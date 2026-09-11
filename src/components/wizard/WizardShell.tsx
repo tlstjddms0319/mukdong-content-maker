@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 export type WizardStep = "topic" | "image" | "copy" | "review";
 
@@ -13,19 +14,19 @@ export function WizardShell({ step, children }: { step: WizardStep; children: Re
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="묵동 콘텐츠 메이커 홈">
+        <Link className="brand" href="/" aria-label="묵동 콘텐츠 메이커 홈">
           <span className="brand-mark" aria-hidden="true" />
           묵동 콘텐츠 메이커
-        </a>
-        <a className="button secondary" href="/help">도움말</a>
+        </Link>
+        <Link className="button secondary" href="/help">도움말</Link>
       </header>
       <div className="shell-body">
         <nav className="side-nav" aria-label="주요 메뉴">
-          <a className="active" href="/">새 초안</a>
-          <a href="/drafts">내 초안</a>
-          <a href="/images">이미지 제작실</a>
-          <a href="/library">콘텐츠 자료</a>
-          <a href="/settings">설정</a>
+          <Link className="active" href="/">새 초안</Link>
+          <Link href="/drafts">내 초안</Link>
+          <Link href="/images">이미지 제작실</Link>
+          <Link href="/library">콘텐츠 자료</Link>
+          <Link href="/settings">설정</Link>
         </nav>
         <main className="main-content">
           <ol className="step-list" aria-label="제작 단계">

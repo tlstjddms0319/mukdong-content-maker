@@ -57,10 +57,10 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .mode-card.selected { border: 2px solid var(--accent); padding: 17px; box-shadow: 0 6px 24px rgb(31 90 67 / 10%); }
 .upload-zone { min-height: 310px; margin-top: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; border: 1px dashed #97a69e; border-radius: var(--panel-radius); background: white; text-align: center; }
 .button.primary { border: 0; background: var(--accent); color: white; cursor: pointer; }
-.generation-note { display: flex; flex-direction: column; margin: 20px 0 12px; padding: 14px 16px; background: #f0eee7; border-radius: var(--control-radius); }
+.generation-note { display: flex; flex-direction: column; align-items:flex-start; gap:8px; margin: 20px 0 12px; padding: 14px 16px; background: #f0eee7; border-radius: var(--control-radius); }
 .candidate { overflow: hidden; background: white; border: 1px solid var(--line); border-radius: var(--panel-radius); }
 .candidate.selected { border: 2px solid var(--accent); }
-.food-placeholder { width: 100%; aspect-ratio: 4 / 5; display: grid; place-items: end start; padding: 16px; border: 0; background: radial-gradient(circle at 52% 48%, #d9bea2 0 17%, #773d31 18% 30%, #e3d6bd 31% 43%, transparent 44%), linear-gradient(145deg, #233c31, #a47851); color: white; cursor: pointer; }
+.food-placeholder { width: 100%; aspect-ratio: 4 / 5; display: grid; place-items: end start; padding: 16px; border: 0; background: radial-gradient(circle at 52% 48%, #d9bea2 0 17%, #773d31 18% 30%, #e3d6bd 31% 43%, transparent 44%), linear-gradient(145deg, #233c31, #a47851); background-size:cover; background-position:center; color: white; cursor: pointer; }
 .food-2 { filter: hue-rotate(18deg) saturate(.9); }
 .food-3 { filter: hue-rotate(-16deg) brightness(1.05); }
 .food-placeholder span { padding: 4px 8px; border-radius: 6px; background: rgb(0 0 0 / 55%); font-size: 13px; }
@@ -89,6 +89,20 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .feed-preview p { margin:0; color:var(--muted); font-size:14px; }
 .caption-preview { padding:22px; border:1px solid var(--line); border-radius:var(--panel-radius); background:white; }
 .export-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:22px; }
+.settings-form { margin-top:32px; }
+.settings-section { display:grid; grid-template-columns:260px minmax(0,1fr); gap:32px; padding:28px 0; border-top:1px solid var(--line); }
+.settings-section h2 { font-size:22px; }
+.settings-section p { margin:5px 0 0; color:var(--muted); }
+.field-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.field-grid label { display:flex; flex-direction:column; gap:6px; font-weight:700; }
+.field-grid select { padding:8px 12px; border:1px solid var(--line); border-radius:var(--control-radius); background:white; }
+.connection-card { display:flex; gap:12px; padding:18px; border:1px solid var(--line); border-radius:var(--panel-radius); background:white; }
+.status-dot { width:12px; height:12px; margin-top:7px; border-radius:50%; background:#b05b46; }.status-dot.on{background:var(--accent)}
+.disabled-section { opacity:.7; }
+.check-list { display:flex; flex-direction:column; gap:10px; }.check-list label{display:flex;align-items:center;gap:10px}.check-list input{width:20px;height:20px;min-height:auto}
+.settings-actions { display:flex; justify-content:flex-end; align-items:center; gap:10px; padding:22px 0; }
+.image-skeleton { aspect-ratio:4/5; display:grid; place-items:center; max-width:360px; border-radius:var(--panel-radius); background:linear-gradient(110deg,#eee 30%,#fafafa 45%,#eee 60%); }
+.state-card { padding:22px; border:1px solid var(--line); border-radius:var(--panel-radius); background:white; }
 
 @media (max-width: 720px) {
   .shell-body { grid-template-columns: 1fr; }
@@ -102,6 +116,9 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
   .verify-card { position: static; }
   .bottom-action { align-items:stretch; flex-direction:column; }
   .bottom-action .button { width:100%; }
+  .settings-section { grid-template-columns:1fr; gap:16px; }
+  .field-grid { grid-template-columns:1fr; }
+  .settings-actions { align-items:stretch; flex-direction:column; }
 }
 
 @media (prefers-reduced-motion: reduce) {
