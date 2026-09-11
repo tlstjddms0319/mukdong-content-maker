@@ -1,5 +1,6 @@
 "use client";
 import { buildExportBundle } from "@/lib/files/exportBundle";
+import { InstagramPublish } from "./InstagramPublish";
 
 const DEFAULT_CAPTION = "처음 만나는 홍어라면, 삼합부터 천천히 즐겨보세요. #묵동맛집";
 
@@ -27,5 +28,5 @@ export function ExportActions({ caption = DEFAULT_CAPTION, imageUrl }: { caption
     const bundle = await buildExportBundle({ caption, image:await imageBytes(currentImage), imageName:"instagram-image.png", source:imageUrl?"ai-generated":"ai-edited", checks:["사용자 선택 완료", "금지 표현 검사 완료"] });
     download(new Blob([bundle as BlobPart], { type:"application/zip" }), "instagram-draft.zip");
   };
-  return <div className="export-actions"><button type="button" className="button secondary" onClick={downloadImage}>이미지 받기</button><button type="button" className="button secondary" onClick={copy}>문안 복사</button><button type="button" className="button primary" onClick={downloadBundle}>전체 묶음 받기</button></div>;
+  return <><div className="export-actions"><button type="button" className="button secondary" onClick={downloadImage}>이미지 받기</button><button type="button" className="button secondary" onClick={copy}>문안 복사</button><button type="button" className="button primary" onClick={downloadBundle}>전체 묶음 받기</button></div><InstagramPublish caption={caption} imageUrl={imageUrl}/></>;
 }
