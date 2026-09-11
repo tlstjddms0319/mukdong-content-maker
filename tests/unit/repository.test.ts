@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
 import { createDraftRepository } from "@/features/drafts/repository";
+import { readSettings, writeSettings } from "@/features/settings/repository";
 
 const created: string[] = [];
 
@@ -60,5 +61,17 @@ describe("draft repository", () => {
       imageAspectRatio: "4:5",
       copyLength: "short",
     });
+  });
+
+  it("handles concurrent settings saves without sharing a temporary file", async () => {
+    const directory = await temporaryDirectory();
+    const previous = process.env.DATA_DIR;
+    process.env.DATA_DIR = directory;
+    try {
+      await Promise.all(Array.from({ length:12 }, (_, index) => writeSettings({ ...DEFAULT_SETTINGS, imageCandidateCount:index % 2 ? 1 : 3 })));
+      expect([1, 3]).toContain((await readSettings()).imageCandidateCount);
+    } finally {
+      if (previous === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = previous;
+    }
   });
 });

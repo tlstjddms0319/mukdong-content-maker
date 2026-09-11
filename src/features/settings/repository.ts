@@ -1,9 +1,11 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { AppSettingsSchema, type AppSettings } from "./schema";
 
 const dataDirectory = () => process.env.DATA_DIR ?? path.join(process.cwd(), "data");
+let writeQueue: Promise<void> = Promise.resolve();
 
 export async function readSettings(): Promise<AppSettings> {
   try {
@@ -17,9 +19,15 @@ export async function readSettings(): Promise<AppSettings> {
 
 export async function writeSettings(value: AppSettings): Promise<void> {
   const settings = AppSettingsSchema.parse(value);
-  const directory = dataDirectory();
-  await mkdir(directory, { recursive: true });
-  const target = path.join(directory, "settings.json");
-  await writeFile(`${target}.tmp`, JSON.stringify(settings, null, 2), "utf8");
-  await rename(`${target}.tmp`, target);
+  const write = async () => {
+    const directory = dataDirectory();
+    await mkdir(directory, { recursive: true });
+    const target = path.join(directory, "settings.json");
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    await writeFile(temporary, JSON.stringify(settings, null, 2), "utf8");
+    await rename(temporary, target);
+  };
+  const pending = writeQueue.then(write);
+  writeQueue = pending.catch(() => undefined);
+  return pending;
 }

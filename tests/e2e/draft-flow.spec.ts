@@ -8,5 +8,9 @@ test("creates a draft without advanced settings", async ({ page }) => {
   await page.getByRole("button", { name:"문안 만들기" }).click();
   await page.getByRole("button", { name:"최종 화면 보기" }).click();
   await expect(page.getByText("게시하기 전에")).toBeVisible();
+  await expect(page.locator(".preserved-caption")).toContainText("처음 만나는 홍어라면, 삼합부터 천천히 즐겨보세요.");
   await expect(page.getByRole("button", { name:"전체 묶음 받기" })).toBeEnabled();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name:"전체 묶음 받기" }).click();
+  expect((await downloadPromise).suggestedFilename()).toBe("instagram-draft.zip");
 });

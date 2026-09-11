@@ -5,4 +5,6 @@ test("settings explains AI connection without exposing a key", async ({ page }) 
   await expect(page.getByText("연결 필요")).toBeVisible();
   await expect(page.getByText("실시간 인기 주제 연결은 다음 단계에서 제공할 예정이에요.")).toBeVisible();
   await expect(page.locator("body")).not.toContainText("sk-");
+  await page.getByRole("button", { name:"설정 저장" }).click();
+  await expect(page.getByRole("status")).toHaveText("저장했어요.");
 });
