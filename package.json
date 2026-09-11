@@ -17,6 +17,7 @@
     "react": "latest",
     "react-dom": "latest",
     "server-only": "latest",
+    "sharp": "^0.35.4",
     "zod": "latest"
   },
   "devDependencies": {
