@@ -5,7 +5,7 @@ import { createInstagramRepository } from "@/features/instagram/repository";
 import { instagramPublishingClient } from "@/features/instagram/metaClient";
 import { InstagramPublishError,publishApprovedDraft } from "@/features/instagram/publish";
 
-const Input=z.object({draftId:z.string().uuid(),approved:z.literal(true)});
+const Input=z.object({draftId:z.string().uuid(),approved:z.literal(true),caption:z.string().trim().min(1).max(2200).optional()});
 export async function POST(request:Request){
   const parsed=Input.safeParse(await request.json().catch(()=>null));
   if(!parsed.success)return NextResponse.json({error:"게시 승인과 초안을 확인해 주세요."},{status:400});
