@@ -23,3 +23,22 @@ export async function getInstagramProfile(accessToken:string){
   if(typeof profile.id!=="string"||typeof profile.username!=="string")throw new InstagramOAuthError("Instagram 계정 정보를 확인할 수 없습니다.");
   return {id:profile.id,username:profile.username};
 }
+
+const graph=(path:string)=>`https://graph.instagram.com/${process.env.INSTAGRAM_API_VERSION??"v24.0"}/${path}`;
+async function postForm(path:string,body:Record<string,string>){return readJson(await fetch(graph(path),{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams(body)}));}
+
+export const instagramPublishingClient={
+  async createImageContainer(input:{instagramUserId:string;accessToken:string;imageUrl:string;caption:string}){
+    const value=await postForm(`${input.instagramUserId}/media`,{image_url:input.imageUrl,caption:input.caption,access_token:input.accessToken});
+    if(typeof value.id!=="string")throw new InstagramOAuthError("Instagram 게시 준비에 실패했습니다.");return value.id;
+  },
+  async getContainerStatus(id:string,accessToken:string){
+    const url=new URL(graph(id));url.search=new URLSearchParams({fields:"status_code",access_token:accessToken}).toString();
+    const value=await readJson(await fetch(url));
+    return (typeof value.status_code==="string"?value.status_code:"ERROR") as "IN_PROGRESS"|"FINISHED"|"ERROR"|"EXPIRED";
+  },
+  async publishContainer(input:{instagramUserId:string;containerId:string;accessToken:string}){
+    const value=await postForm(`${input.instagramUserId}/media_publish`,{creation_id:input.containerId,access_token:input.accessToken});
+    if(typeof value.id!=="string")throw new InstagramOAuthError("Instagram 게시를 완료하지 못했습니다.");return value.id;
+  },
+};
