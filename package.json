@@ -11,6 +11,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "jszip": "^3.10.2",
     "next": "latest",
     "openai": "latest",
     "react": "latest",
