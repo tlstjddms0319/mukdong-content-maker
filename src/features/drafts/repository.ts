@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { remoteStore } from "@/lib/files/remoteStore";
 import { DraftSchema, type Draft } from "./schema";
 
 export class StorageError extends Error {
@@ -15,6 +16,11 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
   return {
     async saveDraft(value: Draft): Promise<Draft> {
       const draft = DraftSchema.parse(value);
+      const remote = remoteStore();
+      if (remote) {
+        await remote.write(`drafts/${draft.id}.json`, JSON.stringify(draft), "application/json");
+        return draft;
+      }
       await mkdir(draftsDirectory, { recursive: true });
       const target = path.join(draftsDirectory, `${draft.id}.json`);
       const temporary = `${target}.tmp`;
@@ -26,6 +32,11 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
     async readDraft(id: string): Promise<Draft | null> {
       if (!zUuid(id)) return null;
       try {
+        const remote = remoteStore();
+        if (remote) {
+          const raw = await remote.read(`drafts/${id}.json`);
+          return raw === null ? null : DraftSchema.parse(JSON.parse(raw));
+        }
         const raw = await readFile(path.join(draftsDirectory, `${id}.json`), "utf8");
         return DraftSchema.parse(JSON.parse(raw));
       } catch (error) {
@@ -36,7 +47,10 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
 
     async listDrafts(): Promise<Draft[]> {
       let names: string[];
-      try { names = await readdir(draftsDirectory); }
+      try {
+        const remote = remoteStore();
+        names = remote ? await remote.list("drafts") : await readdir(draftsDirectory);
+      }
       catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
         throw new StorageError("저장된 초안 목록을 읽을 수 없습니다.", { cause:error });

@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { remoteStore } from "./remoteStore";
 
 const MAX_BYTES = 12 * 1024 * 1024;
 const EXTENSIONS = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
@@ -30,8 +31,12 @@ export function createMediaStore(root: string) {
       if (!matchesMagic(file.type, bytes)) throw new MediaValidationError("이미지 파일의 실제 형식이 올바르지 않아요.");
       const id = randomUUID();
       const mimeType = file.type as keyof typeof EXTENSIONS;
-      await mkdir(join(root, "originals"), { recursive: true });
-      await writeFile(join(root, "originals", `${id}.${EXTENSIONS[mimeType]}`), bytes);
+      const remote = remoteStore();
+      if (remote) await remote.write(`originals/${id}.${EXTENSIONS[mimeType]}`, bytes, mimeType);
+      else {
+        await mkdir(join(root, "originals"), { recursive: true });
+        await writeFile(join(root, "originals", `${id}.${EXTENSIONS[mimeType]}`), bytes);
+      }
       return { id, originalName: file.name.slice(0, 160), mimeType, size: file.size, source: "photo" };
     },
   };
