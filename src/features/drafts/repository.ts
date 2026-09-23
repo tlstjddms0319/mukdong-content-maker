@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DraftSchema, type Draft } from "./schema";
 
@@ -32,6 +32,23 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
         throw new StorageError("저장된 초안을 읽을 수 없습니다.", { cause: error });
       }
+    },
+
+    async listDrafts(): Promise<Draft[]> {
+      let names: string[];
+      try { names = await readdir(draftsDirectory); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+        throw new StorageError("저장된 초안 목록을 읽을 수 없습니다.", { cause:error });
+      }
+      const drafts = await Promise.all(names.filter(name => name.endsWith(".json") && zUuid(name.slice(0,-5))).map(name => this.readDraft(name.slice(0,-5))));
+      return drafts.filter((draft): draft is Draft => draft !== null).sort((a,b) => b.updated_at.localeCompare(a.updated_at));
+    },
+
+    async saveCaption(id: string, caption: string, updatedAt = new Date().toISOString()): Promise<Draft | null> {
+      const draft = await this.readDraft(id);
+      if (!draft) return null;
+      return this.saveDraft({ ...draft, caption, final_review_complete:draft.caption===caption?draft.final_review_complete:false, updated_at:updatedAt });
     },
   };
 }

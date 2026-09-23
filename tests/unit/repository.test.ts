@@ -54,13 +54,66 @@ describe("draft repository", () => {
     expect(stored.topic).toBe(validDraft.topic);
   });
 
+  it("lists saved drafts newest first and still reads older files without a caption", async () => {
+    const directory = await temporaryDirectory();
+    const repository = createDraftRepository(directory);
+    await repository.saveDraft(validDraft);
+    await repository.saveDraft({ ...validDraft, id:"22222222-2222-4222-8222-222222222222", topic:"두 번째 주제", updated_at:"2026-09-11T00:00:00.000Z" });
+
+    expect((await repository.listDrafts()).map(draft => draft.topic)).toEqual(["두 번째 주제", validDraft.topic]);
+    expect(await repository.readDraft(validDraft.id)).toMatchObject({ topic:validDraft.topic });
+  });
+
+  it("saves an edited caption without removing the selected images or changing creation time", async () => {
+    const directory = await temporaryDirectory();
+    const repository = createDraftRepository(directory);
+    const mediaId="33333333-3333-4333-8333-333333333333";
+    await repository.saveDraft({ ...validDraft, media_candidates:[{id:mediaId,source:"photo",file_id:"photo.jpg",purpose:"instagram-primary"}], selected_media_id:mediaId });
+
+    const updated=await repository.saveCaption(validDraft.id,"내가 쓴 홍어 소개\n#묵동", "2026-09-12T00:00:00.000Z");
+
+    expect(updated).toMatchObject({caption:"내가 쓴 홍어 소개\n#묵동",created_at:validDraft.created_at,selected_media_id:mediaId,updated_at:"2026-09-12T00:00:00.000Z"});
+    expect((await repository.readDraft(validDraft.id))?.caption).toBe("내가 쓴 홍어 소개\n#묵동");
+  });
+
+  it("keeps the planned time but clears final review when the caption changes", async () => {
+    const repository = createDraftRepository(await temporaryDirectory());
+    const mediaId="33333333-3333-4333-8333-333333333333";
+    await repository.saveDraft({...validDraft,media_candidates:[{id:mediaId,source:"photo",file_id:"photo.jpg",purpose:"instagram-primary"}],selected_media_id:mediaId,caption:"이전 문안",planned_publish_at:"2030-05-15T09:00:00.000Z",final_review_complete:true});
+
+    await repository.saveCaption(validDraft.id,"고친 문안","2026-09-22T00:00:00.000Z");
+
+    expect(await repository.readDraft(validDraft.id)).toMatchObject({caption:"고친 문안",planned_publish_at:"2030-05-15T09:00:00.000Z",final_review_complete:false});
+  });
+
   it("exposes stable beginner defaults", () => {
     expect(DEFAULT_SETTINGS).toMatchObject({
+      carouselSlideCount: 5,
       imageMode: "photo-first",
       imageCandidateCount: 3,
       imageAspectRatio: "4:5",
       copyLength: "short",
+      textAiProvider: "gemini",
+      imageAiProvider: "automatic",
     });
+  });
+
+  it("migrates the previous single-provider settings automatically", async () => {
+    const directory = await temporaryDirectory();
+    const previous = process.env.DATA_DIR;
+    process.env.DATA_DIR = directory;
+    await writeFile(path.join(directory, "settings.json"), JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      carouselSlideCount: undefined,
+      textAiProvider: undefined,
+      imageAiProvider: "openai",
+      aiProvider: "openai",
+    }), "utf8");
+    try {
+      expect(await readSettings()).toMatchObject({ carouselSlideCount:5, textAiProvider:"gemini", imageAiProvider:"automatic" });
+    } finally {
+      if (previous === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = previous;
+    }
   });
 
   it("handles concurrent settings saves without sharing a temporary file", async () => {

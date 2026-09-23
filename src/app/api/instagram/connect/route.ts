@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { ownerApiError } from "@/features/auth/guard";
 import { buildAuthorizationUrl,createOAuthState,getInstagramConfig,InstagramConfigurationError } from "@/features/instagram/oauth";
 
-export async function GET(){
+export async function GET(){ const denied=await ownerApiError(); if(denied)return denied;
   try{
     const state=createOAuthState();
     const response=NextResponse.redirect(buildAuthorizationUrl(getInstagramConfig(),state));

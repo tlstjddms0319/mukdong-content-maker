@@ -1,16 +1,162 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DraftWizard } from "@/components/wizard/DraftWizard";
-
-describe("DraftWizard", () => {
-  it("keeps the edited caption through final review", () => {
-    render(<DraftWizard />);
-    fireEvent.click(screen.getByRole("button", { name:"이미지 선택" }));
-    fireEvent.click(screen.getByRole("button", { name:"AI 이미지 생성" }));
-    fireEvent.click(screen.getAllByRole("button", { name:"이 이미지 사용" })[0]);
-    fireEvent.click(screen.getByRole("button", { name:"문안 만들기" }));
-    fireEvent.change(screen.getByLabelText("게시물 문안"), { target:{ value:"최종으로 편집한 문안" } });
-    fireEvent.click(screen.getByRole("button", { name:"최종 화면 보기" }));
-    expect(document.querySelector(".preserved-caption")).toHaveTextContent("최종으로 편집한 문안");
+const plan={slideCount:3,styleAnchor:"따뜻한 흰 그릇과 나무 테이블의 일관된 음식 사진",slides:[{role:"cover",headline:"표지",visualPrompt:"선명한 완성 음식 한 상을 정면에서 담은 사진",textPosition:"top"},{role:"how-to",headline:"먹는 법",visualPrompt:"젓가락으로 한 점을 만드는 손동작 음식 사진",textPosition:"bottom"},{role:"visit",headline:"방문",visualPrompt:"편안한 완성 상차림을 담은 음식 사진 장면",textPosition:"bottom"}]};
+describe("DraftWizard",()=>{
+  afterEach(()=>{vi.unstubAllGlobals();localStorage.clear();window.history.replaceState({},"","/");});
+  it("opens a chosen saved draft with its edited caption and ordered images",async()=>{
+    const id="11111111-1111-4111-8111-111111111111";
+    window.history.replaceState({},"",`/?draft=${id}`);
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id,status:"ready",topic:"다시 보는 홍어",audience:"A",caption:"저장된 문안",selected_media_id:"22222222-2222-4222-8222-222222222222",selected_media_ids:["22222222-2222-4222-8222-222222222222"],media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"photo",file_id:"saved-photo",purpose:"instagram-cover"}]})}:url==="/api/copy"?{ok:false,json:async()=>({})}:url==="/api/instagram/status"?{ok:true,json:async()=>({connected:false})}:{ok:false,json:async()=>({})}));
+    render(<DraftWizard/>);
+    await waitFor(()=>expect(document.querySelector(".preserved-caption")).toHaveTextContent("저장된 문안"));
+    expect(screen.getByLabelText("피드 대표 이미지")).toHaveStyle({backgroundImage:'url("saved-photo")'});
+    fireEvent.click(screen.getByRole("button",{name:"3 문안"}));
+    expect(screen.getByRole("textbox",{name:"게시물 문안"})).toHaveValue("저장된 문안");
+  });
+  it("explains when a selected saved draft is missing",async()=>{
+    window.history.replaceState({},"","/?draft=11111111-1111-4111-8111-111111111111");
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({})})));
+    render(<DraftWizard/>);
+    expect(await screen.findByRole("alert")).toHaveTextContent("초안을 찾지 못했어요");
+    expect(screen.getByRole("link",{name:"내 초안으로 돌아가기"})).toHaveAttribute("href","/drafts");
+  });
+  it("saves an edited caption before showing final review",async()=>{
+    const id="11111111-1111-4111-8111-111111111111";
+    localStorage.setItem("mukdong-current-draft",id);
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id,topic:"저장된 주제",audience:"A",selected_media_id:"22222222-2222-4222-8222-222222222222",media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"photo",file_id:"saved-photo",purpose:"instagram-primary"}]})}:url==="/api/drafts"&&init?.method==="PATCH"?{ok:true,json:async()=>({})}:url==="/api/copy"?{ok:false,json:async()=>({})}:{ok:false,json:async()=>({})});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);
+    await screen.findByDisplayValue("저장된 주제");
+    fireEvent.click(screen.getByRole("button",{name:"2 이미지"}));
+    fireEvent.click(screen.getByRole("button",{name:"문안 만들기"}));
+    fireEvent.change(await screen.findByRole("textbox",{name:"게시물 문안"}),{target:{value:"새로 쓴 문안"}});
+    expect(screen.getByRole("button",{name:"4 확인"})).toBeDisabled();
+    fireEvent.click(screen.getByRole("button",{name:"최종 화면 보기"}));
+    await waitFor(()=>expect(document.querySelector(".preserved-caption")).toHaveTextContent("새로 쓴 문안"));
+    const save=request.mock.calls.find(([url,init])=>url==="/api/drafts"&&init?.method==="PATCH");
+    expect(JSON.parse(String(save?.[1]?.body))).toEqual({id,caption:"새로 쓴 문안"});
+  });
+  it("saves the complete ordered carousel before enabling the copy step",async()=>{
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:url==="/api/images/generate"?{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:["image"],source:"ai-generated"})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:{ok:true,json:async()=>({})});vi.stubGlobal("fetch",request);
+    render(<DraftWizard slideCount={3}/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));await screen.findByRole("button",{name:"표지 후보 1 선택"});fireEvent.click(screen.getByRole("button",{name:"표지 후보 1 선택"}));fireEvent.click(screen.getByRole("button",{name:"이 표지로 3장 완성하기"}));await screen.findByRole("button",{name:"이 캐러셀 사용"});fireEvent.click(screen.getByRole("button",{name:"이 캐러셀 사용"}));
+    await waitFor(()=>expect(request).toHaveBeenCalledWith("/api/drafts",expect.anything())); const save=request.mock.calls.find(([url])=>url==="/api/drafts"); const body=JSON.parse(String((save?.[1] as RequestInit).body));expect(body.selected_media_ids).toHaveLength(3);expect(body.selected_media_id).toBe(body.selected_media_ids[0]);expect(screen.getByRole("button",{name:"문안 만들기"})).toBeEnabled();
+  });
+  it("passes every saved carousel slide to review in its stored order",async()=>{
+    const copy={topic:"처음 먹는 홍어, 삼합부터",audience:"A",hook:"첫 문장",information:"정보",store_connection:"가게",call_to_action:"방문",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null,_meta:{provider:"fallback"}};
+    let generated=0;
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:url==="/api/images/generate"?{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:[generated++===0?"detail-2":"visit-3"],source:"ai-generated"})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:url==="/api/copy"?{ok:true,json:async()=>copy}:{ok:false,json:async()=>({})});
+    vi.stubGlobal("fetch",request);render(<DraftWizard slideCount={3}/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));await screen.findByRole("button",{name:"표지 후보 1 선택"});fireEvent.click(screen.getByRole("button",{name:"표지 후보 1 선택"}));fireEvent.click(screen.getByRole("button",{name:"이 표지로 3장 완성하기"}));await screen.findByRole("button",{name:"이 캐러셀 사용"});fireEvent.click(screen.getByRole("button",{name:"이 캐러셀 사용"}));await screen.findByRole("button",{name:"문안 만들기"});fireEvent.click(screen.getByRole("button",{name:"문안 만들기"}));fireEvent.click(await screen.findByRole("button",{name:"최종 화면 보기"}));
+    expect(await screen.findByText("1 / 3")).toBeVisible();
+    expect(screen.getAllByRole("button",{name:/슬라이드 [123] 보기/})).toHaveLength(3);
+    expect(screen.getByRole("button",{name:"슬라이드 1 보기"})).toHaveStyle({backgroundImage:'url("cover-1")'});
+    expect(screen.getByRole("button",{name:"슬라이드 2 보기"})).toHaveStyle({backgroundImage:'url("detail-2")'});
+    expect(screen.getByRole("button",{name:"슬라이드 3 보기"})).toHaveStyle({backgroundImage:'url("visit-3")'});
+    expect(screen.getByLabelText("피드 대표 이미지")).toHaveStyle({backgroundImage:'url("cover-1")'});
+  });
+  it("restores every ordered saved media item",async()=>{const draftId="11111111-1111-4111-8111-111111111111";localStorage.setItem("mukdong-current-draft",draftId);vi.stubGlobal("fetch",vi.fn(async(url:string)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id:draftId,topic:"저장된 주제",audience:"B",selected_media_id:"22222222-2222-4222-8222-222222222222",selected_media_ids:["22222222-2222-4222-8222-222222222222","33333333-3333-4333-8333-333333333333"],media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"ai-generated",file_id:"one",purpose:"instagram-cover"},{id:"33333333-3333-4333-8333-333333333333",source:"ai-generated",file_id:"two",purpose:"instagram-detail"}]})}:{ok:false,json:async()=>({})}));render(<DraftWizard/>);await screen.findByDisplayValue("저장된 주제");fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));expect(screen.getByText("선택한 이미지 2장이 저장되어 있어요.")).toBeInTheDocument();});
+  it("invalidates restored images when refresh selects a new recommendation",async()=>{
+    const draftId="11111111-1111-4111-8111-111111111111";
+    const refreshed=[{id:"four",title:"새 첫 추천",summary:"",reason:"새 첫 이유",audience:"A",imageBrief:"새 이미지"},{id:"five",title:"새 둘째 추천",summary:"",reason:"새 둘째 이유",audience:"B",imageBrief:"새 이미지"},{id:"six",title:"새 셋째 추천",summary:"",reason:"새 셋째 이유",audience:"C",imageBrief:"새 이미지"}];
+    localStorage.setItem("mukdong-current-draft",draftId);
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id:draftId,topic:"저장된 주제",audience:"B",selected_media_id:"22222222-2222-4222-8222-222222222222",selected_media_ids:["22222222-2222-4222-8222-222222222222"],media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"ai-generated",file_id:"one",purpose:"instagram-cover"}]})}:url==="/api/topics"?{ok:true,json:async()=>({topics:refreshed})}:{ok:false,json:async()=>({})}));
+    render(<DraftWizard/>);await screen.findByDisplayValue("저장된 주제");fireEvent.click(screen.getByRole("button",{name:"AI 추천 새로고침"}));
+    await screen.findByDisplayValue("새 첫 추천");expect(localStorage.getItem("mukdong-current-draft")).toBeNull();
+    fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));expect(screen.queryByText(/선택한 이미지 \d+장이 저장되어 있어요/)).not.toBeInTheDocument();expect(screen.getByRole("button",{name:"문안 만들기"})).toBeDisabled();
+  });
+  it("refreshes all recommendation cards without overwriting a manual topic",async()=>{
+    let resolveRefresh:(value:unknown)=>void=()=>{};
+    const first=[{id:"one",title:"첫 추천",summary:"",reason:"첫 이유",audience:"A",imageBrief:"첫 이미지"},{id:"two",title:"둘째 추천",summary:"",reason:"둘째 이유",audience:"B",imageBrief:"둘째 이미지"},{id:"three",title:"셋째 추천",summary:"",reason:"셋째 이유",audience:"C",imageBrief:"셋째 이미지"}];
+    const refreshed=[{id:"four",title:"새 첫 추천",summary:"",reason:"새 첫 이유",audience:"A",imageBrief:"새 이미지"},{id:"five",title:"새 둘째 추천",summary:"",reason:"새 둘째 이유",audience:"B",imageBrief:"새 이미지"},{id:"six",title:"새 셋째 추천",summary:"",reason:"새 셋째 이유",audience:"C",imageBrief:"새 이미지"}];
+    const request=vi.fn((url:string,init?:RequestInit)=>{
+      if(url!=="/api/topics") return Promise.resolve({ok:false,json:async()=>({})});
+      const body=JSON.parse(String(init?.body));
+      return body.recommendationRound===1?new Promise(resolve=>{resolveRefresh=resolve;}):Promise.resolve({ok:true,json:async()=>({topics:first})});
+    });
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);await screen.findByText("첫 추천");
+    fireEvent.click(screen.getByRole("button",{name:"AI 추천 새로고침"}));
+    const refreshBody=JSON.parse(String((request.mock.calls.at(-1)?.[1] as RequestInit).body));
+    expect(refreshBody.excludeTitles).toEqual(["첫 추천","둘째 추천","셋째 추천"]);
+    fireEvent.change(screen.getByDisplayValue("첫 추천"),{target:{value:"직접 정한 주제"}});
+    resolveRefresh({ok:true,json:async()=>({topics:refreshed})});
+    await screen.findByText("새 셋째 추천");
+    expect(screen.getByDisplayValue("직접 정한 주제")).toBeInTheDocument();
+  });
+  it("removes a recommendation image brief after the topic is edited directly",async()=>{
+    const topics=[{id:"one",title:"추천 주제",summary:"",reason:"이유",audience:"A",imageBrief:"광택 나는 한 상"},{id:"two",title:"다른 추천",summary:"",reason:"이유",audience:"B",imageBrief:"다른 이미지"},{id:"three",title:"세 번째 추천",summary:"",reason:"이유",audience:"C",imageBrief:"세 번째 이미지"}];
+    const request=vi.fn<(url:string,init?:RequestInit)=>Promise<unknown>>(async(url:string)=>url==="/api/topics"?{ok:true,json:async()=>({topics})}:url==="/api/images/plan"?{ok:false,json:async()=>({message:"계획 실패"})}:{ok:false,json:async()=>({})});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);await screen.findByText("추천 주제");
+    fireEvent.click(screen.getByText("추천 주제").closest("button")!);
+    fireEvent.change(screen.getByDisplayValue("추천 주제"),{target:{value:"직접 수정한 주제"}});
+    fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));
+    fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
+    await waitFor(()=>expect(request).toHaveBeenCalledWith("/api/images/plan",expect.anything()));
+    const planBody=JSON.parse(String((request.mock.calls.find(([url])=>url==="/api/images/plan")?.[1] as RequestInit).body));
+    expect(planBody).toMatchObject({topic:"직접 수정한 주제",slideCount:5});
+    expect(planBody).not.toHaveProperty("imageBrief");
+  });
+  it("preserves an edited caption through review, back, and review again",async()=>{
+    const copy={topic:"처음 먹는 홍어, 삼합부터",audience:"A",hook:"AI 첫 문장",information:"정보",store_connection:"가게",call_to_action:"방문",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null,_meta:{provider:"fallback"}};
+    const request=vi.fn(async(url:string)=>url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/media/upload"?{ok:true,json:async()=>({id:"photo-id"})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:url==="/api/copy"?{ok:true,json:async()=>copy}:{ok:false,json:async()=>({})});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+    await waitFor(()=>expect(screen.getByRole("button",{name:"문안 만들기"})).toBeEnabled());fireEvent.click(screen.getByRole("button",{name:"문안 만들기"}));
+    const textarea=await screen.findByRole("textbox",{name:"게시물 문안"});fireEvent.change(textarea,{target:{value:"내가 고친 문안"}});
+    fireEvent.click(screen.getByRole("button",{name:"최종 화면 보기"}));await waitFor(()=>expect(document.querySelector(".preserved-caption")).toHaveTextContent("내가 고친 문안"));
+    fireEvent.click(screen.getByRole("button",{name:"이전: 문안"}));
+    await waitFor(()=>expect(screen.getByRole("textbox",{name:"게시물 문안"})).toHaveValue("내가 고친 문안"));
+    fireEvent.click(screen.getByRole("button",{name:"최종 화면 보기"}));await waitFor(()=>expect(document.querySelector(".preserved-caption")).toHaveTextContent("내가 고친 문안"));
+  });
+  it("invalidates saved images and copy when the topic changes",async()=>{
+    let uploads=0;
+    const copy={topic:"처음 먹는 홍어, 삼합부터",audience:"A",hook:"새 AI 문안",information:"정보",store_connection:"가게",call_to_action:"방문",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null,_meta:{provider:"fallback"}};
+    const request=vi.fn(async(url:string,init?:RequestInit)=>{void init;return url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/media/upload"?{ok:true,json:async()=>({id:`photo-${++uploads}`})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:url==="/api/copy"?{ok:true,json:async()=>copy}:url==="/api/images/plan"?{ok:false,json:async()=>({message:"계획 실패"})}:{ok:false,json:async()=>({})};});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+    await waitFor(()=>expect(screen.getByRole("button",{name:"문안 만들기"})).toBeEnabled());
+    const firstSave=JSON.parse(String((request.mock.calls.find(([url])=>url==="/api/drafts")?.[1] as RequestInit).body));
+    expect(localStorage.getItem("mukdong-current-draft")).toBe(firstSave.id);
+    fireEvent.click(screen.getByRole("button",{name:"문안 만들기"}));
+    const textarea=await screen.findByRole("textbox",{name:"게시물 문안"});fireEvent.change(textarea,{target:{value:"이전 주제용 수정 문안"}});
+    fireEvent.click(screen.getByRole("button",{name:"1 주제"}));
+    fireEvent.change(screen.getByDisplayValue("처음 먹는 홍어, 삼합부터"),{target:{value:"막걸리와 즐기는 저녁 한 상"}});
+    expect(localStorage.getItem("mukdong-current-draft")).toBeNull();
+    expect(screen.getByRole("button",{name:"3 문안"})).toBeDisabled();
+    expect(screen.getByRole("button",{name:"4 확인"})).toBeDisabled();
+    fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
+    expect(screen.queryByText(/선택한 이미지 \d+장이 저장되어 있어요/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"문안 만들기"})).toBeDisabled();
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
+    await waitFor(()=>expect(request).toHaveBeenCalledWith("/api/images/plan",expect.anything()));
+    const planBody=JSON.parse(String((request.mock.calls.find(([url])=>url==="/api/images/plan")?.[1] as RequestInit).body));
+    expect(planBody.topic).toBe("막걸리와 즐기는 저녁 한 상");
+    fireEvent.click(screen.getByRole("button",{name:"실제 사진 사용"}));
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["b"],"b.png",{type:"image/png"})]}});
+    await waitFor(()=>expect(request.mock.calls.filter(([url])=>url==="/api/drafts")).toHaveLength(2));
+    const secondSave=JSON.parse(String((request.mock.calls.filter(([url])=>url==="/api/drafts")[1][1] as RequestInit).body));
+    expect(secondSave).toMatchObject({topic:"막걸리와 즐기는 저녁 한 상"});expect(secondSave.id).not.toBe(firstSave.id);
+    await waitFor(()=>expect(screen.getByRole("button",{name:"문안 만들기"})).toBeEnabled());fireEvent.click(screen.getByRole("button",{name:"문안 만들기"}));
+    await waitFor(()=>expect(screen.getByRole("textbox",{name:"게시물 문안"})).not.toHaveValue("이전 주제용 수정 문안"));
+  });
+  it("ignores a late draft save after the topic changes",async()=>{
+    let finishSave:(value:unknown)=>void=()=>{};
+    const request=vi.fn((url:string)=>url==="/api/topics"?Promise.resolve({ok:false,json:async()=>({})}):url==="/api/media/upload"?Promise.resolve({ok:true,json:async()=>({id:"photo-id"})}):url==="/api/drafts"?new Promise(resolve=>{finishSave=resolve;}):Promise.resolve({ok:false,json:async()=>({})}));
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+    await waitFor(()=>expect(request).toHaveBeenCalledWith("/api/drafts",expect.anything()));
+    expect(screen.getByText("이미지 선택을 저장하는 중…")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"이전: 주제"}));
+    fireEvent.change(screen.getByDisplayValue("처음 먹는 홍어, 삼합부터"),{target:{value:"저장 중 바꾼 새 주제"}});
+    await act(async()=>{finishSave({ok:true,json:async()=>({})});await Promise.resolve();});
+    expect(localStorage.getItem("mukdong-current-draft")).toBeNull();
+    expect(screen.getByRole("button",{name:"3 문안"})).toBeDisabled();
+  });
+  it("keeps copy disabled after a save failure until retry succeeds",async()=>{
+    let saves=0;
+    const request=vi.fn(async(url:string)=>url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/media/upload"?{ok:true,json:async()=>({id:"photo-id"})}:url==="/api/drafts"?{ok:++saves>1,json:async()=>({})}:{ok:false,json:async()=>({})});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+    expect(await screen.findByRole("button",{name:"저장 다시 시도"})).toBeInTheDocument();expect(screen.getByRole("button",{name:"문안 만들기"})).toBeDisabled();
+    fireEvent.click(screen.getByRole("button",{name:"저장 다시 시도"}));await waitFor(()=>expect(screen.getByRole("button",{name:"문안 만들기"})).toBeEnabled());expect(saves).toBe(2);
   });
 });

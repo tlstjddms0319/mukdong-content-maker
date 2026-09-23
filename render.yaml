@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: mukdong-content-maker-0319
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /login
+    envVars:
+      - key: DATA_DIR
+        value: /tmp/mukdong-content-maker
+      - key: AUTH_URL
+        value: https://mukdong-content-maker-0319.onrender.com
+      - key: MEDIA_PUBLIC_BASE_URL
+        value: https://mukdong-content-maker-0319.onrender.com
+      - key: OWNER_PASSWORD_HASH
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

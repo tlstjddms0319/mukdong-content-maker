@@ -1,11 +1,13 @@
 import { z } from "zod";
 
 export const AppSettingsSchema = z.object({
+  carouselSlideCount: z.union([z.literal(3), z.literal(5), z.literal(7), z.literal(10)]),
   imageMode: z.enum(["photo-first", "mixed", "ai-first"]),
   imageCandidateCount: z.union([z.literal(1), z.literal(3), z.literal(5)]),
   imageAspectRatio: z.enum(["4:5", "1:1", "9:16"]),
   copyLength: z.enum(["short", "medium", "detailed"]),
-  aiProvider: z.literal("openai"),
+  textAiProvider: z.literal("gemini"),
+  imageAiProvider: z.enum(["automatic", "cloudflare", "openai"]),
   aiModelMode: z.enum(["automatic", "manual"]),
   preserveOriginals: z.boolean(),
   blockUnverifiedClaims: z.boolean(),

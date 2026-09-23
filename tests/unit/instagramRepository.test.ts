@@ -2,7 +2,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInstagramRepository, toPublicConnection } from "@/features/instagram/repository";
 
 const created:string[]=[];
@@ -47,5 +47,17 @@ describe("Instagram repository",()=>{
     const repo=createInstagramRepository(await temporaryDirectory());
     await repo.savePublication(publication);
     expect(await repo.readPublication(publication.draftId)).toEqual(publication);
+  });
+
+  it("allows only one publication task per draft at a time",async()=>{
+    const directory=await temporaryDirectory(),repo=createInstagramRepository(directory),otherProcess=createInstagramRepository(directory);
+    let release!:()=>void,entered=0;
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    const first=repo.withPublicationLock(publication.draftId,async()=>{entered++;await gate;return "first";});
+    await vi.waitFor(()=>expect(entered).toBe(1));
+    await expect(otherProcess.withPublicationLock(publication.draftId,async()=>"second")).rejects.toThrow("already being published");
+    release();
+    await expect(first).resolves.toBe("first");
+    await expect(otherProcess.withPublicationLock(publication.draftId,async()=>"third")).resolves.toBe("third");
   });
 });

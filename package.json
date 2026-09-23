@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test"
@@ -13,6 +14,7 @@
   "dependencies": {
     "jszip": "^3.10.2",
     "next": "latest",
+    "next-auth": "5.0.0-beta.32",
     "openai": "latest",
     "react": "latest",
     "react-dom": "latest",

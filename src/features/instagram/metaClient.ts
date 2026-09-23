@@ -28,8 +28,15 @@ const graph=(path:string)=>`https://graph.instagram.com/${process.env.INSTAGRAM_
 async function postForm(path:string,body:Record<string,string>){return readJson(await fetch(graph(path),{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams(body)}));}
 
 export const instagramPublishingClient={
-  async createImageContainer(input:{instagramUserId:string;accessToken:string;imageUrl:string;caption:string}){
-    const value=await postForm(`${input.instagramUserId}/media`,{image_url:input.imageUrl,caption:input.caption,access_token:input.accessToken});
+  async createImageContainer(input:{instagramUserId:string;accessToken:string;imageUrl:string;caption?:string;isCarouselItem?:boolean}){
+    const body:Record<string,string>={image_url:input.imageUrl,access_token:input.accessToken};
+    if(input.isCarouselItem)body.is_carousel_item="true";
+    else if(input.caption!==undefined)body.caption=input.caption;
+    const value=await postForm(`${input.instagramUserId}/media`,body);
+    if(typeof value.id!=="string")throw new InstagramOAuthError("Instagram 게시 준비에 실패했습니다.");return value.id;
+  },
+  async createCarouselContainer(input:{instagramUserId:string;accessToken:string;children:string[];caption:string}){
+    const value=await postForm(`${input.instagramUserId}/media`,{media_type:"CAROUSEL",children:input.children.join(","),caption:input.caption,access_token:input.accessToken});
     if(typeof value.id!=="string")throw new InstagramOAuthError("Instagram 게시 준비에 실패했습니다.");return value.id;
   },
   async getContainerStatus(id:string,accessToken:string){

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import JSZip from "jszip";
 import { ExportActions } from "@/components/review/ExportActions";
 
 describe("ExportActions", () => {
@@ -8,19 +9,29 @@ describe("ExportActions", () => {
   it("copies the current edited caption", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { clipboard:{ writeText } });
-    render(<ExportActions caption="지금 편집한 문안" imageUrl="data:image/png;base64,AQID" />);
+    render(<ExportActions caption="지금 편집한 문안" images={[{url:"data:image/png;base64,AQID",source:"ai-generated"}]} />);
     fireEvent.click(screen.getByRole("button", { name:"문안 복사" }));
     expect(writeText).toHaveBeenCalledWith("지금 편집한 문안");
   });
 
-  it("creates a zip download from the selected image", async () => {
-    const createObjectURL = vi.fn(() => "blob:bundle");
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+  it("downloads the first ordered image separately and every image in the zip", async () => {
+    const blobs:Blob[]=[];
+    const createObjectURL = vi.fn((blob:Blob) => {blobs.push(blob);return "blob:bundle";});
+    const downloads:string[]=[];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function(this:HTMLAnchorElement) {downloads.push(this.download);});
     vi.stubGlobal("URL", { createObjectURL, revokeObjectURL:vi.fn() });
-    render(<ExportActions caption="문안" imageUrl="data:image/png;base64,AQID" />);
+    render(<ExportActions caption="문안" images={[{url:"data:image/png;base64,AQID",source:"photo"},{url:"data:image/png;base64,BAUG",source:"ai-generated"}]} />);
+    fireEvent.click(screen.getByRole("button", { name:"표지 이미지 받기" }));
     fireEvent.click(screen.getByRole("button", { name:"전체 묶음 받기" }));
-    await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalled());
-    expect(click).toHaveBeenCalled();
+    await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
+    expect(blobs[0]).toHaveProperty("type", "image/jpeg");
+    expect(new Uint8Array(await blobs[0].arrayBuffer())).toEqual(new Uint8Array([1,2,3]));
+    expect(blobs[1]).toHaveProperty("type", "application/zip");
+    expect(downloads).toEqual(["instagram-cover.jpg", "instagram-draft.zip"]);
+    const zip=await JSZip.loadAsync(await blobs[1].arrayBuffer());
+    expect(await zip.file("slide-01.jpg")!.async("uint8array")).toEqual(new Uint8Array([1,2,3]));
+    expect(await zip.file("slide-02.jpg")!.async("uint8array")).toEqual(new Uint8Array([4,5,6]));
+    expect(JSON.parse(await zip.file("metadata.json")!.async("string")).slides.map((slide:{source:string})=>slide.source)).toEqual(["photo","ai-generated"]);
     click.mockRestore();
   });
 });

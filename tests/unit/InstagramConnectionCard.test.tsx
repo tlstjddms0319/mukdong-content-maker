@@ -12,9 +12,23 @@ describe("InstagramConnectionCard",()=>{
     expect(screen.getByRole("link",{name:"Instagram 연결"})).toHaveAttribute("href","/api/instagram/connect");
   });
 
+  it("계정이 연결되어도 게시 서버 설정이 빠졌으면 항목을 따로 안내한다",async()=>{
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({
+      connected:true,username:"mukdong",needsReconnect:false,
+      setup:{appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:false,signingKey:false},
+    })}));
+    render(<InstagramConnectionCard/>);
+
+    expect(await screen.findByText("@mukdong 연결됨")).toBeInTheDocument();
+    expect(screen.getByText("게시 서버 설정이 더 필요해요.")).toBeInTheDocument();
+    expect(screen.getByText("공개 이미지 HTTPS 주소")).toBeInTheDocument();
+    expect(screen.getByText("이미지 보안 키")).toBeInTheDocument();
+    expect(screen.queryByText("게시 준비가 되었어요.")).not.toBeInTheDocument();
+  });
+
   it("연결된 계정은 토큰 없이 사용자명만 보여주고 해제할 수 있다",async()=>{
     const request=vi.fn()
-      .mockResolvedValueOnce({ok:true,json:async()=>({connected:true,username:"mukdong",expiresAt:"2026-10-01T00:00:00.000Z",needsReconnect:false})})
+      .mockResolvedValueOnce({ok:true,json:async()=>({connected:true,username:"mukdong",expiresAt:"2026-10-01T00:00:00.000Z",needsReconnect:false,setup:{appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:true,signingKey:true}})})
       .mockResolvedValueOnce({ok:true,json:async()=>({connected:false})});
     vi.stubGlobal("fetch",request);
     render(<InstagramConnectionCard/>);
@@ -23,5 +37,6 @@ describe("InstagramConnectionCard",()=>{
     fireEvent.click(screen.getByRole("button",{name:"연결 해제"}));
     await waitFor(()=>expect(request).toHaveBeenCalledWith("/api/instagram/connection",{method:"DELETE"}));
     expect(await screen.findByText("아직 연결되지 않았어요")).toBeInTheDocument();
+    expect(screen.getByText("필수 설정 항목이 모두 채워졌어요.")).toBeInTheDocument();
   });
 });

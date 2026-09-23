@@ -1,4 +1,9 @@
-export function PostPreview({ caption, imageUrl }: { caption:string; imageUrl?:string }) {
-  const style = imageUrl ? { backgroundImage:`url(${imageUrl})` } : undefined;
-  return <div className="preview-grid"><div><div className="post-image" style={style}><span>선택한 이미지</span></div><div className="feed-preview"><div className="feed-thumb" style={style}/><div><strong>피드에서 이렇게 보여요</strong><p>{caption.slice(0,32)}{caption.length>32?"…":""}</p></div></div></div><div className="caption-preview"><p className="eyebrow">게시물 문안</p><p className="preserved-caption">{caption}</p><div className="source-note">AI로 만든 이미지입니다 · 원본 보존됨</div></div></div>;
+"use client";
+import { useState } from "react";
+
+export function PostPreview({ caption, imageUrls }: { caption:string; imageUrls:string[] }) {
+  const usableUrls=imageUrls.filter(Boolean),[activeIndex,setActiveIndex]=useState(0);
+  const index=Math.min(activeIndex,Math.max(usableUrls.length-1,0)),activeUrl=usableUrls[index],coverUrl=usableUrls[0];
+  const activeStyle=activeUrl?{backgroundImage:`url(${activeUrl})`}:undefined,coverStyle=coverUrl?{backgroundImage:`url(${coverUrl})`}:undefined;
+  return <div className="preview-grid"><div><div className="post-image" style={activeStyle} aria-label="현재 슬라이드 미리보기"><span>선택한 이미지</span></div><div className="carousel-controls" aria-label="슬라이드 미리보기 이동"><button type="button" className="button secondary" aria-label="이전 슬라이드" disabled={index===0} onClick={()=>setActiveIndex(index-1)}>이전</button><span aria-live="polite">{usableUrls.length?`${index+1} / ${usableUrls.length}`:"0 / 0"}</span><button type="button" className="button secondary" aria-label="다음 슬라이드" disabled={index>=usableUrls.length-1} onClick={()=>setActiveIndex(index+1)}>다음</button></div><div className="carousel-thumbnails" aria-label="슬라이드 목록">{usableUrls.map((url,slideIndex)=><button key={`${url}-${slideIndex}`} type="button" aria-label={`슬라이드 ${slideIndex+1} 보기`} aria-pressed={index===slideIndex} className="feed-thumb" style={{backgroundImage:`url(${url})`}} onClick={()=>setActiveIndex(slideIndex)}/>)}</div><div className="feed-preview"><div className="feed-thumb" aria-label="피드 대표 이미지" style={coverStyle}/><div><strong>피드에서 이렇게 보여요</strong><p>{caption.slice(0,32)}{caption.length>32?"…":""}</p></div></div></div><div className="caption-preview"><p className="eyebrow">게시물 문안</p><p className="preserved-caption">{caption}</p><div className="source-note">AI로 만든 이미지입니다 · 원본 보존됨</div></div></div>;
 }
