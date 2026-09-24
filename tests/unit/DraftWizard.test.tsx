@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DraftWizard } from "@/components/wizard/DraftWizard";
@@ -14,6 +15,23 @@ describe("DraftWizard",()=>{
     expect(request.mock.calls.some(([url])=>String(url).startsWith("/api/drafts?"))).toBe(false);
     expect(request.mock.calls.some(([url])=>String(url)==="/api/drafts")).toBe(false);
     expect(localStorage.getItem("mukdong-current-draft")).toBeNull();
+  });
+  it("keeps an explicit library topic under StrictMode effect replay",async()=>{
+    window.history.replaceState({},"","/?topic="+encodeURIComponent("삼합 한 점을 만드는 순서"));
+    const request=vi.fn(async()=>({ok:true,json:async()=>({topics:[{id:"one",title:"AI replacement topic",audience:"A",reason:"other",imageBrief:""},{id:"two",title:"Other 2",audience:"B",reason:"other",imageBrief:""},{id:"three",title:"Other 3",audience:"C",reason:"other",imageBrief:""}]})}));
+    vi.stubGlobal("fetch",request);
+    render(<StrictMode><DraftWizard/></StrictMode>);
+    await waitFor(()=>expect(screen.getByLabelText("직접 주제를 적고 싶다면")).toHaveValue("삼합 한 점을 만드는 순서"));
+    expect(request).not.toHaveBeenCalledWith("/api/topics",expect.anything());
+  });
+  it("reopens a saved draft without an image at the image step",async()=>{
+    const id="33333333-3333-4333-8333-333333333333";
+    window.history.replaceState({},"",`/?draft=${id}`);
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id,topic:"이미지 없는 초안",audience:"A",caption:null,created_at:"2026-09-24T00:00:00.000Z",media_candidates:[],selected_media_id:null})}:{ok:false,json:async()=>({})}));
+    render(<DraftWizard/>);
+    expect(await screen.findByRole("button",{name:"문안 만들기"})).toBeDisabled();
+    expect(screen.queryByText("선택한 초안을 찾지 못했어요. 내 초안에서 다시 골라 주세요.")).not.toBeInTheDocument();
+    expect(localStorage.getItem("mukdong-current-draft")).toBe(id);
   });
   it("prefers an explicit saved draft over a library topic",async()=>{
     const id="11111111-1111-4111-8111-111111111111";

@@ -50,6 +50,13 @@ describe("ImageGallery", () => {
     expect(screen.getByText("미리보기 없음")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "초안 열기" })).toHaveAttribute("href", `/?draft=${broken.id}`);
   });
+  it("falls back when a plausible image URL fails to load", () => {
+    const broken: Draft = { ...selected, media_candidates: [{ ...selected.media_candidates[0], file_id: "https://example.invalid/missing.png" }] };
+    render(<ImageGallery drafts={[broken]} />);
+    fireEvent.error(screen.getByRole("img", { name: "홍어 한 상 선택 이미지 미리보기" }));
+    expect(screen.getByText("미리보기 없음")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "초안 열기" })).toHaveAttribute("href", `/?draft=${broken.id}`);
+  });
 });
 
 describe("draft list errors", () => {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Draft } from "@/features/drafts/schema";
 import { selectedDraftMedia } from "@/features/drafts/selection";
+import { ImageCover } from "./ImageCover";
 
 function previewUrl(fileId: string) {
   return /^(data:image\/(?:png|jpeg|webp|gif);base64,|https?:\/\/|\/(?!\/))/i.test(fileId) ? fileId : null;
@@ -22,8 +23,7 @@ export function ImageGallery({ drafts }: { drafts: Draft[] }) {
         const selected=selectedDraftMedia(draft);
         const cover=selected[0] ? previewUrl(selected[0].file_id) : null;
         return <li className="image-gallery-card" key={draft.id}>
-          {cover?<div className="image-gallery-cover" role="img" aria-label={`${draft.topic} 선택 이미지 미리보기`} style={{backgroundImage:`url(${cover})`}}/>
-            :<div className="image-gallery-cover image-gallery-missing">{selected.length?"미리보기 없음":"이미지 미선택"}</div>}
+          <ImageCover cover={cover} title={draft.topic} hasSelection={selected.length > 0} />
           <div className="image-gallery-details"><h2>{draft.topic}</h2><p>{selected.length?`선택 이미지 ${selected.length}장`:"이미지를 아직 선택하지 않았어요."}</p><Link className="button secondary" href={`/?draft=${encodeURIComponent(draft.id)}`}>초안 열기</Link></div>
         </li>;
       })}</ul>}

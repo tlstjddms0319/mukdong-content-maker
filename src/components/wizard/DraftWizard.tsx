@@ -37,6 +37,7 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
   const [saveState,setSaveState]=useState<"idle"|"saving"|"saved"|"error">("idle");
   const [copySaveState,setCopySaveState]=useState<"idle"|"saving"|"error">("idle");
   const [loadError,setLoadError]=useState("");
+  const initialQueryRef=useRef<string|null>(null);
   const changeTopic=useCallback((nextTopic:string,nextAudience:"A"|"B"|"C",nextImageBrief="",preserveDraft=false)=>{
     const next={topic:nextTopic,audience:nextAudience,imageBrief:nextImageBrief};
     const current=topicSelectionRef.current;
@@ -84,7 +85,9 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
   useEffect(() => {
     let active=true;
     const load=async()=>{
-      const query=new URLSearchParams(window.location.search);
+      // Keep the mount URL stable when React replays effects in development.
+      if(initialQueryRef.current===null)initialQueryRef.current=window.location.search;
+      const query=new URLSearchParams(initialQueryRef.current);
       const requestedId=query.get("draft");
       const requestedTopic=query.get("topic")?.trim();
       if(!requestedId&&requestedTopic&&requestedTopic.length<=120){
@@ -100,7 +103,7 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
           if(response.ok){
             const draft=await response.json();
             const selected=selectedDraftMedia(draft);
-            if(active&&selected.length){changeTopic(draft.topic,draft.audience,"",true);draftIdRef.current=draft.id;createdAtRef.current=draft.created_at??new Date().toISOString();setDraftId(draft.id);setImages(selected.map(item=>({id:item.id,preview:item.file_id,source:item.source})));setCaption(draft.caption??"");setSavedCaption(draft.caption??"");setSaveState("saved");localStorage.setItem("mukdong-current-draft",draft.id);if(requestedId)setStep(draft.caption?.trim()?"review":"image");return;}
+            if(active&&draft?.id&&draft?.topic){changeTopic(draft.topic,draft.audience,"",true);draftIdRef.current=draft.id;createdAtRef.current=draft.created_at??new Date().toISOString();setDraftId(draft.id);setImages(selected.map(item=>({id:item.id,preview:item.file_id,source:item.source})));setCaption(draft.caption??"");setSavedCaption(draft.caption??"");setSaveState("saved");localStorage.setItem("mukdong-current-draft",draft.id);if(requestedId||!selected.length)setStep(selected.length&&draft.caption?.trim()?"review":"image");return;}
           }
         }catch{}
         if(requestedId)setLoadError("선택한 초안을 찾지 못했어요. 내 초안에서 다시 골라 주세요.");
