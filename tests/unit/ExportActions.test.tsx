@@ -32,6 +32,8 @@ describe("ExportActions", () => {
     expect(await zip.file("slide-01.jpg")!.async("uint8array")).toEqual(new Uint8Array([1,2,3]));
     expect(await zip.file("slide-02.jpg")!.async("uint8array")).toEqual(new Uint8Array([4,5,6]));
     expect(JSON.parse(await zip.file("metadata.json")!.async("string")).slides.map((slide:{source:string})=>slide.source)).toEqual(["photo","ai-generated"]);
+    expect(JSON.parse(await zip.file("metadata.json")!.async("string")).checks).toContain("게시 전 사실 정보 확인 필요");
+    expect(JSON.parse(await zip.file("metadata.json")!.async("string")).checks).not.toContain("금지 표현 검사 완료");
     click.mockRestore();
   });
 });

@@ -7,7 +7,7 @@ describe("DraftWizard",()=>{
   it("prefills a library topic without loading or mutating the previous draft",async()=>{
     localStorage.setItem("mukdong-current-draft","11111111-1111-4111-8111-111111111111");
     window.history.replaceState({},"","/?topic="+encodeURIComponent("동네에서 홍어 한 상"));
-    const request=vi.fn(async(_url:string)=>({ok:false,json:async()=>({})}));
+    const request=vi.fn(async(url:string)=>{void url;return {ok:false,json:async()=>({})};});
     vi.stubGlobal("fetch",request);
     render(<DraftWizard/>);
     expect(await screen.findByDisplayValue("동네에서 홍어 한 상")).toBeInTheDocument();
@@ -35,6 +35,8 @@ describe("DraftWizard",()=>{
     vi.stubGlobal("fetch",vi.fn(async(url:string)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id,status:"ready",topic:"다시 보는 홍어",audience:"A",caption:"저장된 문안",selected_media_id:"22222222-2222-4222-8222-222222222222",selected_media_ids:["22222222-2222-4222-8222-222222222222"],media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"photo",file_id:"saved-photo",purpose:"instagram-cover"}]})}:url==="/api/copy"?{ok:false,json:async()=>({})}:url==="/api/instagram/status"?{ok:true,json:async()=>({connected:false})}:{ok:false,json:async()=>({})}));
     render(<DraftWizard/>);
     await waitFor(()=>expect(document.querySelector(".preserved-caption")).toHaveTextContent("저장된 문안"));
+    expect(screen.getByLabelText("게시 전 확인할 항목")).toHaveTextContent("가격·영업시간");
+    expect(screen.queryByText("금지 표현 없음 ✓")).not.toBeInTheDocument();
     expect(screen.getByLabelText("피드 대표 이미지")).toHaveStyle({backgroundImage:'url("saved-photo")'});
     fireEvent.click(screen.getByRole("button",{name:"3 문안"}));
     expect(screen.getByRole("textbox",{name:"게시물 문안"})).toHaveValue("저장된 문안");

@@ -25,7 +25,7 @@ export function ExportActions({ caption = DEFAULT_CAPTION, images, draftId }: { 
   const copy = () => navigator.clipboard?.writeText(caption);
   const downloadImage = async () => { const cover=images[0]; if(cover)download(new Blob([await imageBytes(cover.url)], { type:"image/jpeg" }), "instagram-cover.jpg"); };
   const downloadBundle = async () => {
-    const bundle = await buildExportBundle({ caption, images:await Promise.all(images.map(async image=>({bytes:await imageBytes(image.url),name:image.url,source:image.source}))), checks:["사용자 선택 완료", "금지 표현 검사 완료"] });
+    const bundle = await buildExportBundle({ caption, images:await Promise.all(images.map(async image=>({bytes:await imageBytes(image.url),name:image.url,source:image.source}))), checks:["사용자 선택 완료", "게시 전 사실 정보 확인 필요"] });
     download(new Blob([bundle as BlobPart], { type:"application/zip" }), "instagram-draft.zip");
   };
   return <><div className="export-actions"><button type="button" className="button secondary" disabled={!images.length} onClick={()=>void downloadImage()}>표지 이미지 받기</button><button type="button" className="button secondary" onClick={copy}>문안 복사</button><button type="button" className="button primary" disabled={!images.length} onClick={()=>void downloadBundle()}>전체 묶음 받기</button></div><InstagramPublish draftId={draftId} caption={caption} imageUrls={images.map(image=>image.url)}/></>;

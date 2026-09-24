@@ -17,6 +17,8 @@ describe("PostPreview", () => {
     expect(screen.getByText("5 / 5")).toBeVisible();
     expect(screen.getByLabelText("현재 슬라이드 미리보기")).toHaveStyle({ backgroundImage:'url("five")' });
     expect(screen.getByRole("button", { name:"다음 슬라이드" })).toBeDisabled();
+    expect(screen.queryByText(/AI로 만든 이미지입니다/)).not.toBeInTheDocument();
+    expect(screen.getByText(/이미지 출처를 확인/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name:"이전 슬라이드" }));
     expect(screen.getByText("4 / 5")).toBeVisible();
     expect(screen.getByLabelText("현재 슬라이드 미리보기")).toHaveStyle({ backgroundImage:'url("four")' });

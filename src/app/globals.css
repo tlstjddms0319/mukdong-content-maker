@@ -96,8 +96,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .candidate-info .button { margin-top: 8px; width: 100%; }
 .copy-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 28px; align-items: start; }
 .copy-layout textarea { width: 100%; margin-top: 16px; padding: 16px; resize: vertical; border: 1px solid var(--line); border-radius: var(--panel-radius); background: white; }
-.tone-row, .copy-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-.tone-row button { padding: 8px 13px; border: 1px solid var(--line); border-radius: 999px; background: white; }
+.copy-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .verify-card { position: sticky; top: 20px; display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: var(--panel-radius); background: #e8efe9; }
 .verify-card p { margin: 0; color: var(--muted); }
 .topic-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:30px; }
