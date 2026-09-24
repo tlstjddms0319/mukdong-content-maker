@@ -28,4 +28,13 @@ describe("WizardShell", () => {
     expect(screen.getByRole("link",{name:"내 초안"})).toHaveAttribute("aria-current","page");
     expect(screen.queryByLabelText("제작 단계")).not.toBeInTheDocument();
   });
+
+  it("marks auxiliary pages current without creation steps", () => {
+    for (const [section, label] of [["images", "이미지 제작실"], ["library", "콘텐츠 자료"], ["help", "도움말"]] as const) {
+      const { unmount } = render(<WizardShell step="topic" section={section}><h1>{label}</h1></WizardShell>);
+      expect(screen.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
+      expect(screen.queryByLabelText("제작 단계")).not.toBeInTheDocument();
+      unmount();
+    }
+  });
 });
