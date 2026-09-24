@@ -4,6 +4,31 @@ import { DraftWizard } from "@/components/wizard/DraftWizard";
 const plan={slideCount:3,styleAnchor:"따뜻한 흰 그릇과 나무 테이블의 일관된 음식 사진",slides:[{role:"cover",headline:"표지",visualPrompt:"선명한 완성 음식 한 상을 정면에서 담은 사진",textPosition:"top"},{role:"how-to",headline:"먹는 법",visualPrompt:"젓가락으로 한 점을 만드는 손동작 음식 사진",textPosition:"bottom"},{role:"visit",headline:"방문",visualPrompt:"편안한 완성 상차림을 담은 음식 사진 장면",textPosition:"bottom"}]};
 describe("DraftWizard",()=>{
   afterEach(()=>{vi.unstubAllGlobals();localStorage.clear();window.history.replaceState({},"","/");});
+  it("prefills a library topic without loading or mutating the previous draft",async()=>{
+    localStorage.setItem("mukdong-current-draft","11111111-1111-4111-8111-111111111111");
+    window.history.replaceState({},"","/?topic="+encodeURIComponent("동네에서 홍어 한 상"));
+    const request=vi.fn(async(_url:string)=>({ok:false,json:async()=>({})}));
+    vi.stubGlobal("fetch",request);
+    render(<DraftWizard/>);
+    expect(await screen.findByDisplayValue("동네에서 홍어 한 상")).toBeInTheDocument();
+    expect(request.mock.calls.some(([url])=>String(url).startsWith("/api/drafts?"))).toBe(false);
+    expect(request.mock.calls.some(([url])=>String(url)==="/api/drafts")).toBe(false);
+    expect(localStorage.getItem("mukdong-current-draft")).toBeNull();
+  });
+  it("prefers an explicit saved draft over a library topic",async()=>{
+    const id="11111111-1111-4111-8111-111111111111";
+    window.history.replaceState({},"",`/?draft=${id}&topic=다른%20주제`);
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id,topic:"기존 초안",audience:"A",caption:"기존 문안",created_at:"2026-09-24T00:00:00.000Z",media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"photo",file_id:"data:image/png;base64,aA==",purpose:"instagram-primary"}],selected_media_id:"22222222-2222-4222-8222-222222222222"})}:{ok:false,json:async()=>({})}));
+    render(<DraftWizard/>);
+    await waitFor(()=>expect(document.querySelector(".preserved-caption")).toHaveTextContent("기존 문안"));
+    expect(screen.queryByDisplayValue("다른 주제")).not.toBeInTheDocument();
+  });
+  it("ignores a topic query longer than 120 characters",async()=>{
+    window.history.replaceState({},"","/?topic="+"가".repeat(121));
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({})})));
+    render(<DraftWizard/>);
+    expect(await screen.findByDisplayValue("처음 먹는 홍어, 삼합부터")).toBeInTheDocument();
+  });
   it("opens a chosen saved draft with its edited caption and ordered images",async()=>{
     const id="11111111-1111-4111-8111-111111111111";
     window.history.replaceState({},"",`/?draft=${id}`);
