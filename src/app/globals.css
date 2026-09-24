@@ -188,6 +188,17 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .drafts-list { display:grid; gap:14px; margin:0; padding:0; list-style:none; }
 .draft-card { display:grid; grid-template-columns:96px minmax(0,1fr) auto; align-items:center; gap:18px; padding:14px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; }
 .draft-cover { width:96px; aspect-ratio:4/5; border-radius:10px; background:center/cover #e8efe9; }
+.image-mode-guide { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:28px; }
+.image-mode-guide > div { padding:18px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; }
+.image-mode-guide p { margin:4px 0 0; color:var(--muted); }
+.image-gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; padding:0; list-style:none; }
+.image-gallery-card { display:grid; grid-template-columns:110px minmax(0,1fr); gap:16px; padding:14px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; }
+.image-gallery-cover { width:110px; aspect-ratio:4/5; border-radius:10px; background:center/cover #e8efe9; }
+.image-gallery-missing { display:grid; place-items:center; padding:8px; color:var(--muted); text-align:center; font-size:13px; }
+.image-gallery-details { min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+.image-gallery-details h2 { font-size:20px; overflow-wrap:anywhere; }
+.image-gallery-details p { margin:0; color:var(--muted); }
+.image-gallery-details .button { margin-top:auto; }
 .draft-details { min-width:0; }
 .draft-details h2 { margin:9px 0 5px; font-size:22px; }
 .draft-details p { overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; margin:0 0 6px; color:var(--muted); }
@@ -229,6 +240,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
   .drafts-toolbar { align-items:stretch; flex-direction:column; }
   .draft-card { grid-template-columns:72px minmax(0,1fr); gap:12px; }
   .draft-cover { width:72px; }
+  .image-mode-guide,.image-gallery { grid-template-columns:1fr; }
   .draft-card > .button { grid-column:1 / -1; justify-content:center; }
   .draft-planning { grid-column:1 / -1; }
   .draft-planning input[type="datetime-local"],.draft-planning .button { width:100%; }
