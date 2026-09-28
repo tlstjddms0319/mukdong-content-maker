@@ -12,7 +12,7 @@ export const TopicSuggestionSchema = z.object({
   title: z.string().trim().min(1).max(120),
   summary: z.string().trim().min(1).max(600),
   reason: z.string().trim().min(1).max(300),
-  audience: z.enum(["A", "B", "C"]),
+  audience: z.preprocess(normalizeAudience, z.enum(["A", "B", "C"])),
   imageBrief: z.string().min(1),
 });
 
@@ -24,3 +24,13 @@ export const TopicSuggestionsSchema = z.array(TopicSuggestionSchema).length(3).s
 
 export type TopicInput = z.input<typeof TopicInputSchema>;
 export type TopicSuggestion = z.infer<typeof TopicSuggestionSchema>;
+
+const AUDIENCE_LABELS: Record<string, "A" | "B" | "C"> = { "음식 탐색형": "A", "약속 결정형": "B", "호기심 입문형": "C" };
+// Gemini often returns "C=호기심 입문형" or just the label; accept those, reject anything else.
+function normalizeAudience(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const text = value.trim();
+  const letter = /^([ABC])(?![A-Za-z])/i.exec(text)?.[1];
+  if (letter) return letter.toUpperCase();
+  return Object.entries(AUDIENCE_LABELS).find(([label]) => text.includes(label))?.[1] ?? value;
+}
