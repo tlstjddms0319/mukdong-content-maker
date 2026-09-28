@@ -6,12 +6,13 @@ export const ImageBriefSchema = z.object({
   count: z.number().int().min(1).max(4).default(3),
   aspectRatio: z.literal("4:5").default("4:5"),
   imageBrief:z.string().trim().min(1).max(600).optional(),
+  refinement:z.string().trim().min(1).max(300).optional(),
   slide:CarouselSlidePlanSchema.optional(),
   slideIndex:z.number().int().min(1).max(10).optional(),
   slideTotal:z.union([z.literal(3),z.literal(5),z.literal(7),z.literal(10)]).optional(),
   styleAnchor:z.string().trim().min(12).max(500).optional(),
   referenceImage: z.string().regex(/^data:image\/(?:png|jpeg|webp);base64,/).max(18_000_000).optional(),
-  referenceMode:z.enum(["source","style"]).optional(),
+  referenceMode:z.enum(["source","style","continuity"]).optional(),
 }).superRefine((brief,ctx)=>{
   if(!brief.slide)return;
   if(brief.slideIndex===undefined)ctx.addIssue({code:"custom",path:["slideIndex"],message:"슬라이드 순번이 필요합니다."});
@@ -31,7 +32,7 @@ export type ImageBrief = z.infer<typeof ImageBriefSchema>;
 export type ImageAnalysis = {
   subjectClarity: "좋음" | "확인 필요";
   backgroundComplexity: "좋음" | "확인 필요";
-  textSpace: "있음" | "부족";
+  textSpace: "있음" | "부족" | "확인 필요";
   cropSafety: "안전" | "확인 필요";
   disclosureRequired: boolean;
 };

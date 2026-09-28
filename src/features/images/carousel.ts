@@ -41,6 +41,8 @@ export const CarouselPlanSchema=z.object({
   plan.slides.forEach((slide,index)=>{
     if(slide.role!==expected[index])ctx.addIssue({code:"custom",path:["slides",index,"role"],message:"슬라이드 순서를 확인해 주세요."});
   });
+  const scenes=plan.slides.map(slide=>slide.visualPrompt.replace(/[\s.,!?]/g,"").toLowerCase());
+  if(new Set(scenes).size!==scenes.length)ctx.addIssue({code:"custom",path:["slides"],message:"각 슬라이드는 서로 다른 장면이어야 합니다."});
 });
 
 export type CarouselPlan=z.infer<typeof CarouselPlanSchema>;
@@ -60,7 +62,7 @@ const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role">>={
 
 export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan {
   const parsed=CarouselPlanInputSchema.parse(input);
-  const context=parsed.imageBrief ? ` 선택 주제의 기존 이미지 설명도 반영: ${parsed.imageBrief}.` : "";
+  const context=parsed.imageBrief ? ` 선택 주제의 기존 이미지 설명도 반영: ${parsed.imageBrief.slice(0,450)}.` : "";
   return CarouselPlanSchema.parse({
     slideCount:parsed.slideCount,
     styleAnchor:"따뜻하고 자연스러운 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트, 실제 음식 사진 질감",

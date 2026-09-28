@@ -34,6 +34,16 @@ describe("ExportActions", () => {
     expect(JSON.parse(await zip.file("metadata.json")!.async("string")).slides.map((slide:{source:string})=>slide.source)).toEqual(["photo","ai-generated"]);
     expect(JSON.parse(await zip.file("metadata.json")!.async("string")).checks).toContain("게시 전 사실 정보 확인 필요");
     expect(JSON.parse(await zip.file("metadata.json")!.async("string")).checks).not.toContain("금지 표현 검사 완료");
+    expect(await zip.file("posting-guide.txt")!.async("string")).toContain("네이버 플레이스: https://naver.me/Ffex1C2k");
     click.mockRestore();
+  });
+
+  it("shows manual posting help instead of an Instagram publish action", () => {
+    render(<ExportActions caption="문안" topic="동네 모임 저녁 홍어 한 상" audience="B" images={[{url:"data:image/png;base64,AQID",source:"photo"}]} />);
+
+    expect(screen.getByRole("heading", { name:"Instagram 앱에서 직접 게시해요" })).toBeInTheDocument();
+    expect(screen.getByText("밝은 레트로·펑크")).toBeInTheDocument();
+    expect(screen.getByText("#모임맛집")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name:/Instagram에 게시/ })).not.toBeInTheDocument();
   });
 });

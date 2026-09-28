@@ -1,8 +1,34 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CopyEditor } from "@/components/copy/CopyEditor";
 
 describe("CopyEditor generation", () => {
+  it("passes the image context and shows verification notes without replacing manual edits",async()=>{
+    const request=vi.fn().mockResolvedValue({ok:true,json:async()=>({topic:"홍어전",audience:"A",hook:"노릇한 한입",information:"전 이야기",store_connection:"묵동홍어마을",call_to_action:"메뉴 확인",hashtags:["#홍어전"],facts_used:[],facts_to_verify:["홍어전 판매 여부 확인"],image_disclosure:"AI 연출 이미지가 포함되어 있으며 실제 메뉴와 다를 수 있습니다."})});
+    vi.stubGlobal("fetch",request);
+    render(<CopyEditor topic="홍어전" imageBrief="노릇한 전을 흰 접시에" hasAiImages onContinue={()=>undefined}/>);
+    expect(await screen.findByText("홍어전 판매 여부 확인")).toBeVisible();
+    expect(JSON.parse(request.mock.calls[0][1].body)).toMatchObject({imageBrief:"노릇한 전을 흰 접시에",hasAiImages:true});
+    expect((screen.getByLabelText("게시물 문안") as HTMLTextAreaElement).value).toContain("AI 연출 이미지");
+    fireEvent.change(screen.getByLabelText("게시물 문안"),{target:{value:"냄새 없음"}});
+    expect(screen.getByText("향이 없다고 단정할 수 없어요.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 안내 넣기"}));
+    expect(screen.getByLabelText("게시물 문안")).toHaveValue("냄새 없음\n\nAI 연출 이미지가 포함되어 있으며 실제 메뉴와 다를 수 있습니다.");
+  });
+  it("keeps the user's prose intact when replacing hashtags",async()=>{
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({replacement:"#홍어 #묵동맛집 #중랑구맛집"})}));
+    const original="내 첫 문장\n\n내 설명\n\n내 가게 소개\n\n내 마무리\n\n#기존";
+    render(<CopyEditor initialText={original} onContinue={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"해시태그 다시 만들기"}));
+    await waitFor(()=>expect(screen.getByRole("textbox")).toHaveValue(original.replace("#기존","#홍어 #묵동맛집 #중랑구맛집")));
+  });
+  it("preserves saved text and provides a retry when the API fails",async()=>{
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:false,json:async()=>({message:"생성에 실패했어요."})}));
+    render(<CopyEditor initialText="사용자가 저장한 글" onContinue={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"전체 문안 새로 생성"}));
+    expect(await screen.findByRole("alert")).toHaveTextContent("생성에 실패했어요.");
+    expect(screen.getByRole("textbox")).toHaveValue("사용자가 저장한 글");
+  });
   afterEach(() => vi.unstubAllGlobals());
   it("replaces the fallback with Gemini copy", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok:true, json:async () => ({

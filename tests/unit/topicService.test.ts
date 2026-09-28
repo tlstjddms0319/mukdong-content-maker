@@ -11,9 +11,31 @@ describe("topic service", () => {
   });
   it("uses valid Gemini suggestions when connected", async () => {
     const topics = Array.from({ length:3 }, (_, index) => ({
-      id:`gemini-${index}`, title:`추천 ${index}`, summary:"설명", reason:"이유", audience:(['A','B','C'] as const)[index], imageBrief:"음식 사진",
+      id:`gemini-${index}`, title:["수육 옆에는 왜 김치가 있을까?","같은 회인데 왜 식감은 다를까?","홍어는 왜 수육이랑 먹을까?"][index], summary:"익숙한 음식의 맛과 식감에 대한 질문에 답하고 홍어를 구체적인 사례로 연결한다.", reason:"이유", audience:(['A','B','C'] as const)[index], imageBrief:"음식 사진",
     }));
     await expect(suggestTopics(input, { suggest:async () => topics })).resolves.toEqual(topics);
+  });
+
+  it("offers two everyday questions and one hongeo question in every offline round", async () => {
+    for (let recommendationRound=0; recommendationRound<4; recommendationRound++) {
+      const result=await suggestTopics({...input,recommendationRound});
+      expect(result.every(topic=>topic.title.endsWith("?"))).toBe(true);
+      expect(result.filter(topic=>!/홍어|삼합|묵동홍어마을/.test(topic.title))).toHaveLength(2);
+      expect(result.every(topic=>topic.summary.includes("홍어"))).toBe(true);
+    }
+  });
+
+  it("replaces menu advertising suggestions that miss the curiosity brief", async () => {
+    const promotional=Array.from({length:3},(_,index)=>({id:`ad-${index}`,title:`홍어 모임 메뉴 추천 ${index}`,summary:"맛있는 홍어를 홍보합니다.",reason:"방문 유도",audience:"A" as const,imageBrief:"사진"}));
+    const result=await suggestTopics(input,{suggest:async()=>promotional});
+    expect(result.every(topic=>topic.id.startsWith("fallback-"))).toBe(true);
+  });
+
+  it("never repeats excluded titles even when the requested fallback round was already shown", async () => {
+    const first=await suggestTopics(input);
+    const next=await suggestTopics({...input,excludeTitles:first.map(topic=>topic.title)});
+    expect(next.every(topic=>!first.some(previous=>previous.title===topic.title))).toBe(true);
+    expect(next).toHaveLength(3);
   });
 
   it("returns three useful topics when AI is unavailable", async () => {

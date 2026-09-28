@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { composeSlideImage } from "@/features/images/composeSlide";
+import { composeSlideImage, renderSlideHeadline } from "@/features/images/composeSlide";
 import type { CarouselSlidePlan } from "@/features/images/carousel";
 
 const coverSlide:CarouselSlidePlan={
@@ -12,6 +12,13 @@ const coverSlide:CarouselSlidePlan={
 };
 
 describe("slide composition", () => {
+  it("renders Korean with the bundled font and fits long titles inside the safe area", async () => {
+    const {data,info}=await renderSlideHeadline("홍어를 처음 만나는 날, 한 점부터 천천히 즐기는 방법을 알아볼까요?");
+    expect(info.width).toBeLessThanOrEqual(936);
+    expect(info.height).toBeLessThanOrEqual(190);
+    expect(info.width).toBeGreaterThan(300);
+    expect(data.length).toBeGreaterThan(1000);
+  });
   it("renders a different 1080 by 1350 JPEG with an XML-sensitive Korean headline", async () => {
     const input=await sharp({create:{width:40,height:40,channels:3,background:"#f4ede2"}}).png().toBuffer();
     const plain=await sharp(input).resize(1080,1350,{fit:"cover"}).jpeg({quality:90}).toBuffer();

@@ -31,6 +31,35 @@ const visitSlideMetadata={slide:visitSlide,slideIndex:5,slideTotal:5,styleAnchor
 const coverSlide={...visitSlide,role:"cover" as const,headline:"비 오는 날 홍어 한 상"};
 
 describe("OpenAI image request", () => {
+  it("uses the cooked preparation instead of a raw-slice directive for hongeo jeon",()=>{
+    const request=buildImageRequest(ImageBriefSchema.parse({topic:"홍어전의 고소한 한입",imageBrief:"홍어회 접시를 표현한다는 잘못된 기획",count:1,refinement:"접시를 더 작게, 자연광은 부드럽게"}));
+    expect(request.prompt).toContain("노릇");
+    expect(request.prompt).not.toContain("숙성 홍어 날개 살을 얇고 불규칙하게");
+    expect(request.prompt).toContain("접시를 더 작게, 자연광은 부드럽게");
+    expect(buildImageRequest(ImageBriefSchema.parse({topic:"홍어 전문점"})).prompt).not.toContain("노릇");
+  });
+  it("does not force an eye-level full plate on a top-down or macro scene",()=>{
+    for(const role of ["overview","detail"] as const){
+      const prompt=buildImageRequest({topic:"홍어",count:1,aspectRatio:"4:5",slide:{...visitSlide,role}}).prompt;
+      expect(prompt).not.toContain("eye-level or 45-degree view");
+      if(role==="detail")expect(prompt).not.toContain("entire main dish");
+    }
+  });
+  it("requests explicit high quality and describes realistic thin slices",()=>{
+    const request=buildImageRequest({topic:"홍어삼합",count:1,aspectRatio:"4:5"},"high");
+    expect(request.quality).toBe("high");
+    expect(request.prompt).toContain("얇고 불규칙하게");
+    expect(request.prompt).toContain("정육면체");
+  });
+  it("returns an uncaptioned cover reference alongside the captioned image",async()=>{
+    const source=await sharp({create:{width:40,height:40,channels:3,background:"#778877"}}).png().toBuffer();
+    generateImage.mockResolvedValue({data:[{b64_json:source.toString("base64")}]});
+    const response=await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어",count:1,...visitSlideMetadata,slide:coverSlide,slideIndex:1})}));
+    const body=await response.json();
+    expect(body.referenceImages).toHaveLength(1);
+    expect(body.referenceImages[0]).not.toBe(body.images[0]);
+    expect(await sharp(Buffer.from(body.referenceImages[0].split(",")[1],"base64")).metadata()).toMatchObject({width:40,height:40});
+  });
   beforeEach(()=>{
     generateImage.mockReset();
     editImage.mockReset();
@@ -139,12 +168,12 @@ describe("OpenAI image request", () => {
   it("omits the unsupported response_format parameter", () => {
     const request = buildImageRequest({ topic:"홍어 삼합", count:1, aspectRatio:"4:5" });
     expect(request).not.toHaveProperty("response_format");
-    expect(request).toMatchObject({ model:"gpt-image-1", size:"1024x1536", n:1 });
+    expect(request).toMatchObject({ model:"gpt-image-1.5", quality:"medium", size:"1024x1536", n:1 });
   });
 
   it("turns a data URL into an image edit request", async () => {
     const request=await buildImageEditRequest({topic:"홍어 삼합",count:3,aspectRatio:"4:5",referenceImage:"data:image/png;base64,iVBORw0KGgo=",referenceMode:"source"});
-    expect(request).toMatchObject({model:"gpt-image-1",size:"1024x1536",n:3,input_fidelity:"high"});
+    expect(request).toMatchObject({model:"gpt-image-1.5",quality:"medium",size:"1024x1536",n:3,input_fidelity:"high"});
     expect(request.image).toMatchObject({name:"reference.png",type:"image/png"});
     expect(request.prompt).toContain("원본 음식의 형태와 특징");
   });

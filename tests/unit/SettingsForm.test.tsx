@@ -40,7 +40,7 @@ describe("SettingsForm", () => {
     render(<SettingsForm initialSettings={{...DEFAULT_SETTINGS,imageAspectRatio:"1:1",copyLength:"detailed",carouselSlideCount:3}} onSave={onSave}/>);
     fireEvent.click(screen.getByRole("button",{name:"권장값으로 되돌리기"}));
     fireEvent.click(screen.getByRole("button",{name:"설정 저장"}));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({carouselSlideCount:5,imageAiProvider:"automatic",imageAspectRatio:"1:1",copyLength:"detailed"}));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({carouselSlideCount:5,imageAiProvider:"automatic",imageAspectRatio:"1:1",copyLength:"medium",imageQuality:"medium"}));
   });
 
   it("shows Cloudflare and OpenAI connection status without exposing keys", () => {

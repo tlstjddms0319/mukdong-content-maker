@@ -10,6 +10,6 @@ export async function generateCandidates(input: ImageBrief, ai: ImageAiClient): 
   return previews.map((preview) => ({
     id: randomUUID(), preview, source: "ai-generated", provider: "openai", model: "automatic",
     promptVersion: "v1", createdAt: new Date().toISOString(),
-    analysis: { subjectClarity: "좋음", backgroundComplexity: "좋음", textSpace: "있음", cropSafety: "안전", disclosureRequired: true },
+    analysis: { subjectClarity: "확인 필요", backgroundComplexity: "확인 필요", textSpace: "확인 필요", cropSafety: "확인 필요", disclosureRequired: true },
   }));
 }

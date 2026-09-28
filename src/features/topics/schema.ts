@@ -9,9 +9,9 @@ export const TopicInputSchema = z.object({
 
 export const TopicSuggestionSchema = z.object({
   id: z.coerce.string().min(1),
-  title: z.string().min(1),
-  summary: z.string().min(1),
-  reason: z.string().min(1),
+  title: z.string().trim().min(1).max(120),
+  summary: z.string().trim().min(1).max(600),
+  reason: z.string().trim().min(1).max(300),
   audience: z.enum(["A", "B", "C"]),
   imageBrief: z.string().min(1),
 });

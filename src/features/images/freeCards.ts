@@ -1,0 +1,32 @@
+import { z } from "zod";
+
+export const AssetKindSchema=z.enum(["photo","stock","illustration","ai-generated"]);
+export const ASSET_KIND_LABELS={photo:"직접 촬영",stock:"자료 사진",illustration:"설명용 일러스트","ai-generated":"AI 연출 이미지"} as const;
+export const AssetDetailsSchema=z.object({
+  name:z.string().trim().min(1).max(60),
+  tags:z.array(z.string().trim().min(1).max(24)).min(1).max(12),
+  kind:AssetKindSchema,
+  credit:z.string().trim().min(1).max(200),
+});
+export const LibraryAssetSchema=AssetDetailsSchema.extend({
+  id:z.string().uuid(),preview:z.string().startsWith("data:image/jpeg;base64,").max(6_000_000),
+  createdAt:z.string().datetime(),lastUsedAt:z.string().datetime().nullable(),
+});
+export type LibraryAsset=z.infer<typeof LibraryAssetSchema>;
+export type AssetDetails=z.infer<typeof AssetDetailsSchema>;
+export const FreeCardInputSchema=z.object({
+  title:z.string().trim().min(1).max(120),body:z.string().trim().max(180).default(""),
+  layout:z.enum(["photo","compare","text"]),
+  assetIds:z.array(z.string().uuid()).max(2).refine(ids=>new Set(ids).size===ids.length,"사진이 중복됐어요."),
+}).superRefine((card,ctx)=>{if(card.layout!=="text"&&card.assetIds.length>0&&card.body.length>90)ctx.addIssue({code:"custom",path:["body"],message:"사진형·비교형 설명은 90자 이내로 줄여 주세요."});});
+export type FreeCardInput=z.input<typeof FreeCardInputSchema>;
+export type FreeCard={id:string;preview:string;source:"design"|"ai-edited";layout:"photo"|"compare"|"text";assetIds:string[]};
+
+// Owner-entered keywords only: this does not analyze or identify image contents.
+export function rankAssets(assets:LibraryAsset[],topic:string):LibraryAsset[] {
+  const text=topic.normalize("NFKC").toLocaleLowerCase("ko-KR");
+  return assets.map(asset=>({asset,score:asset.tags.reduce((sum,tag)=>sum+(text.includes(tag.normalize("NFKC").toLocaleLowerCase("ko-KR"))?tag.length:0),0)}))
+    .filter(item=>item.score>0)
+    .sort((a,b)=>b.score-a.score||(a.asset.lastUsedAt??"").localeCompare(b.asset.lastUsedAt??"")||a.asset.id.localeCompare(b.asset.id))
+    .map(item=>item.asset);
+}

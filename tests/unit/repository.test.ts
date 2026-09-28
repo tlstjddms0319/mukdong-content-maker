@@ -92,7 +92,7 @@ describe("draft repository", () => {
       imageMode: "photo-first",
       imageCandidateCount: 3,
       imageAspectRatio: "4:5",
-      copyLength: "short",
+      copyLength: "medium",
       textAiProvider: "gemini",
       imageAiProvider: "automatic",
     });

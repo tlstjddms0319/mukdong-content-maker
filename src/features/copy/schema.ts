@@ -6,7 +6,11 @@ export const GeneratedCopySchema = z.object({
   facts_used: z.array(z.string()), facts_to_verify: z.array(z.string()), image_disclosure: z.string().nullable(),
 });
 export const GeneratedCopyContentSchema = GeneratedCopySchema.omit({ topic:true, audience:true });
-export const CopyInputSchema = z.object({ topic: z.string().min(1), audience: z.enum(["A", "B", "C"]) });
+export const CopyInputSchema = z.object({
+  topic: z.string().trim().min(1).max(200), audience: z.enum(["A", "B", "C"]),
+  imageBrief:z.string().trim().max(600).optional(), hasAiImages:z.boolean().optional(),
+  contentBrief:z.string().trim().max(600).optional(),
+});
 export type GeneratedCopy = z.infer<typeof GeneratedCopySchema>;
 export type CopyInput = z.infer<typeof CopyInputSchema>;
 export type CopyPart = "hook" | "store_connection" | "call_to_action" | "hashtags";

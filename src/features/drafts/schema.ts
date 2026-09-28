@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const MediaCandidateSchema = z.object({
   id: z.string().uuid(),
-  source: z.enum(["photo", "ai-generated", "ai-edited"]),
+  source: z.enum(["photo", "design", "ai-generated", "ai-edited"]),
   file_id: z.string().min(1),
   purpose: z.string().min(1),
 });
@@ -26,6 +26,8 @@ export const DraftSchema = z.object({
   topic: z.string(),
   audience: z.enum(["A", "B", "C"]),
   media_candidates: z.array(MediaCandidateSchema),
+  image_brief:z.string().max(600).optional(),
+  content_brief:z.string().max(600).optional(),
   selected_media_id: z.string().uuid().nullable(),
   selected_media_ids: z.array(z.string().uuid()).min(1).max(10).optional(),
   copy: GeneratedCopySchema.nullable(),

@@ -3,6 +3,7 @@ import { loginAsOwner } from "./helpers";
 
 const topic = "비 오는 날, 막걸리와 홍어";
 const imageBrief = "창가의 빗빛과 따뜻한 나무 식탁";
+const contentBrief = "비 오는 날 떠오르는 음식의 기억에서 시작해 홍어와 곁들임의 취향 이야기로 연결한다.";
 const roles = ["cover", "detail", "how-to", "pairing", "visit"] as const;
 const dataUrl = (value: number) => {
   const color=["#1f5a43", "#9e5143", "#75613f", "#35596d", "#6a456f"][value % 5];
@@ -14,9 +15,10 @@ test("creates, saves, previews, and exports a five-slide carousel without live p
   const planRequests: Array<Record<string, unknown>> = [];
   const generationRequests: Array<Record<string, unknown>> = [];
   const draftRequests: Array<Record<string, unknown>> = [];
+  const copyRequests: Array<Record<string, unknown>> = [];
 
   await page.route("**/api/topics", route => route.fulfill({ json: { topics: [
-    { id:"rain", title:topic, summary:"", reason:"비 오는 날의 식탁 분위기를 소개해요.", audience:"A", imageBrief },
+    { id:"rain", title:topic, summary:contentBrief, reason:"비 오는 날의 식탁 분위기를 소개해요.", audience:"A", imageBrief },
     { id:"first", title:"처음 먹는 홍어의 한 점", summary:"", reason:"처음 손님에게 쉬운 순서를 보여 줘요.", audience:"B", imageBrief:"한 점을 만드는 손동작" },
     { id:"table", title:"오늘 모임을 위한 홍어 상차림", summary:"", reason:"함께 먹는 분위기를 전해요.", audience:"C", imageBrief:"따뜻한 모임 식탁" },
   ] } }));
@@ -45,9 +47,12 @@ test("creates, saves, previews, and exports a five-slide carousel without live p
     if (route.request().method() === "POST") draftRequests.push(route.request().postDataJSON() as Record<string, unknown>);
     await route.fulfill({ json: { saved:true } });
   });
-  await page.route("**/api/copy", route => route.fulfill({ json: {
-    topic, audience:"A", hook:"비 오는 날에는 홍어 한 점과 막걸리", information:"한 점씩 천천히 즐겨 보세요.", store_connection:"묵동에서 준비했어요.", call_to_action:"저장해 두세요.", hashtags:["#묵동맛집"], facts_used:[], facts_to_verify:[], image_disclosure:null, _meta:{ provider:"gemini" },
-  } }));
+  await page.route("**/api/copy", route => {
+    copyRequests.push(route.request().postDataJSON());
+    return route.fulfill({ json: {
+      topic, audience:"A", hook:"비 오는 날에는 홍어 한 점과 막걸리", information:"한 점씩 천천히 즐겨 보세요.", store_connection:"묵동홍어마을의 메뉴도 살펴보세요.", call_to_action:"프로필의 네이버 플레이스에서 메뉴를 확인해 보세요.", hashtags:["#묵동맛집","#홍어","#묵동홍어마을"], facts_used:[], facts_to_verify:["사진 속 메뉴의 현재 판매 여부를 확인해 주세요."], image_disclosure:"AI 연출 이미지가 포함되어 있으며 실제 메뉴와 다를 수 있습니다.", _meta:{ provider:"gemini" },
+    } });
+  });
   await page.route("**/api/instagram/status", route => route.fulfill({ json: { connected:false } }));
 
   await loginAsOwner(page);
@@ -96,6 +101,12 @@ test("creates, saves, previews, and exports a five-slide carousel without live p
   await page.getByRole("button", { name:"생성된 슬라이드 4 보기" }).click();
   await expect(page.getByText("4 / 5")).toBeVisible();
   await expect(generatedPreview).toHaveCSS("background-image", new RegExp(dataUrl(14).replace(/[+?^${}()|[\]\\]/g, "\\$&")));
+  await page.getByLabel("이 장의 수정 요청").fill("배경은 차분하게, 음식 질감은 선명하게");
+  await page.getByRole("button", {name:"이 장만 다시 만들기"}).click();
+  await expect(page.getByRole("button", {name:"이 캐러셀 사용"})).toBeEnabled();
+  expect(generationRequests.at(-1)).toMatchObject({slideIndex:4,refinement:"배경은 차분하게, 음식 질감은 선명하게"});
+  await page.getByRole("button", {name:"생성된 슬라이드 3 보기"}).click();
+  await expect(page.getByLabel("이 장의 수정 요청")).toHaveValue("");
   expect(draftRequests).toHaveLength(0);
   const copyStepButton=page.getByRole("button", { name:"문안 만들기" });
   await expect(copyStepButton).toBeDisabled();
@@ -105,6 +116,8 @@ test("creates, saves, previews, and exports a five-slide carousel without live p
   await page.getByRole("button", { name:"이 캐러셀 사용" }).click();
   await expect(page.getByText("이미지 5장을 저장했어요.")).toBeVisible();
   expect(draftRequests).toHaveLength(1);
+  expect(draftRequests[0].image_brief).toBe(imageBrief);
+  expect(draftRequests[0].content_brief).toBe(contentBrief);
   const saved = draftRequests[0] as { media_candidates:Array<{ id:string; purpose:string; file_id:string }>; selected_media_ids:string[]; selected_media_id:string };
   expect(saved.media_candidates).toHaveLength(5);
   expect(saved.selected_media_ids).toEqual(saved.media_candidates.map(media => media.id));
@@ -113,6 +126,10 @@ test("creates, saves, previews, and exports a five-slide carousel without live p
   expect(saved.media_candidates.map(media => media.file_id)).toEqual(expectedSlides);
 
   await page.getByRole("button", { name:"문안 만들기" }).click();
+  await expect(page.getByLabel("게시물 문안")).toHaveValue(/AI 연출 이미지/);
+  await expect(page.getByText("사진 속 메뉴의 현재 판매 여부를 확인해 주세요.")).toBeVisible();
+  expect(copyRequests[0]).toMatchObject({topic,contentBrief,imageBrief,hasAiImages:true});
+  await page.screenshot({path:testInfo.outputPath(`${testInfo.project.name}-copy-quality.png`),fullPage:true});
   await page.getByRole("button", { name:"최종 화면 보기" }).click();
   await expect(page.getByText("게시하기 전에")).toBeVisible();
   await expect(page.getByText("1 / 5")).toBeVisible();

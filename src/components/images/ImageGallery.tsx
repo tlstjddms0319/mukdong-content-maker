@@ -11,8 +11,9 @@ export function ImageGallery({ drafts }: { drafts: Draft[] }) {
   return <>
     <p className="eyebrow">이미지 제작실</p>
     <h1>보이는 이미지부터 준비해요</h1>
-    <p className="lead">주제를 고른 뒤 실제 사진을 올리거나 AI 이미지를 만들 수 있어요.</p>
+    <p className="lead">사진과 글자로 무료 카드를 편집하거나, 실제 사진·AI 이미지를 사용할 수 있어요.</p>
     <div className="image-mode-guide">
+      <div><strong>무료 카드 편집</strong><p>보관한 사진과 질문으로 사진형·비교형·글자형 카드를 만들어요.</p></div>
       <div><strong>실제 사진</strong><p>내 사진을 바로 사용해요.</p></div>
       <div><strong>AI 이미지</strong><p>표지를 고른 뒤 여러 장으로 만들어요.</p></div>
       <div><strong>사진 + AI</strong><p>내 사진을 참고해 이미지를 만들어요.</p></div>

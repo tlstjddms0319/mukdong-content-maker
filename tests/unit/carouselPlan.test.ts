@@ -81,4 +81,12 @@ describe("carousel planning", () => {
     expect(body.plan.slideCount).toBe(5);
     expect(body.plan.slides[0].headline).toContain("저녁 홍어 한 상");
   });
+  it("rejects repeated provider scenes and supports a maximum-length image brief",async()=>{
+    const repeated=createFallbackCarouselPlan({topic:"홍어전",slideCount:3});
+    repeated.slides[1].visualPrompt=repeated.slides[0].visualPrompt;
+    const plan=await planCarousel({topic:"홍어전",slideCount:3,imageBrief:"가".repeat(600)},{generate:async()=>repeated});
+    expect(plan.slides).toHaveLength(3);
+    expect(new Set(plan.slides.map(slide=>slide.visualPrompt)).size).toBe(3);
+    expect(plan.slides.every(slide=>slide.visualPrompt.length<=600)).toBe(true);
+  });
 });

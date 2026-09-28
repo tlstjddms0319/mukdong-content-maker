@@ -8,6 +8,7 @@ export const AppSettingsSchema = z.object({
   copyLength: z.enum(["short", "medium", "detailed"]),
   textAiProvider: z.literal("gemini"),
   imageAiProvider: z.enum(["automatic", "cloudflare", "openai"]),
+  imageQuality: z.enum(["medium","high"]).default("medium"),
   aiModelMode: z.enum(["automatic", "manual"]),
   preserveOriginals: z.boolean(),
   blockUnverifiedClaims: z.boolean(),
