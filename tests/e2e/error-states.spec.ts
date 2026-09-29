@@ -7,6 +7,8 @@ test("settings explains AI connection without exposing a key", async ({ page }) 
   await page.goto("/settings");
   await expect(page.getByText(/Gemini (키 설정됨|키 필요)/)).toBeVisible();
   await expect(page.getByText(/OpenAI (키 설정됨|키 필요)/)).toBeVisible();
+  await expect(page.getByText(/Groq (키 설정됨|키 필요)/)).toBeVisible();
+  await expect(page.getByLabel("문안 AI")).toHaveValue("automatic");
   await expect(page.getByText(/실시간 인기 주제 연결은 후속 단계/)).toBeVisible();
   await expect(page.getByLabel("문안 길이")).toBeVisible();
   await expect(page.getByLabel("OpenAI 이미지 품질")).toBeVisible();

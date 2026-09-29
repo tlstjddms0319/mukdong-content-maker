@@ -6,7 +6,7 @@ export const AppSettingsSchema = z.object({
   imageCandidateCount: z.union([z.literal(1), z.literal(3), z.literal(5)]),
   imageAspectRatio: z.enum(["4:5", "1:1", "9:16"]),
   copyLength: z.enum(["short", "medium", "detailed"]),
-  textAiProvider: z.literal("gemini"),
+  textAiProvider: z.enum(["automatic", "gemini", "groq", "cloudflare"]),
   imageAiProvider: z.enum(["automatic", "cloudflare", "openai"]),
   imageQuality: z.enum(["medium","high"]).default("medium"),
   aiModelMode: z.enum(["automatic", "manual"]),

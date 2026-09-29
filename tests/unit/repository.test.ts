@@ -93,7 +93,7 @@ describe("draft repository", () => {
       imageCandidateCount: 3,
       imageAspectRatio: "4:5",
       copyLength: "medium",
-      textAiProvider: "gemini",
+      textAiProvider: "automatic",
       imageAiProvider: "automatic",
     });
   });
@@ -110,7 +110,21 @@ describe("draft repository", () => {
       aiProvider: "openai",
     }), "utf8");
     try {
-      expect(await readSettings()).toMatchObject({ carouselSlideCount:5, textAiProvider:"gemini", imageAiProvider:"automatic" });
+      expect(await readSettings()).toMatchObject({ carouselSlideCount:5, textAiProvider:"automatic", imageAiProvider:"automatic" });
+    } finally {
+      if (previous === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = previous;
+    }
+  });
+
+  it("keeps an explicitly saved text provider once the routing marker exists", async () => {
+    const directory = await temporaryDirectory();
+    const previous = process.env.DATA_DIR;
+    process.env.DATA_DIR = directory;
+    try {
+      await writeSettings({ ...DEFAULT_SETTINGS, textAiProvider:"groq" });
+      expect(await readSettings()).toMatchObject({ textAiProvider:"groq" });
+      await writeFile(path.join(directory, "settings.json"), JSON.stringify({ ...DEFAULT_SETTINGS, textAiProvider:"gemini" }), "utf8");
+      expect(await readSettings()).toMatchObject({ textAiProvider:"automatic" });
     } finally {
       if (previous === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = previous;
     }

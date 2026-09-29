@@ -8,7 +8,8 @@ describe("SettingsForm", () => {
   it("shows safe defaults and restores them", () => {
     const save = vi.fn(); render(<SettingsForm onSave={save}/>);
     expect(screen.queryByLabelText("이미지 비율")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("문안 AI")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("문안 AI")).toHaveValue("automatic");
+    expect(screen.getByRole("option", { name:"자동 (Gemini → Groq → Cloudflare)" })).toBeInTheDocument();
     expect(screen.getByLabelText("이미지 AI")).toHaveValue("automatic");
     expect(screen.getByRole("option", { name:"자동 (Cloudflare 우선)" })).toBeInTheDocument();
     expect(screen.getByText(/제공자 요금제에 따라 비용이 들 수 있어요/)).toBeInTheDocument();
@@ -40,13 +41,23 @@ describe("SettingsForm", () => {
     render(<SettingsForm initialSettings={{...DEFAULT_SETTINGS,imageAspectRatio:"1:1",copyLength:"detailed",carouselSlideCount:3}} onSave={onSave}/>);
     fireEvent.click(screen.getByRole("button",{name:"권장값으로 되돌리기"}));
     fireEvent.click(screen.getByRole("button",{name:"설정 저장"}));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({carouselSlideCount:5,imageAiProvider:"automatic",imageAspectRatio:"1:1",copyLength:"medium",imageQuality:"medium"}));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({carouselSlideCount:5,imageAiProvider:"automatic",imageAspectRatio:"1:1",copyLength:"medium",imageQuality:"medium",textAiProvider:"automatic"}));
   });
 
-  it("shows Cloudflare and OpenAI connection status without exposing keys", () => {
-    render(<SettingsForm connections={{gemini:true,cloudflare:true,openai:false}} />);
-    expect(screen.getByText("Cloudflare 이미지 키 설정됨")).toBeInTheDocument();
+  it("shows every AI connection status without exposing keys", () => {
+    render(<SettingsForm connections={{gemini:true,groq:false,cloudflare:true,openai:false}} />);
+    expect(screen.getByText("Gemini 키 설정됨")).toBeInTheDocument();
+    expect(screen.getByText("Groq 키 필요")).toBeInTheDocument();
+    expect(screen.getByText("Cloudflare 키 설정됨")).toBeInTheDocument();
     expect(screen.getByText("OpenAI 키 필요")).toBeInTheDocument();
-    expect(screen.queryByText(/token-123|sk-/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/token-123|sk-|gsk_/)).not.toBeInTheDocument();
+  });
+
+  it("saves the chosen text provider", () => {
+    const onSave=vi.fn();
+    render(<SettingsForm onSave={onSave}/>);
+    fireEvent.change(screen.getByLabelText("문안 AI"), { target:{ value:"groq" } });
+    fireEvent.click(screen.getByRole("button", { name:"설정 저장" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ textAiProvider:"groq" }));
   });
 });

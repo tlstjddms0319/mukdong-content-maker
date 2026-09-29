@@ -4,7 +4,7 @@ export const DEFAULT_SETTINGS = {
   imageCandidateCount: 3,
   imageAspectRatio: "4:5",
   copyLength: "medium",
-  textAiProvider: "gemini",
+  textAiProvider: "automatic",
   imageAiProvider: "automatic",
   imageQuality: "medium",
   aiModelMode: "automatic",
