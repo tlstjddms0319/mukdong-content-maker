@@ -4,6 +4,8 @@ import { createFallbackCarouselPlan, planCarousel, rolesForCount } from "@/featu
 import { POST } from "@/app/api/images/plan/route";
 
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
+vi.mock("@/features/settings/repository", () => ({ readSettings: async () => ({ textAiProvider:"automatic" }) }));
+vi.mock("server-only", () => ({}));
 
 const generateJson=vi.hoisted(()=>vi.fn());
 vi.mock("@/lib/ai/geminiClient",()=>({createGeminiClient:()=>({generateJson})}));

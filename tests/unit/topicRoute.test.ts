@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const generateJson = vi.hoisted(() => vi.fn());
 
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
+vi.mock("@/features/settings/repository", () => ({ readSettings: async () => ({ textAiProvider:"automatic" }) }));
+vi.mock("server-only", () => ({}));
 
 vi.mock("@/lib/ai/geminiClient", () => ({
   createGeminiClient: () => ({ generateJson }),

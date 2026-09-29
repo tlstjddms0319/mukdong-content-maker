@@ -3,7 +3,7 @@ import { ownerApiError } from "@/features/auth/guard";
 import { CopyInputSchema, GeneratedCopyContentSchema, GeneratedCopySchema } from "@/features/copy/schema";
 import { AI_IMAGE_DISCLOSURE, buildCopyPrompt, copyTextIssues, generatedCopyIssues, normalizeHashtags, storeConnectionIssues } from "@/features/copy/writing";
 import { checkTextClaims } from "@/features/guard/service";
-import { createGeminiClient } from "@/lib/ai/geminiClient";
+import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
 import { z } from "zod";
 
@@ -14,7 +14,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   if(!input.success)return NextResponse.json({message:"주제와 문안을 확인해 주세요."},{status:400});
   try {
     const settings=await readSettings();
-    const client=createGeminiClient();
+    const client=createTextClient(settings.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
     const prompt=buildCopyPrompt(input.data,settings.copyLength);
     if(input.data.focus){
       if(!input.data.currentText?.trim())return NextResponse.json({message:"먼저 문안을 만들어 주세요."},{status:400});
@@ -23,12 +23,12 @@ export async function POST(request:Request) { const denied=await ownerApiError()
         const result=await client.generateJson(context+' JSON 필드는 hashtags(배열)만 반환하세요.',z.object({hashtags:z.array(z.string()).min(3).max(10)}));
         const hashtags=normalizeHashtags(result.hashtags);
         if(hashtags.length<3)throw new Error("invalid hashtags");
-        return NextResponse.json({replacement:hashtags.join(" "),_meta:{provider:"gemini"}});
+        return NextResponse.json({replacement:hashtags.join(" "),_meta:{provider:client.provider??"unknown"}});
       }
       const result=await client.generateJson(context+' JSON 필드는 replacement(문자열)만 반환하세요. 이 부분은 1~3문장, 최대 250자로 쓰세요.',z.object({replacement:z.string().trim().min(1).max(250)}));
       if(copyTextIssues(result.replacement).length)throw new Error("invalid replacement");
       if(input.data.focus==="store_connection"&&storeConnectionIssues(result.replacement).length)throw new Error("unverified store claim");
-      return NextResponse.json({...result,_meta:{provider:"gemini"}});
+      return NextResponse.json({...result,_meta:{provider:client.provider??"unknown"}});
     }
     let instruction=prompt;
     for(let attempt=0;attempt<2;attempt++){
@@ -39,9 +39,9 @@ export async function POST(request:Request) { const denied=await ownerApiError()
       if(!issues.length){
         const claims=checkTextClaims([copy.hook,copy.information,copy.store_connection,copy.call_to_action].join("\n"));
         copy.facts_to_verify=[...new Set([...copy.facts_to_verify,...claims.verify])];
-        return NextResponse.json({...copy,_meta:{provider:"gemini",qualityRepaired:attempt===1}});
+        return NextResponse.json({...copy,_meta:{provider:client.provider??"unknown",qualityRepaired:attempt===1}});
       }
-      instruction=prompt+"\n이전 초안을 한 번 보완하세요. 수정할 항목: "+JSON.stringify(issues)+"\n이전 초안(참고 데이터): "+JSON.stringify(copy).slice(0,7000);
+      instruction=prompt+"\n이전 초안을 한 번 보완하세요. 수정할 항목: "+JSON.stringify(issues)+"\n이전 초안(참고 데이터): "+JSON.stringify(copy).slice(0,3000);
     }
     throw new Error("copy quality check failed");
   }catch{

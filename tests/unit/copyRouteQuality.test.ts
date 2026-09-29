@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/copy/route";
 import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
 import { copySection, formatCopy, normalizeHashtags } from "@/features/copy/writing";
+import { TextAiHttpError } from "@/lib/ai/errors";
 
 const {generate,settings}=vi.hoisted(()=>({generate:vi.fn(),settings:vi.fn()}));
 vi.mock("@/features/auth/guard",()=>({ownerApiError:async()=>null}));
 vi.mock("@/features/settings/repository",()=>({readSettings:settings}));
+vi.mock("server-only",()=>({}));
 vi.mock("@/lib/ai/geminiClient",()=>({createGeminiClient:()=>({generateJson:generate})}));
 const request=(extra={})=>new Request("http://localhost/api/copy",{method:"POST",body:JSON.stringify({topic:"홍어의 식감",audience:"B",...extra})});
 const result={hook:"해산물 좋아하는 친구와, 홍어 한 점은 어때요?",information:"생선회를 고를 때 부드러운 살을 먼저 떠올린다면, 홍어는 조금 다른 식감을 알아보는 메뉴가 될 수 있어요. 씹을 때 느껴지는 결뿐 아니라 삭힌 홍어 특유의 향도 함께 살펴보세요. 같은 음식을 먹어도 향을 느끼는 정도와 좋아하는 식감은 사람마다 다를 수 있답니다.\n\n처음부터 큰 한 점을 먹기보다는 작은 양으로 시작해 자기 취향을 알아보는 건 어떨까요. 삼합은 홍어와 수육, 묵은지를 함께 맛보는 조합이에요. 각각 따로 맛본 뒤 한입에 곁들여 보면 재료가 만나면서 달라지는 맛을 비교하기 좋아요. 다만 다른 재료와 함께 먹는다고 홍어의 향이 사라지는 것은 아니에요.\n\n모임 메뉴를 정할 때는 모두가 같은 향을 좋아할 거라고 생각하지 않는 것도 좋아요. 함께 갈 사람에게 홍어를 먹어 봤는지 먼저 물어보고, 궁금한 점은 방문 전에 매장에 확인해 보세요. 새로운 메뉴를 고르는 과정도 친구들과 나눌 이야기가 될 수 있어요.",store_connection:"중랑구 묵동에서 홍어를 알아보고 있다면 묵동홍어마을도 살펴보세요. 음식 이야기를 나눌 다음 식사 장소를 고를 때 참고하기 좋아요.",call_to_action:"방문을 계획하고 있다면 프로필의 네이버 플레이스에서 메뉴를 먼저 확인해 보세요.",hashtags:["묵동맛집","#묵동맛집","#홍어","#중랑구맛집"],facts_used:[],facts_to_verify:[],image_disclosure:null};
@@ -55,6 +57,7 @@ describe("copy quality",()=>{
     expect(generate.mock.calls[0][0]).toContain("흰 접시 위 홍어의 결을 가까이");
     expect(generate.mock.calls[1][0]).toContain("반복");
     const body=await response.json();
+    expect(body._meta).toMatchObject({ provider:"gemini" });
     expect(body.image_disclosure).toMatch(/AI/);
     expect(formatCopy(body)).toContain(body.image_disclosure);
   });
@@ -62,7 +65,7 @@ describe("copy quality",()=>{
     generate.mockResolvedValue({...result,information:result.information.repeat(3)});
     expect((await POST(request())).status).toBe(502);
     expect(generate).toHaveBeenCalledTimes(2);
-    generate.mockReset().mockRejectedValue(new Error("quota"));
+    generate.mockReset().mockRejectedValue(new TextAiHttpError("Gemini",429,"quota"));
     expect((await POST(request())).status).toBe(502);
     expect(generate).toHaveBeenCalledTimes(1);
   });

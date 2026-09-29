@@ -2,6 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const generateJson = vi.hoisted(() => vi.fn());
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
+vi.mock("@/features/settings/repository", () => ({ readSettings: async () => ({ textAiProvider:"automatic" }) }));
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/ai/geminiClient", () => ({ createGeminiClient: () => ({ generateJson }) }));
 import { POST } from "@/app/api/topics/route";
 import { topicDirectionsForRound } from "@/features/topics/service";
@@ -15,6 +17,7 @@ describe("topic source reporting", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const body = await (await call()).json();
     expect(body.source).toBe("fallback");
+    expect(body.provider).toBeNull();
     expect(body.topics).toHaveLength(3);
     expect(String(warn.mock.calls[0]?.join(" "))).toContain("429");
   });
@@ -24,5 +27,6 @@ describe("topic source reporting", () => {
     generateJson.mockImplementation(async (_p, schema) => schema.parse(titles.map((title, i) => ({ id: String(i), title, summary: "익숙한 음식의 향과 식감을 설명하고 홍어로 연결하는 흐름입니다.", reason: "이유", audience: "A", imageBrief: "사진", direction: directions[i] }))));
     const body = await (await call()).json();
     expect(body.source).toBe("ai");
+    expect(body.provider).toBe("gemini");
   });
 });
