@@ -34,7 +34,7 @@ npm run dev
 
 무료 한도(2026-09-28 기준, 변동 가능): Gemini flash-lite는 모델별 하루 약 500회, Groq는 모델별 하루 1,000회, Cloudflare는 이미지와 합쳐 하루 10,000뉴런입니다. 세 서비스 모두 카드 없이 시작할 수 있습니다.
 
-같은 프롬프트로 세 서비스를 비교하려면 Node 24 이상에서 `npm run compare:text`를 실행하세요. 결과는 `output/text-provider-comparison-<날짜>/report.md`에 저장되며 키는 기록되지 않습니다.
+같은 프롬프트로 세 서비스를 비교하려면 Node 24 이상에서 `npm run compare:text`를 실행하세요(Node의 TypeScript 변환 모드를 사용합니다). 결과는 `output/text-provider-comparison-<날짜>/report.md`에 저장되며 키는 기록되지 않습니다.
 
 ## 확인 명령
 

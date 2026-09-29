@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "compare:text": "node --conditions=react-server --import ./scripts/register-ts.mjs scripts/compare-text-providers.mjs"
+    "compare:text": "node --conditions=react-server --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/compare-text-providers.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",
