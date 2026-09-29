@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "compare:text": "node --conditions=react-server --import ./scripts/register-ts.mjs scripts/compare-text-providers.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",

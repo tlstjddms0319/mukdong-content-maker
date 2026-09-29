@@ -12,7 +12,7 @@ Copy-Item .env.example .env.local
 npm run dev
 ```
 
-브라우저에서 `http://localhost:3000`을 엽니다. `.env.local`에 Gemini 키와 이미지 생성용 Cloudflare 계정 ID·Workers AI 토큰을 입력하세요. 기본 이미지 설정은 Cloudflare 무료 할당량을 먼저 사용하고, 실패할 때 `OPENAI_API_KEY`가 있으면 OpenAI로 전환합니다. Cloudflare 유료 요금제를 사용하면 무료 할당량 초과분이 과금될 수 있습니다. 설정에서 `Cloudflare만`을 고르면 유료 OpenAI 대체 호출을 하지 않습니다. 키는 브라우저, 초안 파일, 로그에 저장하지 않습니다. 키가 없어도 기본 추천과 화면 흐름을 확인할 수 있습니다.
+브라우저에서 `http://localhost:3000`을 엽니다. `.env.local`에 Gemini 키와 이미지 생성용 Cloudflare 계정 ID·Workers AI 토큰을 입력하세요. 주제와 문안은 기본적으로 무료 `gemini-3.5-flash-lite` 모델을 사용합니다. `GROQ_API_KEY`를 추가하면 무료 예비 작성자가 하나 더 생기고, `CLOUDFLARE_TEXT_MODEL`을 설정하면 이미지에 쓰는 같은 Cloudflare 계정으로 문안도 쓸 수 있습니다. 기본 이미지 설정은 Cloudflare 무료 할당량을 먼저 사용하고, 실패할 때 `OPENAI_API_KEY`가 있으면 OpenAI로 전환합니다. Cloudflare 유료 요금제를 사용하면 무료 할당량 초과분이 과금될 수 있습니다. 설정에서 `Cloudflare만`을 고르면 유료 OpenAI 대체 호출을 하지 않습니다. 키는 브라우저, 초안 파일, 로그에 저장하지 않습니다. 키가 없어도 기본 추천과 화면 흐름을 확인할 수 있습니다.
 
 ## 관리자 로그인 설정
 
@@ -27,6 +27,14 @@ npm run dev
 최종 확인 화면은 게시물 주제와 대상에 맞춘 해시태그 묶음, 음악 분위기, Instagram 음악 검색어, 게시 순서를 제공합니다. **전체 묶음 받기** ZIP에는 이미지, 문안, 메타데이터와 `posting-guide.txt`가 들어갑니다. 네이버 플레이스 링크를 확인한 뒤 Instagram 앱에서 직접 게시하세요. 앱은 Instagram 연결 상태를 조회하거나 게시 API를 호출하지 않습니다.
 
 `콘텐츠 자료`에는 첫 4주용 아이디어 12개가 들어 있습니다. 구성은 음식 탐색형 5개, 약속 결정형 4개, 호기심 입문형 3개이며 실사진 6개, 실사 릴스 3개, 일러스트 3개입니다. 카드에서 초안을 시작하면 대상과 촬영 힌트가 제작 화면으로 함께 전달됩니다.
+
+## 문안 AI 선택과 비교
+
+`설정 → 문안 AI`에서 `자동`(Gemini → Groq → Cloudflare 순서), `Gemini만`, `Groq만`, `Cloudflare만`을 고릅니다. 자동은 키가 있는 서비스만 시도하고, 한도 초과나 응답 오류가 나면 다음 서비스로 넘어간 뒤 모두 실패하면 준비된 문안을 씁니다. 문안 화면에는 어느 서비스가 썼는지 표시됩니다.
+
+무료 한도(2026-09-28 기준, 변동 가능): Gemini flash-lite는 모델별 하루 약 500회, Groq는 모델별 하루 1,000회, Cloudflare는 이미지와 합쳐 하루 10,000뉴런입니다. 세 서비스 모두 카드 없이 시작할 수 있습니다.
+
+같은 프롬프트로 세 서비스를 비교하려면 Node 24 이상에서 `npm run compare:text`를 실행하세요. 결과는 `output/text-provider-comparison-<날짜>/report.md`에 저장되며 키는 기록되지 않습니다.
 
 ## 확인 명령
 
