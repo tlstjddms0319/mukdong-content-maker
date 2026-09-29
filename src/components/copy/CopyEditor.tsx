@@ -5,9 +5,12 @@ import { AI_IMAGE_DISCLOSURE, copySection, copyTextIssues, formatCopy } from "@/
 import { checkTextClaims } from "@/features/guard/service";
 import { GenerationProgress } from "@/components/states/GenerationState";
 
+const PROVIDER_LABELS:Record<string,string>={gemini:"Gemini",groq:"Groq",cloudflare:"Cloudflare"};
+
 export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience="A",contentBrief,imageBrief,hasAiImages=false,initialText,onTextChange,onContinue,saving=false}:{topic?:string;audience?:"A"|"B"|"C";contentBrief?:string;imageBrief?:string;hasAiImages?:boolean;initialText?:string;onTextChange?:(text:string)=>void;onContinue:(text:string)=>void;saving?:boolean}) {
   const [text,setText]=useState(initialText??"");
-  const [status,setStatus]=useState<"loading"|"gemini"|"fallback"|"saved">(initialText?"saved":"loading");
+  const [status,setStatus]=useState<"loading"|"ai"|"fallback"|"saved">(initialText?"saved":"loading");
+  const [provider,setProvider]=useState("");
   const [error,setError]=useState("");
   const [factsToVerify,setFactsToVerify]=useState<string[]>([]);
   const writingIssues=copyTextIssues(text);
@@ -26,7 +29,8 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
       const next=section?current.slice(0,section.start)+(section.start===current.length?"\n\n":"")+copy.replacement+current.slice(section.end):formatCopy(copy);
       if(next.length>2200)throw new Error("문안이 2,200자를 넘었어요. 글을 줄인 뒤 다시 시도해 주세요.");
       if(!edited.current){setText(next);onTextChange?.(next);if(!focus)setFactsToVerify(copy.facts_to_verify??[]);}
-      setStatus("gemini");
+      setProvider(String((copy as {_meta?:{provider?:string}})._meta?.provider??""));
+      setStatus("ai");
     }catch(reason){if(run===runRef.current){setStatus("fallback");setError(reason instanceof Error?reason.message:"문안 생성에 실패했어요. 기존 글은 그대로 있어요.");}}
   };
   useEffect(()=>{
@@ -35,7 +39,7 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     let active=true;
     fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages})})
       .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.message||"문안을 만들지 못했어요.");return body;})
-      .then(copy=>{if(active){if(!edited.current){const next=formatCopy(copy);setText(next);onTextChange?.(next);setFactsToVerify(copy.facts_to_verify??[]);}setStatus("gemini");}})
+      .then(copy=>{if(active){if(!edited.current){const next=formatCopy(copy);setText(next);onTextChange?.(next);setFactsToVerify(copy.facts_to_verify??[]);}setProvider(String(copy._meta?.provider??""));setStatus("ai");}})
       .catch(reason=>{if(active){setStatus("fallback");setError(reason instanceof Error?reason.message:"문안을 만들지 못했어요. 다시 시도해 주세요.");}});
     return ()=>{active=false;runCounter.current++;};
   },[topic,audience,contentBrief,imageBrief,hasAiImages,onTextChange]);
@@ -43,7 +47,7 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     <p className="eyebrow">3 문안</p><h2 id="copy-title">완성된 글을 확인해요</h2><p className="lead">음식 이야기에서 묵동홍어마을 방문 안내까지 자연스럽게 이어가요. 글 길이는 설정에서 바꿀 수 있어요.</p>
     {contentBrief&&<p className="copy-brief"><strong>글의 설명 방향</strong><br/>{contentBrief}</p>}
     {imageBrief&&<p className="copy-brief"><strong>이미지와 맞출 이야기</strong><br/>{imageBrief}</p>}
-    {status==="loading"?<GenerationProgress label="Gemini가 문안을"/>:<p role="status">{status==="saved"?"저장된 문안을 불러왔어요.":status==="gemini"?"Gemini로 문안을 만들었어요.":"문안 생성이 완료되지 않았어요."}</p>}
+    {status==="loading"?<GenerationProgress label="AI가 문안을"/>:<p role="status">{status==="saved"?"저장된 문안을 불러왔어요.":status==="ai"?`AI로 문안을 만들었어요${provider?` (${PROVIDER_LABELS[provider]??provider})`:""}`:"문안 생성이 완료되지 않았어요."}</p>}
     {error&&<p role="alert">{error}</p>}
     <textarea aria-label="게시물 문안" rows={18} maxLength={2200} value={text} onChange={event=>{edited.current=true;setText(event.target.value);onTextChange?.(event.target.value);}}/>
     <p>{text.length.toLocaleString()} / 2,200자 · 해시태그는 관련성 높은 3~5개를 사용해요.</p>

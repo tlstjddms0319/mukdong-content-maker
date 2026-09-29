@@ -42,10 +42,18 @@ describe("CopyEditor generation", () => {
     let finish:(value:unknown)=>void=()=>undefined;
     vi.stubGlobal("fetch",vi.fn(()=>new Promise(resolve=>{finish=resolve;})));
     render(<CopyEditor topic="선택한 주제" onContinue={()=>undefined}/>);
-    expect(screen.getByRole("status")).toHaveTextContent("Gemini가 문안을 만드는 중");
+    expect(screen.getByRole("status")).toHaveTextContent("AI가 문안을 만드는 중");
     fireEvent.change(screen.getByLabelText("게시물 문안"),{target:{value:"내가 직접 고친 문안"}});
     finish({ok:true,json:async()=>({topic:"선택한 주제",audience:"A",hook:"늦게 온 AI 문안",information:"정보",store_connection:"가게",call_to_action:"저장",hashtags:[],facts_used:[],facts_to_verify:[],image_disclosure:null,_meta:{provider:"gemini"}})});
     expect(await screen.findByDisplayValue("내가 직접 고친 문안")).toBeInTheDocument();
+  });
+
+  it("names the provider that answered", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok:true, json:async () => ({
+      topic:"선택한 주제", audience:"A", hook:"첫 문장", information:"정보", store_connection:"가게", call_to_action:"저장", hashtags:["#삼합"], facts_used:[], facts_to_verify:[], image_disclosure:null, _meta:{provider:"groq"},
+    }) }));
+    render(<CopyEditor topic="선택한 주제" onContinue={() => undefined}/>);
+    expect(await screen.findByText("AI로 문안을 만들었어요 (Groq)")).toBeInTheDocument();
   });
 
   it("does not spend an AI request when reopening a saved caption", () => {
