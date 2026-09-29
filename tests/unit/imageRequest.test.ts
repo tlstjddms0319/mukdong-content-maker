@@ -284,4 +284,30 @@ describe("OpenAI image request", () => {
 
     expect(actual.equals(expected)).toBe(true);
   }, 15_000);
+
+  it("keeps automatic routing when settings cannot be read", async () => {
+    readSettings.mockRejectedValueOnce(new Error("broken settings"));
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","account-123");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN","token-123");
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response(JSON.stringify({success:true,result:{image:"Y2xvdWRmbGFyZS1pbWFnZQ=="}}),{status:200,headers:{"Content-Type":"application/json"}})));
+    const response=await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어 한 상",count:1,aspectRatio:"4:5"})}));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({provider:"cloudflare",fallback:false});
+    expect(generateImage).not.toHaveBeenCalled();
+  });
+
+
+  it("fails closed on cost when settings cannot be read and Cloudflare fails", async () => {
+    readSettings.mockRejectedValueOnce(new Error("broken settings"));
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","account-123");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN","token-123");
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response(JSON.stringify({success:false,errors:[{message:"daily limit"}]}),{status:429,headers:{"Content-Type":"application/json"}})));
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const response=await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어 한 상",count:1,aspectRatio:"4:5"})}));
+    expect(response.status).toBe(502);
+    expect(generateImage).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("설정"), expect.any(String));
+    warn.mockRestore();
+  });
+
 });

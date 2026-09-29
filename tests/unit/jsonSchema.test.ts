@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { toStrictJsonSchema } from "@/lib/ai/jsonSchema";
+import { OptionalFieldsError, toStrictJsonSchema } from "@/lib/ai/jsonSchema";
 import { TextAiHttpError } from "@/lib/ai/errors";
 import { GeneratedCopyContentSchema } from "@/features/copy/schema";
 import { topicGenerationSchema } from "@/features/topics/prompt";
@@ -31,4 +31,9 @@ describe("toStrictJsonSchema", () => {
     expect(error.status).toBe(429);
     expect(error.provider).toBe("Gemini");
   });
+
+  it("throws a dedicated error for optional fields so callers can fall back only for that case", () => {
+    expect(() => toStrictJsonSchema(z.object({ note: z.string().optional() }))).toThrow(OptionalFieldsError);
+  });
+
 });

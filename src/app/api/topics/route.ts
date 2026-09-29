@@ -19,7 +19,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const body = RequestSchema.parse(await request.json());
     const input = TopicInputSchema.parse({ storeName: body.storeProfile.name, intent: body.intent, recommendationRound:body.recommendationRound, excludeTitles:body.excludeTitles });
     const directions = topicDirectionsForRound(input.recommendationRound);
-    const settings = await readSettings().catch(() => null);
+    const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     let source: "ai" | "fallback" = "ai";
     const topics = await suggestTopics(input, { suggest:() => client.generateJson(

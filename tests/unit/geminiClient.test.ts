@@ -52,4 +52,58 @@ describe("Gemini client", () => {
     await expect(createGeminiClient({apiKey:"secret",fetch:request}).generateJson("test",z.object({ok:z.boolean()}))).rejects.toMatchObject({name:"TextAiHttpError",status:429,provider:"Gemini"});
     expect(request).toHaveBeenCalledTimes(2);
   });
+
+  it("sends the strict JSON schema with the request", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'{"title":"삼합"}' }] } }] }), { status:200 }));
+    await createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ title:z.string() }));
+    const body = JSON.parse(String(request.mock.calls[0][1].body));
+    expect(body.generationConfig).toMatchObject({ responseMimeType:"application/json", responseJsonSchema:{ type:"object", additionalProperties:false, required:["title"] } });
+  });
+
+  it("retries once without the schema when Gemini rejects it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const request = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error:{ status:"INVALID_ARGUMENT" } }), { status:400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'{"ok":true}' }] } }] }), { status:200 }));
+    await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ ok:z.boolean() }))).resolves.toEqual({ ok:true });
+    expect(JSON.parse(String(request.mock.calls[0][1].body)).generationConfig.responseJsonSchema).toBeDefined();
+    expect(JSON.parse(String(request.mock.calls[1][1].body)).generationConfig.responseJsonSchema).toBeUndefined();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1][0]).toContain("gemini-3.5-flash-lite:generateContent");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("responseJsonSchema"), expect.any(String));
+    warn.mockRestore();
+  });
+
+  it("falls back to plain JSON mode when the schema has optional fields", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'{"title":"삼합"}' }] } }] }), { status:200 }));
+    await createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ title:z.string(), note:z.string().optional() }));
+    expect(JSON.parse(String(request.mock.calls[0][1].body)).generationConfig.responseJsonSchema).toBeUndefined();
+  });
+
+
+  it("gives up after one schema-less retry on a persistent 400", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error:{ status:"INVALID_ARGUMENT" } }), { status:400 }));
+    await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ ok:z.boolean() }))).rejects.toMatchObject({ name:"TextAiHttpError", status:400 });
+    expect(request).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it("does not retry a 400 when no schema was attached", async () => {
+    const request = vi.fn().mockResolvedValue(new Response("{}", { status:400 }));
+    await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ title:z.string(), note:z.string().optional() }))).rejects.toMatchObject({ status:400 });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the schema on the 503 retry and on the fallback model", async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(new Response("{}", { status:503 }))
+      .mockResolvedValueOnce(new Response("{}", { status:429 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'{"ok":true}' }] } }] }), { status:200 }));
+    await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ ok:z.boolean() }))).resolves.toEqual({ ok:true });
+    expect(request).toHaveBeenCalledTimes(3);
+    for (const call of request.mock.calls) expect(JSON.parse(String(call[1].body)).generationConfig.responseJsonSchema).toBeDefined();
+    expect(request.mock.calls[2][0]).toContain("gemini-3.1-flash-lite:generateContent");
+  });
+
 });

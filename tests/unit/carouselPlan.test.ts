@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFallbackCarouselPlan, planCarousel, rolesForCount } from "@/features/images/carousel";
+import { buildCarouselPlanPrompt, createFallbackCarouselPlan, planCarousel, rolesForCount } from "@/features/images/carousel";
 import { POST } from "@/app/api/images/plan/route";
 
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
@@ -103,4 +103,13 @@ describe("carousel planning", () => {
     expect(["fallback","gemini"]).toContain(body.provider);
     expect(body.plan.slideCount).toBe(3);
   });
+
+  it("builds the plan instruction from the input", () => {
+    const prompt=buildCarouselPlanPrompt({topic:"비 오는 날 홍어",slideCount:3});
+    expect(prompt).toContain("\"비 오는 날 홍어\"");
+    expect(prompt).toContain("cover → how-to → visit");
+    expect(prompt).toContain("기존 이미지 설명: 없음");
+    expect(prompt).toContain("가격, 원산지, 영업시간, 매장 정보");
+  });
+
 });

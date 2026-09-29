@@ -7,6 +7,8 @@ import { classifyOpenAIImageError } from "@/features/images/openaiError";
 import { composeSlideImage } from "@/features/images/composeSlide";
 import { CloudflareConfigurationError, CloudflareImageError, CloudflarePartialImageError, generateCloudflareImages } from "@/features/images/cloudflareRequest";
 import { readSettings } from "@/features/settings/repository";
+import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
+import { AppSettingsSchema, type AppSettings } from "@/features/settings/schema";
 import sharp from "sharp";
 
 async function imageBytes(source:string):Promise<Buffer> {
@@ -21,7 +23,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
   const parsed = ImageBriefSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ message: "이미지 설정을 확인해 주세요." }, { status: 400 });
   try {
-    const settings=await readSettings();
+    // An unreadable settings file falls back to defaults, but fails closed on cost: no paid OpenAI call
+    // can be triggered by a settings read failure, only the free Cloudflare path.
+    const settings:AppSettings=(await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 무료 이미지 경로만 사용합니다:",error instanceof Error?error.message:String(error));return null;}))
+      ??{...AppSettingsSchema.parse(DEFAULT_SETTINGS),imageAiProvider:"cloudflare"};
     const generateWithOpenAI=async(count=parsed.data.count)=>{
       const client=getOpenAIClient();
       const input={...parsed.data,count};

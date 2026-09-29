@@ -106,4 +106,14 @@ describe("copy quality",()=>{
     const body=await response.json();
     expect(body._meta).toMatchObject({ provider:"gemini" });
   });
+
+  it("still writes with the default length when settings cannot be read",async()=>{
+    settings.mockRejectedValueOnce(new Error("broken settings"));
+    generate.mockResolvedValue(result);
+    const response=await POST(request());
+    expect(response.status).toBe(200);
+    expect(generate.mock.calls[0][0]).toContain("500~800자");
+    expect((await response.json())._meta).toMatchObject({provider:"gemini"});
+  });
+
 });

@@ -5,6 +5,7 @@ import { AI_IMAGE_DISCLOSURE, buildCopyPrompt, copyTextIssues, generatedCopyIssu
 import { checkTextClaims } from "@/features/guard/service";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
+import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
 import { z } from "zod";
 
 const RequestSchema=CopyInputSchema.extend({focus:z.enum(["hook","store_connection","call_to_action","hashtags"]).optional(),currentText:z.string().max(2200).optional()});
@@ -13,9 +14,11 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   const input=RequestSchema.safeParse(await request.json().catch(()=>null));
   if(!input.success)return NextResponse.json({message:"주제와 문안을 확인해 주세요."},{status:400});
   try {
-    const settings=await readSettings();
-    const client=createTextClient(settings.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
-    const prompt=buildCopyPrompt(input.data,settings.copyLength);
+    // An unreadable settings file must not stop the writer; defaults keep the caption flow alive.
+    const settings=await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:",error instanceof Error?error.message:String(error));return null;});
+    const copyLength=settings?.copyLength??DEFAULT_SETTINGS.copyLength;
+    const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
+    const prompt=buildCopyPrompt(input.data,copyLength);
     if(input.data.focus){
       if(!input.data.currentText?.trim())return NextResponse.json({message:"먼저 문안을 만들어 주세요."},{status:400});
       const context=prompt+"\n현재 문안(내용 참고용): "+JSON.stringify(input.data.currentText)+"\n"+input.data.focus+" 부분만 새롭게 작성하세요. 부분 수정에는 전체 본문 길이 기준을 적용하지 않습니다. 다른 부분은 출력하지 마세요.";
@@ -35,7 +38,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
       const copy=GeneratedCopySchema.parse({...await client.generateJson(instruction,GeneratedCopyContentSchema),topic:input.data.topic,audience:input.data.audience});
       copy.hashtags=normalizeHashtags(copy.hashtags);
       copy.image_disclosure=input.data.hasAiImages?AI_IMAGE_DISCLOSURE:null;
-      const issues=generatedCopyIssues(copy,settings.copyLength);
+      const issues=generatedCopyIssues(copy,copyLength);
       if(!issues.length){
         const claims=checkTextClaims([copy.hook,copy.information,copy.store_connection,copy.call_to_action].join("\n"));
         copy.facts_to_verify=[...new Set([...copy.facts_to_verify,...claims.verify])];
