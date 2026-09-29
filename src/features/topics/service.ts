@@ -68,5 +68,5 @@ export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallbac
     const excluded=new Set(parsed.excludeTitles.map(titleKey));
     if(new Set(titles).size!==titles.length||titles.some(title=>excluded.has(title))||!followsCuriosityBrief(suggestions,parsed.storeName))return fallback("suggestions broke the topic rules");
     return suggestions;
-  }catch(error){return fallback(error instanceof Error?error.message.replace(/s+/g," ").slice(0,300):"AI request failed");}
+  }catch(error){return fallback(error instanceof Error?error.message.replace(/\s+/g," ").slice(0,300):"AI request failed");}
 }

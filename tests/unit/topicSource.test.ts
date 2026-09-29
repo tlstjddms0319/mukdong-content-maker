@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const generateJson = vi.hoisted(() => vi.fn());
+const readSettings = vi.hoisted(() => vi.fn(async () => ({ textAiProvider:"automatic" })));
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
-vi.mock("@/features/settings/repository", () => ({ readSettings: async () => ({ textAiProvider:"automatic" }) }));
+vi.mock("@/features/settings/repository", () => ({ readSettings }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/ai/geminiClient", () => ({ createGeminiClient: () => ({ generateJson }) }));
 import { POST } from "@/app/api/topics/route";
@@ -11,7 +12,7 @@ import { topicDirectionsForRound } from "@/features/topics/service";
 const call = () => POST(new Request("http://localhost/api/topics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storeProfile: { name: "묵동홍어마을" }, recommendationRound: 0 }) }));
 
 describe("topic source reporting", () => {
-  beforeEach(() => { generateJson.mockReset(); vi.restoreAllMocks(); });
+  beforeEach(() => { generateJson.mockReset(); readSettings.mockReset(); readSettings.mockImplementation(async () => ({ textAiProvider:"automatic" })); vi.restoreAllMocks(); });
   it("marks fallback topics and logs why Gemini was not used", async () => {
     generateJson.mockRejectedValue(new Error("Gemini API 오류 (429)"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -28,5 +29,12 @@ describe("topic source reporting", () => {
     const body = await (await call()).json();
     expect(body.source).toBe("ai");
     expect(body.provider).toBe("gemini");
+  });
+  it("keeps prepared topics when settings cannot be read", async () => {
+    readSettings.mockRejectedValueOnce(new Error("broken settings"));
+    const response = await call();
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.topics).toHaveLength(3);
   });
 });

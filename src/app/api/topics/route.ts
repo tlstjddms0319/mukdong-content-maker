@@ -19,8 +19,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const body = RequestSchema.parse(await request.json());
     const input = TopicInputSchema.parse({ storeName: body.storeProfile.name, intent: body.intent, recommendationRound:body.recommendationRound, excludeTitles:body.excludeTitles });
     const directions = topicDirectionsForRound(input.recommendationRound);
-    const settings = await readSettings();
-    const client = createTextClient(settings.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
+    const settings = await readSettings().catch(() => null);
+    const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     let source: "ai" | "fallback" = "ai";
     const topics = await suggestTopics(input, { suggest:() => client.generateJson(
       buildTopicPrompt(input),

@@ -2,7 +2,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { GroqConfigurationError, createGroqClient } from "@/lib/ai/groqClient";
+import { GroqConfigurationError, createGroqClient, groqSdkOptions } from "@/lib/ai/groqClient";
 
 vi.mock("server-only", () => ({}));
 
@@ -33,5 +33,9 @@ describe("Groq client", () => {
     const create = vi.fn().mockResolvedValue({ choices:[{ message:{ content:null } }] });
     const client = createGroqClient({ apiKey:"secret", client:{ chat:{ completions:{ create } } } });
     await expect(client.generateJson("x", z.object({ ok:z.boolean() }))).rejects.toThrow(/비어/);
+  });
+
+  it("builds SDK options that fail fast instead of inheriting the SDK's retries and long timeout", () => {
+    expect(groqSdkOptions("secret")).toEqual({ apiKey:"secret", baseURL:"https://api.groq.com/openai/v1", maxRetries:0, timeout:30_000 });
   });
 });

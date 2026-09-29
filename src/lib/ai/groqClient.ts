@@ -11,6 +11,12 @@ export class GroqConfigurationError extends Error {
   }
 }
 
+export const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+export function groqSdkOptions(apiKey: string) {
+  // The resolver owns retries and fallback; the SDK must fail fast.
+  return { apiKey, baseURL: GROQ_BASE_URL, maxRetries: 0, timeout: 30_000 };
+}
+
 type CompletionClient = {
   chat: { completions: { create(body: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming): Promise<OpenAI.Chat.Completions.ChatCompletion> } };
 };
@@ -19,7 +25,7 @@ export function createGroqClient(options: { apiKey?:string; model?:string; clien
   const apiKey = options.apiKey ?? process.env.GROQ_API_KEY ?? "";
   if (!apiKey) throw new GroqConfigurationError();
   const model = options.model ?? process.env.GROQ_TEXT_MODEL ?? "openai/gpt-oss-120b";
-  const client: CompletionClient = options.client ?? new OpenAI({ apiKey, baseURL:"https://api.groq.com/openai/v1" });
+  const client: CompletionClient = options.client ?? new OpenAI(groqSdkOptions(apiKey));
   return {
     provider: "groq" as const,
     async generateJson<T>(prompt:string, schema:z.ZodType<T>):Promise<T> {
