@@ -1,6 +1,6 @@
 # Free Text AI Providers Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Let topic, caption and carousel-plan generation run on Gemini flash-lite, Groq or Cloudflare Workers AI behind one interface, fall back automatically, and produce a side-by-side comparison report so the owner can pick the best free provider.
 
@@ -52,7 +52,7 @@
 **Interfaces:**
 - Produces: `class TextAiHttpError extends Error { provider: string; status: number }` and `toStrictJsonSchema(schema: z.ZodType): Record<string, unknown>`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/unit/jsonSchema.test.ts
@@ -92,12 +92,12 @@ describe("toStrictJsonSchema", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/unit/jsonSchema.test.ts`
 Expected: FAIL — cannot resolve `@/lib/ai/jsonSchema` and `@/lib/ai/errors`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
 // src/lib/ai/errors.ts
@@ -136,12 +136,12 @@ function tighten(node: unknown): unknown {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/unit/jsonSchema.test.ts`
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/ai/errors.ts src/lib/ai/jsonSchema.ts tests/unit/jsonSchema.test.ts
@@ -160,7 +160,7 @@ git commit -m "feat: add strict JSON schema helper and shared text AI error"
 - Consumes: `TextAiHttpError` from Task 1.
 - Produces: `createGeminiClient(options?: { apiKey?; model?; fallbackModel?; fetch? })` returning `{ provider: "gemini"; generateJson<T>(prompt, schema): Promise<T> }`. Non-OK responses throw `TextAiHttpError("Gemini", status)`.
 
-- [ ] **Step 1: Update the model expectation and add the fallback test**
+- [x] **Step 1: Update the model expectation and add the fallback test**
 
 In `tests/unit/geminiClient.test.ts` change the third test to:
 
@@ -192,12 +192,12 @@ Append two tests inside the describe block:
   });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/unit/geminiClient.test.ts`
 Expected: FAIL — default model still `gemini-3.6-flash`, no `provider`, no fallback.
 
-- [ ] **Step 3: Rewrite the client**
+- [x] **Step 3: Rewrite the client**
 
 Replace the body of `src/lib/ai/geminiClient.ts` from `type Fetch` to the end with:
 
@@ -233,17 +233,17 @@ export function createGeminiClient(options: { apiKey?:string; model?:string; fal
 
 Add `import { TextAiHttpError } from "./errors";` after the zod import.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `npx vitest run tests/unit/geminiClient.test.ts tests/unit/topicRoute.test.ts tests/unit/topicSource.test.ts tests/unit/copyRouteQuality.test.ts`
 Expected: PASS. (`topicSource` still sees "429" in the warning because the message is `Gemini API 오류 (429)`.)
 
-- [ ] **Step 5: Point the local environment at the new default**
+- [x] **Step 5: Point the local environment at the new default**
 
 Run (does not print secrets): `sed -i 's/^GEMINI_TEXT_MODEL=.*/GEMINI_TEXT_MODEL=gemini-3.5-flash-lite/' .env.local && grep -c "^GEMINI_TEXT_MODEL=gemini-3.5-flash-lite" .env.local`
 Expected: `1`. `.env.local` is git-ignored; nothing to commit for it.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/ai/geminiClient.ts tests/unit/geminiClient.test.ts
@@ -262,7 +262,7 @@ git commit -m "feat: default Gemini text to flash-lite with rate-limit fallback"
 - Consumes: `toStrictJsonSchema`, `TextAiHttpError` (Task 1).
 - Produces: `createGroqClient(options?: { apiKey?; model?; client? })` returning `{ provider: "groq"; generateJson }`; `class GroqConfigurationError`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/unit/groqClient.test.ts
@@ -304,12 +304,12 @@ describe("Groq client", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/unit/groqClient.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the client**
+- [x] **Step 3: Write the client**
 
 ```ts
 // src/lib/ai/groqClient.ts
@@ -358,12 +358,12 @@ export function createGroqClient(options: { apiKey?:string; model?:string; clien
 }
 ```
 
-- [ ] **Step 4: Run test and type-check**
+- [x] **Step 4: Run test and type-check**
 
 Run: `npx vitest run tests/unit/groqClient.test.ts && npx tsc --noEmit`
 Expected: PASS, no type errors. If `tsc` complains that the fake `client` in the test is not assignable, type the test fake as `unknown as Parameters<typeof createGroqClient>[0]["client"]`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/ai/groqClient.ts tests/unit/groqClient.test.ts
@@ -382,7 +382,7 @@ git commit -m "feat: add Groq text client with strict JSON schema"
 - Consumes: `toStrictJsonSchema`, `TextAiHttpError`.
 - Produces: `createCloudflareTextClient(options?: { accountId?; token?; model?; fetch? })` returning `{ provider: "cloudflare"; generateJson }`; `class CloudflareTextConfigurationError`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/unit/cloudflareTextClient.test.ts
@@ -429,12 +429,12 @@ describe("Cloudflare text client", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/unit/cloudflareTextClient.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the client**
+- [x] **Step 3: Write the client**
 
 ```ts
 // src/lib/ai/cloudflareTextClient.ts
@@ -487,12 +487,12 @@ export function createCloudflareTextClient(options: { accountId?:string; token?:
 }
 ```
 
-- [ ] **Step 4: Run test**
+- [x] **Step 4: Run test**
 
 Run: `npx vitest run tests/unit/cloudflareTextClient.test.ts && npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/ai/cloudflareTextClient.ts tests/unit/cloudflareTextClient.test.ts
@@ -514,7 +514,7 @@ git commit -m "feat: add Cloudflare Workers AI text client"
 **Interfaces:**
 - Produces: `AppSettings["textAiProvider"]` = `"automatic" | "gemini" | "groq" | "cloudflare"`; `SettingsForm` prop `connections: { gemini; groq; cloudflare; openai }`.
 
-- [ ] **Step 1: Update the failing tests**
+- [x] **Step 1: Update the failing tests**
 
 In `tests/unit/repository.test.ts`: in "exposes stable beginner defaults" change `textAiProvider: "gemini"` to `textAiProvider: "automatic"`. In "migrates the previous single-provider settings automatically" change the expectation to `textAiProvider:"automatic"`. Append inside the same describe:
 
@@ -564,12 +564,12 @@ In `tests/e2e/error-states.spec.ts` add after the OpenAI expectation:
 
 The `/실시간 인기 주제 연결은 후속 단계/` expectation stays as is (only "문안 AI 선택" is removed from that sentence in the component).
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/unit/repository.test.ts tests/unit/SettingsForm.test.tsx`
 Expected: FAIL on the new expectations.
 
-- [ ] **Step 3: Schema, defaults and repository**
+- [x] **Step 3: Schema, defaults and repository**
 
 `src/features/settings/schema.ts`: replace `textAiProvider: z.literal("gemini"),` with `textAiProvider: z.enum(["automatic", "gemini", "groq", "cloudflare"]),`.
 
@@ -577,7 +577,7 @@ Expected: FAIL on the new expectations.
 
 `src/features/settings/repository.ts` line 18: replace `textAiProvider:stored.textAiProvider ?? "gemini"` with `textAiProvider:stored.textAiRoutingVersion===1 ? stored.textAiProvider : "automatic"`. On lines 30 and 37 change both `{...settings,imageAiRoutingVersion:1,copyWritingVersion:1}` to `{...settings,imageAiRoutingVersion:1,copyWritingVersion:1,textAiRoutingVersion:1}`.
 
-- [ ] **Step 4: Settings form and page**
+- [x] **Step 4: Settings form and page**
 
 In `src/components/settings/SettingsForm.tsx`:
 
@@ -594,12 +594,12 @@ In `src/components/settings/SettingsForm.tsx`:
 
 In `src/app/settings/page.tsx` change the `connections` prop to `{{gemini:Boolean(process.env.GEMINI_API_KEY),groq:Boolean(process.env.GROQ_API_KEY),cloudflare:Boolean(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN),openai:Boolean(process.env.OPENAI_API_KEY)}}`.
 
-- [ ] **Step 5: Run unit tests, lint, types, then the settings E2E**
+- [x] **Step 5: Run unit tests, lint, types, then the settings E2E**
 
 Run: `npm test && npm run lint && npx tsc --noEmit && npx playwright test tests/e2e/error-states.spec.ts --reporter=line`
 Expected: all PASS. Look at `tests/unit/copyRouteQuality.test.ts` and `tests/unit/imageRequest.test.ts` if they fail: their mocked settings spread `DEFAULT_SETTINGS`, so they should pass unchanged.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/features/settings tests/unit/repository.test.ts tests/unit/SettingsForm.test.tsx tests/e2e/error-states.spec.ts src/components/settings/SettingsForm.tsx src/app/settings/page.tsx
@@ -623,7 +623,7 @@ git commit -m "feat: add text AI provider setting with Groq and Cloudflare statu
   - `createTextClient(setting, options?: { onSwitch?: (from: TextProvider, reason: string) => void; create?: … })` returning `{ readonly provider: TextProvider | null; configured: TextProvider[]; generateJson<T>(prompt, schema): Promise<T> }`
   - `class TextAiUnavailableError extends Error` (message `연결된 문안 AI가 없습니다.`)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/unit/textClient.test.ts
@@ -688,12 +688,12 @@ describe("text client resolver", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/unit/textClient.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the resolver**
+- [x] **Step 3: Write the resolver**
 
 ```ts
 // src/lib/ai/textClient.ts
@@ -769,12 +769,12 @@ export function createTextClient(setting: AppSettings["textAiProvider"] | undefi
 }
 ```
 
-- [ ] **Step 4: Run test**
+- [x] **Step 4: Run test**
 
 Run: `npx vitest run tests/unit/textClient.test.ts && npx tsc --noEmit`
 Expected: PASS (6 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/ai/textClient.ts tests/unit/textClient.test.ts
@@ -795,7 +795,7 @@ git commit -m "feat: resolve text AI providers with ordered fallback"
 - Consumes: `createTextClient` (Task 6), `readSettings`.
 - Produces: `/api/topics` → `{ topics, source: "ai"|"fallback", provider: TextProvider|null }`; `/api/copy` → `_meta.provider` is the real provider; `/api/images/plan` → `{ plan, provider: "gemini"|"groq"|"cloudflare"|"fallback" }`.
 
-- [ ] **Step 1: Extend the route tests first**
+- [x] **Step 1: Extend the route tests first**
 
 `tests/unit/topicRoute.test.ts`, `tests/unit/topicSource.test.ts` and `tests/unit/carouselPlan.test.ts`: add below the existing `vi.mock("@/features/auth/guard", …)` line:
 
@@ -812,7 +812,7 @@ vi.mock("@/features/settings/repository", () => ({ readSettings: async () => ({ 
 Run: `npx vitest run tests/unit/topicRoute.test.ts tests/unit/topicSource.test.ts tests/unit/carouselPlan.test.ts tests/unit/copyRouteQuality.test.ts`
 Expected: `topicSource` FAILS on `provider`; others PASS.
 
-- [ ] **Step 2: Topics route**
+- [x] **Step 2: Topics route**
 
 Replace the import of `createGeminiClient` with `import { createTextClient } from "@/lib/ai/textClient";` and add `import { readSettings } from "@/features/settings/repository";`. Replace the block from `const directions = …` to `return NextResponse.json({ topics, source });` with:
 
@@ -828,20 +828,20 @@ Replace the import of `createGeminiClient` with `import { createTextClient } fro
     return NextResponse.json({ topics, source, provider: source === "ai" ? client.provider : null });
 ```
 
-- [ ] **Step 3: Copy route**
+- [x] **Step 3: Copy route**
 
 Replace `import { createGeminiClient } from "@/lib/ai/geminiClient";` with `import { createTextClient } from "@/lib/ai/textClient";`. Replace `const client=createGeminiClient();` with `const client=createTextClient(settings.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});`. Replace every `_meta:{provider:"gemini"` with `_meta:{provider:client.provider??"unknown"` (three places). Change `.slice(0,7000)` on line 44 to `.slice(0,3000)` (Groq allows 8,000 tokens per minute).
 
-- [ ] **Step 4: Plan route**
+- [x] **Step 4: Plan route**
 
 Replace the Gemini import with `import { createTextClient } from "@/lib/ai/textClient";` and add `import { readSettings } from "@/features/settings/repository";`. Change `let provider:"gemini"|"fallback"="fallback";` to `let provider:"gemini"|"groq"|"cloudflare"|"fallback"="fallback";`. Before `const plan=await planCarousel(` add `const client=createTextClient((await readSettings()).textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});`. Replace `createGeminiClient().generateJson(` with `client.generateJson(` and `provider="gemini";` with `provider=client.provider??"gemini";`.
 
-- [ ] **Step 5: Run the route tests, full unit suite, lint, types**
+- [x] **Step 5: Run the route tests, full unit suite, lint, types**
 
 Run: `npm test && npm run lint && npx tsc --noEmit`
 Expected: PASS. If `tests/unit/imageRequest.test.ts` or others mock `readSettings` without `textAiProvider`, the resolver treats `undefined` as automatic, so they still pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/app/api/topics/route.ts src/app/api/copy/route.ts src/app/api/images/plan/route.ts tests/unit/topicRoute.test.ts tests/unit/topicSource.test.ts tests/unit/carouselPlan.test.ts tests/unit/copyRouteQuality.test.ts
@@ -859,7 +859,7 @@ git commit -m "feat: route text generation through the provider resolver"
 **Interfaces:**
 - Consumes: `/api/copy` `_meta.provider` from Task 7.
 
-- [ ] **Step 1: Find and update assertions on the old wording**
+- [x] **Step 1: Find and update assertions on the old wording**
 
 Run: `grep -rn "Gemini로 문안\|Gemini가 문안" tests`
 For every hit, change `Gemini로 문안을 만들었어요.` to a regex `/AI로 문안을 만들었어요/` and `Gemini가 문안을` to `AI가 문안을`. Add to `tests/unit/CopyEditorGeneration.test.tsx` a test that renders the editor with a fetch mock returning `_meta:{provider:"groq"}` and expects `await screen.findByText("AI로 문안을 만들었어요 (Groq)")`. Model the fetch mock on the existing tests in that file (search `finish(` to see how the mocked response is resolved).
@@ -867,7 +867,7 @@ For every hit, change `Gemini로 문안을 만들었어요.` to a regex `/AI로 
 Run: `npx vitest run tests/unit/CopyEditorGeneration.test.tsx`
 Expected: FAIL on the new text.
 
-- [ ] **Step 2: Update the component**
+- [x] **Step 2: Update the component**
 
 Line 10: change the status union to `"loading"|"ai"|"fallback"|"saved"` and add `const [provider,setProvider]=useState("");`. Where the code reads the generated copy (lines 29 and 38), capture the provider: at line 29 the parsed response object used for `formatCopy` is available — call `setProvider(String((data as {_meta?:{provider?:string}})._meta?.provider??""))` right before `setStatus("ai")`, and do the same in the `.then(copy=>…)` handler on line 38 using `copy._meta?.provider`. Replace both `setStatus("gemini")` with `setStatus("ai")`.
 
@@ -879,12 +879,12 @@ Line 46: replace `<GenerationProgress label="Gemini가 문안을"/>` with `<Gene
 
 Add near the top of the file: `const PROVIDER_LABELS:Record<string,string>={gemini:"Gemini",groq:"Groq",cloudflare:"Cloudflare"};`
 
-- [ ] **Step 3: Run tests, lint, types and the draft-flow E2E**
+- [x] **Step 3: Run tests, lint, types and the draft-flow E2E**
 
 Run: `npm test && npm run lint && npx tsc --noEmit && npx playwright test tests/e2e/draft-flow.spec.ts --reporter=line`
 Expected: PASS. `draft-flow.spec.ts` mocks `/api/copy` without `_meta`, so the text is `AI로 문안을 만들었어요` with no suffix; update its expectation if it asserted the Gemini wording.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/components/copy/CopyEditor.tsx tests/unit/CopyEditorGeneration.test.tsx tests/unit/DraftWizard.test.tsx tests/e2e/draft-flow.spec.ts
@@ -903,7 +903,7 @@ git commit -m "feat: show which AI wrote the caption"
 - Consumes: the real clients and prompts through `@/…` imports.
 - Produces: `npm run compare:text` → `output/text-provider-comparison-<YYYY-MM-DD>/report.md` and `raw.json`.
 
-- [ ] **Step 1: Loader (verified on 2026-09-28 with Node 24.20)**
+- [x] **Step 1: Loader (verified on 2026-09-28 with Node 24.20)**
 
 ```js
 // scripts/register-ts.mjs
@@ -932,7 +932,7 @@ export async function resolve(specifier, context, next) {
 }
 ```
 
-- [ ] **Step 2: Comparison script**
+- [x] **Step 2: Comparison script**
 
 ```js
 // scripts/compare-text-providers.mjs
@@ -1009,7 +1009,7 @@ await writeFile(path.join(directory, "report.md"), lines.join("\n") + "\n", "utf
 console.log(`report: ${path.join(directory, "report.md")}`);
 ```
 
-- [ ] **Step 3: npm script and environment files**
+- [x] **Step 3: npm script and environment files**
 
 `package.json` scripts: add `"compare:text": "node --conditions=react-server --import ./scripts/register-ts.mjs scripts/compare-text-providers.mjs"`.
 
@@ -1035,7 +1035,7 @@ CLOUDFLARE_TEXT_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
         sync: false
 ```
 
-- [ ] **Step 4: Docs**
+- [x] **Step 4: Docs**
 
 `README.md`: in `## 시작하기` change the sentence starting `.env.local에 Gemini 키와` to mention that Gemini uses the free `gemini-3.5-flash-lite` model by default, that `GROQ_API_KEY` adds a free backup writer, and that `CLOUDFLARE_TEXT_MODEL` lets the Cloudflare account also write captions. Add a section before `## 확인 명령`:
 
@@ -1051,7 +1051,7 @@ CLOUDFLARE_TEXT_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
 
 `docs/APP_OPERATION_GUIDE.ko.md`: add at the top a dated note `> 2026-09-28 추가: 문안 AI를 Gemini·Groq·Cloudflare 중에서 고르고 자동으로 넘어가도록 바꿨습니다. 자세한 내용은 README의 "문안 AI 선택과 비교"를 보세요.` and change the sentence on line 16 to `주제와 문안은 설정한 문안 AI(기본: Gemini → Groq → Cloudflare 자동)를 시도하고, 모두 실패하면 앱에 들어 있는 기본 추천·문안을 사용합니다.` In the settings table add a row `| 문안 AI | 자동은 키가 있는 순서로 Gemini, Groq, Cloudflare를 시도합니다. 하나만 고르면 그 서비스만 씁니다. |`. On line 79 change `` 문안 화면의 `Gemini로 문안을 만들었어요` `` to `` 문안 화면의 `AI로 문안을 만들었어요` ``.
 
-- [ ] **Step 5: Smoke-test the loader without spending quota**
+- [x] **Step 5: Smoke-test the loader without spending quota**
 
 Run: `node --conditions=react-server --import ./scripts/register-ts.mjs -e "const m=await import('@/features/topics/prompt');console.log(typeof m.buildTopicPrompt)"`
 Expected: `function`.
@@ -1059,7 +1059,7 @@ Expected: `function`.
 Run: `npm run lint && npx tsc --noEmit && npm test`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/register-ts.mjs scripts/ts-alias-hooks.mjs scripts/compare-text-providers.mjs package.json .env.example render.yaml README.md docs/APP_OPERATION_GUIDE.ko.md
@@ -1073,17 +1073,17 @@ git commit -m "feat: add text provider comparison script and document free provi
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-28-free-text-providers.md` (tick boxes, add results)
 
-- [ ] **Step 1: Run everything**
+- [x] **Step 1: Run everything**
 
 Run: `npm test && npm run lint && npx tsc --noEmit && npx playwright test --reporter=line`
 Expected: all PASS (unit ≥ 262, E2E 30).
 
-- [ ] **Step 2: Live comparison with whatever keys exist**
+- [x] **Step 2: Live comparison with whatever keys exist**
 
 Run: `npm run compare:text`
 Expected: `output/text-provider-comparison-<date>/report.md` exists; providers without keys are listed as 건너뜀. Confirm no key material appears: `grep -c "AIza\|gsk_\|Bearer" output/text-provider-comparison-*/report.md` → `0`.
 
-- [ ] **Step 3: Record results and commit**
+- [x] **Step 3: Record results and commit**
 
 Tick every box in this plan, append a `## Verification (<date>)` section listing the test counts and which providers produced output, then:
 
@@ -1099,3 +1099,22 @@ git commit -m "docs: record free text provider verification"
 - Spec coverage: setting enum + migration (Task 5), three clients with one contract (Tasks 2–4), ordered fallback and provider reporting (Tasks 6–7), Gemini flash-lite + fallback model (Task 2), comparison script and report (Task 9), key-less providers skipped and shown as `키 필요` (Tasks 5–6), Groq token budget via the 3,000-char retry slice (Task 7), env/render/docs (Task 9), verification (Task 10). Caption provider label (Task 8). Topic screen unchanged per spec.
 - Placeholders: none; every code step carries the code.
 - Type consistency: `TextAiClient.provider` is `TextProvider`; `createTextClient(...).provider` is `TextProvider | null`; routes coerce `null` to `"unknown"`/`"gemini"`/`null` as stated in Task 7's Interfaces.
+
+## Verification (2026-09-29)
+
+- **단위 테스트**: `npm test` → 59개 파일 / 273개 테스트 모두 통과.
+- **Lint**: `npm run lint` → 출력 없음, 문제 0건.
+- **타입 검사**: `npx tsc --noEmit` → 출력 없음, 오류 0건.
+- **E2E**: `npx playwright test --reporter=line` → 30개 테스트(데스크톱 15 + 모바일 15) 모두 통과.
+- **비교 스크립트**: `npm run compare:text` 1회 실행 → `output/text-provider-comparison-2026-09-29/report.md` 생성 확인. 키 노출 검사 `grep -c "AIza\|gsk_\|Bearer" output/text-provider-comparison-*/report.md` → `0`.
+- **제공자별 결과** (report.md 요약표):
+
+  | 제공자 | 모델 | 주제 성공 | 문안 성공 | 비고 |
+  | --- | --- | --- | --- | --- |
+  | gemini | gemini-3.5-flash-lite | 2/2 | 2/2 | 429 없이 전부 성공 |
+  | groq | openai/gpt-oss-120b | 건너뜀 | 건너뜀 | 로컬에 `GROQ_API_KEY` 없음 |
+  | cloudflare | @cf/qwen/qwen3-30b-a3b-fp8 | 건너뜀 | 건너뜀 | 로컬에 Cloudflare 계정 ID·토큰 없음 |
+
+  Groq·Cloudflare는 예상대로 "키가 연결되지 않았습니다" 사유로 건너뜀 처리되었고, Gemini만 실제 키로 응답을 생성했다.
+- **Gemini flash-lite 출력 관찰**: 생성된 제목 6개의 길이는 17~24자(평균 20자)로 짧고 서로 비슷한 편이었다. 본문(문안) 평균 길이는 309자였다. `raw.json`을 직접 확인한 결과 주제 2회차(각 3개 항목)와 문안 2건 모두 `ok: true`로 Zod 스키마(`topicGenerationSchema`, `GeneratedCopyContentSchema`) 검증을 통과했다.
+- 이전에 발견된 로더 결함(`src/lib/ai/errors.ts`의 TS parameter property가 Node strip-only 모드에서 파싱 실패)은 커밋 `0507b56`에서 `compare:text` 스크립트를 `--experimental-transform-types --disable-warning=ExperimentalWarning`으로 실행하도록 고쳐 해결되었고, 이번 재실행에서는 정상적으로 리포트가 생성되었다.
