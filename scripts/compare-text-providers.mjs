@@ -19,7 +19,7 @@ const factories = [
   ["cloudflare", () => createCloudflareTextClient(), process.env.CLOUDFLARE_TEXT_MODEL ?? "@cf/qwen/qwen3-30b-a3b-fp8"],
 ];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const safe = (error) => String(error?.message ?? error).replace(/(key|token)=\S+/gi, "$1=***").slice(0, 200);
+const safe = (error) => String(error?.message ?? error).replace(/(key|token)=\S+/gi, "$1=***").replace(/\|/g, "\\|").slice(0, 200);
 
 async function timed(run) {
   const started = Date.now();
