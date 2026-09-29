@@ -10,7 +10,8 @@ export async function POST(request:Request) { const denied=await ownerApiError()
 
   let provider:"gemini"|"groq"|"cloudflare"|"fallback"="fallback";
   const requestedPlanSchema=CarouselPlanSchema.refine((plan)=>plan.slideCount===input.data.slideCount,{message:"요청한 슬라이드 수와 다릅니다."});
-  const client=createTextClient((await readSettings()).textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
+  const settings=await readSettings().catch(()=>null);
+  const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
   const plan=await planCarousel(input.data,{
     generate:async()=>{
       const result=await client.generateJson(

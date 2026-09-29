@@ -47,7 +47,7 @@ describe("copy quality",()=>{
   it("returns only the requested replacement for a partial rewrite",async()=>{
     generate.mockResolvedValue({hashtags:["#홍어","#묵동맛집","#중랑구맛집"]});
     const response=await POST(request({focus:"hashtags",currentText:"내가 쓴 글"}));
-    expect(await response.json()).toMatchObject({replacement:"#홍어 #묵동맛집 #중랑구맛집"});
+    expect(await response.json()).toMatchObject({replacement:"#홍어 #묵동맛집 #중랑구맛집",_meta:{provider:"gemini"}});
   });
   it("repairs repetitive copy once, using the image brief and audience context",async()=>{
     generate.mockResolvedValueOnce({...result,information:"똑같은 문장을 반복해서 분량을 채웁니다. ".repeat(24)}).mockResolvedValueOnce(result);
@@ -94,6 +94,16 @@ describe("copy quality",()=>{
     generate.mockResolvedValueOnce({replacement:"묵동홍어마을의 메뉴와 제공 여부를 확인해 보세요."});
     const response=await POST(request({focus:"store_connection",currentText:"내가 쓴 문안"}));
     expect(response.status).toBe(200);
-    expect((await response.json()).replacement).toContain("확인해 보세요");
+    const body=await response.json();
+    expect(body.replacement).toContain("확인해 보세요");
+    expect(body._meta).toMatchObject({ provider:"gemini" });
+  });
+  it("recovers from one malformed reply through the resolver",async()=>{
+    generate.mockRejectedValueOnce(new SyntaxError("bad json")).mockResolvedValueOnce(result);
+    const response=await POST(request());
+    expect(response.status).toBe(200);
+    expect(generate).toHaveBeenCalledTimes(2);
+    const body=await response.json();
+    expect(body._meta).toMatchObject({ provider:"gemini" });
   });
 });

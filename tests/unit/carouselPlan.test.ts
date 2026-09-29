@@ -4,14 +4,15 @@ import { createFallbackCarouselPlan, planCarousel, rolesForCount } from "@/featu
 import { POST } from "@/app/api/images/plan/route";
 
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
-vi.mock("@/features/settings/repository", () => ({ readSettings: async () => ({ textAiProvider:"automatic" }) }));
+const readSettings=vi.hoisted(()=>vi.fn());
+vi.mock("@/features/settings/repository", () => ({ readSettings }));
 vi.mock("server-only", () => ({}));
 
 const generateJson=vi.hoisted(()=>vi.fn());
 vi.mock("@/lib/ai/geminiClient",()=>({createGeminiClient:()=>({generateJson})}));
 
 describe("carousel planning", () => {
-  beforeEach(()=>{generateJson.mockReset();});
+  beforeEach(()=>{generateJson.mockReset();readSettings.mockReset().mockResolvedValue({textAiProvider:"automatic"});});
   it("keeps five distinct roles in publishing order by default", async () => {
     const plan=await planCarousel({topic:"막걸리 한 잔과 어울리는 홍어 한 점",imageBrief:"홍어와 막걸리"});
 
@@ -90,5 +91,16 @@ describe("carousel planning", () => {
     expect(plan.slides).toHaveLength(3);
     expect(new Set(plan.slides.map(slide=>slide.visualPrompt)).size).toBe(3);
     expect(plan.slides.every(slide=>slide.visualPrompt.length<=600)).toBe(true);
+  });
+
+  it("still returns a rule-based plan when settings cannot be read",async()=>{
+    readSettings.mockRejectedValueOnce(new Error("broken settings"));
+
+    const response=await POST(new Request("http://localhost/api/images/plan",{method:"POST",body:JSON.stringify({topic:"홍어와 막걸리",slideCount:3})}));
+    const body=await response.json();
+
+    expect(response.status).toBe(200);
+    expect(["fallback","gemini"]).toContain(body.provider);
+    expect(body.plan.slideCount).toBe(3);
   });
 });
