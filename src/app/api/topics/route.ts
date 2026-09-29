@@ -18,11 +18,12 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const body = RequestSchema.parse(await request.json());
     const input = TopicInputSchema.parse({ storeName: body.storeProfile.name, intent: body.intent, recommendationRound:body.recommendationRound, excludeTitles:body.excludeTitles });
     const directions = topicDirectionsForRound(input.recommendationRound);
+    let source: "ai" | "fallback" = "ai";
     const topics = await suggestTopics(input, { suggest:() => createGeminiClient().generateJson(
       buildTopicPrompt(input),
       topicGenerationSchema(directions),
-    ) });
-    return NextResponse.json({ topics });
+    ) }, (reason) => { source = "fallback"; console.warn("[topics] using prepared topics:", reason); });
+    return NextResponse.json({ topics, source });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: "입력 내용을 확인해 주세요." }, { status: 400 });

@@ -58,15 +58,15 @@ export function followsCuriosityBrief(topics:TopicSuggestion[],storeName:string)
     && /홍어|삼합/.test(topics[2]?.title??"");
 }
 
-export async function suggestTopics(input:TopicInput,ai?:TopicAiClient):Promise<TopicSuggestion[]> {
+export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string)=>void):Promise<TopicSuggestion[]> {
   const parsed=TopicInputSchema.parse(input);
-  const fallback=()=>fallbackTopics(parsed.recommendationRound,parsed.excludeTitles);
+  const fallback=(reason="no AI client")=>{onFallback?.(reason);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles);};
   if(!ai)return fallback();
   try{
     const suggestions=TopicSuggestionsSchema.parse(await ai.suggest(parsed));
     const titles=suggestions.map(item=>titleKey(item.title));
     const excluded=new Set(parsed.excludeTitles.map(titleKey));
-    if(new Set(titles).size!==titles.length||titles.some(title=>excluded.has(title))||!followsCuriosityBrief(suggestions,parsed.storeName))return fallback();
+    if(new Set(titles).size!==titles.length||titles.some(title=>excluded.has(title))||!followsCuriosityBrief(suggestions,parsed.storeName))return fallback("suggestions broke the topic rules");
     return suggestions;
-  }catch{return fallback();}
+  }catch(error){return fallback(error instanceof Error?error.message.replace(/s+/g," ").slice(0,300):"AI request failed");}
 }
