@@ -3,7 +3,14 @@ import { afterEach,describe,expect,it,vi } from "vitest";
 import { InstagramConnectionCard } from "@/components/settings/InstagramConnectionCard";
 
 describe("InstagramConnectionCard",()=>{
-  afterEach(()=>vi.unstubAllGlobals());
+  afterEach(()=>{vi.unstubAllGlobals();window.history.replaceState(null,"","/");});
+
+  it("Instagram에서 돌아온 실패 사유를 확인할 항목으로 안내한다",async()=>{
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:false})}));
+    window.history.replaceState(null,"","/settings?instagram=error&reason=token");
+    render(<InstagramConnectionCard/>);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Instagram 앱 시크릿");
+  });
 
   it("연결 전에는 쉬운 안내와 연결 버튼을 보여준다",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:false})}));

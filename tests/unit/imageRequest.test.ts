@@ -72,6 +72,9 @@ describe("OpenAI image request", () => {
     editImage.mockReset();
     readSettings.mockReset();
     readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"automatic"});
+    // 이 파일은 Higgsfield 키가 없는 기존 순서(Cloudflare → OpenAI)를 검증한다.
+    vi.stubEnv("HF_API_KEY_ID","");
+    vi.stubEnv("HF_API_KEY_SECRET","");
   });
   afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();});
 

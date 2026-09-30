@@ -1,5 +1,5 @@
 import { describe,expect,it,vi } from "vitest";
-import { buildAuthorizationUrl,completeInstagramOAuth,InstagramOAuthError } from "@/features/instagram/oauth";
+import { buildAuthorizationUrl,completeInstagramOAuth,InstagramOAuthError,publicAppOrigin } from "@/features/instagram/oauth";
 
 const config={appId:"app-123",appSecret:"secret-456",redirectUri:"https://example.com/api/instagram/callback"};
 
@@ -21,6 +21,12 @@ describe("Instagram OAuth",()=>{
       {config,exchangeCode,getProfile:vi.fn(),saveConnection:vi.fn()},
     )).rejects.toBeInstanceOf(InstagramOAuthError);
     expect(exchangeCode).not.toHaveBeenCalled();
+  });
+
+  it("공개 주소는 콜백 주소, AUTH_URL, 요청 주소 순서로 정한다",()=>{
+    expect(publicAppOrigin({INSTAGRAM_REDIRECT_URI:" https://app.example.com/api/instagram/callback "},"https://localhost:10000")).toBe("https://app.example.com");
+    expect(publicAppOrigin({INSTAGRAM_REDIRECT_URI:"not-a-url",AUTH_URL:"https://auth.example.com"},"https://localhost:10000")).toBe("https://auth.example.com");
+    expect(publicAppOrigin({},"https://localhost:10000")).toBe("https://localhost:10000");
   });
 
   it("토큰과 프로필을 서버 저장소에 저장한다",async()=>{

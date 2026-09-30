@@ -115,7 +115,7 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
     if(!response.ok)throw new Error(data.message||"표지 후보를 만들지 못했습니다.");
     if(!Array.isArray(data.images)||data.images.length!==2)throw new Error("표지 후보는 정확히 2장이 필요합니다.");
     const source=sourceOf(data.source);
-    patch({...(data.fallback?{providerNotice:"Cloudflare 생성이 어려워 OpenAI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],source,role:nextPlan.slides[0].role}))});
+    patch({...(data.fallback?{providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],source,role:nextPlan.slides[0].role}))});
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"표지 후보를 만들지 못했습니다."});
   }finally{
@@ -145,7 +145,7 @@ async function generate(slide:CarouselPlan["slides"][number],index:number,refine
   const data=await response.json();
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");
-  if(data.fallback)patch({providerNotice:"Cloudflare 생성이 어려워 OpenAI로 전환했어요."});
+  if(data.fallback)patch({providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."});
   return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],source:sourceOf(data.source),role:slide.role};
 }
 

@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "check:higgsfield": "node scripts/check-higgsfield.mjs",
     "compare:text": "node --conditions=react-server --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/compare-text-providers.mjs"
   },
   "dependencies": {

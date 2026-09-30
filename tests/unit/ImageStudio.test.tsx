@@ -139,9 +139,9 @@ describe("ImageStudio carousel",()=>{
     expect(await screen.findByRole("status")).toHaveTextContent("1/3장 완성");resolveSlide({ok:true,json:async()=>({images:["two"]})});await waitFor(()=>expect(screen.getByRole("status")).toHaveTextContent("2/3장 완성"));resolveSlide({ok:true,json:async()=>({images:["three"]})});await screen.findByRole("button",{name:"이 캐러셀 사용"});
   });
   it("explains when automatic image generation used the OpenAI fallback",async()=>{
-    const request=vi.fn(async(url:string)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:["cover-1","cover-2"],provider:"openai",fallback:true})});
+    const request=vi.fn(async(url:string)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:["cover-1","cover-2"],provider:"openai",fallback:true,notice:"Cloudflare 생성이 어려워 OpenAI(으)로 전환했어요."})});
     vi.stubGlobal("fetch",request);render(<ImageStudio topic="대체 생성" slideCount={3} onApprove={()=>undefined}/>);
     fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
-    expect(await screen.findByText("Cloudflare 생성이 어려워 OpenAI로 전환했어요.")).toBeInTheDocument();
+    expect(await screen.findByText("Cloudflare 생성이 어려워 OpenAI(으)로 전환했어요.")).toBeInTheDocument();
   });
 });

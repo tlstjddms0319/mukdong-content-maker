@@ -11,7 +11,7 @@ describe("SettingsForm", () => {
     expect(screen.getByLabelText("문안 AI")).toHaveValue("automatic");
     expect(screen.getByRole("option", { name:"자동 (Gemini → Groq → Cloudflare)" })).toBeInTheDocument();
     expect(screen.getByLabelText("이미지 AI")).toHaveValue("automatic");
-    expect(screen.getByRole("option", { name:"자동 (Cloudflare 우선)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name:"자동 (Higgsfield → Cloudflare → OpenAI)" })).toBeInTheDocument();
     expect(screen.getByText(/제공자 요금제에 따라 비용이 들 수 있어요/)).toBeInTheDocument();
     expect(screen.getByLabelText("캐러셀 장수")).toHaveValue("5");
     expect(screen.getByRole("option", { name:"5 (권장)" })).toBeInTheDocument();
