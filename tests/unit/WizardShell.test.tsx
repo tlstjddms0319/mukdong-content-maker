@@ -12,7 +12,7 @@ describe("WizardShell", () => {
     void startPlan();
     render(<WizardShell step="topic" section="drafts"><h1>내 초안</h1></WizardShell>);
     expect(screen.getByText("이미지 생성 중")).toBeInTheDocument();
-    expect(screen.getByRole("link",{name:"새 초안"})).toBeInTheDocument();
+    expect(screen.getByRole("link",{name:"만들기"})).toBeInTheDocument();
   });
 
   it("shows four simple steps and the active step", () => {

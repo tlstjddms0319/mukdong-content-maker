@@ -12,7 +12,7 @@ import { fallbackTopics } from "@/features/topics/service";
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { selectedDraftMedia } from "@/features/drafts/selection";
 import type { CarouselSlideCount } from "@/features/images/carousel";
-import { readWizardSession, saveWizardSession } from "@/features/drafts/wizardSession";
+import { clearWizardSession, readWizardSession, saveWizardSession } from "@/features/drafts/wizardSession";
 
 const DEFAULT_TOPICS:TopicSuggestion[] = fallbackTopics();
 
@@ -62,6 +62,16 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
       }
     }catch{if(requestId===topicRequestRef.current)setTopicsFallback(true);}finally{if(requestId===topicRequestRef.current)setTopicsLoading(false);}
   },[changeTopic]);
+  // 이어서 만들던 초안을 두고 완전히 새 초안으로 시작한다. 이전 초안은 서버에 저장된 그대로 내 초안에 남는다.
+  const startNewDraft=useCallback(()=>{
+    const nextDraftId=crypto.randomUUID();draftIdRef.current=nextDraftId;createdAtRef.current=new Date().toISOString();
+    setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopySaveState("idle");setLoadError("");setDraftId(nextDraftId);
+    localStorage.removeItem("mukdong-current-draft");clearWizardSession();
+    if(window.location.search)window.history.replaceState({},"","/");
+    setTopics(DEFAULT_TOPICS);changeTopic(DEFAULT_TOPICS[0].title,DEFAULT_TOPICS[0].audience,DEFAULT_TOPICS[0].imageBrief ?? "",true,DEFAULT_TOPICS[0].summary ?? "");
+    setStep("topic");
+    void loadTopics();
+  },[changeTopic,loadTopics]);
   const approveImage=async (approved:ApprovedImage[]) => {
     const savingDraftId=draftIdRef.current;
     setImages(approved); setSaveState("saving");
@@ -91,6 +101,7 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
       if(initialQueryRef.current===null)initialQueryRef.current=window.location.search;
       const session=readWizardSession();
       const query=new URLSearchParams(initialQueryRef.current);
+      if(query.get("new")==="1"){startNewDraft();return;}
       const requestedId=query.get("draft");
       const requestedTopic=query.get("topic")?.trim();
       const requestedAudienceValue=query.get("audience");
@@ -125,13 +136,13 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
     };
     void load().finally(()=>{if(active)setSessionLoaded(true);});
     return () => { active=false; };
-  }, [changeTopic,loadTopics]);
+  }, [changeTopic,loadTopics,startNewDraft]);
   useEffect(()=>{
     if(!sessionLoaded)return;
     saveWizardSession({draftId,topic,audience,imageBrief,contentBrief,step});
   },[sessionLoaded,draftId,topic,audience,imageBrief,contentBrief,step]);
   const canVisit:WizardStep[]=["topic",...(topic.trim()?["image" as const]:[]),...(images.length&&saveState==="saved"?["copy" as const]:[]),...(caption.trim()&&caption===savedCaption&&copySaveState!=="saving"?["review" as const]:[])];
-  const shell={canVisit,onStepChange:setStep};
+  const shell={canVisit,onStepChange:setStep,onNewDraft:step==="topic"?undefined:startNewDraft};
   if(loadError)return <WizardShell step="topic" {...shell}><div className="state-card"><p role="alert">{loadError}</p><Link className="button secondary" href="/drafts">내 초안으로 돌아가기</Link></div></WizardShell>;
   if(step==="image") return <WizardShell step={step} {...shell}><ImageStudio topic={topic} imageBrief={imageBrief.trim()||undefined} contentBrief={contentBrief.trim()||undefined} slideCount={slideCount} approvedImages={images} onApprove={approveImage} sessionKey={draftId}/><div className="bottom-action"><button type="button" className="button secondary" onClick={()=>setStep("topic")}>이전: 주제</button>{saveState!=="idle"&&<span role="status">{saveState==="saving"?"이미지 선택을 저장하는 중…":saveState==="saved"?`이미지 ${images.length}장을 저장했어요.`:"저장하지 못했어요. 다시 선택해 주세요."}</span>}{saveState==="error"&&<button type="button" className="button secondary" onClick={()=>void approveImage(images)}>저장 다시 시도</button>}<button className="button primary" disabled={!images.length||saveState!=="saved"} onClick={()=>setStep("copy")}>문안 만들기</button></div></WizardShell>;
   if(step==="copy") return <WizardShell step={step} {...shell}><CopyEditor topic={topic} audience={audience} contentBrief={contentBrief} imageBrief={imageBrief} hasAiImages={images.some(image=>image.source==="ai-generated"||image.source==="ai-edited")} initialText={caption} onTextChange={setCaption} saving={copySaveState==="saving"} onContinue={text=>void saveCaption(text)}/>{copySaveState==="error"&&<p role="alert">문안을 저장하지 못했어요. 다시 시도해 주세요.</p>}<div className="bottom-action"><button type="button" className="button secondary" onClick={()=>setStep("image")}>이전: 이미지</button></div></WizardShell>;
