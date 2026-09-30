@@ -1,7 +1,7 @@
 import "server-only";
 import sharp from "sharp";
 import type { ImageBrief } from "./schema";
-import { buildImagePrompt } from "./openaiRequest";
+import { buildImagePrompt, candidateBriefs } from "./openaiRequest";
 
 const MODEL="@cf/black-forest-labs/flux-2-klein-4b";
 const REQUEST_TIMEOUT_MS=60_000;
@@ -68,8 +68,8 @@ export async function generateCloudflareImages(input:ImageBrief):Promise<string[
   const token=process.env.CLOUDFLARE_API_TOKEN;
   if(!accountId||!token)throw new CloudflareConfigurationError();
   const images:string[]=[];
-  for(let index=0;index<input.count;index++){
-    try { images.push(await generateOne(input,accountId,token)); }
+  for(const brief of candidateBriefs(input)){
+    try { images.push(await generateOne(brief,accountId,token)); }
     catch(error) {
       if(images.length&&error instanceof CloudflareImageError)throw new CloudflarePartialImageError(error.status,images);
       throw error;

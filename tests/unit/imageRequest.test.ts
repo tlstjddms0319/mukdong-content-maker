@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
-import { buildImageEditRequest, buildImageRequest } from "@/features/images/openaiRequest";
+import { CANDIDATE_VARIANTS, buildImageEditRequest, buildImagePrompt, buildImageRequest, candidateBriefs } from "@/features/images/openaiRequest";
 import { POST as generateImages } from "@/app/api/images/generate/route";
 import { composeSlideImage } from "@/features/images/composeSlide";
 import { ImageBriefSchema } from "@/features/images/schema";
@@ -175,6 +175,39 @@ describe("OpenAI image request", () => {
     expect(await response.json()).toMatchObject({retryable:true});
     expect(generateImage).not.toHaveBeenCalled();
   });
+  it("gives each cover candidate its own camera setup and continues numbering after a partial provider", () => {
+    const briefs=candidateBriefs({topic:"홍어 표지",count:2,aspectRatio:"4:5",slide:coverSlide,slideIndex:1,slideTotal:5,styleAnchor:carouselStyleAnchor});
+    expect(briefs.map(brief=>brief.count)).toEqual([1,1]);
+    expect(briefs.map(brief=>brief.variant)).toEqual([CANDIDATE_VARIANTS[0],CANDIDATE_VARIANTS[1]]);
+    expect(buildImagePrompt(briefs[1])).toContain(`이 후보만의 구도: ${CANDIDATE_VARIANTS[1]}`);
+    expect(candidateBriefs({topic:"홍어 표지",count:1,aspectRatio:"4:5",candidateOffset:1})[0].variant).toBe(CANDIDATE_VARIANTS[1]);
+    expect(candidateBriefs({topic:"홍어 한 장",count:1,aspectRatio:"4:5"})[0].variant).toBeUndefined();
+  });
+
+  it("sends two different prompts to OpenAI for two cover candidates", async () => {
+    generateImage.mockResolvedValue({data:[{b64_json:"aW1n"}]});
+    const response=await generateImages(new Request("http://localhost/api/images/generate",{
+      method:"POST",
+      body:JSON.stringify({topic:"홍어 표지",count:2,aspectRatio:"4:5"}),
+    }));
+    expect(response.status).toBe(200);
+    expect(generateImage).toHaveBeenCalledTimes(2);
+    const prompts=generateImage.mock.calls.map(([request])=>request.prompt);
+    expect(prompts[0]).not.toBe(prompts[1]);
+    expect(generateImage.mock.calls.every(([request])=>request.n===1)).toBe(true);
+  });
+
+  it("keeps only the mood of the cover for later slides and lowers fidelity so the scene can change", async () => {
+    const reference="data:image/png;base64,"+Buffer.from("png").toString("base64");
+    const request=await buildImageEditRequest({slide:visitSlide,slideIndex:5,slideTotal:5 as const,styleAnchor:carouselStyleAnchor,topic:"홍어 한 상",count:1,aspectRatio:"4:5",referenceImage:reference,referenceMode:"continuity"});
+    expect(request.input_fidelity).toBe("low");
+    expect(request.prompt).toContain("분위기만 이어 가고");
+    expect(request.prompt).toContain("표지와 같은 접시 배치를 다시 그리지 말 것");
+    expect(request.prompt).not.toContain("동일하게 유지");
+    expect(request.prompt).toContain("손, 젓가락, 잔, 뒷모습");
+    expect(request.prompt).not.toContain("손님 얼굴");
+  });
+
   it("omits the unsupported response_format parameter", () => {
     const request = buildImageRequest({ topic:"홍어 삼합", count:1, aspectRatio:"4:5" });
     expect(request).not.toHaveProperty("response_format");

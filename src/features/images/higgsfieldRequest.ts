@@ -1,7 +1,7 @@
 import "server-only";
 import sharp from "sharp";
 import type { ImageBrief } from "./schema";
-import { buildImagePrompt } from "./openaiRequest";
+import { buildImagePrompt, candidateBriefs } from "./openaiRequest";
 
 // Higgsfield의 Grok Image 2.0: 음식 사실감이 가장 좋았고 참고 이미지(image_urls)도 받는다. 한 요청에 한 장만 만든다.
 const BASE_URL="https://api.higgsfield.ai";
@@ -120,8 +120,8 @@ async function generateOne(input:ImageBrief,auth:string,referenceUrl?:string):Pr
 export async function generateHiggsfieldImages(input:ImageBrief):Promise<string[]> {
   const auth=authorization();
   const referenceUrl=input.referenceImage?await uploadReference(input.referenceImage,auth):undefined;
-  // 한 장에 2분 가까이 걸려서 후보 여러 장은 동시에 요청한다.
-  const results=await Promise.allSettled(Array.from({length:input.count},()=>generateOne(input,auth,referenceUrl)));
+  // 한 장에 2분 가까이 걸려서 후보 여러 장은 동시에 요청한다. 후보마다 구도가 다른 요청이다.
+  const results=await Promise.allSettled(candidateBriefs(input).map(brief=>generateOne(brief,auth,referenceUrl)));
   const images=results.flatMap(result=>result.status==="fulfilled"?[result.value]:[]);
   const failure=results.find((result):result is PromiseRejectedResult=>result.status==="rejected")?.reason;
   if(!failure)return images;

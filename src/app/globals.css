@@ -78,6 +78,8 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .button.primary { border: 0; background: var(--accent); color: white; cursor: pointer; }
 .generation-note { display: flex; flex-direction: column; align-items:flex-start; gap:8px; margin: 20px 0 12px; padding: 14px 16px; background: #f0eee7; border-radius: var(--control-radius); }
 .generation-note [role="status"] { margin:0; color:var(--accent); font-weight:800; }
+.plan-fallback { display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+.plan-fallback [role="alert"] { margin:0; }
 .generation-progress { display:flex; flex-wrap:wrap; align-items:center; gap:7px; color:var(--accent); font-weight:700; }
 .generation-progress small { flex-basis:100%; padding-left:17px; color:var(--muted); font-weight:400; }
 .progress-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); animation:pulse 1s ease-in-out infinite alternate; }

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
-import { ImageBriefSchema } from "@/features/images/schema";
+import { ImageBriefSchema, type ImageBrief } from "@/features/images/schema";
 import { AiConfigurationError, getOpenAIClient } from "@/lib/ai/openaiClient";
-import { buildImageEditRequest, buildImageRequest } from "@/features/images/openaiRequest";
+import { buildImageEditRequest, buildImageRequest, candidateBriefs } from "@/features/images/openaiRequest";
 import { classifyOpenAIImageError } from "@/features/images/openaiError";
 import { composeSlideImage } from "@/features/images/composeSlide";
 import { CloudflareConfigurationError, CloudflareImageError, CloudflarePartialImageError, generateCloudflareImages } from "@/features/images/cloudflareRequest";
@@ -38,27 +38,31 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // can be triggered by a settings read failure, only the free Cloudflare path.
     const settings:AppSettings=(await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 무료 이미지 경로만 사용합니다:",error instanceof Error?error.message:String(error));return null;}))
       ??{...AppSettingsSchema.parse(DEFAULT_SETTINGS),imageAiProvider:"cloudflare"};
-    const generateWithOpenAI=async(count=parsed.data.count)=>{
+    // 후보마다 구도가 다른 프롬프트라 n장을 한 번에 요청하지 않고, 한 장씩 동시에 요청한다.
+    const generateWithOpenAI=async(input:ImageBrief)=>{
       const client=getOpenAIClient();
-      const input={...parsed.data,count};
-      const result=parsed.data.referenceImage
-        ? await client.images.edit(await buildImageEditRequest({...input,referenceImage:parsed.data.referenceImage},settings.imageQuality))
-        : await client.images.generate(buildImageRequest(input,settings.imageQuality));
-      return (result.data??[]).map((item)=>item.b64_json?`data:image/png;base64,${item.b64_json}`:item.url).filter((value):value is string=>Boolean(value));
+      const results=await Promise.all(candidateBriefs(input).map(async brief=>{
+        const result=brief.referenceImage
+          ? await client.images.edit(await buildImageEditRequest({...brief,referenceImage:brief.referenceImage},settings.imageQuality))
+          : await client.images.generate(buildImageRequest(brief,settings.imageQuality));
+        return (result.data??[]).map((item)=>item.b64_json?`data:image/png;base64,${item.b64_json}`:item.url).filter((value):value is string=>Boolean(value));
+      }));
+      return results.flat();
     };
     // 자동은 키가 있는 Higgsfield부터, 실패하면 무료 Cloudflare, 마지막으로 OpenAI 순서로 남은 장수만 이어서 만든다.
     const chain:ImageProvider[]=settings.imageAiProvider==="automatic"
       ?[...(isHiggsfieldConfigured()?["higgsfield" as const]:[]),"cloudflare","openai"]
       :[settings.imageAiProvider];
-    const generators:Record<ImageProvider,(count:number)=>Promise<string[]>>={
-      higgsfield:count=>generateHiggsfieldImages({...parsed.data,count}),
-      cloudflare:count=>generateCloudflareImages({...parsed.data,count}),
-      openai:count=>generateWithOpenAI(count),
+    const generators:Record<ImageProvider,(input:ImageBrief)=>Promise<string[]>>={
+      higgsfield:generateHiggsfieldImages,
+      cloudflare:generateCloudflareImages,
+      openai:generateWithOpenAI,
     };
     let images:string[]=[];
     const used:ImageProvider[]=[];
     for(const [index,name] of chain.entries()){
-      try { images=[...images,...await generators[name](parsed.data.count-images.length)]; used.push(name); break; }
+      // 앞 제공자가 일부만 만들었으면 남은 장수만, 그리고 이어지는 후보 번호부터 요청한다.
+      try { images=[...images,...await generators[name]({...parsed.data,count:parsed.data.count-images.length,candidateOffset:images.length})]; used.push(name); break; }
       catch(error) {
         const completed=error instanceof CloudflarePartialImageError||error instanceof HiggsfieldPartialImageError?error.images:[];
         if(completed.length){images=[...images,...completed];used.push(name);}

@@ -125,6 +125,18 @@ describe("ImageStudio carousel",()=>{
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["b"],"failure.png",{type:"image/png"})]}});
     expect(await screen.findByRole("alert")).toHaveTextContent("사진을 올릴 수 없어요.");expect(screen.getByRole("button",{name:"실제 사진 사용"})).toHaveAttribute("aria-pressed","true");expect(screen.getByText("사진을 여기에 끌어놓으세요")).toBeInTheDocument();
   });
+  it("stops before making covers when the plan came from the prepared fallback and retries on request",async()=>{
+    let planCalls=0;
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan,provider:++planCalls===1?"fallback":"gemini"})}:{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:["slide"]})});
+    vi.stubGlobal("fetch",request);render(<ImageStudio topic="기본 문안" slideCount={3} onApprove={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
+    expect(await screen.findByRole("alert")).toHaveTextContent("기본 문안으로 채웠어요");
+    expect(request.mock.calls.filter(([url])=>url==="/api/images/generate")).toHaveLength(0);
+    expect(screen.getByRole("button",{name:"기본 구성안으로 표지 만들기"})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"구성안 다시 만들기"}));
+    await screen.findByRole("button",{name:"표지 후보 1 선택"});
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
   it("keeps AI mode selected when plan generation fails",async()=>{
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({message:"구성안을 만들 수 없어요."})})));render(<ImageStudio topic="AI 오류" slideCount={3} onApprove={()=>undefined}/>);
     fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
