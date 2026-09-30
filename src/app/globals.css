@@ -81,6 +81,9 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .generation-progress small { flex-basis:100%; padding-left:17px; color:var(--muted); font-weight:400; }
 .progress-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); animation:pulse 1s ease-in-out infinite alternate; }
 @keyframes pulse { to { opacity:.3; transform:scale(.7); } }
+.option-picker { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.option-picker .button { min-height:36px; padding:6px 12px; font-size:14px; }
+.button.secondary[aria-pressed="true"] { border-color:var(--accent); background:#e8efe9; color:var(--accent); }
 .generation-note .generation-progress, .upload-zone .generation-progress { align-self:stretch; }
 .generation-note .generation-progress > span, .upload-zone .generation-progress > span { color:inherit; font-size:inherit; }
 .generation-progress > .progress-elapsed { color:var(--muted); font-weight:400; font-variant-numeric:tabular-nums; }

@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { IMAGE_STYLE_DIRECTIONS, ImageStyleSchema } from "./style";
 
 export const CarouselPlanInputSchema=z.object({
   topic:z.string().trim().min(1).max(200),
   imageBrief:z.string().trim().min(1).max(600).optional(),
+  imageStyle:ImageStyleSchema.optional(),
   slideCount:z.union([z.literal(3),z.literal(5),z.literal(7),z.literal(10)]).default(5),
 });
 
@@ -62,15 +64,18 @@ const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role">>={
 
 export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan {
   const parsed=CarouselPlanInputSchema.parse(input);
+  const style=IMAGE_STYLE_DIRECTIONS[parsed.imageStyle??"photo"];
+  const drawn=parsed.imageStyle!==undefined&&parsed.imageStyle!=="photo";
   const context=parsed.imageBrief ? ` 선택 주제의 기존 이미지 설명도 반영: ${parsed.imageBrief.slice(0,450)}.` : "";
   return CarouselPlanSchema.parse({
     slideCount:parsed.slideCount,
-    styleAnchor:"따뜻하고 자연스러운 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트, 실제 음식 사진 질감",
+    styleAnchor:`따뜻하고 자연스러운 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트, ${style.anchor}`,
     slides:rolesForCount(parsed.slideCount).map((role)=>({
       role,
       ...FALLBACK_SLIDES[role],
       headline:role==="cover" ? parsed.topic.slice(0,42) : FALLBACK_SLIDES[role].headline,
-      visualPrompt:`${FALLBACK_SLIDES[role].visualPrompt}.${context}`,
+      // 준비된 장면 설명은 사진 기준으로 쓰여 있어, 그림 화풍이면 "사진"을 "그림"으로 바꿔 모델이 실사로 가지 않게 한다.
+      visualPrompt:`${drawn?FALLBACK_SLIDES[role].visualPrompt.replace(/사진/g,"그림"):FALLBACK_SLIDES[role].visualPrompt}.${context}`,
     })),
   });
 }
@@ -78,7 +83,8 @@ export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan
 // Shared by the plan route and the provider comparison script so both send the same instruction.
 export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
   const parsed=CarouselPlanInputSchema.parse(input);
-  return `한국 음식점 Instagram 캐러셀 구성안을 JSON 객체로 작성하세요. 선택한 주제 "${parsed.topic}"를 바꾸지 말고 모든 장면에 일관되게 반영하세요. 기존 이미지 설명: ${parsed.imageBrief ?? "없음"}. slideCount는 ${parsed.slideCount}, slides의 role 순서는 ${rolesForCount(parsed.slideCount).join(" → ")}를 정확히 지키세요. styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준을 쓰세요. 각 headline은 짧은 한국어로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지는 음식에 대한 구체적인 궁금증, 중간 장은 질감·먹는 방법, 마지막 장은 방문 전 확인으로 이어지게 하세요. 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어전·찜·무침의 조리법을 구분하고 선택 주제에 없는 삼합 구성을 강제하지 마세요. visualPrompt는 서로 다른 촬영 거리와 구도의 음식 사진 장면으로 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 만들지 마세요. 각 slide는 role, headline, visualPrompt, textPosition(top 또는 bottom)을 포함해야 합니다.`;
+  const style=IMAGE_STYLE_DIRECTIONS[parsed.imageStyle??"photo"];
+  return `한국 음식점 Instagram 캐러셀 구성안을 JSON 객체로 작성하세요. 선택한 주제 "${parsed.topic}"를 바꾸지 말고 모든 장면에 일관되게 반영하세요. 기존 이미지 설명: ${parsed.imageBrief ?? "없음"}. slideCount는 ${parsed.slideCount}, slides의 role 순서는 ${rolesForCount(parsed.slideCount).join(" → ")}를 정확히 지키세요. styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 각 headline은 짧은 한국어로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지는 음식에 대한 구체적인 궁금증, 중간 장은 질감·먹는 방법, 마지막 장은 방문 전 확인으로 이어지게 하세요. 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어전·찜·무침의 조리법을 구분하고 선택 주제에 없는 삼합 구성을 강제하지 마세요. visualPrompt는 서로 다른 촬영 거리와 구도의 ${style.scene}으로 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 만들지 마세요. 각 slide는 role, headline, visualPrompt, textPosition(top 또는 bottom)을 포함해야 합니다.`;
 }
 
 export interface CarouselPlanAi {

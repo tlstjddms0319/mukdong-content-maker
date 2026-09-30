@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { CarouselSlidePlanSchema, rolesForCount } from "./carousel";
+import { ImageStyleSchema } from "./style";
 
 export const ImageBriefSchema = z.object({
   topic: z.string().trim().min(1).max(200),
   count: z.number().int().min(1).max(4).default(3),
   aspectRatio: z.literal("4:5").default("4:5"),
   imageBrief:z.string().trim().min(1).max(600).optional(),
+  imageStyle:ImageStyleSchema.optional(),
   refinement:z.string().trim().min(1).max(300).optional(),
   slide:CarouselSlidePlanSchema.optional(),
   slideIndex:z.number().int().min(1).max(10).optional(),

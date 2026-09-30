@@ -110,6 +110,17 @@ describe("carousel planning", () => {
     expect(prompt).toContain("cover → how-to → visit");
     expect(prompt).toContain("기존 이미지 설명: 없음");
     expect(prompt).toContain("가격, 원산지, 영업시간, 매장 정보");
+    expect(prompt).toContain("음식 사진 장면");
+  });
+
+  it("asks for drawn scenes and a matching style anchor when an art style is chosen", () => {
+    const prompt=buildCarouselPlanPrompt({topic:"홍어 한 점",slideCount:3,imageStyle:"anime"});
+    expect(prompt).toContain("애니메이션 일러스트로 그릴 음식 장면");
+    expect(prompt).not.toContain("음식 사진 장면으로");
+    const fallback=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:3,imageStyle:"anime"});
+    expect(fallback.styleAnchor).toContain("애니메이션");
+    expect(fallback.slides.every(slide=>!slide.visualPrompt.includes("사진"))).toBe(true);
+    expect(createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:3}).styleAnchor).toContain("실제 음식 사진 질감");
   });
 
 });

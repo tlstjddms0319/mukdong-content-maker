@@ -205,9 +205,33 @@ describe("OpenAI image request", () => {
       slide:visitSlide,
     });
 
-    expect(request.prompt).toContain("조명과 색감만 참고");
+    expect(request.prompt).toContain("화풍, 색감, 조명, 분위기만 참고");
     expect(request.prompt).toContain(visitSlide.visualPrompt);
     expect(request.prompt).not.toContain("원본 음식의 형태와 특징은 유지");
+  });
+
+  it("switches to the requested art style and drops the photo-realism directive",()=>{
+    const anime=buildImageRequest(ImageBriefSchema.parse({topic:"홍어 삼합",count:1,imageStyle:"anime"})).prompt;
+    expect(anime).toContain("anime-style");
+    expect(anime).toContain("사진처럼 만들지 말고");
+    expect(anime).not.toContain("Editorial food photography");
+    const inferred=buildImageRequest(ImageBriefSchema.parse({topic:"홍어 삼합",count:1,refinement:"애니메이션 풍으로 바꿔 주세요"})).prompt;
+    expect(inferred).toContain("anime-style");
+    expect(inferred).toContain("가장 우선");
+    expect(buildImageRequest(ImageBriefSchema.parse({topic:"홍어 삼합",count:1})).prompt).toContain("Editorial food photography");
+  });
+
+  it("tells the model not to copy text or characters from an uploaded reference and lowers fidelity when the image must change",async()=>{
+    const reference={topic:"홍어",count:1,aspectRatio:"4:5" as const,referenceImage:"data:image/png;base64,iVBORw0KGgo="};
+    const source=await buildImageEditRequest({...reference,referenceMode:"source"});
+    expect(source.prompt).toContain("글자, 표, 로고, 캐릭터");
+    expect(source.input_fidelity).toBe("high");
+    expect((await buildImageEditRequest({...reference,referenceMode:"style"})).input_fidelity).toBe("low");
+    expect((await buildImageEditRequest({...reference,referenceMode:"source",imageStyle:"illustration"})).input_fidelity).toBe("low");
+    const revised=await buildImageEditRequest({...reference,referenceMode:"continuity",refinement:"애니메이션 풍으로"});
+    expect(revised.input_fidelity).toBe("low");
+    expect(revised.prompt).toContain("수정 요청을 우선");
+    expect(revised.prompt).not.toContain("동일하게 유지");
   });
 
   it("keeps legacy requests valid and permits two cover candidates at carousel position one", () => {
