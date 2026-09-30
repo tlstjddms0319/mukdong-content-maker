@@ -10,14 +10,15 @@ export type { ApprovedImage } from "@/features/images/generationStore";
 
 // 상태와 생성 루프는 generationStore에 있고, 이 컴포넌트는 그것을 보여 주고 버튼을 연결하는 화면이다.
 // 그래서 다른 화면으로 이동해 이 컴포넌트가 사라져도 생성은 계속되고, 돌아오면 같은 상태를 다시 보여 준다.
-export function ImageStudio({topic,imageBrief,slideCount,approvedImages=[],onApprove,sessionKey}:{topic:string;imageBrief?:string;slideCount:CarouselSlideCount;approvedImages?:ApprovedImage[];onApprove:(images:ApprovedImage[])=>void;sessionKey?:string}) {
+export function ImageStudio({topic,imageBrief,contentBrief,slideCount,approvedImages=[],onApprove,sessionKey}:{topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount;approvedImages?:ApprovedImage[];onApprove:(images:ApprovedImage[])=>void;sessionKey?:string}) {
  const inputRef=useRef<HTMLInputElement>(null);
  const brief=imageBrief?.trim();
+ const content=contentBrief?.trim()||undefined;
  const key=`${sessionKey??topic}|${slideCount}`;
  const stored=useGenerationState();
  // 저장소가 다른 초안의 상태를 들고 있으면 첫 렌더에서는 빈 초기 상태를 보여 주고, 아래 effect가 저장소를 이 초안으로 맞춘다.
- const state=stored.key===key?stored:initialGenerationState(key,{topic,imageBrief:brief,slideCount},approvedImages);
- useEffect(()=>{ensureGeneration(key,{topic,imageBrief:brief,slideCount},approvedImages);},[key,topic,brief,slideCount,approvedImages]);
+ const state=stored.key===key?stored:initialGenerationState(key,{topic,imageBrief:brief,contentBrief:content,slideCount},approvedImages);
+ useEffect(()=>{ensureGeneration(key,{topic,imageBrief:brief,contentBrief:content,slideCount},approvedImages);},[key,topic,brief,content,slideCount,approvedImages]);
  const {mode,imageStyle,referenceUse,photoPreview,photoStatus,providerNotice,plan,covers,cover,slides,phase,error,approved,refinements}=state;
  const busy=phase!=="idle",activeIndex=activeSlideIndex(state),active=slides[activeIndex];
  const fillingSlides=phase==="slides"&&slides.length<slideCount;

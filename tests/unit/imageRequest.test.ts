@@ -22,6 +22,7 @@ vi.mock("@/features/settings/repository",()=>({readSettings}));
 const visitSlide={
   role:"visit" as const,
   headline:"오늘 한 상 어때요?",
+  points:[],
   visualPrompt:"따뜻한 저녁 조명 아래 편안한 홍어 한 상을 넓게 담은 음식 사진",
   textPosition:"bottom" as const,
 };

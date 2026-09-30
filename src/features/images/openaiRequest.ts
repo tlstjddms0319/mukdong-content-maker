@@ -41,7 +41,9 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     styleId==="photo" ? "" : `화풍: ${style.anchor}. 장면 설명이나 공통 스타일에 '사진'이라는 말이 있어도 사진처럼 만들지 말고 이 화풍으로 그릴 것.`,
     input.slide?.role==="detail"?"Macro detail: emphasize the actual texture of one bite with a gently blurred background. Keep the focal food clear of the title area; the plate may extend beyond the frame.":input.slide?.role==="overview"?"Top-down overview: keep the whole plate inside the central 75% crop-safe area, with sufficient depth of field to read the arrangement.":"Keep the main food inside the central 75% crop-safe area; use depth of field appropriate to this scene, without losing the food's recognizable shape.",
     foodDirection(input),
-    input.slide ? `나중에 제목을 합성할 수 있도록 이미지의 ${input.slide.textPosition==="top"?"위쪽":"아래쪽"}에 복잡하지 않은 안전 여백을 둘 것.` : "",
+    input.slide ? (input.slide.points?.length
+      ? `나중에 제목과 요점 문구를 합성할 수 있도록 이미지의 ${input.slide.textPosition==="top"?"위쪽":"아래쪽"} 40% 정도를 복잡하지 않은 안전 여백으로 둘 것.`
+      : `나중에 제목을 합성할 수 있도록 이미지의 ${input.slide.textPosition==="top"?"위쪽":"아래쪽"}에 복잡하지 않은 안전 여백을 둘 것.`) : "",
     reference ? referenceDirection(input) : "",
     // 수정 요청은 위의 화풍·구도 지침보다 우선한다고 명시해야 "애니메이션 풍으로" 같은 요청이 사진 지시에 묻히지 않는다.
     input.refinement ? `사용자의 수정 요청(가장 우선): ${JSON.stringify(input.refinement)}. 위의 화풍·구도·조명 지침과 충돌하면 이 요청을 따른다. 음식의 종류와 사실 기준은 유지한다.` : "",

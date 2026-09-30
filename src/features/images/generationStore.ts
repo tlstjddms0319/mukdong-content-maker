@@ -10,7 +10,7 @@ export type ApprovedImage={id:string;preview?:string;referencePreview?:string;so
 export type StudioMode="photo"|"ai"|"mix"|"free";
 export type StudioPhase="idle"|"uploading"|"planning"|"cover"|"slides";
 export type ReferenceUse="source"|"style";
-export type GenerationInput={topic:string;imageBrief?:string;slideCount:CarouselSlideCount};
+export type GenerationInput={topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount};
 
 export type GenerationState={
   key:string;                 // 초안(세션)마다 다른 값. 키가 바뀌면 상태를 새로 시작한다.
@@ -60,7 +60,7 @@ export function resetGenerationStore(){run++;replace(initialGenerationState("",E
 // 다른 초안으로 바뀌면 새로 시작하고, 같은 초안이면 진행 중인 상태를 그대로 이어 간다.
 export function ensureGeneration(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]){
   if(state.key!==key){run++;replace(initialGenerationState(key,input,approvedImages));return;}
-  if(state.input.topic!==input.topic||state.input.imageBrief!==input.imageBrief||state.input.slideCount!==input.slideCount)patch({input});
+  if(state.input.topic!==input.topic||state.input.imageBrief!==input.imageBrief||state.input.contentBrief!==input.contentBrief||state.input.slideCount!==input.slideCount)patch({input});
 }
 
 export const activeSlideIndex=(current:GenerationState)=>Math.min(current.activeSlide,Math.max(current.slides.length-1,0));
@@ -124,8 +124,8 @@ export async function startPlan(){
   const token=++run;
   patch({...CLEARED,phase:"planning"});
   try{
-    const {topic,imageBrief,slideCount}=state.input;
-    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),slideCount,imageStyle:state.imageStyle})});
+    const {topic,imageBrief,contentBrief,slideCount}=state.input;
+    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:state.imageStyle})});
     const data=await response.json();
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
