@@ -39,6 +39,12 @@ describe("OpenAI image request", () => {
     expect(request.prompt).toContain("접시를 더 작게, 자연광은 부드럽게");
     expect(buildImageRequest(ImageBriefSchema.parse({topic:"홍어 전문점"})).prompt).not.toContain("노릇");
   });
+  it("forbids rendering the question topic as text at both ends of the prompt",()=>{
+    const prompt=buildImageRequest({topic:"홍어가 톡 쏘는 이유",count:1,aspectRatio:"4:5"}).prompt;
+    expect(prompt.startsWith("Absolutely no text in the image")).toBe(true);
+    expect(prompt.trimEnd().endsWith("Food and background only.")).toBe(true);
+    expect(prompt).toContain("이미지에 글자로 쓰지 말 것): 홍어가 톡 쏘는 이유");
+  });
   it("does not force an eye-level full plate on a top-down or macro scene",()=>{
     for(const role of ["overview","detail"] as const){
       const prompt=buildImageRequest({topic:"홍어",count:1,aspectRatio:"4:5",slide:{...visitSlide,role}}).prompt;

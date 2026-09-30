@@ -14,6 +14,8 @@ function foodDirection(input:ImageBrief):string {
   ] as const;
   const preparations:string[]=cooked.filter(([pattern])=>pattern.test(menuText)).map(([,description])=>description);
   if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push("홍어회·삼합 장면의 홍어는 숙성 홍어 날개 살을 얇고 불규칙하게 썬 연한 분홍빛 또는 아이보리색 회로 표현한다. 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.");
+  // 작은 이미지 모델은 '홍어'를 몰라 베이컨·햄처럼 그리기 쉬워서 영어로 무엇인지 한 번 설명한다.
+  preparations.push("Hongeo is Korean fermented skate, a flat ray fish: its flesh has fine parallel fibers and thin translucent cartilage lines, never marbled fat stripes. The skate must not look like bacon, ham, sausage or pork belly.");
   return preparations.join(" ")+" 이번 장면에 해당하는 조리법만 표현한다. 두꺼운 정육면체 회, 두부 같은 고기 블록, 탑처럼 높은 적층, 초밥이나 연어로 바꾸는 표현은 금지한다. 메뉴와 무관한 장식 소스는 추가하지 않는다.";
 }
 
@@ -28,11 +30,15 @@ function referenceDirection(input:ImageBrief):string {
   return `첨부한 원본 음식의 형태와 특징은 유지하고 조명, 색감, 구도만 자연스럽게 보완할 것. ${noCopy}`;
 }
 
+const NO_TEXT_DIRECTIVE="Absolutely no text in the image: no letters, words, Korean or English characters, numbers, captions, speech bubbles, question marks, signs or logos. Food and background only.";
+
 export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
   const styleId=resolveImageStyle(input);
   const style=IMAGE_STYLE_DIRECTIONS[styleId];
   return [
-    `한국 음식점 인스타그램 게시물용 ${style.medium}. 선택 주제: ${input.topic}.`,
+    // 작은 이미지 모델은 질문형 주제를 그대로 글씨로 그리기 쉬워서, 글자 금지를 영어로 맨 앞과 맨 끝에 둔다.
+    NO_TEXT_DIRECTIVE,
+    `한국 음식점 인스타그램 게시물용 ${style.medium}. 선택 주제(장면의 소재일 뿐, 이미지에 글자로 쓰지 말 것): ${input.topic}.`,
     input.imageBrief ? `기존 이미지 설명: ${input.imageBrief}.` : "",
     input.slide ? `슬라이드 역할: ${input.slide.role}. 장면: ${input.slide.visualPrompt}.` : `세로 4:5 구도, 하나의 음식 피사체가 선명하고 먹음직스럽게 보이며 자연스러운 조명과 여백이 있는 ${styleId==="photo"?"실제 음식 사진 스타일":`${style.medium} 스타일`}.`,
     input.styleAnchor ? `전체 캐러셀 공통 스타일: ${input.styleAnchor}.` : "",
@@ -51,6 +57,7 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 수정 요청은 위의 화풍·구도 지침보다 우선한다고 명시해야 "애니메이션 풍으로" 같은 요청이 사진 지시에 묻히지 않는다.
     input.refinement ? `사용자의 수정 요청(가장 우선): ${JSON.stringify(input.refinement)}. 위의 화풍·구도·조명 지침과 충돌하면 이 요청을 따른다. 음식의 종류와 사실 기준은 유지한다.` : "",
     "이미지 안에 글자, 로고, 가격표를 넣지 말 것. 실제 매장 외관, 손님 얼굴, 확인되지 않은 원산지나 메뉴 구성을 만들지 말 것.",
+    NO_TEXT_DIRECTIVE,
   ].filter(Boolean).join(" ");
 };
 
