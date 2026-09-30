@@ -12,6 +12,14 @@ describe("InstagramConnectionCard",()=>{
     expect(screen.getByRole("link",{name:"Instagram 연결"})).toHaveAttribute("href","/api/instagram/connect");
   });
 
+  it("연결에 필요한 서버 설정이 없으면 연결 버튼을 막고 이유를 보여준다",async()=>{
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:false,setup:{appId:false,appSecret:false,redirectUri:false,mediaHttpsUrl:false,signingKey:false}})}));
+    render(<InstagramConnectionCard/>);
+    expect(await screen.findByRole("button",{name:"Instagram 연결"})).toBeDisabled();
+    expect(screen.queryByRole("link",{name:"Instagram 연결"})).not.toBeInTheDocument();
+    expect(screen.getByText(/서버 환경변수에 넣으면 연결할 수 있어요/)).toBeInTheDocument();
+  });
+
   it("계정이 연결되어도 게시 서버 설정이 빠졌으면 항목을 따로 안내한다",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({
       connected:true,username:"mukdong",needsReconnect:false,
