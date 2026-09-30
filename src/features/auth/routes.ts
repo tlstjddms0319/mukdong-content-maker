@@ -3,5 +3,5 @@ export function safeReturnPath(value: string | null): string {
 }
 
 export function isPublicException(pathname: string): boolean {
-  return pathname === "/api/instagram/callback" || /^\/api\/media\/public\/[^/]+$/.test(pathname);
+  return pathname === "/api/instagram/callback" || pathname === "/api/instagram/scheduler" || /^\/api\/media\/public\/[^/]+$/.test(pathname);
 }

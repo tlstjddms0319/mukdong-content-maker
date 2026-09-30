@@ -1,16 +1,24 @@
 import { z } from "zod";
+import { IMAGE_STYLE_DIRECTIONS, ImageStyleSchema } from "./style";
 
 export const CarouselPlanInputSchema=z.object({
   topic:z.string().trim().min(1).max(200),
   imageBrief:z.string().trim().min(1).max(600).optional(),
+  contentBrief:z.string().trim().min(1).max(600).optional(),
+  imageStyle:ImageStyleSchema.optional(),
   slideCount:z.union([z.literal(3),z.literal(5),z.literal(7),z.literal(10)]).default(5),
 });
 
 export const CarouselRoleSchema=z.enum(["cover","overview","detail","how-to","pairing","process","occasion","mood","visit","cta"]);
 
+export const SLIDE_POINT_MAX_LENGTH=40;
+export const SLIDE_POINT_MAX_COUNT=4;
+
 export const CarouselSlidePlanSchema=z.object({
   role:CarouselRoleSchema,
   headline:z.string().trim().min(1).max(42),
+  // 본문 장에 얹을 짧은 요점 2~4줄. 표지는 빈 배열. 엄격 JSON 스키마 제공자 때문에 선택 필드로 두지 않는다.
+  points:z.array(z.string().trim().min(1).max(SLIDE_POINT_MAX_LENGTH)).max(SLIDE_POINT_MAX_COUNT),
   visualPrompt:z.string().trim().min(12).max(600),
   textPosition:z.enum(["top","bottom"]),
 });
@@ -47,30 +55,34 @@ export const CarouselPlanSchema=z.object({
 
 export type CarouselPlan=z.infer<typeof CarouselPlanSchema>;
 
+// 준비된 요점은 주제와 무관하게 안전한 일반 문장만 쓴다(가격·원산지·영업시간 같은 확인 필요한 사실은 넣지 않는다).
 const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role">>={
-  cover:{headline:"",visualPrompt:"완성된 음식 한 상과 핵심 메뉴를 선명하게 보여 주는 강한 정면 히어로 음식 사진",textPosition:"top"},
-  overview:{headline:"한눈에 보는 한 상",visualPrompt:"그릇과 곁들임의 전체 구성이 보이도록 위에서 넓게 내려다본 정돈된 음식 상차림 사진",textPosition:"top"},
-  detail:{headline:"결과 윤기를 가까이",visualPrompt:"핵심 음식의 결, 윤기, 재료 질감을 가까운 거리와 얕은 심도로 강조한 매크로 음식 사진",textPosition:"bottom"},
-  "how-to":{headline:"한 점을 만드는 순간",visualPrompt:"젓가락으로 재료를 차례로 올려 한 점을 완성하는 손동작 중심의 생생한 음식 사진, 얼굴 없음",textPosition:"top"},
-  pairing:{headline:"함께 놓으면 좋은 조합",visualPrompt:"핵심 음식과 잘 어울리는 음료와 곁들임을 대각선 구도로 함께 보여 주는 음식 사진",textPosition:"bottom"},
-  process:{headline:"정갈하게 준비하는 과정",visualPrompt:"깨끗한 손이 재료를 접시에 가지런히 담는 준비 과정을 옆 각도에서 포착한 음식 사진, 얼굴 없음",textPosition:"top"},
-  occasion:{headline:"함께 나누는 저녁",visualPrompt:"여럿이 편안하게 나눠 먹는 저녁 상황을 음식과 손만으로 표현한 따뜻한 식탁 사진, 얼굴 없음",textPosition:"bottom"},
-  mood:{headline:"편안한 한 끼의 분위기",visualPrompt:"부드러운 조명과 작은 녹색 포인트가 있는 차분한 식탁 분위기를 넓은 여백과 함께 담은 사진",textPosition:"top"},
-  visit:{headline:"오늘 한 상 어때요?",visualPrompt:"방문을 떠올릴 수 있는 푸짐하고 편안한 완성 상차림을 눈높이에서 담은 실제 음식 사진, 매장 외관 없음",textPosition:"bottom"},
-  cta:{headline:"다음 한 점을 만나 보세요",visualPrompt:"마지막 행동을 자연스럽게 유도하도록 비어 있는 접시 가장자리와 먹음직스러운 한 점을 대비한 음식 사진",textPosition:"bottom"},
+  cover:{headline:"",points:[],visualPrompt:"완성된 음식 한 상과 핵심 메뉴를 선명하게 보여 주는 강한 정면 히어로 음식 사진",textPosition:"top"},
+  overview:{headline:"한눈에 보는 한 상",points:["메인과 곁들임을 한 상에 정갈하게","처음이라면 순한 것부터 차례로"],visualPrompt:"그릇과 곁들임의 전체 구성이 보이도록 위에서 넓게 내려다본 정돈된 음식 상차림 사진",textPosition:"top"},
+  detail:{headline:"결과 윤기를 가까이",points:["얇게 썰어 결이 살아 있어요","한 점씩 천천히 음미해 보세요"],visualPrompt:"핵심 음식의 결, 윤기, 재료 질감을 가까운 거리와 얕은 심도로 강조한 매크로 음식 사진",textPosition:"bottom"},
+  "how-to":{headline:"한 점을 만드는 순간",points:["재료를 차례로 올려 한입 크기로","첫 점은 양념을 적게 시작해 보세요"],visualPrompt:"젓가락으로 재료를 차례로 올려 한 점을 완성하는 손동작 중심의 생생한 음식 사진, 얼굴 없음",textPosition:"top"},
+  pairing:{headline:"함께 놓으면 좋은 조합",points:["곁들임이 맛의 균형을 잡아 줘요","음료는 담백한 것이 잘 어울려요"],visualPrompt:"핵심 음식과 잘 어울리는 음료와 곁들임을 대각선 구도로 함께 보여 주는 음식 사진",textPosition:"bottom"},
+  process:{headline:"정갈하게 준비하는 과정",points:["손질부터 담음새까지 차분하게","한 접시씩 정성껏 준비해요"],visualPrompt:"깨끗한 손이 재료를 접시에 가지런히 담는 준비 과정을 옆 각도에서 포착한 음식 사진, 얼굴 없음",textPosition:"top"},
+  occasion:{headline:"함께 나누는 저녁",points:["여럿이 나누기 좋은 구성이에요","이야기와 함께 천천히 즐겨 보세요"],visualPrompt:"여럿이 편안하게 나눠 먹는 저녁 상황을 음식과 손만으로 표현한 따뜻한 식탁 사진, 얼굴 없음",textPosition:"bottom"},
+  mood:{headline:"편안한 한 끼의 분위기",points:["서두르지 않아도 되는 저녁","한 상 앞에서 잠시 쉬어 가요"],visualPrompt:"부드러운 조명과 작은 녹색 포인트가 있는 차분한 식탁 분위기를 넓은 여백과 함께 담은 사진",textPosition:"top"},
+  visit:{headline:"오늘 한 상 어때요?",points:["방문 전 메뉴 구성을 확인해 보세요","처음이라면 직원에게 편하게 물어보세요"],visualPrompt:"방문을 떠올릴 수 있는 푸짐하고 편안한 완성 상차림을 눈높이에서 담은 실제 음식 사진, 매장 외관 없음",textPosition:"bottom"},
+  cta:{headline:"다음 한 점을 만나 보세요",points:["저장해 두면 다음 방문 때 편해요","궁금한 점은 댓글로 남겨 주세요"],visualPrompt:"마지막 행동을 자연스럽게 유도하도록 비어 있는 접시 가장자리와 먹음직스러운 한 점을 대비한 음식 사진",textPosition:"bottom"},
 };
 
 export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan {
   const parsed=CarouselPlanInputSchema.parse(input);
+  const style=IMAGE_STYLE_DIRECTIONS[parsed.imageStyle??"photo"];
+  const drawn=parsed.imageStyle!==undefined&&parsed.imageStyle!=="photo";
   const context=parsed.imageBrief ? ` 선택 주제의 기존 이미지 설명도 반영: ${parsed.imageBrief.slice(0,450)}.` : "";
   return CarouselPlanSchema.parse({
     slideCount:parsed.slideCount,
-    styleAnchor:"따뜻하고 자연스러운 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트, 실제 음식 사진 질감",
+    styleAnchor:`따뜻하고 자연스러운 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트, ${style.anchor}`,
     slides:rolesForCount(parsed.slideCount).map((role)=>({
       role,
       ...FALLBACK_SLIDES[role],
       headline:role==="cover" ? parsed.topic.slice(0,42) : FALLBACK_SLIDES[role].headline,
-      visualPrompt:`${FALLBACK_SLIDES[role].visualPrompt}.${context}`,
+      // 준비된 장면 설명은 사진 기준으로 쓰여 있어, 그림 화풍이면 "사진"을 "그림"으로 바꿔 모델이 실사로 가지 않게 한다.
+      visualPrompt:`${drawn?FALLBACK_SLIDES[role].visualPrompt.replace(/사진/g,"그림"):FALLBACK_SLIDES[role].visualPrompt}.${context}`,
     })),
   });
 }
@@ -78,7 +90,8 @@ export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan
 // Shared by the plan route and the provider comparison script so both send the same instruction.
 export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
   const parsed=CarouselPlanInputSchema.parse(input);
-  return `한국 음식점 Instagram 캐러셀 구성안을 JSON 객체로 작성하세요. 선택한 주제 "${parsed.topic}"를 바꾸지 말고 모든 장면에 일관되게 반영하세요. 기존 이미지 설명: ${parsed.imageBrief ?? "없음"}. slideCount는 ${parsed.slideCount}, slides의 role 순서는 ${rolesForCount(parsed.slideCount).join(" → ")}를 정확히 지키세요. styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준을 쓰세요. 각 headline은 짧은 한국어로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지는 음식에 대한 구체적인 궁금증, 중간 장은 질감·먹는 방법, 마지막 장은 방문 전 확인으로 이어지게 하세요. 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어전·찜·무침의 조리법을 구분하고 선택 주제에 없는 삼합 구성을 강제하지 마세요. visualPrompt는 서로 다른 촬영 거리와 구도의 음식 사진 장면으로 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 만들지 마세요. 각 slide는 role, headline, visualPrompt, textPosition(top 또는 bottom)을 포함해야 합니다.`;
+  const style=IMAGE_STYLE_DIRECTIONS[parsed.imageStyle??"photo"];
+  return `한국 음식점 Instagram 캐러셀 구성안을 JSON 객체로 작성하세요. 선택한 주제 "${parsed.topic}"를 바꾸지 말고 모든 장면에 일관되게 반영하세요. 기존 이미지 설명: ${parsed.imageBrief ?? "없음"}. 내용 메모: ${parsed.contentBrief ?? "없음"}. slideCount는 ${parsed.slideCount}, slides의 role 순서는 ${rolesForCount(parsed.slideCount).join(" → ")}를 정확히 지키세요. styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 각 headline은 짧은 한국어로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~24자)로, headline을 반복하지 말고 주제와 내용 메모에서 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 표지의 points는 빈 배열로 두세요. 표지는 음식에 대한 구체적인 궁금증, 중간 장은 질감·먹는 방법, 마지막 장은 방문 전 확인으로 이어지게 하세요. 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어전·찜·무침의 조리법을 구분하고 선택 주제에 없는 삼합 구성을 강제하지 마세요. visualPrompt는 서로 다른 촬영 거리와 구도의 ${style.scene}으로 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요. 각 slide는 role, headline, points, visualPrompt, textPosition(top 또는 bottom)을 포함해야 합니다.`;
 }
 
 export interface CarouselPlanAi {

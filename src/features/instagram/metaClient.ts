@@ -16,6 +16,15 @@ export async function exchangeInstagramCode(code:string,config:InstagramOAuthCon
   return {accessToken:long.access_token,expiresIn:typeof long.expires_in==="number"?long.expires_in:5184000};
 }
 
+// 장기 토큰은 60일마다 만료된다. 발급 24시간 뒤부터 만료 전까지는 이 호출로 다시 60일을 받을 수 있다.
+export async function refreshInstagramToken(accessToken:string){
+  const url=new URL("https://graph.instagram.com/refresh_access_token");
+  url.search=new URLSearchParams({grant_type:"ig_refresh_token",access_token:accessToken}).toString();
+  const value=await readJson(await fetch(url));
+  if(typeof value.access_token!=="string")throw new InstagramOAuthError("Instagram 연결을 갱신할 수 없습니다.");
+  return {accessToken:value.access_token,expiresIn:typeof value.expires_in==="number"?value.expires_in:5184000};
+}
+
 export async function getInstagramProfile(accessToken:string){
   const url=new URL("https://graph.instagram.com/me");
   url.search=new URLSearchParams({fields:"id,username",access_token:accessToken}).toString();

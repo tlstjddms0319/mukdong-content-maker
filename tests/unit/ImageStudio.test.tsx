@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ImageStudio } from "@/components/images/ImageStudio";
+import { resetGenerationStore } from "@/features/images/generationStore";
 
 const plan={slideCount:3,styleAnchor:"따뜻한 흰 그릇과 나무 테이블의 일관된 음식 사진",slides:[{role:"cover",headline:"표지",visualPrompt:"선명한 완성 음식 한 상을 정면에서 담은 사진",textPosition:"top"},{role:"how-to",headline:"먹는 법",visualPrompt:"젓가락으로 한 점을 만드는 손동작 음식 사진",textPosition:"bottom"},{role:"visit",headline:"방문",visualPrompt:"편안한 완성 상차림을 담은 음식 사진 장면",textPosition:"bottom"}]};
 describe("ImageStudio carousel",()=>{
@@ -29,7 +30,29 @@ describe("ImageStudio carousel",()=>{
     expect(screen.getByLabelText("생성된 캐러셀 미리보기")).toHaveStyle({backgroundImage:'url("slide-3")'});
     expect(screen.getByLabelText("이 장의 수정 요청")).toHaveValue("빛을 부드럽게 하고 접시 주변 여백을 넓혀 주세요");
   });
-  afterEach(()=>vi.unstubAllGlobals());
+  afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
+  it("keeps a running generation and its results when the studio unmounts and comes back",async()=>{
+    let resolveCover:(value:unknown)=>void=()=>{};
+    const request=vi.fn((url:string,init?:RequestInit)=>url==="/api/images/plan"?Promise.resolve({ok:true,json:async()=>({plan})}):JSON.parse(String(init?.body)).count===2?new Promise(resolve=>{resolveCover=resolve;}):Promise.resolve({ok:true,json:async()=>({images:["slide"]})}));vi.stubGlobal("fetch",request);
+    const first=render(<ImageStudio topic="이어지는 주제" slideCount={3} sessionKey="draft-1" onApprove={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
+    expect(await screen.findByRole("status")).toHaveTextContent("표지 후보 2장을 만들고 있어요");
+    first.unmount();
+    resolveCover({ok:true,json:async()=>({images:["cover-1","cover-2"]})});
+    await waitFor(()=>expect(request).toHaveBeenCalledTimes(2));
+    render(<ImageStudio topic="이어지는 주제" slideCount={3} sessionKey="draft-1" onApprove={()=>undefined}/>);
+    expect(await screen.findByRole("button",{name:"표지 후보 2 선택"})).toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"AI 이미지 생성"})).toHaveAttribute("aria-pressed","true");
+  });
+  it("starts fresh for a different draft session",async()=>{
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:["slide"]})}));
+    const first=render(<ImageStudio topic="첫 주제" slideCount={3} sessionKey="draft-1" onApprove={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));await screen.findByRole("button",{name:"표지 후보 1 선택"});
+    first.unmount();
+    render(<ImageStudio topic="둘째 주제" slideCount={3} sessionKey="draft-2" onApprove={()=>undefined}/>);
+    expect(screen.queryByRole("button",{name:"표지 후보 1 선택"})).not.toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"실제 사진 사용"})).toHaveAttribute("aria-pressed","true");
+  });
   it("plans with the selected topic, selects a cover, then generates ordered remaining slides",async()=>{
     const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:[`image-${request.mock.calls.filter(([path])=>path==="/api/images/generate").length}`],source:"ai-generated"})});
     vi.stubGlobal("fetch",request); const approve=vi.fn(); render(<ImageStudio topic="새 주제" imageBrief="따뜻한 한 상" slideCount={3} onApprove={approve}/>);
@@ -69,6 +92,27 @@ describe("ImageStudio carousel",()=>{
   });
   it("sends the mixed reference for every generated slide",async()=>{
     const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/media/upload"?{ok:true,json:async()=>({id:"reference"})}:url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:["slide"]})});vi.stubGlobal("fetch",request);render(<ImageStudio topic="혼합 주제" slideCount={3} onApprove={()=>undefined}/>);fireEvent.click(screen.getByRole("button",{name:"사진 + AI 함께"}));fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});await screen.findByText("a.png 참고 사진을 저장했어요.");fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));await screen.findByRole("button",{name:"표지 후보 1 선택"});fireEvent.click(screen.getByRole("button",{name:"표지 후보 1 선택"}));fireEvent.click(screen.getByRole("button",{name:"이 표지로 3장 완성하기"}));await screen.findByRole("button",{name:"이 캐러셀 사용"});const bodies=request.mock.calls.filter(([url])=>url==="/api/images/generate").map(([,init])=>JSON.parse(String((init as RequestInit).body)));expect(bodies).toHaveLength(3);expect(bodies.every(body=>body.referenceImage&&body.referenceMode==="source")).toBe(true);
+  });
+  it("sends the chosen art style and reference use with every request",async()=>{
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/media/upload"?{ok:true,json:async()=>({id:"reference"})}:url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:["slide"]})});vi.stubGlobal("fetch",request);
+    render(<ImageStudio topic="화풍 주제" slideCount={3} onApprove={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"사진 + AI 함께"}));fireEvent.click(screen.getByRole("button",{name:"애니메이션"}));
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});await screen.findByText("a.png 참고 사진을 저장했어요.");
+    fireEvent.click(screen.getByRole("button",{name:"화풍·분위기만"}));expect(screen.getByRole("button",{name:"화풍·분위기만"})).toHaveAttribute("aria-pressed","true");
+    fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));await screen.findByRole("button",{name:"표지 후보 1 선택"});fireEvent.click(screen.getByRole("button",{name:"표지 후보 1 선택"}));fireEvent.click(screen.getByRole("button",{name:"이 표지로 3장 완성하기"}));await screen.findByRole("button",{name:"이 캐러셀 사용"});
+    expect(JSON.parse(String(request.mock.calls.find(([url])=>url==="/api/images/plan")![1]?.body)).imageStyle).toBe("anime");
+    const bodies=request.mock.calls.filter(([url])=>url==="/api/images/generate").map(([,init])=>JSON.parse(String((init as RequestInit).body)));
+    expect(bodies).toHaveLength(3);expect(bodies.every(body=>body.imageStyle==="anime"&&body.referenceImage&&body.referenceMode==="style")).toBe(true);
+  });
+  it("sends the card layout by default and the overlay layout when chosen",async()=>{
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:["slide"]})});vi.stubGlobal("fetch",request);
+    render(<ImageStudio topic="디자인 주제" slideCount={3} onApprove={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));
+    expect(screen.getByRole("button",{name:"카드형"})).toHaveAttribute("aria-pressed","true");
+    fireEvent.click(screen.getByRole("button",{name:"사진 위 글자"}));
+    fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));await screen.findByRole("button",{name:"표지 후보 1 선택"});
+    const body=JSON.parse(String(request.mock.calls.find(([url])=>url==="/api/images/generate")![1]?.body));
+    expect(body.slideLayout).toBe("overlay");
   });
   it("ignores a late AI plan after switching to photo mode",async()=>{
     let resolve:(value:unknown)=>void=()=>{};vi.stubGlobal("fetch",vi.fn(()=>new Promise(response=>{resolve=response;})));render(<ImageStudio topic="늦은 응답" slideCount={3} onApprove={()=>undefined}/>);fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));fireEvent.click(screen.getByRole("button",{name:"실제 사진 사용"}));resolve({ok:true,json:async()=>({plan})});await Promise.resolve();await Promise.resolve();expect(screen.queryByRole("button",{name:"표지 후보 1 선택"})).not.toBeInTheDocument();expect(screen.getByText("사진을 여기에 끌어놓으세요")).toBeInTheDocument();

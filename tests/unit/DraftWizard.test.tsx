@@ -14,7 +14,22 @@ describe("DraftWizard",()=>{
     const copyRequest=request.mock.calls.find(([url])=>url==="/api/copy");
     expect(JSON.parse(String(copyRequest?.[1]?.body))).toMatchObject({topic:"홍어전",imageBrief:"노릇한 전 한 접시",contentBrief:"익혔을 때 달라지는 식감을 설명하고 홍어전으로 연결한다.",hasAiImages});
   });
-  afterEach(()=>{vi.unstubAllGlobals();localStorage.clear();window.history.replaceState({},"","/");});
+  afterEach(()=>{vi.unstubAllGlobals();localStorage.clear();sessionStorage.clear();window.history.replaceState({},"","/");});
+  it("returns to the same unsaved draft and step after the wizard is remounted",async()=>{
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({})})));
+    const first=render(<DraftWizard/>);
+    fireEvent.change(screen.getByLabelText("직접 주제를 적고 싶다면"),{target:{value:"이어지는 주제"}});
+    fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
+    expect(screen.getByRole("heading",{name:"눈길을 끄는 이미지를 골라요"})).toBeInTheDocument();
+    await waitFor(()=>expect(JSON.parse(sessionStorage.getItem("mukdong-wizard-session")??"null")).toMatchObject({topic:"이어지는 주제",step:"image"}));
+    const {draftId}=JSON.parse(sessionStorage.getItem("mukdong-wizard-session")!);
+    first.unmount();
+    render(<DraftWizard/>);
+    expect(await screen.findByRole("heading",{name:"눈길을 끄는 이미지를 골라요"})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"이전: 주제"}));
+    expect(screen.getByLabelText("직접 주제를 적고 싶다면")).toHaveValue("이어지는 주제");
+    await waitFor(()=>expect(JSON.parse(sessionStorage.getItem("mukdong-wizard-session")!)).toMatchObject({draftId,step:"topic"}));
+  });
   it("prefills a library topic without loading or mutating the previous draft",async()=>{
     localStorage.setItem("mukdong-current-draft","11111111-1111-4111-8111-111111111111");
     window.history.replaceState({},"","/?topic="+encodeURIComponent("동네에서 홍어 한 상")+"&audience=B&imageBrief="+encodeURIComponent("퇴근 후 실제 상차림"));

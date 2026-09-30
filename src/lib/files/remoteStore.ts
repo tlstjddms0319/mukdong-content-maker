@@ -36,6 +36,11 @@ export function createRemoteStore(url: string, key: string, fetcher: typeof fetc
         cache: "no-store",
       }));
     },
+    async remove(name: string): Promise<void> {
+      const response = await fetcher(objectUrl(name), { method: "DELETE", headers, cache: "no-store" });
+      if (response.status === 404) return;
+      await checked(response);
+    },
     async list(folder: string): Promise<string[]> {
       const names: string[] = [];
       for (let offset = 0; ; offset += 100) {

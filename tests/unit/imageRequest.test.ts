@@ -22,6 +22,7 @@ vi.mock("@/features/settings/repository",()=>({readSettings}));
 const visitSlide={
   role:"visit" as const,
   headline:"오늘 한 상 어때요?",
+  points:[],
   visualPrompt:"따뜻한 저녁 조명 아래 편안한 홍어 한 상을 넓게 담은 음식 사진",
   textPosition:"bottom" as const,
 };
@@ -37,6 +38,12 @@ describe("OpenAI image request", () => {
     expect(request.prompt).not.toContain("숙성 홍어 날개 살을 얇고 불규칙하게");
     expect(request.prompt).toContain("접시를 더 작게, 자연광은 부드럽게");
     expect(buildImageRequest(ImageBriefSchema.parse({topic:"홍어 전문점"})).prompt).not.toContain("노릇");
+  });
+  it("forbids rendering the question topic as text at both ends of the prompt",()=>{
+    const prompt=buildImageRequest({topic:"홍어가 톡 쏘는 이유",count:1,aspectRatio:"4:5"}).prompt;
+    expect(prompt.startsWith("Absolutely no text in the image")).toBe(true);
+    expect(prompt.trimEnd().endsWith("Food and background only.")).toBe(true);
+    expect(prompt).toContain("이미지에 글자로 쓰지 말 것): 홍어가 톡 쏘는 이유");
   });
   it("does not force an eye-level full plate on a top-down or macro scene",()=>{
     for(const role of ["overview","detail"] as const){
@@ -185,6 +192,7 @@ describe("OpenAI image request", () => {
       aspectRatio:"4:5",
       imageBrief:"창가의 빗빛",
       slide:visitSlide,
+      slideLayout:"overlay",
       styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트",
     });
 
@@ -193,6 +201,10 @@ describe("OpenAI image request", () => {
     expect(request.prompt).toContain(visitSlide.visualPrompt);
     expect(request.prompt).toContain("아래쪽");
     expect(request.prompt).not.toContain("하나의 음식 피사체");
+    // 카드형(기본)은 사진이 카드 안에 들어가므로 글자 여백 대신 가운데 배치를 요청한다.
+    const card=buildImageRequest({topic:"비 오는 날 홍어와 막걸리",count:1,aspectRatio:"4:5",slide:visitSlide,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트"});
+    expect(card.prompt).toContain("카드 안에");
+    expect(card.prompt).not.toContain("안전 여백");
   });
 
   it("uses a reference image as style only when requested", async () => {
@@ -205,9 +217,33 @@ describe("OpenAI image request", () => {
       slide:visitSlide,
     });
 
-    expect(request.prompt).toContain("조명과 색감만 참고");
+    expect(request.prompt).toContain("화풍, 색감, 조명, 분위기만 참고");
     expect(request.prompt).toContain(visitSlide.visualPrompt);
     expect(request.prompt).not.toContain("원본 음식의 형태와 특징은 유지");
+  });
+
+  it("switches to the requested art style and drops the photo-realism directive",()=>{
+    const anime=buildImageRequest(ImageBriefSchema.parse({topic:"홍어 삼합",count:1,imageStyle:"anime"})).prompt;
+    expect(anime).toContain("anime-style");
+    expect(anime).toContain("사진처럼 만들지 말고");
+    expect(anime).not.toContain("Editorial food photography");
+    const inferred=buildImageRequest(ImageBriefSchema.parse({topic:"홍어 삼합",count:1,refinement:"애니메이션 풍으로 바꿔 주세요"})).prompt;
+    expect(inferred).toContain("anime-style");
+    expect(inferred).toContain("가장 우선");
+    expect(buildImageRequest(ImageBriefSchema.parse({topic:"홍어 삼합",count:1})).prompt).toContain("Editorial food photography");
+  });
+
+  it("tells the model not to copy text or characters from an uploaded reference and lowers fidelity when the image must change",async()=>{
+    const reference={topic:"홍어",count:1,aspectRatio:"4:5" as const,referenceImage:"data:image/png;base64,iVBORw0KGgo="};
+    const source=await buildImageEditRequest({...reference,referenceMode:"source"});
+    expect(source.prompt).toContain("글자, 표, 로고, 캐릭터");
+    expect(source.input_fidelity).toBe("high");
+    expect((await buildImageEditRequest({...reference,referenceMode:"style"})).input_fidelity).toBe("low");
+    expect((await buildImageEditRequest({...reference,referenceMode:"source",imageStyle:"illustration"})).input_fidelity).toBe("low");
+    const revised=await buildImageEditRequest({...reference,referenceMode:"continuity",refinement:"애니메이션 풍으로"});
+    expect(revised.input_fidelity).toBe("low");
+    expect(revised.prompt).toContain("수정 요청을 우선");
+    expect(revised.prompt).not.toContain("동일하게 유지");
   });
 
   it("keeps legacy requests valid and permits two cover candidates at carousel position one", () => {

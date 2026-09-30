@@ -3,6 +3,7 @@ import { ownerApiError } from "@/features/auth/guard";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
 import { CarouselPlanInputSchema, CarouselPlanSchema, buildCarouselPlanPrompt, planCarousel } from "@/features/images/carousel";
+import { guardSlidePoints } from "@/features/images/slidePoints";
 
 export async function POST(request:Request) { const denied=await ownerApiError(); if(denied)return denied;
   const input=CarouselPlanInputSchema.safeParse(await request.json());
@@ -21,5 +22,5 @@ export async function POST(request:Request) { const denied=await ownerApiError()
       return candidate;
     },
   });
-  return NextResponse.json({plan,provider});
+  return NextResponse.json({plan:guardSlidePoints(plan),provider});
 }
