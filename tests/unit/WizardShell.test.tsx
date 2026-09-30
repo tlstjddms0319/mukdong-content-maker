@@ -1,8 +1,20 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WizardShell } from "@/components/wizard/WizardShell";
+import { ensureGeneration, resetGenerationStore, startPlan } from "@/features/images/generationStore";
 
 describe("WizardShell", () => {
+  afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
+
+  it("shows a badge while an image generation keeps running on another screen", () => {
+    vi.stubGlobal("fetch",vi.fn(()=>new Promise(()=>{})));
+    ensureGeneration("draft-1",{topic:"홍어",slideCount:3});
+    void startPlan();
+    render(<WizardShell step="topic" section="drafts"><h1>내 초안</h1></WizardShell>);
+    expect(screen.getByText("이미지 생성 중")).toBeInTheDocument();
+    expect(screen.getByRole("link",{name:"새 초안"})).toBeInTheDocument();
+  });
+
   it("shows four simple steps and the active step", () => {
     render(
       <WizardShell step="image">

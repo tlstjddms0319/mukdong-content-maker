@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { logout } from "@/features/auth/actions";
+import { GenerationBadge } from "./GenerationBadge";
 
 export type WizardStep = "topic" | "image" | "copy" | "review";
 
@@ -29,6 +30,7 @@ export function WizardShell({ step, children, canVisit=[], onStepChange, section
       <div className="shell-body">
         <nav className="side-nav" aria-label="주요 메뉴">
           <Link className={section==="create"?"active":undefined} aria-current={section==="create"?"page":undefined} href="/">새 초안</Link>
+          <GenerationBadge />
           <Link className={section==="drafts"?"active":undefined} aria-current={section==="drafts"?"page":undefined} href="/drafts">내 초안</Link>
           <Link className={section==="images"?"active":undefined} aria-current={section==="images"?"page":undefined} href="/images">이미지 제작실</Link>
           <Link className={section==="library"?"active":undefined} aria-current={section==="library"?"page":undefined} href="/library">콘텐츠 자료</Link>
