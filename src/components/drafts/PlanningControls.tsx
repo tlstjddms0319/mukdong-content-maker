@@ -37,6 +37,6 @@ export function PlanningControls({ draftId, topic, plannedPublishAt, finalReview
     {!canReview&&<small>이미지와 문안을 먼저 저장해 주세요.</small>}
     {message&&<small role="status">{message}</small>}
     {error&&<small role="alert">{error}</small>}
-    <small>이 설정만으로 자동 게시되지 않아요.</small>
+    <small>Instagram을 연결하고 ‘최종 확인 완료’를 켜 두면 이 시각에 자동으로 게시돼요. 연결 전에는 자동 게시되지 않아요.</small>
   </form>;
 }

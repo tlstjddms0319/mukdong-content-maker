@@ -32,3 +32,15 @@ services:
         sync: false
       - key: SUPABASE_SECRET_KEY
         sync: false
+      - key: INSTAGRAM_APP_ID
+        sync: false
+      - key: INSTAGRAM_APP_SECRET
+        sync: false
+      - key: INSTAGRAM_REDIRECT_URI
+        value: https://mukdong-content-maker-0319.onrender.com/api/instagram/callback
+      - key: MEDIA_SIGNING_SECRET
+        generateValue: true
+      - key: INSTAGRAM_SCHEDULER_SECRET
+        generateValue: true
+      - key: INSTAGRAM_AUTOPUBLISH
+        value: "on"

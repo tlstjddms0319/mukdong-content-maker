@@ -5,6 +5,8 @@ import { selectedDraftMedia } from "@/features/drafts/selection";
 import { PublicationLockError } from "./repository";
 
 export type ContainerStatus="IN_PROGRESS"|"FINISHED"|"ERROR"|"EXPIRED";
+export const CONTAINER_POLL_ATTEMPTS=30;
+export const CONTAINER_POLL_INTERVAL_MS=3000;
 export class InstagramPublishError extends Error{constructor(message:string,public kind:"approval"|"incomplete"|"reconnect"|"in-progress"|"meta"="meta"){super(message);}}
 
 function caption(draft:Draft,approvedCaption?:string){if(approvedCaption?.trim())return approvedCaption.trim();const copy=draft.copy!;return [copy.hook,"",copy.information,copy.store_connection,"",copy.call_to_action,"",copy.hashtags.join(" "),copy.image_disclosure].filter(Boolean).join("\n");}
@@ -50,12 +52,13 @@ async function publishLocked(input:{draftId:string;approved:boolean;caption?:str
       : await createCarouselContainer(selected,deps,connection,input.draftId,expiresAt,approvedCaption);
     progress={...progress,containerId};
     await deps.repo.savePublication(progress);
+    // 캐러셀 컨테이너는 Meta 쪽 처리에 수십 초가 걸리기도 하므로 최대 약 90초까지 기다린다.
     let finished=false;
-    for(let attempt=0;attempt<5;attempt++){
+    for(let attempt=0;attempt<CONTAINER_POLL_ATTEMPTS;attempt++){
       const status=await deps.meta.getContainerStatus(containerId,connection.accessToken);
       if(status==="FINISHED"){finished=true;break;}
       if(status==="ERROR"||status==="EXPIRED")throw new Error("processing");
-      await (deps.wait??(ms=>new Promise(resolve=>setTimeout(resolve,ms))))(1000);
+      await (deps.wait??(ms=>new Promise(resolve=>setTimeout(resolve,ms))))(CONTAINER_POLL_INTERVAL_MS);
     }
     if(!finished)throw new Error("timeout");
     publishRequested=true;
