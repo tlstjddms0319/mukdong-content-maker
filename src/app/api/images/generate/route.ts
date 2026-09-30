@@ -9,7 +9,18 @@ import { CloudflareConfigurationError, CloudflareImageError, CloudflarePartialIm
 import { readSettings } from "@/features/settings/repository";
 import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
 import { AppSettingsSchema, type AppSettings } from "@/features/settings/schema";
+import { HiggsfieldConfigurationError, HiggsfieldImageError, HiggsfieldPartialImageError, generateHiggsfieldImages, isHiggsfieldConfigured } from "@/features/images/higgsfieldRequest";
 import sharp from "sharp";
+
+type ImageProvider="higgsfield"|"cloudflare"|"openai";
+const PROVIDER_LABELS:Record<ImageProvider,string>={higgsfield:"Higgsfield",cloudflare:"Cloudflare",openai:"OpenAI"};
+const HIGGSFIELD_MESSAGES:Record<HiggsfieldImageError["reason"],string>={
+  auth:"Higgsfield 키를 확인해 주세요.",
+  credits:"Higgsfield 크레딧이 부족해요. 충전하거나 설정에서 다른 이미지 AI를 골라 주세요.",
+  nsfw:"이미지 안전 검사에 걸렸어요. 수정 요청을 바꿔 다시 시도해 주세요.",
+  timeout:"이미지 생성이 너무 오래 걸려 멈췄어요. 잠시 뒤 다시 시도해 주세요.",
+  failed:"이미지 생성에 실패했습니다. 잠시 뒤 다시 시도하거나 직접 사진을 넣어 주세요.",
+};
 
 async function imageBytes(source:string):Promise<Buffer> {
   const data=source.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
@@ -35,20 +46,29 @@ export async function POST(request: Request) { const denied=await ownerApiError(
         : await client.images.generate(buildImageRequest(input,settings.imageQuality));
       return (result.data??[]).map((item)=>item.b64_json?`data:image/png;base64,${item.b64_json}`:item.url).filter((value):value is string=>Boolean(value));
     };
-    let provider:"cloudflare"|"openai"|"mixed"=settings.imageAiProvider==="openai"?"openai":"cloudflare";
-    let fallback=false;
-    let images:string[];
-    if(provider==="openai")images=await generateWithOpenAI();
-    else {
-      try { images=await generateCloudflareImages(parsed.data); }
+    // 자동은 키가 있는 Higgsfield부터, 실패하면 무료 Cloudflare, 마지막으로 OpenAI 순서로 남은 장수만 이어서 만든다.
+    const chain:ImageProvider[]=settings.imageAiProvider==="automatic"
+      ?[...(isHiggsfieldConfigured()?["higgsfield" as const]:[]),"cloudflare","openai"]
+      :[settings.imageAiProvider];
+    const generators:Record<ImageProvider,(count:number)=>Promise<string[]>>={
+      higgsfield:count=>generateHiggsfieldImages({...parsed.data,count}),
+      cloudflare:count=>generateCloudflareImages({...parsed.data,count}),
+      openai:count=>generateWithOpenAI(count),
+    };
+    let images:string[]=[];
+    const used:ImageProvider[]=[];
+    for(const [index,name] of chain.entries()){
+      try { images=[...images,...await generators[name](parsed.data.count-images.length)]; used.push(name); break; }
       catch(error) {
-        if(settings.imageAiProvider==="cloudflare")throw error;
-        const completed=error instanceof CloudflarePartialImageError?error.images:[];
-        images=[...completed,...await generateWithOpenAI(parsed.data.count-completed.length)];
-        provider=completed.length?"mixed":"openai";
-        fallback=true;
+        const completed=error instanceof CloudflarePartialImageError||error instanceof HiggsfieldPartialImageError?error.images:[];
+        if(completed.length){images=[...images,...completed];used.push(name);}
+        if(index===chain.length-1)throw error;
+        console.warn(`[images] ${name} 생성 실패, 다음 이미지 AI로 전환합니다:`,error instanceof Error?error.name:String(error));
       }
     }
+    const provider=used.length>1?"mixed":used[0];
+    const fallback=used[0]!==chain[0]||used.length>1;
+    const notice=fallback?`${PROVIDER_LABELS[chain[0]]} 생성이 어려워 ${PROVIDER_LABELS[used[used.length-1]]}(으)로 전환했어요.`:undefined;
     if (images.length !== parsed.data.count) throw new Error("incomplete image result");
     const referenceImages:string[]=[];
     if(parsed.data.slide)images=await Promise.all(images.map(async (source,index)=>{
@@ -62,8 +82,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
       const composed=await composeSlideImage(original,parsed.data.slide!,slideIndex,slideTotal,parsed.data.slideLayout);
       return `data:image/jpeg;base64,${composed.toString("base64")}`;
     }));
-    return NextResponse.json({ images, ...(referenceImages.length?{referenceImages}:{}), source:parsed.data.referenceImage&&parsed.data.referenceMode!=="continuity"?"ai-edited":"ai-generated", provider, fallback, disclosure:"AI 연출 이미지입니다. 실제 메뉴와 다를 수 있어요." });
+    return NextResponse.json({ images, ...(referenceImages.length?{referenceImages}:{}), source:parsed.data.referenceImage&&parsed.data.referenceMode!=="continuity"?"ai-edited":"ai-generated", provider, fallback, ...(notice?{notice}:{}), disclosure:"AI 연출 이미지입니다. 실제 메뉴와 다를 수 있어요." });
   } catch (error) {
+    if(error instanceof HiggsfieldConfigurationError)return NextResponse.json({message:error.message,retryable:false},{status:503});
+    if(error instanceof HiggsfieldImageError)return NextResponse.json({message:HIGGSFIELD_MESSAGES[error.reason],retryable:error.reason!=="auth"&&error.reason!=="credits"},{status:error.reason==="nsfw"?422:502});
     if(error instanceof CloudflareConfigurationError)return NextResponse.json({message:error.message,retryable:false},{status:503});
     if(error instanceof CloudflareImageError)return NextResponse.json({message:error.status===401?"Cloudflare API 토큰을 확인해 주세요.":"무료 이미지 생성에 실패했습니다. 잠시 뒤 다시 시도하거나 직접 사진을 넣어 주세요.",retryable:error.status!==401},{status:502});
     const detail = error instanceof AiConfigurationError ? {message:error.message,retryable:false} : classifyOpenAIImageError(error);
