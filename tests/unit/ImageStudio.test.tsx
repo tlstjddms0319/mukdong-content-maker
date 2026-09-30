@@ -104,6 +104,16 @@ describe("ImageStudio carousel",()=>{
     const bodies=request.mock.calls.filter(([url])=>url==="/api/images/generate").map(([,init])=>JSON.parse(String((init as RequestInit).body)));
     expect(bodies).toHaveLength(3);expect(bodies.every(body=>body.imageStyle==="anime"&&body.referenceImage&&body.referenceMode==="style")).toBe(true);
   });
+  it("sends the card layout by default and the overlay layout when chosen",async()=>{
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:["slide"]})});vi.stubGlobal("fetch",request);
+    render(<ImageStudio topic="디자인 주제" slideCount={3} onApprove={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));
+    expect(screen.getByRole("button",{name:"카드형"})).toHaveAttribute("aria-pressed","true");
+    fireEvent.click(screen.getByRole("button",{name:"사진 위 글자"}));
+    fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));await screen.findByRole("button",{name:"표지 후보 1 선택"});
+    const body=JSON.parse(String(request.mock.calls.find(([url])=>url==="/api/images/generate")![1]?.body));
+    expect(body.slideLayout).toBe("overlay");
+  });
   it("ignores a late AI plan after switching to photo mode",async()=>{
     let resolve:(value:unknown)=>void=()=>{};vi.stubGlobal("fetch",vi.fn(()=>new Promise(response=>{resolve=response;})));render(<ImageStudio topic="늦은 응답" slideCount={3} onApprove={()=>undefined}/>);fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));fireEvent.click(screen.getByRole("button",{name:"실제 사진 사용"}));resolve({ok:true,json:async()=>({plan})});await Promise.resolve();await Promise.resolve();expect(screen.queryByRole("button",{name:"표지 후보 1 선택"})).not.toBeInTheDocument();expect(screen.getByText("사진을 여기에 끌어놓으세요")).toBeInTheDocument();
   });

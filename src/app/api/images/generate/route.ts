@@ -59,7 +59,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
         const reference=await sharp(original).rotate().resize({width:1024,height:1024,fit:"inside",withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
         referenceImages[index]=`data:image/jpeg;base64,${reference.toString("base64")}`;
       }
-      const composed=await composeSlideImage(original,parsed.data.slide!,slideIndex,slideTotal);
+      const composed=await composeSlideImage(original,parsed.data.slide!,slideIndex,slideTotal,parsed.data.slideLayout);
       return `data:image/jpeg;base64,${composed.toString("base64")}`;
     }));
     return NextResponse.json({ images, ...(referenceImages.length?{referenceImages}:{}), source:parsed.data.referenceImage&&parsed.data.referenceMode!=="continuity"?"ai-edited":"ai-generated", provider, fallback, disclosure:"AI 연출 이미지입니다. 실제 메뉴와 다를 수 있어요." });

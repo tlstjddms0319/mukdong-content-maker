@@ -43,4 +43,18 @@ describe("slide composition", () => {
     expect(await sharp(withPoints).metadata()).toMatchObject({format:"jpeg",width:1080,height:1350});
     expect(withPoints.equals(withoutPoints)).toBe(false);
   }, 20_000);
+  it("renders the card layout by default with a light paper background and keeps overlay as an option", async () => {
+    const input=await sharp({create:{width:40,height:40,channels:3,background:"#202020"}}).png().toBuffer();
+    const slide:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",points:["코가 뾰족하면 홍어예요","가오리는 살이 부드러워요"]};
+    const card=await composeSlideImage(input,slide,2,5);
+    const overlay=await composeSlideImage(input,slide,2,5,"overlay");
+    const cover=await composeSlideImage(input,coverSlide,1,5,"card");
+    expect(card.equals(await composeSlideImage(input,slide,2,5,"card"))).toBe(true);
+    expect(card.equals(overlay)).toBe(false);
+    // 카드형은 종이색 배경이라 왼쪽 위 모서리가 밝고, 오버레이는 어두운 사진이 그대로 보인다.
+    const corner=async(image:Buffer)=>{const {data}=await sharp(image).extract({left:8,top:8,width:1,height:1}).raw().toBuffer({resolveWithObject:true});return data[0];};
+    expect(await corner(card)).toBeGreaterThan(200);
+    expect(await corner(overlay)).toBeLessThan(80);
+    expect(await sharp(cover).metadata()).toMatchObject({format:"jpeg",width:1080,height:1350});
+  }, 30_000);
 });

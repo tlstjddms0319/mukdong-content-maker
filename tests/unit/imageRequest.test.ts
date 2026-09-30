@@ -186,6 +186,7 @@ describe("OpenAI image request", () => {
       aspectRatio:"4:5",
       imageBrief:"창가의 빗빛",
       slide:visitSlide,
+      slideLayout:"overlay",
       styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트",
     });
 
@@ -194,6 +195,10 @@ describe("OpenAI image request", () => {
     expect(request.prompt).toContain(visitSlide.visualPrompt);
     expect(request.prompt).toContain("아래쪽");
     expect(request.prompt).not.toContain("하나의 음식 피사체");
+    // 카드형(기본)은 사진이 카드 안에 들어가므로 글자 여백 대신 가운데 배치를 요청한다.
+    const card=buildImageRequest({topic:"비 오는 날 홍어와 막걸리",count:1,aspectRatio:"4:5",slide:visitSlide,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트"});
+    expect(card.prompt).toContain("카드 안에");
+    expect(card.prompt).not.toContain("안전 여백");
   });
 
   it("uses a reference image as style only when requested", async () => {

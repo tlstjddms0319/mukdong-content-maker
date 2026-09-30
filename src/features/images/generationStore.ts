@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { CarouselPlan, CarouselRole, CarouselSlideCount } from "./carousel";
 import type { ImageStyle } from "./style";
+import { DEFAULT_SLIDE_LAYOUT, type SlideLayout } from "./slideLayout";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
 // 화면(ImageStudio)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
@@ -17,6 +18,7 @@ export type GenerationState={
   input:GenerationInput;
   mode:StudioMode;
   imageStyle:ImageStyle;
+  slideLayout:SlideLayout;
   referenceUse:ReferenceUse;
   photoPreview:string;
   photoStatus:string;
@@ -35,7 +37,7 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{}};
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{}};
 }
 
 // 만든 것들만 비우고 모드·화풍·참고 사진은 남긴다(모드 카드나 표지 다시 만들기에서 쓰는 초기화).
@@ -67,6 +69,7 @@ export const activeSlideIndex=(current:GenerationState)=>Math.min(current.active
 
 export function chooseMode(next:StudioMode){run++;patch({...CLEARED,mode:next,phase:"idle"});}
 export function setImageStyle(imageStyle:ImageStyle){patch({imageStyle});}
+export function setSlideLayout(slideLayout:SlideLayout){patch({slideLayout});}
 export function setReferenceUse(referenceUse:ReferenceUse){patch({referenceUse});}
 export function setRefinement(index:number,value:string){patch({refinements:{...state.refinements,[index]:value}});}
 export function setActiveSlide(activeSlide:number){patch({activeSlide});}
@@ -75,7 +78,7 @@ export function markApproved(){patch({approved:true});}
 
 const readPreview=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>typeof reader.result==="string"?resolve(reader.result):reject(new Error());reader.onerror=()=>reject(new Error());reader.readAsDataURL(file);});
 
-function requestBase(){const {topic,imageBrief,slideCount}=state.input;return {topic,...(imageBrief?{imageBrief}:{}),slideTotal:slideCount,imageStyle:state.imageStyle};}
+function requestBase(){const {topic,imageBrief,slideCount}=state.input;return {topic,...(imageBrief?{imageBrief}:{}),slideTotal:slideCount,imageStyle:state.imageStyle,slideLayout:state.slideLayout};}
 // 참고 사진(mix)이 있으면 그것을, 아니면 고른 표지의 글자 없는 원본을 이어 가기용으로 붙인다.
 function referenceFields(){return state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:state.cover?.referencePreview?{referenceImage:state.cover.referencePreview,referenceMode:"continuity"}:{};}
 const sourceOf=(reported?:string)=>(reported??(state.mode==="mix"?"ai-edited":"ai-generated")) as ApprovedImage["source"];
