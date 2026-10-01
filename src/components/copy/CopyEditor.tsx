@@ -4,6 +4,7 @@ import type { CopyPart } from "@/features/copy/schema";
 import { AI_IMAGE_DISCLOSURE, copySection, copyTextIssues, formatCopy } from "@/features/copy/writing";
 import { checkTextClaims } from "@/features/guard/service";
 import { GenerationProgress } from "@/components/states/GenerationState";
+import { readJsonResponse } from "@/lib/http/readJson";
 
 const PROVIDER_LABELS:Record<string,string>={gemini:"Gemini",groq:"Groq",cloudflare:"Cloudflare"};
 
@@ -25,7 +26,7 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     const run=++runRef.current;edited.current=false;setStatus("loading");setError("");
     try{
       const response=await fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,...(outlineKey?{slideOutline:outlineKey.split("\n")}:{}),focus,...(focus?{currentText:current}:{})})});
-      const copy=await response.json();
+      const copy=await readJsonResponse(response);
       if(!response.ok)throw new Error(copy.message||"문안을 만들지 못했어요. 다시 시도해 주세요.");
       if(run!==runRef.current)return;
       const next=section?current.slice(0,section.start)+(section.start===current.length?"\n\n":"")+copy.replacement+current.slice(section.end):formatCopy(copy);
@@ -40,7 +41,7 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     const runCounter=runRef;
     let active=true;
     fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,...(outlineKey?{slideOutline:outlineKey.split("\n")}:{})})})
-      .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.message||"문안을 만들지 못했어요.");return body;})
+      .then(async response=>{const body=await readJsonResponse(response);if(!response.ok)throw new Error(body.message||"문안을 만들지 못했어요.");return body;})
       .then(copy=>{if(active){if(!edited.current){const next=formatCopy(copy);setText(next);onTextChange?.(next);setFactsToVerify(copy.facts_to_verify??[]);}setProvider(String(copy._meta?.provider??""));setStatus("ai");}})
       .catch(reason=>{if(active){setStatus("fallback");setError(reason instanceof Error?reason.message:"문안을 만들지 못했어요. 다시 시도해 주세요.");}});
     return ()=>{active=false;runCounter.current++;};

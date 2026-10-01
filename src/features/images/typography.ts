@@ -14,6 +14,11 @@ export const TitleFontIdSchema=z.enum(["pretendard","plex","batang","jua","black
 export const BodyFontIdSchema=z.enum(["pretendard","plex","batang","dodum"]);
 export type TitleFontId=z.infer<typeof TitleFontIdSchema>;
 export type BodyFontId=z.infer<typeof BodyFontIdSchema>;
+// 장마다 고르는 글꼴. "auto"는 캐러셀 공통 글꼴(design.titleFont/bodyFont)을 따른다는 뜻이다.
+export const SlideTitleFontSchema=z.enum(["auto",...TitleFontIdSchema.options]);
+export const SlideBodyFontSchema=z.enum(["auto",...BodyFontIdSchema.options]);
+export type SlideTitleFont=z.infer<typeof SlideTitleFontSchema>;
+export type SlideBodyFont=z.infer<typeof SlideBodyFontSchema>;
 
 // label·when은 화면 선택지와 구성안 AI의 추천 기준으로 함께 쓴다.
 export const TITLE_FONTS:Record<TitleFontId,{label:string;when:string;title:FontFace}>={
@@ -33,6 +38,12 @@ export const BODY_FONTS:Record<BodyFontId,{label:string;when:string;body:FontFac
 };
 
 export type Typography={title:FontFace;label:FontFace;body:FontFace};
+// 장 글꼴이 "auto"가 아니면 그것을, 아니면 캐러셀 공통 글꼴을 쓴다.
+export const resolveSlideFonts=(design:{titleFont?:TitleFontId;bodyFont?:BodyFontId}|undefined,slide:{titleFont?:SlideTitleFont;bodyFont?:SlideBodyFont}):{titleFont:TitleFontId;bodyFont:BodyFontId}=>({
+  titleFont:slide.titleFont&&slide.titleFont!=="auto"?slide.titleFont:design?.titleFont??"pretendard",
+  bodyFont:slide.bodyFont&&slide.bodyFont!=="auto"?slide.bodyFont:design?.bodyFont??"pretendard",
+});
+
 export const typographyOf=(titleFont:TitleFontId="pretendard",bodyFont:BodyFontId="pretendard"):Typography=>({
   title:TITLE_FONTS[titleFont].title,
   label:BODY_FONTS[bodyFont].labelFont,
@@ -43,7 +54,7 @@ export const typographyOf=(titleFont:TitleFontId="pretendard",bodyFont:BodyFontI
 export function fontCatalogText():string {
   const titles=TitleFontIdSchema.options.map(id=>`${id}(${TITLE_FONTS[id].label}: ${TITLE_FONTS[id].when})`).join(", ");
   const bodies=BodyFontIdSchema.options.map(id=>`${id}(${BODY_FONTS[id].label}: ${BODY_FONTS[id].when})`).join(", ");
-  return `design.titleFont는 글의 분위기에 맞게 다음 중 하나: ${titles}. design.bodyFont는 다음 중 하나: ${bodies}. 제목과 본문은 서로 어울리게 고르세요(예: batang+batang, jua+dodum, blackhan+plex, plex+plex). 확신이 없으면 pretendard+pretendard.`;
+  return `design.titleFont는 글의 분위기에 맞게 다음 중 하나: ${titles}. design.bodyFont는 다음 중 하나: ${bodies}. 제목과 본문은 서로 어울리게 고르세요(예: batang+batang, jua+dodum, blackhan+plex, plex+plex). 확신이 없으면 pretendard+pretendard. 각 slide의 titleFont·bodyFont는 그 장의 내용에 어울리는 글꼴이거나 "auto"(design 글꼴을 그대로 씀)입니다. 표지·분위기·인용 장처럼 감정을 건드리는 장은 감성 글꼴(batang 등), 먹는 법·순서·확인할 점처럼 정보 장은 또박또박한 글꼴(plex, pretendard)이 어울립니다. 한 캐러셀의 제목 글꼴은 2~3종 안에서 고르고, 본문 글꼴은 대부분 "auto"로 두어 읽기 흐름을 맞추세요.`;
 }
 
 // 화면의 글꼴 선택지. [id, 이름, 언제 어울리는지]

@@ -29,7 +29,7 @@ describe("Instagram status route",()=>{
 
     expect(body.connected).toBe(true);
     expect(body.setup).toEqual({
-      appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:false,signingKey:false,
+      appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:false,signingKey:false,persistentStorage:false,
     });
     expect(JSON.stringify(body)).not.toContain("private-access-token");
     expect(JSON.stringify(body)).not.toContain("private-app-secret");
@@ -46,7 +46,7 @@ describe("Instagram status route",()=>{
     const body=await (await GET()).json();
 
     expect(body.connected).toBe(false);
-    expect(body.setup).toEqual({appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:true,signingKey:true});
+    expect(body.setup).toEqual({appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:true,signingKey:true,persistentStorage:false});
     expect(JSON.stringify(body)).not.toContain("private-signing-secret");
   });
 

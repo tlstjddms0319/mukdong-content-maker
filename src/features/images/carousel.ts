@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { IMAGE_STYLE_DIRECTIONS, ImageStyleSchema } from "./style";
 import { CardLayoutSchema, DesignSpecSchema, DEFAULT_DESIGN, defaultCardLayout, designCatalogText, normalizeCardLayout } from "./design";
+import { SlideBodyFontSchema, SlideTitleFontSchema } from "./typography";
+import { diversifyCarouselDesign } from "./variety";
 
 export const CarouselPlanInputSchema=z.object({
   topic:z.string().trim().min(1).max(200),
@@ -28,11 +30,17 @@ export const CarouselSlidePlanSchema=z.object({
   keywords:z.array(z.string().trim().min(1).max(12)).max(3),
   // 대형 숫자형에서 크게 보여 줄 숫자. 확인된 숫자가 없으면 빈 문자열.
   figure:z.string().trim().max(16),
+  // 이 장의 제목·본문 글꼴. "auto"면 캐러셀 공통 글꼴(design)을 쓴다. 예전 구성안에는 없으므로 기본값 "auto".
+  titleFont:SlideTitleFontSchema.default("auto"),
+  bodyFont:SlideBodyFontSchema.default("auto"),
+  // 같은 레이아웃의 모양 변형 번호(제목 위치·사진 모양 등). 서버가 게시물마다 섞어 채우므로 AI는 0을 두면 된다.
+  variant:z.number().int().min(0).max(3).default(0),
 });
 
 export type CarouselPlanInput=z.input<typeof CarouselPlanInputSchema>;
 export type CarouselRole=z.infer<typeof CarouselRoleSchema>;
-export type CarouselSlidePlan=z.infer<typeof CarouselSlidePlanSchema>;
+// 장 하나를 받는 함수(그리기·이미지 프롬프트)는 글꼴 필드가 없는 예전 장도 받는다. 없으면 "auto"로 본다.
+export type CarouselSlidePlan=z.input<typeof CarouselSlidePlanSchema>;
 export type CarouselSlideCount=z.output<typeof CarouselPlanInputSchema>["slideCount"];
 
 const ROLE_ORDERS:{[count in CarouselSlideCount]:readonly CarouselRole[]}={
@@ -66,7 +74,7 @@ export type CarouselPlan=z.infer<typeof CarouselPlanSchema>;
 
 // 준비된 요점은 주제와 무관하게 안전한 일반 문장만 쓴다(가격·원산지·영업시간 같은 확인 필요한 사실은 넣지 않는다).
 // 앞 장의 마지막 줄을 다음 장의 첫 줄이 받도록 써서, AI 없이도 슬라이드가 한 이야기로 읽히게 한다.
-const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role"|"layout"|"keywords"|"figure">>={
+const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role"|"layout"|"keywords"|"figure"|"titleFont"|"bodyFont"|"variant">>={
   cover:{headline:"",points:[],visualPrompt:"완성된 음식 한 상을 45도 위에서 담은 히어로 음식 사진. 테이블 가장자리에 젓가락을 든 손이 살짝 들어오고, 얼굴은 프레임 밖",textPosition:"top"},
   overview:{headline:"상에 뭐가 올라오는지 먼저 볼게요",points:["가운데 메인 접시, 둘레에 곁들임이 놓여요","처음이라면 순한 것부터 차례로 집어 보세요","다음 장에서 한 점을 가까이 볼게요"],visualPrompt:"그릇과 곁들임의 전체 구성이 보이도록 위에서 넓게 내려다본 상차림. 양쪽에서 젓가락을 든 두 사람의 손이 들어오고 얼굴은 없음",textPosition:"top"},
   detail:{headline:"가까이 보면 결이 이렇게 살아 있어요",points:["얇게 썰려 빛에 비치면 결이 보여요","씹을수록 탄력이 느껴지는 부분이에요","이걸 어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"젓가락으로 집어 올린 한 점을 눈높이에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손만 보이고 얼굴 없음",textPosition:"bottom"},
@@ -125,7 +133,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     // 장면 다양성: 같은 접시를 거리만 바꿔 다섯 번 찍지 않도록, 장면 유형과 사람 요소를 장마다 다르게 배정한다.
     `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도 또는 눈높이), 한 점의 질감(매크로), 젓가락으로 집거나 재료를 올리는 손, 함께 먹는 식탁(여러 손과 잔, 뒷모습), 준비 과정, 곁들임과의 조합. ${Math.max(2,Math.ceil(parsed.slideCount/2))}장 이상에는 손, 젓가락, 잔, 뒷모습처럼 사람이 먹고 있다는 느낌이 드는 요소를 넣되 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 음식이 나오는 모든 장면에서 홍어가 주인공입니다. visualPrompt에 홍어(또는 그 장의 홍어 요리)를 가장 크고 앞에, 초점이 맞게 둔다고 명시하고, 수육·묵은지·막걸리는 작게 곁들여지는 조연으로만 쓰세요. 집어 올리는 한 점도 홍어 조각이어야 합니다.`,
     `[디자인] ${designCatalogText()}`,
-    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(palette, titleFont, bodyFont)를 두고, 각 slide는 role, headline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure를 포함해야 합니다.`,
+    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(palette, theme, titleFont, bodyFont)를 두고, 각 slide는 role, headline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
   ].join("\n");
 }
 
@@ -133,15 +141,18 @@ export interface CarouselPlanAi {
   generate(input:CarouselPlanInput):Promise<unknown>;
 }
 
-export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi):Promise<CarouselPlan> {
+// options.seed를 주면 캐러셀마다 레이아웃·색·글꼴을 섞는다(variety.ts). 화면에서 쓰는 구성안 경로는 매번 무작위 시드를 넘기고,
+// 시드를 주지 않으면 섞지 않아 결과가 항상 같다(테스트·비교 스크립트용).
+export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,options:{seed?:number}={}):Promise<CarouselPlan> {
   const parsed=CarouselPlanInputSchema.parse(input);
   const fallback=createFallbackCarouselPlan(parsed);
-  if(!ai)return fallback;
+  const vary=(plan:CarouselPlan,isFallback:boolean)=>options.seed===undefined?plan:diversifyCarouselDesign(plan,options.seed,{fallback:isFallback});
+  if(!ai)return vary(fallback,true);
   try {
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));
-    return plan.slideCount===parsed.slideCount ? normalizeCarouselDesign(plan) : fallback;
+    return plan.slideCount===parsed.slideCount ? vary(normalizeCarouselDesign(plan),false) : vary(fallback,true);
   } catch {
-    return fallback;
+    return vary(fallback,true);
   }
 }
 

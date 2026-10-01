@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ASSET_KIND_LABELS, rankAssets, type LibraryAsset, type FreeCard } from "@/features/images/freeCards";
 import type { ApprovedImage } from "./ImageStudio";
+import { readJsonResponse } from "@/lib/http/readJson";
 
 export function FreeCardStudio({topic,onApprove}:{topic:string;onApprove:(images:ApprovedImage[])=>void}) {
   const [assets,setAssets]=useState<LibraryAsset[]>([]),[loading,setLoading]=useState(true);
@@ -16,7 +17,7 @@ export function FreeCardStudio({topic,onApprove}:{topic:string;onApprove:(images
   const effectiveLayout=layout==="text"||!selected.length?"text":layout==="compare"&&selected.length>=2?"compare":"photo";
   useEffect(()=>{
     let active=true;const requestSequence=run;
-    fetch("/api/images/assets").then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.message);if(active)setAssets(data.assets);})
+    fetch("/api/images/assets").then(async response=>{const data=await readJsonResponse(response);if(!response.ok)throw new Error(data.message);if(active)setAssets(data.assets);})
       .catch(()=>{if(active)setError("사진 보관함을 불러오지 못했어요. 새로고침하거나 글자형 카드를 만들어 주세요.");})
       .finally(()=>{if(active)setLoading(false);});
     return()=>{active=false;requestSequence.current++;};
@@ -27,7 +28,7 @@ export function FreeCardStudio({topic,onApprove}:{topic:string;onApprove:(images
     const request=++run.current;setBusy(true);setError("");setPreview(undefined);
     try{
       const form=new FormData();form.append("file",file);form.append("name",name);form.append("tags",tags);form.append("kind",kind);form.append("credit",credit);
-      const response=await fetch("/api/images/assets",{method:"POST",body:form}),data=await response.json();
+      const response=await fetch("/api/images/assets",{method:"POST",body:form}),data=await readJsonResponse(response);
       if(request!==run.current)return;if(!response.ok)throw new Error(data.message);
       setAssets(current=>[data.asset,...current]);setSelection([data.asset.id]);setFile(undefined);setName("");setTags("");
       if(uploadInput.current)uploadInput.current.value="";setNotice("사진을 보관함에 등록했어요. 다음 게시물에서도 사용할 수 있어요.");
@@ -37,7 +38,7 @@ export function FreeCardStudio({topic,onApprove}:{topic:string;onApprove:(images
   async function compose(){
     const request=++run.current;setBusy(true);setError("");setPreview(undefined);setNotice("");
     try{
-      const response=await fetch("/api/images/compose",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,body,layout,assetIds:layout==="text"?[]:selected})}),data=await response.json();
+      const response=await fetch("/api/images/compose",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,body,layout,assetIds:layout==="text"?[]:selected})}),data=await readJsonResponse(response);
       if(request!==run.current)return;if(!response.ok)throw new Error(data.message);
       setPreview(data.card);setAssets(current=>current.map(asset=>data.card.assetIds.includes(asset.id)?{...asset,lastUsedAt:new Date().toISOString()}:asset));
       // Freeze the chosen photos while reviewing this preview; ranking may change after use.
