@@ -25,12 +25,13 @@ const visitSlide={
   points:[],
   visualPrompt:"따뜻한 저녁 조명 아래 편안한 홍어 한 상을 넓게 담은 음식 사진",
   textPosition:"bottom" as const,
-  layout:"statement" as const,
+  layout:"frame" as const,
+  keywords:["방문 전"],
 };
 
 const carouselStyleAnchor="따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트";
 const visitSlideMetadata={slide:visitSlide,slideIndex:5,slideTotal:5,styleAnchor:carouselStyleAnchor};
-const coverSlide={...visitSlide,role:"cover" as const,headline:"비 오는 날 홍어 한 상",layout:"cover-bleed" as const};
+const coverSlide={...visitSlide,role:"cover" as const,headline:"비 오는 날 홍어 한 상",layout:"fullscreen" as const};
 
 describe("OpenAI image request", () => {
   it("uses the cooked preparation instead of a raw-slice directive for hongeo jeon",()=>{
@@ -236,12 +237,13 @@ describe("OpenAI image request", () => {
     expect(request.prompt).toContain("비 오는 날 홍어와 막걸리");
     expect(request.prompt).toContain("창가의 빗빛");
     expect(request.prompt).toContain(visitSlide.visualPrompt);
-    expect(request.prompt).toContain("아래쪽");
+    // 사진 위 글자형은 모든 장을 풀스크린으로 그리므로 아래쪽 여백과 필름 톤을 요청한다.
+    expect(request.prompt).toContain("bottom 45%");
     expect(request.prompt).not.toContain("하나의 음식 피사체");
-    // 카드형(기본)은 사진이 카드 안에 들어가므로 글자 여백 대신 가운데 배치를 요청한다.
+    // 장마다 자동(기본)은 그 장의 레이아웃(여기서는 대조 프레임)에 맞는 사진 분위기를 요청한다.
     const card=buildImageRequest({topic:"비 오는 날 홍어와 막걸리",count:1,aspectRatio:"4:5",slide:visitSlide,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트"});
-    expect(card.prompt).toContain("카드 안에");
-    expect(card.prompt).not.toContain("안전 여백");
+    expect(card.prompt).toContain("calm subject centered");
+    expect(card.prompt).not.toContain("bottom 45%");
   });
 
   it("uses a reference image as style only when requested", async () => {

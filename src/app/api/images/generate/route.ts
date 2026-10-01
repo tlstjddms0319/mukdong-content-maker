@@ -36,6 +36,11 @@ export async function POST(request: Request) { const denied=await ownerApiError(
   try {
     // An unreadable settings file falls back to defaults, but fails closed on cost: no paid OpenAI call
     // can be triggered by a settings read failure, only the free Cloudflare path.
+    // 브라우저형은 사진 없이 그래픽만으로 그리므로 이미지 AI를 부르지 않는다.
+    if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&parsed.data.slide.layout==="browser"){
+      const composed=await composeSlideImage([],parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design);
+      return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"design",provider:"none",fallback:false});
+    }
     const settings:AppSettings=(await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 무료 이미지 경로만 사용합니다:",error instanceof Error?error.message:String(error));return null;}))
       ??{...AppSettingsSchema.parse(DEFAULT_SETTINGS),imageAiProvider:"cloudflare"};
     // 후보마다 구도가 다른 프롬프트라 n장을 한 번에 요청하지 않고, 한 장씩 동시에 요청한다.
@@ -75,7 +80,12 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const notice=fallback?`${PROVIDER_LABELS[chain[0]]} 생성이 어려워 ${PROVIDER_LABELS[used[used.length-1]]}(으)로 전환했어요.`:undefined;
     if (images.length !== parsed.data.count) throw new Error("incomplete image result");
     const referenceImages:string[]=[];
-    if(parsed.data.slide)images=await Promise.all(images.map(async (source,index)=>{
+    // 콜라주형은 만든 사진 여러 장을 한 카드에 격자로 넣는다.
+    if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&parsed.data.slide.layout==="collage"&&images.length>1){
+      const originals=await Promise.all(images.map(imageBytes));
+      const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design);
+      images=[`data:image/jpeg;base64,${composed.toString("base64")}`];
+    }else if(parsed.data.slide)images=await Promise.all(images.map(async (source,index)=>{
       const slideIndex=parsed.data.slideIndex ?? index+1;
       const slideTotal=parsed.data.slideTotal ?? parsed.data.count;
       const original=await imageBytes(source);

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { CarouselPlan, CarouselRole, CarouselSlideCount } from "./carousel";
 import type { ImageStyle } from "./style";
 import { DEFAULT_SLIDE_LAYOUT, type SlideLayout } from "./slideLayout";
+import { photosNeeded } from "./design";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
 // 화면(ImageStudio)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
@@ -144,7 +145,9 @@ export async function startPlan(){
 }
 
 async function generate(slide:CarouselPlan["slides"][number],index:number,refinement=""):Promise<ApprovedImage>{
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count:1,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFields()})});
+  // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
+  const count=state.slideLayout==="card"?Math.max(1,photosNeeded(slide.layout)):1;
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFields()})});
   const data=await response.json();
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");

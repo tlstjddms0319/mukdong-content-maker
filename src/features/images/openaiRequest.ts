@@ -1,5 +1,6 @@
 import type { ImageBrief } from "./schema";
 import { IMAGE_STYLE_DIRECTIONS, resolveImageStyle } from "./style";
+import { CARD_LAYOUTS } from "./design";
 import { toFile } from "openai";
 
 function foodDirection(input:ImageBrief):string {
@@ -71,12 +72,8 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 사람이 먹고 있는 느낌은 장면 설명이 요구할 때만, 얼굴이 식별되지 않는 범위에서 넣는다.
     "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
     foodDirection(input),
-    // 카드형은 사진이 카드 안에 통째로 들어가므로 글자 여백이 필요 없고, 사진 위 글자형만 위/아래 여백을 요청한다.
-    input.slide ? (input.slideLayout==="overlay"
-      ? (input.slide.points?.length
-        ? `나중에 제목과 요점 문구를 합성할 수 있도록 이미지의 ${input.slide.textPosition==="top"?"위쪽":"아래쪽"} 40% 정도를 복잡하지 않은 안전 여백으로 둘 것.`
-        : `나중에 제목을 합성할 수 있도록 이미지의 ${input.slide.textPosition==="top"?"위쪽":"아래쪽"}에 복잡하지 않은 안전 여백을 둘 것.`)
-      : "이 이미지는 카드 안에 가로로 넓게 잘려 들어가므로 음식을 화면 가운데에 크게 두고 위아래 가장자리에는 중요한 요소를 두지 말 것.") : "",
+    // 레이아웃마다 사진이 쓰이는 방식이 달라서, 그 레이아웃의 사진 분위기와 여백 요청을 붙인다.
+    input.slide ? CARD_LAYOUTS[input.slideLayout==="overlay"?"fullscreen":input.slide.layout].photoHint : "",
     reference ? referenceDirection(input) : "",
     // 수정 요청은 위의 화풍·구도 지침보다 우선한다고 명시해야 "애니메이션 풍으로" 같은 요청이 사진 지시에 묻히지 않는다.
     input.refinement ? `사용자의 수정 요청(가장 우선): ${JSON.stringify(input.refinement)}. 위의 화풍·구도·조명 지침과 충돌하면 이 요청을 따른다. 음식의 종류와 사실 기준은 유지한다.` : "",

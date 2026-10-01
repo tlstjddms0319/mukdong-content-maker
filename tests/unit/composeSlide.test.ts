@@ -11,7 +11,8 @@ const coverSlide:CarouselSlidePlan={
   points:[],
   visualPrompt:"창가의 빗빛 아래 홍어와 막걸리를 담은 선명한 음식 사진",
   textPosition:"top",
-  layout:"cover-bleed",
+  layout:"fullscreen",
+  keywords:["홍어","막걸리"],
 };
 
 describe("slide composition", () => {
@@ -39,7 +40,7 @@ describe("slide composition", () => {
     expect(await renderSlidePoints([" ",""])).toBeNull();
 
     const input=await sharp({create:{width:40,height:40,channels:3,background:"#4f643f"}}).png().toBuffer();
-    const slide:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",layout:"photo-top",points:["코가 뾰족하면 홍어예요","가오리는 살이 부드러워요"]};
+    const slide:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",layout:"collage",points:["코가 뾰족하면 홍어예요","가오리는 살이 부드러워요"]};
     const withPoints=await composeSlideImage(input,slide,2,5);
     const withoutPoints=await composeSlideImage(input,{...slide,points:[]},2,5);
     expect(await sharp(withPoints).metadata()).toMatchObject({format:"jpeg",width:1080,height:1350});
@@ -47,7 +48,7 @@ describe("slide composition", () => {
   }, 20_000);
   it("renders the card layout by default with a light paper background and keeps overlay as an option", async () => {
     const input=await sharp({create:{width:40,height:40,channels:3,background:"#202020"}}).png().toBuffer();
-    const slide:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",layout:"photo-top",points:["코가 뾰족하면 홍어예요","가오리는 살이 부드러워요"]};
+    const slide:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",layout:"collage",points:["코가 뾰족하면 홍어예요","가오리는 살이 부드러워요"]};
     const card=await composeSlideImage(input,slide,2,5);
     const overlay=await composeSlideImage(input,slide,2,5,"overlay");
     const cover=await composeSlideImage(input,coverSlide,1,5,"card");
@@ -61,7 +62,7 @@ describe("slide composition", () => {
   }, 30_000);
   it("bleeds the cover photo to the top edge, keeps body slides on paper, and sets body text in the regular weight", async () => {
     const input=await sharp({create:{width:40,height:40,channels:3,background:"#202020"}}).png().toBuffer();
-    const body:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",layout:"photo-top",points:["얇게 썰려 빛에 비치면 결이 보여요","씹을수록 탄력이 느껴지는 부분이에요"]};
+    const body:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",layout:"collage",points:["얇게 썰려 빛에 비치면 결이 보여요","씹을수록 탄력이 느껴지는 부분이에요"]};
     const corner=async(image:Buffer)=>{const {data}=await sharp(image).extract({left:8,top:8,width:1,height:1}).raw().toBuffer({resolveWithObject:true});return data[0];};
     expect(await corner(await composeSlideImage(input,coverSlide,1,5))).toBeLessThan(80);
     expect(await corner(await composeSlideImage(input,body,2,5))).toBeGreaterThan(200);

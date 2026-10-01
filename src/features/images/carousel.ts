@@ -24,6 +24,8 @@ export const CarouselSlidePlanSchema=z.object({
   textPosition:z.enum(["top","bottom"]),
   // 이 장을 그릴 카드 레이아웃. 엄격 JSON 스키마 제공자 때문에 선택 필드로 두지 않는다.
   layout:CardLayoutSchema,
+  // 태그 알약과 검색창 문구에 쓰는 짧은 키워드. 없으면 빈 배열.
+  keywords:z.array(z.string().trim().min(1).max(12)).max(3),
 });
 
 export type CarouselPlanInput=z.input<typeof CarouselPlanInputSchema>;
@@ -62,7 +64,7 @@ export type CarouselPlan=z.infer<typeof CarouselPlanSchema>;
 
 // 준비된 요점은 주제와 무관하게 안전한 일반 문장만 쓴다(가격·원산지·영업시간 같은 확인 필요한 사실은 넣지 않는다).
 // 앞 장의 마지막 줄을 다음 장의 첫 줄이 받도록 써서, AI 없이도 슬라이드가 한 이야기로 읽히게 한다.
-const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role"|"layout">>={
+const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role"|"layout"|"keywords">>={
   cover:{headline:"",points:[],visualPrompt:"완성된 음식 한 상을 45도 위에서 담은 히어로 음식 사진. 테이블 가장자리에 젓가락을 든 손이 살짝 들어오고, 얼굴은 프레임 밖",textPosition:"top"},
   overview:{headline:"상에 뭐가 올라오는지 먼저 볼게요",points:["가운데 메인 접시, 둘레에 곁들임이 놓여요","처음이라면 순한 것부터 차례로 집어 보세요","다음 장에서 한 점을 가까이 볼게요"],visualPrompt:"그릇과 곁들임의 전체 구성이 보이도록 위에서 넓게 내려다본 상차림. 양쪽에서 젓가락을 든 두 사람의 손이 들어오고 얼굴은 없음",textPosition:"top"},
   detail:{headline:"가까이 보면 결이 이렇게 살아 있어요",points:["얇게 썰려 빛에 비치면 결이 보여요","씹을수록 탄력이 느껴지는 부분이에요","이걸 어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"젓가락으로 집어 올린 한 점을 눈높이에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손만 보이고 얼굴 없음",textPosition:"bottom"},
@@ -73,6 +75,11 @@ const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role"|"layout"
   mood:{headline:"서두르지 않아도 되는 저녁이에요",points:["부드러운 조명 아래 한 상 앞에서 쉬어 가요","한 점씩 천천히 먹어도 괜찮은 자리예요","가기 전에 확인할 것만 남았어요"],visualPrompt:"부드러운 저녁 조명 아래 한 상을 넓은 여백과 함께 담은 식탁 사진. 테이블 끝에 잔을 든 손이 보이고 얼굴 없음",textPosition:"top"},
   visit:{headline:"가기 전에 이것만 확인하면 돼요",points:["메뉴 구성은 프로필의 플레이스에서 확인해요","처음이라면 직원에게 편하게 물어봐도 돼요","저장해 두면 다음에 찾기 편해요"],visualPrompt:"푸짐하고 편안한 완성 상차림을 눈높이에서 담은 사진. 마주 앉은 사람의 손이 젓가락을 들고 있고 얼굴 없음, 매장 외관 없음",textPosition:"bottom"},
   cta:{headline:"다음 한 점은 직접 확인해 보세요",points:["저장해 두면 다음 방문 때 편해요","궁금한 점은 댓글로 남겨 주세요"],visualPrompt:"비어 가는 접시 가장자리와 마지막 한 점을 대비해 담은 사진. 접시를 향한 젓가락과 손만 보이고 얼굴 없음",textPosition:"bottom"},
+};
+
+const FALLBACK_KEYWORDS:Record<CarouselRole,string[]>={
+  cover:["홍어","묵동"],overview:["한 상","구성"],detail:["결","식감"],"how-to":["먹는 법","한 점"],pairing:["곁들임","조합"],
+  process:["준비","손질"],occasion:["모임","저녁"],mood:["분위기","여유"],visit:["방문 전","확인"],cta:["저장","다음 한 점"],
 };
 
 export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan {
@@ -88,6 +95,7 @@ export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan
       role,
       ...FALLBACK_SLIDES[role],
       layout:defaultCardLayout(role),
+      keywords:FALLBACK_KEYWORDS[role],
       headline:role==="cover" ? parsed.topic.slice(0,42) : FALLBACK_SLIDES[role].headline,
       // 준비된 장면 설명은 사진 기준으로 쓰여 있어, 그림 화풍이면 "사진"을 "그림"으로 바꿔 모델이 실사로 가지 않게 한다.
       visualPrompt:`${drawn?FALLBACK_SLIDES[role].visualPrompt.replace(/사진/g,"그림"):FALLBACK_SLIDES[role].visualPrompt}.${context}`,
@@ -110,7 +118,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     // 장면 다양성: 같은 접시를 거리만 바꿔 다섯 번 찍지 않도록, 장면 유형과 사람 요소를 장마다 다르게 배정한다.
     `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도 또는 눈높이), 한 점의 질감(매크로), 젓가락으로 집거나 재료를 올리는 손, 함께 먹는 식탁(여러 손과 잔, 뒷모습), 준비 과정, 곁들임과의 조합. ${Math.max(2,Math.ceil(parsed.slideCount/2))}장 이상에는 손, 젓가락, 잔, 뒷모습처럼 사람이 먹고 있다는 느낌이 드는 요소를 넣되 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요.`,
     `[디자인] ${designCatalogText()}`,
-    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(palette)를 두고, 각 slide는 role, headline, points, visualPrompt, textPosition(top 또는 bottom), layout을 포함해야 합니다.`,
+    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(palette)를 두고, 각 slide는 role, headline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords를 포함해야 합니다.`,
   ].join("\n");
 }
 

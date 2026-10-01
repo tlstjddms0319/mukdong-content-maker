@@ -64,172 +64,219 @@ async function croppedPhoto(input:Buffer,width:number,height:number,radius:numbe
   return sharp(photo).composite([{input:mask,blend:"dest-in"}]).png().toBuffer();
 }
 
-const svgLayer=(body:string):OverlayOptions=>({input:Buffer.from(`<svg width="1080" height="1350" xmlns="http://www.w3.org/2000/svg">${body}</svg>`),left:0,top:0});
+const svg=(width:number,height:number,body:string)=>Buffer.from(`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`);
+const svgLayer=(body:string):OverlayOptions=>({input:svg(1080,1350,body),left:0,top:0});
 const canvas=(background:string,layers:OverlayOptions[])=>sharp({create:{width:1080,height:1350,channels:3,background}}).composite(layers).jpeg({quality:92}).toBuffer();
 
-const POINT_GAP=28;
-const MARGIN=72,CONTENT=1080-MARGIN*2,FOOTER_TOP=1262;
+const MARGIN=72,CONTENT=1080-MARGIN*2;
 
-async function composeOverlay(input:Buffer,slide:CarouselSlidePlan,index:number,total:number):Promise<Buffer> {
-  const headline=await renderSlideHeadline(slide.headline);
-  const points=await renderSlidePoints(slide.points??[]);
-  const eyebrow=await textLayer(slideEyebrow(slide.role,index),{size:26,color:"#ffffffcc",width:936,height:40,font:FONTS.semibold});
-  // 요점이 있으면 글자 영역이 커지므로 어두운 그라데이션도 더 넓게 깐다.
-  const shadeSpan=points?.info.height?Math.min(.62,.42+(points.info.height+POINT_GAP)/1350):.42;
-  const gradient=slide.textPosition==="top"
-    ? `<linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".74"/><stop offset="${shadeSpan.toFixed(2)}" stop-color="#000" stop-opacity="0"/></linearGradient>`
-    : `<linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="${(1-shadeSpan-.03).toFixed(2)}" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".78"/></linearGradient>`;
-  const overlay=Buffer.from(`<svg width="1080" height="1350" viewBox="0 0 1080 1350" xmlns="http://www.w3.org/2000/svg"><defs>${gradient}</defs><rect width="1080" height="1350" fill="url(#shade)"/></svg>`);
-  const counter=await textLayer(`${index} / ${total}`,{size:30,color:"#ffffff",width:200,height:40,font:FONTS.semibold});
-
-  // 라벨 → 제목 → 요점을 한 블록으로 잡고, 위(top)면 72px에서 시작, 아래(bottom)면 카운터 위 1200px에서 끝나게 놓는다.
-  const eyebrowSpace=eyebrow.info.height+14;
-  const blockHeight=eyebrowSpace+headline.info.height+(points?POINT_GAP+points.info.height:0);
-  const blockTop=slide.textPosition==="top"?72:1200-blockHeight;
-  const layers:OverlayOptions[]=[{input:overlay},{input:eyebrow.data,left:72,top:blockTop},{input:headline.data,left:72,top:blockTop+eyebrowSpace}];
-  if(points)layers.push({input:points.data,left:72,top:blockTop+eyebrowSpace+headline.info.height+POINT_GAP});
-  layers.push({input:counter.data,left:1008-counter.info.width,top:1250});
-  return sharp(input).rotate().resize(1080,1350,{fit:"cover"}).composite(layers).jpeg({quality:90}).toBuffer();
-}
-
-// 하단 브랜드 줄. 왼쪽은 가게 이름, 오른쪽은 표지면 넘김 안내, 본문이면 장 번호.
-async function footerLayers(index:number,total:number,cover:boolean,colors:{line:string;brand:string;right:string}):Promise<OverlayOptions[]> {
-  const brand=await textLayer(STORE_NAME,{size:24,color:colors.brand,width:600,height:34,font:FONTS.regular});
-  const right=cover
-    ? await textLayer("다음 장으로 →",{size:24,color:colors.right,width:300,height:34,font:FONTS.semibold})
-    : await textLayer(`${index} / ${total}`,{size:24,color:colors.right,width:200,height:34,font:FONTS.semibold});
-  return [
-    svgLayer(`<path d="M${MARGIN} ${FOOTER_TOP}H${1080-MARGIN}" stroke="${colors.line}" stroke-opacity=".22" stroke-width="2"/>`),
-    {input:brand.data,left:MARGIN,top:1284},
-    {input:right.data,left:1080-MARGIN-right.info.width,top:1284},
-  ];
-}
-
-// 요점 목록: 강조점(또는 번호)과 보통 굵기 글. cursor부터 아래로 쌓고 끝 위치를 돌려준다.
-async function pointLayers(lines:string[],top:number,palette:Palette,options:{numbered?:boolean;color?:string;markerColor?:string;size?:number}={}):Promise<{layers:OverlayOptions[];bottom:number}> {
-  const size=options.size??32,color=options.color??palette.ink,markerColor=options.markerColor??palette.accent;
-  const indent=options.numbered?88:40;
+// 요점 목록: 강조점(또는 번호)과 보통 굵기 글. top부터 아래로 쌓고 끝 위치를 돌려준다.
+async function pointLayers(lines:string[],top:number,options:{left?:number;width?:number;numbered?:boolean;color:string;markerColor:string;size?:number;align?:"left"|"centre"}):Promise<{layers:OverlayOptions[];bottom:number}> {
+  const size=options.size??32,left=options.left??MARGIN,width=options.width??CONTENT;
+  const indent=options.align==="centre"?0:options.numbered?88:40;
   const layers:OverlayOptions[]=[];
   let cursor=top;
   for(const [i,line] of lines.entries()){
-    const text=await textLayer(line,{size,color,width:CONTENT-indent,height:size*3,font:FONTS.regular,spacing:8});
-    if(options.numbered){
-      const number=await textLayer(String(i+1).padStart(2,"0"),{size:40,color:markerColor,width:80,height:52,font:FONTS.bold});
-      layers.push({input:number.data,left:MARGIN,top:cursor-6});
+    const text=await textLayer(line,{size,color:options.color,width:width-indent,height:size*3,font:FONTS.regular,spacing:8,align:options.align});
+    if(options.align==="centre"){
+      layers.push({input:text.data,left:left+Math.round((width-text.info.width)/2),top:cursor});
     }else{
-      layers.push(svgLayer(`<circle cx="${MARGIN+5}" cy="${cursor+Math.round(size*.6)}" r="5" fill="${markerColor}"/>`));
+      if(options.numbered){
+        const number=await textLayer(String(i+1).padStart(2,"0"),{size:36,color:options.markerColor,width:80,height:48,font:FONTS.bold});
+        layers.push({input:number.data,left,top:cursor-4});
+      }else{
+        // 강조점은 작은 레이어로 그린다. 카드처럼 작은 캔버스 안에서도 합성할 수 있어야 한다.
+        layers.push({input:svg(12,12,`<circle cx="6" cy="6" r="5" fill="${options.markerColor}"/>`),left:left-1,top:cursor+Math.round(size*.6)-6});
+      }
+      layers.push({input:text.data,left:left+indent,top:cursor});
     }
-    layers.push({input:text.data,left:MARGIN+indent,top:cursor});
-    cursor+=Math.max(text.info.height,options.numbered?52:0)+(options.numbered?26:18);
+    cursor+=Math.max(text.info.height,options.numbered?48:0)+(options.numbered?24:16);
   }
   return {layers,bottom:cursor};
 }
 
-// 표지: 사진이 위쪽을 꽉 채우고, 아래 종이 면에 라벨과 큰 제목을 왼쪽 정렬로 놓는다.
-async function composeCoverBleed(input:Buffer,slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
-  const PHOTO_HEIGHT=840;
-  const eyebrow=await textLayer(slideEyebrow(slide.role,index),{size:26,color:palette.accent,width:CONTENT,height:40,font:FONTS.semibold});
-  const headline=await renderSlideHeadline(slide.headline,{size:72,color:palette.ink,align:"left",height:300,balance:false});
-  return canvas(palette.paper,[
-    {input:await croppedPhoto(input,1080,PHOTO_HEIGHT,0),left:0,top:0},
-    {input:eyebrow.data,left:MARGIN,top:PHOTO_HEIGHT+52},
-    {input:headline.data,left:MARGIN,top:PHOTO_HEIGHT+52+eyebrow.info.height+22},
-    ...await footerLayers(index,total,true,{line:palette.ink,brand:palette.muted,right:palette.accent}),
-  ]);
+// 1. 감성 풀스크린: 사진이 화면을 채우고, 위 오른쪽에 작은 채널명, 아래 가운데에 작은 부제와 굵은 흰 제목.
+async function composeFullscreen(inputs:Buffer[],slide:CarouselSlidePlan,index:number,total:number):Promise<Buffer> {
+  const white="#ffffff";
+  const brand=await textLayer(STORE_NAME,{size:24,color:"#ffffffd9",width:400,height:34,font:FONTS.semibold});
+  const corner=slide.role==="cover"
+    ? await textLayer("음식 이야기",{size:24,color:"#ffffffd9",width:400,height:34,font:FONTS.semibold})
+    : await textLayer(`${index} / ${total}`,{size:24,color:"#ffffffd9",width:200,height:34,font:FONTS.semibold});
+  const headline=await renderSlideHeadline(slide.headline,{size:slide.role==="cover"?72:62,color:white,align:"centre",height:280,balance:false});
+  const lines=cleanPoints(slide.points).slice(0,3);
+  const sub=lines.length?await textLayer(lines.join("\n"),{size:28,color:"#ffffffe6",width:CONTENT,height:140,font:FONTS.regular,align:"centre",spacing:10}):null;
+  const BOTTOM=1350-116;
+  const headlineTop=BOTTOM-headline.info.height;
+  const subTop=sub?headlineTop-22-sub.info.height:headlineTop;
+  // 글자 블록이 차지하는 만큼 아래쪽 그라데이션을 넓힌다.
+  const shadeStart=Math.max(.38,(subTop-220)/1350);
+  const layers:OverlayOptions[]=[
+    svgLayer(`<defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="${shadeStart.toFixed(2)}" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".8"/></linearGradient><linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".35"/><stop offset=".18" stop-color="#000" stop-opacity="0"/></linearGradient></defs><rect width="1080" height="1350" fill="url(#shade)"/><rect width="1080" height="1350" fill="url(#top)"/>`),
+    {input:corner.data,left:MARGIN,top:64},
+    {input:brand.data,left:1080-MARGIN-brand.info.width,top:64},
+    {input:headline.data,left:Math.round((1080-headline.info.width)/2),top:headlineTop},
+  ];
+  if(sub)layers.push({input:sub.data,left:Math.round((1080-sub.info.width)/2),top:subTop});
+  return sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover"}).composite(layers).jpeg({quality:90}).toBuffer();
 }
 
-// 사진 위 설명: 라벨 → 제목 → 둥근 사진 → 강조점이 붙은 요점. 사진 높이는 제목·요점 길이에 맞춰 남는 공간으로 정한다.
-async function composePhotoTop(input:Buffer,slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
-  const eyebrow=await textLayer(slideEyebrow(slide.role,index),{size:24,color:palette.accent,width:CONTENT,height:36,font:FONTS.semibold});
-  const headline=await renderSlideHeadline(slide.headline,{size:58,color:palette.ink,align:"left",height:240,balance:false});
+// 2. 대조 프레임: 같은 사진을 흐리고 어둡게 깔고, 가운데 얇은 흰 테두리 프레임 안에 선명한 장면. 아래에 흰 제목과 설명.
+async function composeFrame(inputs:Buffer[],slide:CarouselSlidePlan,index:number,total:number):Promise<Buffer> {
+  const white="#ffffff";
+  const headline=await renderSlideHeadline(slide.headline,{size:52,color:white,align:"centre",height:200,balance:false});
+  const lines=cleanPoints(slide.points).slice(0,3);
+  const sub=lines.length?await textLayer(lines.join("\n"),{size:28,color:"#ffffffe0",width:CONTENT,height:150,font:FONTS.regular,align:"centre",spacing:10}):null;
+  const textHeight=headline.info.height+(sub?18+sub.info.height:0);
+  const FRAME_TOP=150,FRAME_WIDTH=760;
+  const frameHeight=Math.max(560,Math.min(860,1290-48-textHeight-44-FRAME_TOP));
+  const frameLeft=Math.round((1080-FRAME_WIDTH)/2);
+  const textTop=FRAME_TOP+frameHeight+44;
+  const background=await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover"}).blur(26).modulate({brightness:.62,saturation:.85}).png().toBuffer();
+  const counter=await textLayer(`${index} / ${total}`,{size:24,color:"#ffffffcc",width:200,height:34,font:FONTS.semibold});
+  const brand=await textLayer(STORE_NAME,{size:24,color:"#ffffffcc",width:400,height:34,font:FONTS.semibold});
+  const layers:OverlayOptions[]=[
+    {input:await croppedPhoto(inputs[0],FRAME_WIDTH,frameHeight,0),left:frameLeft,top:FRAME_TOP},
+    svgLayer(`<rect x="${frameLeft-10}" y="${FRAME_TOP-10}" width="${FRAME_WIDTH+20}" height="${frameHeight+20}" fill="none" stroke="${white}" stroke-width="4"/>`),
+    {input:headline.data,left:Math.round((1080-headline.info.width)/2),top:textTop},
+    {input:brand.data,left:MARGIN,top:1296},
+    {input:counter.data,left:1080-MARGIN-counter.info.width,top:1296},
+  ];
+  if(sub)layers.push({input:sub.data,left:Math.round((1080-sub.info.width)/2),top:textTop+headline.info.height+18});
+  return sharp(background).composite(layers).jpeg({quality:90}).toBuffer();
+}
+
+// 3. 일러스트 설명: 파스텔 배경 위에 살짝 기울어진 흰 카드. 카드 안에 강조색 제목, 그림, 본문. 아래에 노란 말풍선.
+async function composeIllustration(inputs:Buffer[],slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
+  const CARD_W=900,PAD=56,TILT=-3,PHOTO_H=460;
   const lines=cleanPoints(slide.points);
-  // 요점이 차지할 높이를 먼저 재서 사진 높이를 정한다.
-  const measured=await pointLayers(lines,0,palette);
-  const headlineTop=MARGIN+eyebrow.info.height+18;
-  const photoTop=headlineTop+headline.info.height+36;
-  const photoHeight=Math.max(420,Math.min(700,FOOTER_TOP-44-(lines.length?measured.bottom+22:0)-photoTop));
-  const points=await pointLayers(lines,photoTop+photoHeight+40,palette);
-  return canvas(palette.paper,[
-    {input:eyebrow.data,left:MARGIN,top:MARGIN},
-    {input:headline.data,left:MARGIN,top:headlineTop},
-    {input:await croppedPhoto(input,CONTENT,photoHeight,24),left:MARGIN,top:photoTop},
-    ...points.layers,
-    ...await footerLayers(index,total,false,{line:palette.ink,brand:palette.muted,right:palette.ink}),
-  ]);
+  const bubbleText=lines.length>1?lines[lines.length-1]:slide.keywords[0]?`#${slide.keywords.join(" #")}`:"";
+  const bodyLines=lines.length>1?lines.slice(0,-1):lines;
+  const headline=await renderSlideHeadline(slide.headline,{size:46,color:palette.accent,align:"left",width:CARD_W-PAD*2,height:170,balance:false});
+  const photoTop=PAD+headline.info.height+28;
+  const points=await pointLayers(bodyLines,photoTop+PHOTO_H+32,{left:PAD,width:CARD_W-PAD*2,color:"#2a2a2a",markerColor:palette.accent,size:28});
+  // 카드 높이는 내용에 맞춘다. 비어 있는 카드 아래쪽이 남지 않는다.
+  const CARD_H=Math.max(820,Math.min(1080,(bodyLines.length?points.bottom:photoTop+PHOTO_H)+PAD+8));
+  const card=await sharp({create:{width:CARD_W,height:CARD_H,channels:4,background:"#fffdf8"}})
+    .composite([
+      {input:svg(CARD_W,CARD_H,`<rect width="${CARD_W}" height="${CARD_H}" rx="14" fill="#fffdf8"/>`),left:0,top:0},
+      {input:headline.data,left:PAD,top:PAD},
+      {input:await croppedPhoto(inputs[0],CARD_W-PAD*2,PHOTO_H,18),left:PAD,top:photoTop},
+      ...points.layers,
+    ]).png().toBuffer();
+  // 카드를 살짝 기울이고(투명 배경), 그 뒤에 같은 각도의 옅은 그림자를 깐다.
+  const tilted=await sharp(card).rotate(TILT,{background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer({resolveWithObject:true});
+  const cardLeft=Math.round((1080-tilted.info.width)/2),cardTop=Math.max(72,Math.round((1350-tilted.info.height)/2)-30);
+  const cx=cardLeft+tilted.info.width/2,cy=cardTop+tilted.info.height/2;
+  const layers:OverlayOptions[]=[
+    svgLayer(`<rect x="${Math.round(cx-CARD_W/2)+14}" y="${Math.round(cy-CARD_H/2)+18}" width="${CARD_W}" height="${CARD_H}" rx="14" fill="#000" fill-opacity=".14" transform="rotate(${TILT} ${cx} ${cy})"/>`),
+    {input:tilted.data,left:cardLeft,top:cardTop},
+  ];
+  if(bubbleText){
+    // 노란 말풍선은 카드의 오른쪽 아래 모서리에 살짝 걸친다. 꼬리는 왼쪽 아래로 뻗는다.
+    const text=await textLayer(bubbleText,{size:28,color:"#2a2a2a",width:700,height:80,font:FONTS.bold,spacing:6});
+    const bw=text.info.width+72,bh=text.info.height+40;
+    const bx=1080-MARGIN-bw,by=Math.min(cardTop+tilted.info.height-Math.round(bh/2)-20,1350-110-bh);
+    layers.push(svgLayer(`<rect x="${bx+8}" y="${by+10}" width="${bw}" height="${bh}" rx="28" fill="#000" fill-opacity=".12"/><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="28" fill="${palette.highlight}"/><path d="M${bx+54} ${by+bh-6}l-26 40 56-12z" fill="${palette.highlight}"/>`));
+    layers.push({input:text.data,left:bx+36,top:by+20});
+  }
+  const brand=await textLayer(`${STORE_NAME} · ${index} / ${total}`,{size:22,color:palette.ink,width:500,height:32,font:FONTS.semibold});
+  layers.push({input:brand.data,left:MARGIN,top:1350-MARGIN-20});
+  return canvas(palette.soft,layers);
 }
 
-// 반반: 사진이 위 절반을 가장자리까지 채우고, 아래 종이 면에 라벨·제목·요점.
-async function composeSplit(input:Buffer,slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
-  const eyebrow=await textLayer(slideEyebrow(slide.role,index),{size:24,color:palette.accent,width:CONTENT,height:36,font:FONTS.semibold});
-  const headline=await renderSlideHeadline(slide.headline,{size:54,color:palette.ink,align:"left",height:200,balance:false});
-  const lines=cleanPoints(slide.points);
-  // 글 블록 높이를 먼저 재서, 사진이 남는 공간을 모두 차지하게 한다.
-  const measured=await pointLayers(lines,0,palette,{size:30});
-  const textHeight=48+eyebrow.info.height+16+headline.info.height+(lines.length?30+measured.bottom:0);
-  const PHOTO_HEIGHT=Math.max(520,Math.min(820,FOOTER_TOP-44-textHeight));
-  const headlineTop=PHOTO_HEIGHT+48+eyebrow.info.height+16;
-  const points=await pointLayers(lines,headlineTop+headline.info.height+30,palette,{size:30});
-  return canvas(palette.paper,[
-    {input:await croppedPhoto(input,1080,PHOTO_HEIGHT,0),left:0,top:0},
-    {input:eyebrow.data,left:MARGIN,top:PHOTO_HEIGHT+48},
-    {input:headline.data,left:MARGIN,top:headlineTop},
-    ...points.layers,
-    ...await footerLayers(index,total,false,{line:palette.ink,brand:palette.muted,right:palette.ink}),
-  ]);
-}
-
-// 큰 글자: 강조색 배경에 큰 제목과 요점. 사진은 아래쪽에 좁은 띠로만 들어가 리듬을 바꾼다.
-async function composeStatement(input:Buffer,slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
-  const STRIP_HEIGHT=300,STRIP_TOP=FOOTER_TOP-44-STRIP_HEIGHT;
-  const eyebrow=await textLayer(slideEyebrow(slide.role,index),{size:24,color:palette.onAccent,width:CONTENT,height:36,font:FONTS.semibold});
-  const headline=await renderSlideHeadline(slide.headline,{size:72,color:palette.onAccent,align:"left",height:330,balance:false});
-  const lines=cleanPoints(slide.points);
-  // 라벨·제목·요점 블록을 사진 띠 위 공간의 가운데에 놓는다. 짧은 글이어도 위에 몰리지 않는다.
-  const measured=await pointLayers(lines,0,palette,{size:30});
-  const blockHeight=eyebrow.info.height+26+headline.info.height+(lines.length?40+measured.bottom:0);
-  const blockTop=MARGIN+Math.max(0,Math.round((STRIP_TOP-48-MARGIN-blockHeight)/2));
-  const headlineTop=blockTop+eyebrow.info.height+26;
-  const points=await pointLayers(lines,headlineTop+headline.info.height+40,palette,{size:30,color:palette.onAccent,markerColor:palette.onAccent});
-  return canvas(palette.accent,[
-    svgLayer(`<rect x="${MARGIN}" y="${blockTop+eyebrow.info.height+8}" width="64" height="6" fill="${palette.onAccent}" fill-opacity=".7"/>`),
-    {input:eyebrow.data,left:MARGIN,top:blockTop},
-    {input:headline.data,left:MARGIN,top:headlineTop},
-    ...points.layers,
-    {input:await croppedPhoto(input,CONTENT,STRIP_HEIGHT,24),left:MARGIN,top:STRIP_TOP},
-    ...await footerLayers(index,total,false,{line:palette.onAccent,brand:palette.onAccent,right:palette.onAccent}),
-  ]);
-}
-
-// 순서: 제목 아래 작은 사진, 그 아래 번호가 크게 붙은 단계 목록.
-async function composeSteps(input:Buffer,slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
-  const eyebrow=await textLayer(slideEyebrow(slide.role,index),{size:24,color:palette.accent,width:CONTENT,height:36,font:FONTS.semibold});
+// 4. 사진 콜라주: 밝은 바탕에 큰 제목과 설명, 사진 격자, 남은 요점, 태그 알약.
+async function composeCollage(inputs:Buffer[],slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
   const headline=await renderSlideHeadline(slide.headline,{size:56,color:palette.ink,align:"left",height:200,balance:false});
-  const headlineTop=MARGIN+eyebrow.info.height+18;
-  const photoTop=headlineTop+headline.info.height+32;
   const lines=cleanPoints(slide.points);
-  // 단계 목록 높이를 먼저 재서 사진이 남는 공간을 채우게 한다.
-  const measured=await pointLayers(lines,0,palette,{numbered:true,size:32});
-  const PHOTO_HEIGHT=Math.max(360,Math.min(640,FOOTER_TOP-44-(lines.length?measured.bottom+44:0)-photoTop));
-  const points=await pointLayers(lines,photoTop+PHOTO_HEIGHT+44,palette,{numbered:true,size:32});
-  return canvas(palette.paper,[
-    {input:eyebrow.data,left:MARGIN,top:MARGIN},
-    {input:headline.data,left:MARGIN,top:headlineTop},
-    {input:await croppedPhoto(input,CONTENT,PHOTO_HEIGHT,24),left:MARGIN,top:photoTop},
+  const sub=lines[0]?await textLayer(lines[0],{size:30,color:palette.muted,width:CONTENT,height:90,font:FONTS.regular,spacing:8}):null;
+  const gridTop=MARGIN+headline.info.height+(sub?16+sub.info.height:0)+36;
+  const photos=inputs.slice(0,3);
+  const rest=lines.slice(1,3);
+  const tags=slide.keywords.slice(0,3);
+  // 아래 요점·태그에 필요한 높이를 빼고 남는 만큼 격자를 키운다.
+  const reserved=(rest.length?rest.length*48+24:0)+(tags.length?70:0)+44;
+  const gridHeight=Math.max(420,Math.min(640,1262-reserved-gridTop));
+  const GAP=20;
+  const layers:OverlayOptions[]=[{input:headline.data,left:MARGIN,top:MARGIN}];
+  if(sub)layers.push({input:sub.data,left:MARGIN,top:MARGIN+headline.info.height+16});
+  if(photos.length>=3){
+    const leftW=Math.round(CONTENT*.58),rightW=CONTENT-leftW-GAP,halfH=Math.round((gridHeight-GAP)/2);
+    layers.push({input:await croppedPhoto(photos[0],leftW,gridHeight,18),left:MARGIN,top:gridTop});
+    layers.push({input:await croppedPhoto(photos[1],rightW,halfH,18),left:MARGIN+leftW+GAP,top:gridTop});
+    layers.push({input:await croppedPhoto(photos[2],rightW,gridHeight-halfH-GAP,18),left:MARGIN+leftW+GAP,top:gridTop+halfH+GAP});
+  }else if(photos.length===2){
+    const w=Math.round((CONTENT-GAP)/2);
+    layers.push({input:await croppedPhoto(photos[0],w,gridHeight,18),left:MARGIN,top:gridTop});
+    layers.push({input:await croppedPhoto(photos[1],CONTENT-w-GAP,gridHeight,18),left:MARGIN+w+GAP,top:gridTop});
+  }else{
+    layers.push({input:await croppedPhoto(photos[0],CONTENT,gridHeight,18),left:MARGIN,top:gridTop});
+  }
+  let cursor=gridTop+gridHeight+32;
+  if(rest.length){
+    const points=await pointLayers(rest,cursor,{color:palette.ink,markerColor:palette.accent,size:28});
+    layers.push(...points.layers);cursor=points.bottom+6;
+  }
+  if(tags.length){
+    let x=MARGIN;
+    for(const tag of tags){
+      const text=await textLayer(`#${tag}`,{size:26,color:palette.ink,width:400,height:36,font:FONTS.semibold});
+      const w=text.info.width+44;
+      layers.push(svgLayer(`<rect x="${x}" y="${cursor}" width="${w}" height="52" rx="26" fill="${palette.soft}"/>`));
+      layers.push({input:text.data,left:x+22,top:cursor+Math.round((52-text.info.height)/2)});
+      x+=w+12;
+    }
+  }
+  const brand=await textLayer(STORE_NAME,{size:24,color:palette.muted,width:600,height:34,font:FONTS.regular});
+  const counter=await textLayer(`${index} / ${total}`,{size:24,color:palette.ink,width:200,height:34,font:FONTS.semibold});
+  layers.push(svgLayer(`<path d="M${MARGIN} 1262H${1080-MARGIN}" stroke="${palette.ink}" stroke-opacity=".2" stroke-width="2"/>`),{input:brand.data,left:MARGIN,top:1284},{input:counter.data,left:1080-MARGIN-counter.info.width,top:1284});
+  return canvas(palette.paper,layers);
+}
+
+// 5. 브라우저 프레임: 파스텔 배경 위 검은 테두리 브라우저 창. 안에 굵은 제목, 번호 목록, 아래 돋보기 검색창 캡슐. 사진은 쓰지 않는다.
+async function composeBrowser(slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
+  const WIN_LEFT=MARGIN,WIN_W=CONTENT,BAR=66,PAD=52,capH=72;
+  const ink="#141414";
+  const headline=await renderSlideHeadline(slide.headline,{size:50,color:ink,align:"left",width:WIN_W-PAD*2,height:200,balance:false});
+  const lines=cleanPoints(slide.points);
+  // 창 높이는 내용에 맞추고, 창을 화면 가운데에 둔다. 글이 짧아도 빈 창이 남지 않는다.
+  const measured=await pointLayers(lines,0,{left:WIN_LEFT+PAD,width:WIN_W-PAD*2,numbered:true,color:ink,markerColor:palette.accent,size:30});
+  const WIN_H=Math.max(640,Math.min(1010,BAR+PAD+headline.info.height+36+measured.bottom+40+capH+PAD));
+  const WIN_TOP=Math.max(96,Math.round((1350-WIN_H-90)/2));
+  const contentTop=WIN_TOP+BAR+PAD;
+  const points=await pointLayers(lines,contentTop+headline.info.height+36,{left:WIN_LEFT+PAD,width:WIN_W-PAD*2,numbered:true,color:ink,markerColor:palette.accent,size:30});
+  const query=slide.keywords.length?slide.keywords.join(" "):slideEyebrow(slide.role,index).split(" · ").pop()??"";
+  const search=await textLayer(query,{size:28,color:ink,width:WIN_W-PAD*2-160,height:40,font:FONTS.bold});
+  const capW=Math.min(WIN_W-PAD*2,search.info.width+150),capX=WIN_LEFT+PAD,capY=WIN_TOP+WIN_H-PAD-capH;
+  const brand=await textLayer(STORE_NAME,{size:24,color:palette.ink,width:600,height:34,font:FONTS.regular});
+  const counter=await textLayer(`${index} / ${total}`,{size:24,color:palette.ink,width:200,height:34,font:FONTS.semibold});
+  return canvas(palette.soft,[
+    svgLayer(`<rect x="${WIN_LEFT+12}" y="${WIN_TOP+14}" width="${WIN_W}" height="${WIN_H}" rx="20" fill="#000" fill-opacity=".9"/>
+      <rect x="${WIN_LEFT}" y="${WIN_TOP}" width="${WIN_W}" height="${WIN_H}" rx="20" fill="#ffffff" stroke="#000" stroke-width="5"/>
+      <path d="M${WIN_LEFT} ${WIN_TOP+BAR}H${WIN_LEFT+WIN_W}" stroke="#000" stroke-width="5"/>
+      <circle cx="${WIN_LEFT+38}" cy="${WIN_TOP+BAR/2}" r="11" fill="#000"/><circle cx="${WIN_LEFT+74}" cy="${WIN_TOP+BAR/2}" r="11" fill="#000"/><circle cx="${WIN_LEFT+110}" cy="${WIN_TOP+BAR/2}" r="11" fill="#000"/>
+      <rect x="${capX}" y="${capY}" width="${capW}" height="${capH}" rx="36" fill="${palette.highlight}" stroke="#000" stroke-width="4"/>
+      <circle cx="${capX+40}" cy="${capY+34}" r="12" fill="none" stroke="#000" stroke-width="4"/><path d="M${capX+49} ${capY+43}l12 12" stroke="#000" stroke-width="4" stroke-linecap="round"/>`),
+    {input:headline.data,left:WIN_LEFT+PAD,top:contentTop},
     ...points.layers,
-    ...await footerLayers(index,total,false,{line:palette.ink,brand:palette.muted,right:palette.ink}),
+    {input:search.data,left:capX+78,top:capY+Math.round((capH-search.info.height)/2)},
+    {input:brand.data,left:MARGIN,top:WIN_TOP+WIN_H+44},
+    {input:counter.data,left:1080-MARGIN-counter.info.width,top:WIN_TOP+WIN_H+44},
   ]);
 }
 
-const CARD_RENDERERS:Record<CardLayout,(input:Buffer,slide:CarouselSlidePlan,index:number,total:number,palette:Palette)=>Promise<Buffer>>={
-  "cover-bleed":composeCoverBleed,
-  "photo-top":composePhotoTop,
-  split:composeSplit,
-  statement:composeStatement,
-  steps:composeSteps,
+const CARD_RENDERERS:Record<CardLayout,(inputs:Buffer[],slide:CarouselSlidePlan,index:number,total:number,palette:Palette)=>Promise<Buffer>>={
+  fullscreen:(inputs,slide,index,total)=>composeFullscreen(inputs,slide,index,total),
+  frame:(inputs,slide,index,total)=>composeFrame(inputs,slide,index,total),
+  illustration:composeIllustration,
+  collage:composeCollage,
+  browser:(_inputs,slide,index,total,palette)=>composeBrowser(slide,index,total,palette),
 };
 
-export async function composeSlideImage(input:Buffer,slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpec):Promise<Buffer> {
+// 사진 한 장 또는 여러 장(콜라주)을 받아 한 장의 카드로 만든다. 브라우저형은 사진 없이 그린다.
+export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpec):Promise<Buffer> {
   await access(FONTS.bold.file);
-  if(layout==="overlay")return composeOverlay(input,slide,index,total);
-  return CARD_RENDERERS[normalizeCardLayout(slide.role,slide.layout)](input,slide,index,total,paletteOf(design));
+  const inputs=Array.isArray(input)?input:[input];
+  const card:CardLayout=layout==="overlay"?"fullscreen":normalizeCardLayout(slide.role,slide.layout);
+  if(card!=="browser"&&!inputs.length)throw new Error("slide image required");
+  return CARD_RENDERERS[card](inputs,slide,index,total,paletteOf(design));
 }
