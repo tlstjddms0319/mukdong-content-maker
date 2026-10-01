@@ -227,21 +227,32 @@ async function composeIllustration(inputs:Buffer[],slide:CarouselSlidePlan,index
     {input:tilted.data,left:cardLeft,top:cardTop},
     svgLayer(washiTape({x:cardLeft+2,y:cardTop+6,width:210,color:palette.highlight,angle:-12,opacity:.8})),
   ];
-  if(bubbleText){
-    // 노란 말풍선은 카드의 오른쪽 아래 모서리에 살짝 걸친다. 꼬리는 왼쪽 아래로 뻗는다.
-    const text=await textLayer(bubbleText,{size:30,color:"#2a2a2a",width:720,height:90,font:FONTS.bold,spacing:6});
-    const bw=text.info.width+72,bh=text.info.height+40;
-    const bx=1080-MARGIN-bw,by=Math.min(cardTop+tilted.info.height-Math.round(bh/2)-20,1350-110-bh);
-    layers.push(svgLayer(`<rect x="${bx+8}" y="${by+10}" width="${bw}" height="${bh}" rx="28" fill="#000" fill-opacity=".12"/><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="28" fill="${palette.highlight}"/><path d="M${bx+54} ${by+bh-6}l-26 40 56-12z" fill="${palette.highlight}"/>`
-      +sparkles([[bx-26,by-8,15],[Math.min(1056,bx+bw+22),by+bh-10,10]],palette.accent)));
-    layers.push({input:text.data,left:bx+36,top:by+20});
-  }
   // 마스코트는 카드 왼쪽 아래 바깥의 빈 공간에 세운다. 머리는 카드의 아래 여백(글이 없는 띠)까지만 올라오게
   // 높이를 제한해, 본문 글줄을 가리지 않는다. 카드가 길어 공간이 모자라면 줄이고, 너무 좁으면 생략한다.
   const cardBottom=cardTop+tilted.info.height;
-  const MASCOT_FOOT=1284;
-  const mascot=await mascotLayer({width:200,pose:"hello",left:MARGIN-26,top:MASCOT_FOOT,anchor:"bottom-left",maxHeight:MASCOT_FOOT-(cardBottom-Math.round(PAD*.6))});
+  const MASCOT_FOOT=1284,TEXT_SAFE_TOP=cardBottom-Math.round(PAD*.6);
+  const mascot=await mascotLayer({width:200,pose:"hello",left:MARGIN-26,top:MASCOT_FOOT,anchor:"bottom-left",maxHeight:MASCOT_FOOT-TEXT_SAFE_TOP});
   if(mascot)layers.push(mascot);
+  if(bubbleText){
+    // 노란 말풍선은 마스코트 바로 오른쪽에 붙여, 마스코트가 하는 말처럼 보이게 한다. 꼬리는 왼쪽(마스코트 쪽)으로 뻗고
+    // 마스코트 얼굴 높이를 가리킨다. 마스코트가 생략된 카드에서는 꼬리 없는 알약 모양으로 오른쪽 아래에 둔다.
+    const TAIL=28;
+    const bx=mascot?mascot.left+mascot.width+TAIL:0;
+    const text=await textLayer(bubbleText,{size:30,color:"#2a2a2a",width:Math.min(720,1080-MARGIN-(mascot?bx:MARGIN)-72),height:90,font:FONTS.bold,spacing:6});
+    const bw=text.info.width+72,bh=text.info.height+40;
+    let x=1080-MARGIN-bw,y=Math.min(cardTop+tilted.info.height-Math.round(bh/2)-20,1350-110-bh),tail="";
+    if(mascot){
+      const face=mascot.top+Math.round(mascot.height*.35);
+      x=bx;
+      // 본문 글줄(카드 아래 여백 위쪽)을 가리지 않고, 채널명 줄(1290) 위에서 끝나게 세로 위치를 제한한다.
+      y=Math.max(TEXT_SAFE_TOP,Math.min(1282-bh,face-Math.round(bh/2)));
+      const tipY=Math.max(y+14,Math.min(y+bh-14,face));
+      tail=`<path d="M${x+2} ${tipY-16}L${x-TAIL} ${tipY}L${x+2} ${tipY+16}z" fill="${palette.highlight}"/>`;
+    }
+    layers.push(svgLayer(`<rect x="${x+8}" y="${y+10}" width="${bw}" height="${bh}" rx="28" fill="#000" fill-opacity=".12"/><rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="28" fill="${palette.highlight}"/>${tail}`
+      +sparkles([[Math.min(1056,x+bw+22),y-6,13],[Math.min(1056,x+bw+12),y+bh+4,9]],palette.accent)));
+    layers.push({input:text.data,left:x+36,top:y+20});
+  }
   // 다른 카드와 같게 채널명은 왼쪽, 장 번호는 오른쪽 아래. 마스코트가 있으면 채널명은 그 오른쪽으로 비킨다.
   const brand=await textLayer(STORE_NAME,{size:META,color:palette.ink,width:500,height:36,font:FONTS.semibold});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:palette.ink,width:200,height:36,font:FONTS.semibold});
@@ -452,19 +463,19 @@ async function composeVersus(inputs:Buffer[],slide:CarouselSlidePlan,index:numbe
 // 8. 단계 가이드: 왼쪽 위 STEP 스티커, 큰 제목, 가운데 사진, 아래 흰 둥근 상자 안 설명.
 async function composeStep(inputs:Buffer[],slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
   const R=66,stickerX=MARGIN+R,stickerY=84+R;
-  const stepWord=await textLayer("STEP",{size:20,color:palette.accent,width:120,height:28,font:FONTS.semibold,align:"centre"});
-  // STEP 번호는 아래 장 번호(8 / 10)와 같은 수를 쓴다. 표지를 빼고 세면(index-1) 두 숫자가 어긋나 보인다.
-  const stepNo=await textLayer(String(index).padStart(2,"0"),{size:44,color:palette.accent,width:120,height:56,font:FONTS.bold,align:"centre"});
+  // 카드 한 장만 보고는 이 장이 몇 번째 단계인지 알 수 없어, 스티커에는 번호 대신 "HOW TO"를 쓰고
+  // 실제 단계는 아래 상자의 요점에 01·02·03 번호로 매긴다(장 번호를 STEP 번호로 쓰면 "왜 STEP 3이지?"가 된다).
+  const howTo=await textLayer("HOW\nTO",{size:30,color:palette.accent,width:110,height:90,font:DECOR_FONT,align:"centre",spacing:0});
   const headline=await renderSlideHeadline(slide.headline,{size:46,color:palette.ink,align:"left",width:CONTENT-R*2-36,height:170,balance:false});
   const lines=cleanPoints(slide.points);
   // 설명 상자는 흰색이라 글자는 항상 짙은 색(밤 팔레트의 밝은 ink는 여기서 사라진다).
   const boxInk=inkOn("#ffffff",palette);
-  const measured=await pointLayers(lines,0,{left:MARGIN+40,width:CONTENT-80,color:boxInk,markerColor:palette.accent});
+  const measured=await pointLayers(lines,0,{left:MARGIN+40,width:CONTENT-80,numbered:true,color:boxInk,markerColor:palette.accent});
   const boxH=lines.length?measured.bottom+72:0;
   const photoTop=Math.max(84+R*2+40,84+headline.info.height+48);
   const PHOTO_H=Math.max(360,Math.min(700,1250-(boxH?boxH+32:0)-photoTop));
   const boxTop=photoTop+PHOTO_H+32;
-  const points=await pointLayers(lines,boxTop+40,{left:MARGIN+40,width:CONTENT-80,color:boxInk,markerColor:palette.accent});
+  const points=await pointLayers(lines,boxTop+40,{left:MARGIN+40,width:CONTENT-80,numbered:true,color:boxInk,markerColor:palette.accent});
   const brand=await textLayer(STORE_NAME,{size:META,color:palette.ink,width:600,height:36,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:palette.ink,width:200,height:36,font:FONTS.semibold});
   const layers:OverlayOptions[]=[
@@ -472,8 +483,7 @@ async function composeStep(inputs:Buffer[],slide:CarouselSlidePlan,index:number,
     svgLayer(ring({cx:stickerX,cy:stickerY,r:R+14,color:palette.accent,strokeWidth:3,dashed:true,opacity:.5})+sparkles([[stickerX+R+30,stickerY-R-4,14],[stickerX-R-18,stickerY+R+10,10]],palette.accent)
       +`<circle cx="${stickerX+4}" cy="${stickerY+6}" r="${R}" fill="#000" fill-opacity=".12"/><circle cx="${stickerX}" cy="${stickerY}" r="${R}" fill="#ffffff" stroke="${palette.accent}" stroke-width="6"/>`
       +softShadow({x:MARGIN,y:photoTop+12,width:CONTENT,height:PHOTO_H,rx:24,blur:16,opacity:.18})),
-    {input:stepWord.data,left:stickerX-Math.round(stepWord.info.width/2),top:stickerY-44},
-    {input:stepNo.data,left:stickerX-Math.round(stepNo.info.width/2),top:stickerY-18},
+    {input:howTo.data,left:stickerX-Math.round(howTo.info.width/2),top:stickerY-Math.round(howTo.info.height/2)},
     {input:headline.data,left:MARGIN+R*2+36,top:84+Math.max(0,Math.round((R*2-headline.info.height)/2))},
     {input:await croppedPhoto(inputs[0],CONTENT,PHOTO_H,24),left:MARGIN,top:photoTop},
     svgLayer(washiTape({x:1080-MARGIN-150,y:photoTop-20,width:200,color:palette.highlight,angle:9,opacity:.8})),
@@ -523,12 +533,13 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
   const aLetter=await textLayer("A",{size:34,color:palette.onAccent,width:60,height:44,font:FONTS.bold,align:"centre"});
   const layers:OverlayOptions[]=[
     // 배경 장식: 오른쪽 위 점 무늬, 왼쪽 아래 옅은 강조색 덩어리. 말풍선 뒤에 번진 그림자.
+    // 말풍선 꼬리는 말하는 쪽을 가리킨다: 질문은 왼쪽 Q 동그라미, 답변은 오른쪽 A 동그라미 쪽으로 뻗는다.
     svgLayer(dotGrid({x:820,y:48,width:230,height:Math.max(60,qY-70),color:bgInk,opacity:.18})+blob({cx:90,cy:1230,r:160,color:palette.accent,opacity:.12,seed:4})
       +softShadow({x:qX,y:qY+12,width:BUBBLE_W,height:qH,rx:30,blur:16,opacity:.16})+softShadow({x:aX,y:aY+12,width:BUBBLE_W,height:aH,rx:30,blur:16,opacity:.16})),
-    svgLayer(`<rect x="${qX}" y="${qY}" width="${BUBBLE_W}" height="${qH}" rx="30" fill="${dark}"/><path d="M${qX+30} ${qY+qH-2}l-26 34 60-10z" fill="${dark}"/>${badge(MARGIN+34,qY+34,"Q",dark)}`),
+    svgLayer(`<rect x="${qX}" y="${qY}" width="${BUBBLE_W}" height="${qH}" rx="30" fill="${dark}"/><path d="M${qX+4} ${qY+18}L${qX-26} ${qY+34}L${qX+4} ${qY+50}z" fill="${dark}"/>${badge(MARGIN+34,qY+34,"Q",dark)}`),
     {input:qLetter.data,left:MARGIN+34-Math.round(qLetter.info.width/2),top:qY+34-Math.round(qLetter.info.height/2)},
     {input:q.data,left:qX+PAD,top:qY+PAD},
-    svgLayer(`<rect x="${aX}" y="${aY}" width="${BUBBLE_W}" height="${aH}" rx="30" fill="${palette.accent}"/><path d="M${aX+BUBBLE_W-30} ${aY+aH-2}l26 34-60-10z" fill="${palette.accent}"/>${badge(1080-MARGIN-34,aY+34,"A",palette.accent)}`),
+    svgLayer(`<rect x="${aX}" y="${aY}" width="${BUBBLE_W}" height="${aH}" rx="30" fill="${palette.accent}"/><path d="M${aX+BUBBLE_W-4} ${aY+18}L${aX+BUBBLE_W+26} ${aY+34}L${aX+BUBBLE_W-4} ${aY+50}z" fill="${palette.accent}"/>${badge(1080-MARGIN-34,aY+34,"A",palette.accent)}`),
     {input:aLetter.data,left:1080-MARGIN-34-Math.round(aLetter.info.width/2),top:aY+34-Math.round(aLetter.info.height/2)},
     {input:a.data,left:aX+PAD,top:aY+PAD},
   ];
