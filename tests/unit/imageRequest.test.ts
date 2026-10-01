@@ -387,3 +387,14 @@ describe("OpenAI image request", () => {
   });
 
 });
+
+describe("hongeo stays the hero", () => {
+  it("tells the image model that the skate is largest and in front while pork and kimchi are sides", () => {
+    const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:""}});
+    expect(prompt).toContain("주인공은 홍어");
+    expect(prompt).toContain("hero of every scene");
+    expect(prompt).toContain("수육이 홍어보다 크거나 앞에 오면 안 된다");
+    // 홍어와 무관한 주제에는 붙지 않는다.
+    expect(buildImagePrompt({topic:"김치찌개",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:3,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블"})).not.toContain("hero of every scene");
+  });
+});

@@ -111,6 +111,9 @@ describe("carousel planning", () => {
     expect(prompt).toContain("기존 이미지 설명: 없음");
     expect(prompt).toContain("가격, 원산지, 영업시간, 매장 정보");
     expect(prompt).toContain("음식 사진 장면");
+    // 장면 설명을 쓸 때 홍어가 주인공이고 수육·묵은지는 조연이라는 규칙이 들어간다.
+    expect(prompt).toContain("홍어가 주인공입니다");
+    expect(prompt).toContain("조연");
   });
 
   it("asks for slide points, ships safe fallback points, and drops risky provider points", async () => {

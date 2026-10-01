@@ -17,6 +17,8 @@ function foodDirection(input:ImageBrief):string {
   if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push("홍어회·삼합 장면의 홍어는 숙성 홍어 날개 살을 얇고 불규칙하게 썬 연한 분홍빛 또는 아이보리색 회로 표현한다. 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.");
   // 작은 이미지 모델은 '홍어'를 몰라 베이컨·햄처럼 그리기 쉬워서 영어로 무엇인지 한 번 설명한다.
   preparations.push("Hongeo is Korean fermented skate, a flat ray fish: its flesh has fine parallel fibers and thin translucent cartilage lines, never marbled fat stripes. The skate must not look like bacon, ham, sausage or pork belly.");
+  // 삼합 장면은 모델이 익숙한 수육을 크게 그리고 홍어를 뒤로 밀기 쉽다. 홍어가 주인공임을 한국어·영어로 못 박는다.
+  preparations.push("이 가게의 주인공은 홍어다. 모든 장면에서 홍어가 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓이고, 수육·묵은지·막걸리는 더 작게 뒤나 가장자리에 조연으로만 둔다. 집어 올린 한 점은 홍어 조각이어야 하며, 수육이 홍어보다 크거나 앞에 오면 안 된다. The fermented skate is the hero of every scene: largest, closest to the camera or centered, and in focus; boiled pork and kimchi are small supporting sides behind or beside it, never larger or more prominent than the skate.");
   return preparations.join(" ")+" 이번 장면에 해당하는 조리법만 표현한다. 두꺼운 정육면체 회, 두부 같은 고기 블록, 탑처럼 높은 적층, 초밥이나 연어로 바꾸는 표현은 금지한다. 메뉴와 무관한 장식 소스는 추가하지 않는다.";
 }
 
