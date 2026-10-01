@@ -12,6 +12,9 @@ export function guardSlidePoints(plan:CarouselPlan):CarouselPlan {
       const result=checkTextClaims(point);
       return result.blocked.length===0&&result.verify.length===0;
     });
-    return {...slide,points};
+    // 대형 숫자도 확인이 필요한 수치(가격·영업시간 등)면 지운다. 그러면 레이아웃 정규화가 브라우저형으로 바꾼다.
+    const figureCheck=checkTextClaims(`${slide.figure} ${slide.headline}`);
+    const figure=figureCheck.blocked.length||figureCheck.verify.length?"":slide.figure;
+    return {...slide,points,figure};
   })};
 }

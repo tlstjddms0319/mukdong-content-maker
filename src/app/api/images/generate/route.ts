@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { ImageBriefSchema, type ImageBrief } from "@/features/images/schema";
+import { normalizeCardLayout, photosNeeded } from "@/features/images/design";
 import { AiConfigurationError, getOpenAIClient } from "@/lib/ai/openaiClient";
 import { buildImageEditRequest, buildImageRequest, candidateBriefs } from "@/features/images/openaiRequest";
 import { classifyOpenAIImageError } from "@/features/images/openaiError";
@@ -36,8 +37,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
   try {
     // An unreadable settings file falls back to defaults, but fails closed on cost: no paid OpenAI call
     // can be triggered by a settings read failure, only the free Cloudflare path.
-    // 브라우저형은 사진 없이 그래픽만으로 그리므로 이미지 AI를 부르지 않는다.
-    if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&parsed.data.slide.layout==="browser"){
+    // 브라우저형·Q&A·대형 숫자처럼 사진이 없는 레이아웃은 이미지 AI를 부르지 않는다.
+    if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&photosNeeded(normalizeCardLayout(parsed.data.slide))===0){
       const composed=await composeSlideImage([],parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design);
       return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"design",provider:"none",fallback:false});
     }
@@ -80,8 +81,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const notice=fallback?`${PROVIDER_LABELS[chain[0]]} 생성이 어려워 ${PROVIDER_LABELS[used[used.length-1]]}(으)로 전환했어요.`:undefined;
     if (images.length !== parsed.data.count) throw new Error("incomplete image result");
     const referenceImages:string[]=[];
-    // 콜라주형은 만든 사진 여러 장을 한 카드에 격자로 넣는다.
-    if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&parsed.data.slide.layout==="collage"&&images.length>1){
+    // 콜라주·비교처럼 사진 여러 장을 쓰는 레이아웃은 만든 사진을 모두 한 카드에 넣는다.
+    if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&photosNeeded(normalizeCardLayout(parsed.data.slide))>1&&images.length>1){
       const originals=await Promise.all(images.map(imageBytes));
       const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design);
       images=[`data:image/jpeg;base64,${composed.toString("base64")}`];

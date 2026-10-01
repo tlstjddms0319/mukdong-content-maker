@@ -7,7 +7,7 @@ import { buildImagePrompt } from "@/features/images/openaiRequest";
 import { composeSlideImage } from "@/features/images/composeSlide";
 import type { CarouselSlidePlan } from "@/features/images/carousel";
 
-const body:CarouselSlidePlan={role:"how-to",headline:"한 점은 이렇게 만들어 먹어요",points:["재료를 차례로 올려 한입 크기로 집어요","첫 점은 양념을 적게 해서 맛을 확인해요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 한 점을 만드는 손동작 사진, 얼굴 없음",textPosition:"top",layout:"browser",keywords:["먹는 법","한 점"]};
+const body:CarouselSlidePlan={role:"how-to",headline:"한 점은 이렇게 만들어 먹어요",points:["재료를 차례로 올려 한입 크기로 집어요","첫 점은 양념을 적게 해서 맛을 확인해요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 한 점을 만드는 손동작 사진, 얼굴 없음",textPosition:"top",layout:"browser",keywords:["먹는 법","한 점"],figure:""};
 const picture=(background:string)=>sharp({create:{width:60,height:80,channels:3,background}}).png().toBuffer();
 const pixel=async(image:Buffer,left:number,top:number)=>{const {data}=await sharp(image).extract({left,top,width:1,height:1}).raw().toBuffer({resolveWithObject:true});return [data[0],data[1],data[2]] as const;};
 
@@ -17,7 +17,8 @@ describe("topic-driven card design", () => {
     for(const id of PaletteIdSchema.options)expect(prompt).toContain(`${id}(${PALETTES[id].label}`);
     for(const id of CardLayoutSchema.options)expect(prompt).toContain(`${id}(${CARD_LAYOUTS[id].label}`);
     expect(prompt).toContain(designCatalogText());
-    expect(prompt).toContain("browser는 사진이 없으니");
+    expect(prompt).toContain("사진이 없으니");
+    expect(prompt).toContain("숫자를 지어내지 마세요");
     expect(prompt).toContain("keywords");
   });
 
@@ -29,9 +30,15 @@ describe("topic-driven card design", () => {
   });
 
   it("repairs a cover drawn as a body-only layout instead of rejecting the plan", async () => {
-    expect(normalizeCardLayout("cover","collage")).toBe("fullscreen");
-    expect(normalizeCardLayout("cover","frame")).toBe("frame");
-    expect(normalizeCardLayout("visit","fullscreen")).toBe("fullscreen");
+    expect(normalizeCardLayout({role:"cover",layout:"collage"})).toBe("fullscreen");
+    expect(normalizeCardLayout({role:"cover",layout:"frame"})).toBe("frame");
+    expect(normalizeCardLayout({role:"cover",layout:"quote"})).toBe("quote");
+    expect(normalizeCardLayout({role:"visit",layout:"fullscreen"})).toBe("fullscreen");
+    // 숫자 없는 대형 숫자형과 이름 두 개가 없는 비교형은 재료가 있는 레이아웃으로 바뀐다.
+    expect(normalizeCardLayout({role:"detail",layout:"stat",figure:""})).toBe("browser");
+    expect(normalizeCardLayout({role:"detail",layout:"stat",figure:"3가지"})).toBe("stat");
+    expect(normalizeCardLayout({role:"detail",layout:"versus",keywords:["홍어"]})).toBe("frame");
+    expect(normalizeCardLayout({role:"detail",layout:"versus",keywords:["홍어","가오리"]})).toBe("versus");
     const drafted=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:3});
     drafted.slides[0].layout="browser";
     const plan=await planCarousel({topic:"홍어 한 점",slideCount:3},{generate:async()=>({...drafted,design:{palette:"sea"}})});
@@ -48,6 +55,37 @@ describe("topic-driven card design", () => {
     expect(buildImagePrompt({...common,slide:{...body,layout:"collage"}})).toContain("different angle");
     expect(buildImagePrompt({...common,slide:{...body,layout:"collage"},slideLayout:"overlay"})).toContain("film grain");
   });
+
+  it("drops a figure that needs verification so the stat layout falls back", async () => {
+    const { guardSlidePoints }=await import("@/features/images/slidePoints");
+    const plan=createFallbackCarouselPlan({topic:"홍어 숙성",slideCount:3});
+    plan.slides[1]={...plan.slides[1],layout:"stat",figure:"12,000원"};
+    plan.slides[2]={...plan.slides[2],layout:"stat",figure:"3가지"};
+    const guarded=normalizeCarouselDesign(guardSlidePoints(plan));
+    expect(guarded.slides[1].figure).toBe("");
+    expect(guarded.slides[1].layout).toBe("browser");
+    expect(guarded.slides[2].layout).toBe("stat");
+  });
+
+  it("renders the five added layouts, with no photo for stat and qa and two photos for versus", async () => {
+    const a=await picture("#202020"),b=await picture("#2040a0");
+    const versus={...body,layout:"versus" as const,keywords:["홍어","가오리"],points:["코가 뾰족해요","톡 쏘는 향이 있어요","코가 둥글어요","살이 부드러워요"]};
+    const rendered=[
+      await composeSlideImage([],{...body,layout:"stat",figure:"3가지"},3,5,"card",{palette:"warm"}),
+      await composeSlideImage([a,b],versus,3,5,"card",{palette:"warm"}),
+      await composeSlideImage([a],{...body,layout:"step"},3,5,"card",{palette:"warm"}),
+      await composeSlideImage([],{...body,layout:"qa"},3,5,"card",{palette:"warm"}),
+      await composeSlideImage([a],{...body,layout:"quote"},3,5,"card",{palette:"warm"}),
+    ];
+    for(let i=0;i<rendered.length;i++)for(let j=i+1;j<rendered.length;j++)expect(rendered[i].equals(rendered[j])).toBe(false);
+    for(const image of rendered)expect(await sharp(image).metadata()).toMatchObject({format:"jpeg",width:1080,height:1350});
+    // 비교형은 왼쪽 위가 첫 사진(어두움), 오른쪽 위가 둘째 사진(파랑)이다.
+    expect((await pixel(rendered[1],8,8))[0]).toBeLessThan(60);
+    expect((await pixel(rendered[1],1070,8))[2]).toBeGreaterThan(120);
+    expect(photosNeeded("versus")).toBe(2);
+    expect(photosNeeded("qa")).toBe(0);
+    await expect(composeSlideImage([],{...body,layout:"quote"},3,5)).rejects.toThrow();
+  }, 90_000);
 
   it("renders each layout differently, paints with the chosen palette, and builds a collage from several photos", async () => {
     const a=await picture("#202020"),b=await picture("#2040a0"),c=await picture("#20a040");

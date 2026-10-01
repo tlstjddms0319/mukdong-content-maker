@@ -13,6 +13,7 @@ const coverSlide:CarouselSlidePlan={
   textPosition:"top",
   layout:"fullscreen",
   keywords:["홍어","막걸리"],
+  figure:"",
 };
 
 describe("slide composition", () => {

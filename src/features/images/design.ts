@@ -28,7 +28,7 @@ export const PALETTES:Record<PaletteId,{label:string;when:string;colors:Palette}
 };
 
 // 사장님이 고른 다섯 가지 카드뉴스 스타일. 글자는 코드로 찍고, 사진 분위기만 photoHint로 이미지 AI에 전달한다.
-export const CardLayoutSchema=z.enum(["fullscreen","frame","illustration","collage","browser"]);
+export const CardLayoutSchema=z.enum(["fullscreen","frame","illustration","collage","browser","stat","versus","step","qa","quote"]);
 export type CardLayout=z.infer<typeof CardLayoutSchema>;
 
 export const CARD_LAYOUTS:Record<CardLayout,{label:string;when:string;photoCount:number;coverAllowed:boolean;photoHint:string}>={
@@ -42,6 +42,16 @@ export const CARD_LAYOUTS:Record<CardLayout,{label:string;when:string;photoCount
     photoHint:"Clean editorial food photo with the subject centered and crop-safe; each candidate takes a clearly different angle so the three read as a set."},
   browser:{label:"브라우저 프레임",when:"먹는 순서, 확인할 점처럼 글자 위주 정보 장. 사진 없이 파스텔 배경에 브라우저 창 그래픽과 번호 목록",photoCount:0,coverAllowed:false,
     photoHint:""},
+  stat:{label:"대형 숫자",when:"주제나 내용 메모에 확인된 숫자가 있을 때만. 짙은 배경 가운데 아주 큰 숫자(figure)와 그 설명. 숫자가 없으면 고르지 말 것",photoCount:0,coverAllowed:false,
+    photoHint:""},
+  versus:{label:"A vs B 비교",when:"두 가지를 나란히 비교하는 장. 좌우 반반에 각각 사진·이름·체크 목록, 가운데 VS. keywords의 앞 두 개가 양쪽 이름이 된다",photoCount:2,coverAllowed:false,
+    photoHint:"Two candidates, one per side: each shows its own subject clearly centered on a plain background so the pair reads as a comparison."},
+  step:{label:"단계 가이드",when:"한 장에 한 단계를 설명하는 장. 왼쪽 위 STEP 스티커, 큰 제목, 가운데 사진, 아래 흰 상자에 설명",photoCount:1,coverAllowed:false,
+    photoHint:"Show the action of this single step clearly from the side or above, hands allowed, simple background."},
+  qa:{label:"Q&A 말풍선",when:"자주 묻는 질문, 고민 상담처럼 질문과 답이 한 쌍인 장. headline이 질문, 첫 요점이 답, 마지막 요점이 팁. 사진 없음",photoCount:0,coverAllowed:false,
+    photoHint:""},
+  quote:{label:"인용구",when:"한 문장이 기억에 남게 하는 장, 분위기 장, 표지. 톤을 낮춘 사진 위에 큰 따옴표와 흰 인용구, 아래 출처 줄",photoCount:1,coverAllowed:true,
+    photoHint:"Moody editorial photo with muted tones and side light; a back view or hands only, no recognizable face; keep the center-left area calm for text."},
 };
 
 export const DesignSpecSchema=z.object({palette:PaletteIdSchema});
@@ -59,17 +69,20 @@ const ROLE_LAYOUTS:Record<CarouselRole,CardLayout>={
   "how-to":"browser",
   pairing:"illustration",
   process:"browser",
-  occasion:"fullscreen",
+  occasion:"quote",
   mood:"fullscreen",
   visit:"collage",
-  cta:"frame",
+  cta:"qa",
 };
 
 export const defaultCardLayout=(role:CarouselRole):CardLayout=>ROLE_LAYOUTS[role];
 
-// 표지에 본문 전용 레이아웃을 주면 표지 기본값으로 바꾼다.
-export function normalizeCardLayout(role:CarouselRole,layout:CardLayout):CardLayout {
+// 표지에 본문 전용 레이아웃을 주거나, 숫자 없는 대형 숫자형, 이름 두 개가 없는 비교형처럼 재료가 모자라면 바꾼다.
+export function normalizeCardLayout(slide:{role:CarouselRole;layout:CardLayout;figure?:string;keywords?:string[]}):CardLayout {
+  const {role,layout}=slide;
   if(role==="cover"&&!CARD_LAYOUTS[layout].coverAllowed)return ROLE_LAYOUTS.cover;
+  if(layout==="stat"&&!slide.figure?.trim())return "browser";
+  if(layout==="versus"&&(slide.keywords?.length??0)<2)return "frame";
   return layout;
 }
 
@@ -77,5 +90,5 @@ export function normalizeCardLayout(role:CarouselRole,layout:CardLayout):CardLay
 export function designCatalogText():string {
   const palettes=PaletteIdSchema.options.map(id=>`${id}(${PALETTES[id].label}: ${PALETTES[id].when})`).join(", ");
   const layouts=CardLayoutSchema.options.map(id=>`${id}(${CARD_LAYOUTS[id].label}: ${CARD_LAYOUTS[id].when})`).join(", ");
-  return `design.palette는 주제의 분위기에 맞게 다음 중 하나: ${palettes}. 각 slide의 layout은 그 장의 내용에 맞게 다음 중 하나: ${layouts}. 표지는 fullscreen 또는 frame, 본문은 내용에 맞게 고르되 이어지는 두 장이 같은 layout이 되지 않게 섞고, browser는 사진이 없으니 글자 정보가 중심인 장에만 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣으세요(해시태그·검색창에 쓰임).`;
+  return `design.palette는 주제의 분위기에 맞게 다음 중 하나: ${palettes}. 각 slide의 layout은 그 장의 내용에 맞게 다음 중 하나: ${layouts}. 표지는 fullscreen, frame, quote 중에서, 본문은 내용에 맞게 고르되 이어지는 두 장이 같은 layout이 되지 않게 섞고, browser·qa·stat은 사진이 없으니 글자 정보가 중심인 장에만 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣으세요(해시태그·검색창·비교 이름에 쓰임). 각 slide의 figure는 stat 레이아웃에서 크게 보여 줄 숫자(예: "3가지", "48시간")이며, 주제나 내용 메모에 실제로 있는 숫자만 쓰고 그 외에는 빈 문자열로 두세요. 숫자를 지어내지 마세요.`;
 }

@@ -27,6 +27,7 @@ const visitSlide={
   textPosition:"bottom" as const,
   layout:"frame" as const,
   keywords:["방문 전"],
+  figure:"",
 };
 
 const carouselStyleAnchor="따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트";
