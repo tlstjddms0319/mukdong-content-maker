@@ -387,7 +387,7 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
     const label=await textLayer("TIP",{size:22,color:palette.ink,width:80,height:30,font:FONTS.bold});
     const text=tipLayer;
     const tipY=aY+aH+70;
-    layers.push(svgLayer(`<rect x="${MARGIN+88}" y="${tipY+6}" width="${text.info.width+24}" height="${text.info.height+4}" fill="${palette.highlight}" fill-opacity=".7" transform="skewX(-6)"/>`));
+    layers.push(svgLayer(`<rect x="${MARGIN+96}" y="${tipY+8}" width="${text.info.width+36}" height="${text.info.height}" fill="${palette.highlight}" fill-opacity=".7" transform="skewX(-6)"/>`));
     layers.push({input:label.data,left:MARGIN+20,top:tipY+8},{input:text.data,left:MARGIN+100,top:tipY});
   }
   const brand=await textLayer(STORE_NAME,{size:24,color:palette.muted,width:600,height:34,font:FONTS.regular});
