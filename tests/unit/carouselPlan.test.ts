@@ -111,6 +111,14 @@ describe("carousel planning", () => {
     expect(prompt).toContain("기존 이미지 설명: 없음");
     expect(prompt).toContain("가격, 원산지, 영업시간, 매장 정보");
     expect(prompt).toContain("음식 사진 장면");
+    // 장면 설명을 쓸 때 홍어가 주인공이고 수육·묵은지는 조연이라는 규칙이 들어간다.
+    expect(prompt).toContain("홍어가 주인공입니다");
+    expect(prompt).toContain("조연");
+    // 글에서도 홍어가 문장을 이끌고, 비교 장은 사진에서 보이는 차이만 쓴다.
+    expect(prompt).toContain("[홍어 중심]");
+    expect(prompt).toContain("수육이나 묵은지로 시작하는 요점");
+    expect(prompt).toContain("[비교 장]");
+    expect(prompt).toContain("코 모양, 몸 전체 생김새처럼 썬 회 사진에 나오지 않는 차이는 쓰지 마세요");
   });
 
   it("asks for slide points, ships safe fallback points, and drops risky provider points", async () => {

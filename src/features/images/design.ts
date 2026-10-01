@@ -59,6 +59,19 @@ export type DesignSpec=z.infer<typeof DesignSpecSchema>;
 export const DEFAULT_DESIGN:DesignSpec={palette:"warm"};
 
 export const paletteOf=(design?:DesignSpec):Palette=>PALETTES[design?.palette??DEFAULT_DESIGN.palette].colors;
+
+// 상대 휘도(WCAG 식)로 색이 밝은지 판단한다. 6자리 hex만 받는다.
+const luminance=(hex:string)=>{
+  const n=parseInt(hex.slice(1,7),16);
+  const [r,g,b]=[(n>>16)&255,(n>>8)&255,n&255].map(v=>{const c=v/255;return c<=.03928?c/12.92:((c+.055)/1.055)**2.4;});
+  return .2126*r+.7152*g+.0722*b;
+};
+export const isLight=(hex:string)=>luminance(hex)>.4;
+
+// 흰 상자나 고정된 연한 바탕처럼 팔레트와 무관한 면 위의 글자색. 밤 팔레트는 ink가 밝아 그런 면에서 사라지므로
+// 배경과 글자의 밝기가 같을 때만 짙은(또는 밝은) 기본색으로 바꾼다.
+export const inkOn=(background:string,palette:Palette)=>isLight(background)===isLight(palette.ink)?(isLight(background)?"#22272a":"#f3efe6"):palette.ink;
+export const mutedOn=(background:string,palette:Palette)=>isLight(background)===isLight(palette.muted)?(isLight(background)?"#6d746f":"#b5b0a3"):palette.muted;
 export const photosNeeded=(layout:CardLayout)=>CARD_LAYOUTS[layout].photoCount;
 
 // AI가 레이아웃을 고르지 못했을 때와 준비 문안에서 쓰는 역할별 기본 레이아웃. 이웃한 장이 겹치지 않게 짰다.

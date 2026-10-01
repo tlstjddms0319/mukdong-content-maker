@@ -9,3 +9,5 @@ playwright-report/
 graphify-out/
 .claude/
 ponytail/
+output/
+tsconfig.tsbuildinfo

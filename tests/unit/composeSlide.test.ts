@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { access } from "node:fs/promises";
-import { FONTS, composeSlideImage, renderSlideHeadline, renderSlidePoints } from "@/features/images/composeSlide";
+import { FONTS, balanceHeadline, composeSlideImage, renderSlideHeadline, renderSlidePoints } from "@/features/images/composeSlide";
 import type { CarouselSlidePlan } from "@/features/images/carousel";
 
 const coverSlide:CarouselSlidePlan={
@@ -75,4 +75,15 @@ describe("slide composition", () => {
     expect(await ink(regular!.data)).toBeLessThan(await ink(bold.data));
   }, 30_000);
 
+});
+
+describe("headline balancing", () => {
+  it("breaks after a comma instead of splitting a phrase", () => {
+    expect(balanceHeadline("비 오는 날엔 홍어 한 점, 막걸리 한 잔")).toBe("비 오는 날엔 홍어 한 점,\n막걸리 한 잔");
+  });
+
+  it("falls back to the space nearest the middle and leaves short titles alone", () => {
+    expect(balanceHeadline("처음이라면 살코기부터 천천히 시작하세요")).toBe("처음이라면 살코기부터\n천천히 시작하세요");
+    expect(balanceHeadline("홍어 한 점")).toBe("홍어 한 점");
+  });
 });
