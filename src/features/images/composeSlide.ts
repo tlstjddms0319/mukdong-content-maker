@@ -1,23 +1,44 @@
 import sharp, { type OverlayOptions } from "sharp";
 import path from "node:path";
 import { access } from "node:fs/promises";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { CarouselSlidePlan } from "./carousel";
 import { DEFAULT_SLIDE_LAYOUT, STORE_NAME, slideEyebrow, type SlideLayout } from "./slideLayout";
-import { type CardLayout, type DesignSpec, type Palette, inkOn, mutedOn, normalizeCardLayout, paletteOf, photosNeeded } from "./design";
+import { type CardLayout, type DesignSpecInput, type Palette, inkOn, mutedOn, normalizeCardLayout, paletteOf, photosNeeded } from "./design";
+import { typographyOf, type FontFace, type Typography } from "./typography";
 import { blob, cornerMarks, dotGrid, grainLayer, mascotLayer, ring, softShadow, sparkles, washiTape, wavyUnderline } from "./decor";
 
 function escapeXml(value:string):string {
   return value.replace(/[&<>"']/g,(character)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"})[character]!);
 }
 
-// 제목은 굵게, 본문은 보통 굵기, 라벨·번호는 중간 굵기. 굵은 글꼴 하나로 모든 글자를 찍으면 위계가 사라진다.
+// 글자의 역할은 세 가지다. bold=제목·강조(제목 글꼴), semibold=채널명·장 번호 같은 보조 글(본문 글꼴의 굵은 쪽),
+// regular=요점·설명(본문 글꼴). 각 그리기 함수는 역할만 고르고, 실제 글꼴 파일은 카드마다 고른 글꼴 설정에서 정해진다.
 const FONT_DIR=path.join(process.cwd(),"assets/fonts");
 type Font={file:string;family:string};
+const fontFile=(face:FontFace):Font=>({file:path.join(FONT_DIR,face.fileName),family:face.family});
+const DEFAULT_TYPOGRAPHY=typographyOf();
 export const FONTS={
-  bold:{file:path.join(FONT_DIR,"Pretendard-Bold.otf"),family:"Pretendard Bold"},
-  semibold:{file:path.join(FONT_DIR,"Pretendard-SemiBold.otf"),family:"Pretendard SemiBold"},
-  regular:{file:path.join(FONT_DIR,"Pretendard-Regular.otf"),family:"Pretendard"},
+  bold:fontFile(DEFAULT_TYPOGRAPHY.title),
+  semibold:fontFile(DEFAULT_TYPOGRAPHY.label),
+  regular:fontFile(DEFAULT_TYPOGRAPHY.body),
 } as const satisfies Record<string,Font>;
+
+// 큰 따옴표처럼 모양 자체가 장식인 기호는 고른 글꼴과 무관하게 Pretendard로 찍는다(주아·검은고딕의 따옴표는 가는 막대처럼 보인다).
+// FONTS.bold와 다른 객체라 resolveFont가 바꾸지 않는다.
+const DECOR_FONT:Font={...FONTS.bold};
+
+// 카드 한 장을 그리는 동안의 글꼴 설정. 서버는 여러 카드를 동시에 그릴 수 있으므로 모듈 변수 대신
+// AsyncLocalStorage에 담아, 같은 비동기 흐름 안의 textLayer만 그 값을 보게 한다(요청끼리 글꼴이 섞이지 않는다).
+const typographyStore=new AsyncLocalStorage<Typography>();
+function resolveFont(role:Font):Font {
+  const typography=typographyStore.getStore();
+  if(!typography)return role;
+  if(role===FONTS.bold)return fontFile(typography.title);
+  if(role===FONTS.semibold)return fontFile(typography.label);
+  if(role===FONTS.regular)return fontFile(typography.body);
+  return role;
+}
 
 type TextStyle={size:number;color:string;width:number;height:number;font?:Font;align?:"left"|"centre";spacing?:number};
 type Layer={data:Buffer;info:{width:number;height:number}};
@@ -28,7 +49,7 @@ const breakOnlyAtSpaces=(value:string)=>value.replace(/(\S)(?=\S)/g,"$1⁠");
 
 // 제목·요점·라벨이 모두 같은 경로로 그려지도록 하는 공용 텍스트 레이어. 결과의 info.height로 다음 요소 위치를 잡는다.
 async function textLayer(value:string,style:TextStyle):Promise<Layer> {
-  const font=style.font??FONTS.bold;
+  const font=resolveFont(style.font??FONTS.bold);
   await access(font.file);
   return sharp({text:{text:`<span foreground="${style.color}">${escapeXml(breakOnlyAtSpaces(value))}</span>`,font:`${font.family} ${style.size}`,fontfile:font.file,width:style.width,wrap:"word-char",align:style.align??"left",spacing:style.spacing??12,rgba:true}})
     .resize({width:style.width,height:style.height,fit:"inside",withoutEnlargement:true})
@@ -215,8 +236,11 @@ async function composeIllustration(inputs:Buffer[],slide:CarouselSlidePlan,index
       +sparkles([[bx-26,by-8,15],[Math.min(1056,bx+bw+22),by+bh-10,10]],palette.accent)));
     layers.push({input:text.data,left:bx+36,top:by+20});
   }
-  // 마스코트가 카드의 왼쪽 아래 모서리를 살짝 가리며 고개를 내민다. 채널명 줄 위에서 끝난다.
-  const mascot=await mascotLayer({width:200,pose:"hello",left:MARGIN-26,top:Math.min(1244,cardTop+tilted.info.height+36),anchor:"bottom-left"});
+  // 마스코트는 카드 왼쪽 아래 바깥의 빈 공간에 세운다. 머리는 카드의 아래 여백(글이 없는 띠)까지만 올라오게
+  // 높이를 제한해, 본문 글줄을 가리지 않는다. 카드가 길어 공간이 모자라면 줄이고, 너무 좁으면 생략한다.
+  const cardBottom=cardTop+tilted.info.height;
+  const MASCOT_FOOT=1284;
+  const mascot=await mascotLayer({width:200,pose:"hello",left:MARGIN-26,top:MASCOT_FOOT,anchor:"bottom-left",maxHeight:MASCOT_FOOT-(cardBottom-Math.round(PAD*.6))});
   if(mascot)layers.push(mascot);
   // 다른 카드와 같게 채널명은 왼쪽, 장 번호는 오른쪽 아래. 마스코트가 있으면 채널명은 그 오른쪽으로 비킨다.
   const brand=await textLayer(STORE_NAME,{size:META,color:palette.ink,width:500,height:36,font:FONTS.semibold});
@@ -312,7 +336,8 @@ async function composeBrowser(slide:CarouselSlidePlan,index:number,total:number,
   const brand=await textLayer(STORE_NAME,{size:META,color:palette.ink,width:600,height:36,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:palette.ink,width:200,height:36,font:FONTS.semibold});
   // 마스코트가 창의 왼쪽 아래 모서리에 걸터앉는다. 채널명은 마스코트 오른쪽으로 비킨다.
-  const mascot=await mascotLayer({width:150,pose:"curious",left:MARGIN-12,top:WIN_TOP+WIN_H+88,anchor:"bottom-left"});
+  // 검색창 캡슐 아래로만 올라오게 높이를 제한한다(캡슐 글자를 가리지 않게).
+  const mascot=await mascotLayer({width:150,pose:"curious",left:MARGIN-12,top:WIN_TOP+WIN_H+88,anchor:"bottom-left",maxHeight:WIN_TOP+WIN_H+88-(capY+capH+12)});
   return canvas(palette.soft,[
     // 창 뒤 배경 장식: 오른쪽 위 밝은 덩어리, 왼쪽 아래 옅은 강조색 덩어리, 창 모서리 밖 반짝이.
     svgLayer(blob({cx:960,cy:130,r:210,color:palette.highlight,opacity:.5,seed:5})+blob({cx:110,cy:1230,r:170,color:palette.accent,opacity:.12,seed:11})
@@ -530,7 +555,7 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
 async function composeQuote(inputs:Buffer[],slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
   const white="#ffffff";
   const background=await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover"}).modulate({saturation:.3,brightness:.55}).png().toBuffer();
-  const mark=await textLayer("“",{size:220,color:palette.highlight,width:300,height:240,font:FONTS.bold,spacing:0});
+  const mark=await textLayer("“",{size:220,color:palette.highlight,width:300,height:240,font:DECOR_FONT,spacing:0});
   const quote=await renderSlideHeadline(slide.headline,{size:56,color:white,align:"left",width:860,height:420,balance:false});
   const lines=cleanPoints(slide.points);
   // 마지막 장이면 오른쪽 아래에서 마스코트가 손을 흔든다(bye). 출처·부연 글은 마스코트 폭만큼 좁게 접는다.
@@ -571,10 +596,10 @@ const CARD_RENDERERS:Record<CardLayout,(inputs:Buffer[],slide:CarouselSlidePlan,
 };
 
 // 사진 한 장 또는 여러 장(콜라주)을 받아 한 장의 카드로 만든다. 브라우저형은 사진 없이 그린다.
-export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpec):Promise<Buffer> {
+export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput):Promise<Buffer> {
   await access(FONTS.bold.file);
   const inputs=Array.isArray(input)?input:[input];
   const card:CardLayout=layout==="overlay"?"fullscreen":normalizeCardLayout(slide);
   if(photosNeeded(card)>0&&!inputs.length)throw new Error("slide image required");
-  return CARD_RENDERERS[card](inputs,slide,index,total,paletteOf(design));
+  return typographyStore.run(typographyOf(design?.titleFont,design?.bodyFont),()=>CARD_RENDERERS[card](inputs,slide,index,total,paletteOf(design)));
 }
