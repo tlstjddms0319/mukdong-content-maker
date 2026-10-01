@@ -16,7 +16,7 @@ async function temporaryDirectory(){
 
 const connection={
   instagramUserId:"17841400000000000", username:"mukdong", accessToken:"private-token",
-  expiresAt:"2026-10-01T00:00:00.000Z",
+  expiresAt:"2099-01-01T00:00:00.000Z",
   scopes:["instagram_business_basic","instagram_business_content_publish"] as ("instagram_business_basic"|"instagram_business_content_publish")[],
   connectedAt:"2026-09-11T00:00:00.000Z", updatedAt:"2026-09-11T00:00:00.000Z",
 };

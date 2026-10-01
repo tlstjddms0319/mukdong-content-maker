@@ -110,7 +110,7 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
   if(!nextPlan)return;
   patch({phase:"cover",error:""});
   try{
-    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:nextPlan.slides[0],styleAnchor:nextPlan.styleAnchor,slideIndex:1,count:2,...(state.refinements[0]?.trim()?{refinement:state.refinements[0].trim()}:{}),...(state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:{})})});
+    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:nextPlan.slides[0],styleAnchor:nextPlan.styleAnchor,design:nextPlan.design,slideIndex:1,count:2,...(state.refinements[0]?.trim()?{refinement:state.refinements[0].trim()}:{}),...(state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:{})})});
     const data=await response.json();
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"표지 후보를 만들지 못했습니다.");
@@ -144,7 +144,7 @@ export async function startPlan(){
 }
 
 async function generate(slide:CarouselPlan["slides"][number],index:number,refinement=""):Promise<ApprovedImage>{
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,slideIndex:index,count:1,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFields()})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count:1,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFields()})});
   const data=await response.json();
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");

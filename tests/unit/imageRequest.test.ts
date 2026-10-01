@@ -25,11 +25,12 @@ const visitSlide={
   points:[],
   visualPrompt:"따뜻한 저녁 조명 아래 편안한 홍어 한 상을 넓게 담은 음식 사진",
   textPosition:"bottom" as const,
+  layout:"statement" as const,
 };
 
 const carouselStyleAnchor="따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트";
 const visitSlideMetadata={slide:visitSlide,slideIndex:5,slideTotal:5,styleAnchor:carouselStyleAnchor};
-const coverSlide={...visitSlide,role:"cover" as const,headline:"비 오는 날 홍어 한 상"};
+const coverSlide={...visitSlide,role:"cover" as const,headline:"비 오는 날 홍어 한 상",layout:"cover-bleed" as const};
 
 describe("OpenAI image request", () => {
   it("uses the cooked preparation instead of a raw-slice directive for hongeo jeon",()=>{
