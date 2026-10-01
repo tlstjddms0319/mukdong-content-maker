@@ -7,7 +7,9 @@ import { GenerationProgress } from "@/components/states/GenerationState";
 
 const PROVIDER_LABELS:Record<string,string>={gemini:"Gemini",groq:"Groq",cloudflare:"Cloudflare"};
 
-export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience="A",contentBrief,imageBrief,hasAiImages=false,initialText,onTextChange,onContinue,saving=false}:{topic?:string;audience?:"A"|"B"|"C";contentBrief?:string;imageBrief?:string;hasAiImages?:boolean;initialText?:string;onTextChange?:(text:string)=>void;onContinue:(text:string)=>void;saving?:boolean}) {
+export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience="A",contentBrief,imageBrief,hasAiImages=false,slideOutline,initialText,onTextChange,onContinue,saving=false}:{topic?:string;audience?:"A"|"B"|"C";contentBrief?:string;imageBrief?:string;hasAiImages?:boolean;slideOutline?:string[];initialText?:string;onTextChange?:(text:string)=>void;onContinue:(text:string)=>void;saving?:boolean}) {
+  // 배열은 렌더마다 새 참조라 effect 의존성에는 문자열로 넣는다.
+  const outlineKey=slideOutline?.join("\n")??"";
   const [text,setText]=useState(initialText??"");
   const [status,setStatus]=useState<"loading"|"ai"|"fallback"|"saved">(initialText?"saved":"loading");
   const [provider,setProvider]=useState("");
@@ -22,7 +24,7 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     if(focus&&!section){setError("부분 수정은 첫 문장·본문·가게 소개·마무리가 빈 줄로 나뉜 문안에서 사용할 수 있어요.");return;}
     const run=++runRef.current;edited.current=false;setStatus("loading");setError("");
     try{
-      const response=await fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,focus,...(focus?{currentText:current}:{})})});
+      const response=await fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,...(outlineKey?{slideOutline:outlineKey.split("\n")}:{}),focus,...(focus?{currentText:current}:{})})});
       const copy=await response.json();
       if(!response.ok)throw new Error(copy.message||"문안을 만들지 못했어요. 다시 시도해 주세요.");
       if(run!==runRef.current)return;
@@ -37,12 +39,12 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     if(edited.current)return;
     const runCounter=runRef;
     let active=true;
-    fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages})})
+    fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,...(outlineKey?{slideOutline:outlineKey.split("\n")}:{})})})
       .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.message||"문안을 만들지 못했어요.");return body;})
       .then(copy=>{if(active){if(!edited.current){const next=formatCopy(copy);setText(next);onTextChange?.(next);setFactsToVerify(copy.facts_to_verify??[]);}setProvider(String(copy._meta?.provider??""));setStatus("ai");}})
       .catch(reason=>{if(active){setStatus("fallback");setError(reason instanceof Error?reason.message:"문안을 만들지 못했어요. 다시 시도해 주세요.");}});
     return ()=>{active=false;runCounter.current++;};
-  },[topic,audience,contentBrief,imageBrief,hasAiImages,onTextChange]);
+  },[topic,audience,contentBrief,imageBrief,hasAiImages,outlineKey,onTextChange]);
   return <section className="copy-layout" aria-labelledby="copy-title"><div>
     <p className="eyebrow">3 문안</p><h2 id="copy-title">완성된 글을 확인해요</h2><p className="lead">음식 이야기에서 묵동홍어마을 방문 안내까지 자연스럽게 이어가요. 글 길이는 설정에서 바꿀 수 있어요.</p>
     {contentBrief&&<p className="copy-brief"><strong>글의 설명 방향</strong><br/>{contentBrief}</p>}

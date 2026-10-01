@@ -116,4 +116,14 @@ describe("copy quality",()=>{
     expect((await response.json())._meta).toMatchObject({provider:"gemini"});
   });
 
+  it("hands the carousel headline order to the writer so the caption follows the same story", async () => {
+    generate.mockResolvedValue(result);
+    const response=await POST(request({slideOutline:["홍어는 왜 톡 쏠까요?","가까이 보면 결이 이렇게 살아 있어요","가기 전에 이것만 확인하면 돼요"]}));
+    expect(response.status).toBe(200);
+    const prompt=String(generate.mock.calls[0][0]);
+    expect(prompt).toContain("캐러셀 슬라이드 제목 순서");
+    expect(prompt).toContain("홍어는 왜 톡 쏠까요?");
+    expect(prompt).toContain("같은 이야기 흐름");
+  });
+
 });

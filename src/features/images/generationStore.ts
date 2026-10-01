@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { CarouselPlan, CarouselRole, CarouselSlideCount } from "./carousel";
 import type { ImageStyle } from "./style";
 import { DEFAULT_SLIDE_LAYOUT, type SlideLayout } from "./slideLayout";
+import { normalizeCardLayout, photosNeeded } from "./design";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
 // 화면(ImageStudio)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
@@ -24,6 +25,7 @@ export type GenerationState={
   photoStatus:string;
   providerNotice:string;
   plan?:CarouselPlan;
+  planFallback:boolean;      // AI가 구성안을 못 만들어 준비된 기본 문안으로 채웠는지. 표지 생성 전에 사용자가 다시 시도할 수 있게 멈춘다.
   covers:ApprovedImage[];
   cover?:ApprovedImage;
   slides:ApprovedImage[];
@@ -37,11 +39,11 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{}};
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{}};
 }
 
 // 만든 것들만 비우고 모드·화풍·참고 사진은 남긴다(모드 카드나 표지 다시 만들기에서 쓰는 초기화).
-const CLEARED:Partial<GenerationState>={plan:undefined,refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:""};
+const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:""};
 
 let state:GenerationState=initialGenerationState("",EMPTY_INPUT);
 // 늦게 도착한 응답을 버리기 위한 토큰. 새 작업이 시작되거나 상태가 초기화될 때마다 올라간다.
@@ -109,7 +111,7 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
   if(!nextPlan)return;
   patch({phase:"cover",error:""});
   try{
-    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:nextPlan.slides[0],styleAnchor:nextPlan.styleAnchor,slideIndex:1,count:2,...(state.refinements[0]?.trim()?{refinement:state.refinements[0].trim()}:{}),...(state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:{})})});
+    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:nextPlan.slides[0],styleAnchor:nextPlan.styleAnchor,design:nextPlan.design,slideIndex:1,count:2,...(state.refinements[0]?.trim()?{refinement:state.refinements[0].trim()}:{}),...(state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:{})})});
     const data=await response.json();
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"표지 후보를 만들지 못했습니다.");
@@ -133,7 +135,9 @@ export async function startPlan(){
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
     const next=data.plan as CarouselPlan;
-    patch({plan:next});
+    // 기본 문안은 주제와 무관한 일반 문장이라, 그걸로 이미지를 만들어 크레딧을 쓰기 전에 멈추고 알린다.
+    if(data.provider==="fallback"){patch({plan:next,planFallback:true,phase:"idle"});return;}
+    patch({plan:next,planFallback:false});
     void requestCovers(next,token);
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"구성안을 만들지 못했습니다.",phase:"idle"});
@@ -141,7 +145,9 @@ export async function startPlan(){
 }
 
 async function generate(slide:CarouselPlan["slides"][number],index:number,refinement=""):Promise<ApprovedImage>{
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,slideIndex:index,count:1,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFields()})});
+  // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
+  const count=state.slideLayout==="card"?Math.max(1,photosNeeded(normalizeCardLayout(slide))):1;
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFields()})});
   const data=await response.json();
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");

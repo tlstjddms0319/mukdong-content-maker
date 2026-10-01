@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ASSET_KIND_LABELS, FreeCardInputSchema, type FreeCardInput, type FreeCard, type LibraryAsset } from "./freeCards";
 
-const fontfile=path.join(process.cwd(),"assets/fonts/NanumGothic-Bold.ttf");
+const fontfile=path.join(process.cwd(),"assets/fonts/Pretendard-Bold.otf");
 const ink="#193c32",muted="#65716a",accent="#c65138",paper="#f5f1e8";
 const escape=(value:string)=>value.replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"})[char]!);
 
@@ -15,7 +15,7 @@ export async function renderFreeCard(value:FreeCardInput,available:LibraryAsset[
   const layers:OverlayOptions[]=[];
   async function text(value:string,x:number,y:number,width:number,height:number,size:number,color=ink) {
     if(!value.trim())return;
-    const result=await sharp({text:{text:`<span foreground="${color}">${escape(value)}</span>`,font:`NanumGothic Bold ${size}`,fontfile,width,wrap:"word-char",spacing:14,rgba:true}})
+    const result=await sharp({text:{text:`<span foreground="${color}">${escape(value)}</span>`,font:`Pretendard Bold ${size}`,fontfile,width,wrap:"word-char",spacing:14,rgba:true}})
       .resize({width,height,fit:"inside",withoutEnlargement:true}).png().toBuffer();
     layers.push({input:result,left:x,top:y});
   }

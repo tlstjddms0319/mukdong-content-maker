@@ -124,13 +124,32 @@ describe("carousel planning", () => {
 
     const providerPlan=createFallbackCarouselPlan({topic:"홍어와 가오리",slideCount:3});
     providerPlan.slides[0].points=["표지에는 넣지 말아야 할 줄"];
-    providerPlan.slides[1].points=["한 점을 만드는 순간","코가 뾰족하면 홍어예요","한 접시 12,000원","냄새 없음 보장","저녁 6시부터 영업"];
+    providerPlan.slides[1].points=[providerPlan.slides[1].headline,"코가 뾰족하면 홍어예요","한 접시 12,000원","냄새 없음 보장","저녁 6시부터 영업"];
     generateJson.mockResolvedValue({...providerPlan,slides:providerPlan.slides.map(slide=>({...slide,points:slide.points?.slice(0,4)}))});
     const response=await POST(new Request("http://localhost/api/images/plan",{method:"POST",body:JSON.stringify({topic:"홍어와 가오리",slideCount:3})}));
     const body=await response.json();
     expect(body.provider).toBe("gemini");
     expect(body.plan.slides[0].points).toEqual([]);
     expect(body.plan.slides[1].points).toEqual(["코가 뾰족하면 홍어예요"]);
+  });
+
+  it("asks for one connected story in a human voice with people in the scenes", () => {
+    const prompt=buildCarouselPlanPrompt({topic:"홍어와 가오리",slideCount:5});
+    expect(prompt).toContain("한 편의 이야기");
+    expect(prompt).toContain("다음 장의 내용을 예고");
+    expect(prompt).toContain("명사로 끝나는 슬로건");
+    expect(prompt).toContain("해요체");
+    expect(prompt).toContain("3장 이상에는 손, 젓가락, 잔, 뒷모습");
+    expect(prompt).toContain("얼굴은 프레임 밖");
+  });
+
+  it("ships fallback slides that hand off to the next slide and show people eating without faces", () => {
+    const fallback=createFallbackCarouselPlan({topic:"홍어와 가오리",slideCount:5});
+    const body=fallback.slides.slice(1,-1);
+    expect(body.every(slide=>/다음 장|이어서|남았어요/.test(slide.points.at(-1)!))).toBe(true);
+    expect(fallback.slides.filter(slide=>/손|젓가락|잔/.test(slide.visualPrompt)).length).toBeGreaterThanOrEqual(3);
+    expect(fallback.slides.every(slide=>/얼굴 없음|얼굴은 프레임 밖/.test(slide.visualPrompt))).toBe(true);
+    expect(fallback.slides.slice(1).every(slide=>/[요다까]\??$/.test(slide.headline))).toBe(true);
   });
 
   it("asks for drawn scenes and a matching style anchor when an art style is chosen", () => {

@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DraftWizard } from "@/components/wizard/DraftWizard";
-const plan={slideCount:3,styleAnchor:"따뜻한 흰 그릇과 나무 테이블의 일관된 음식 사진",slides:[{role:"cover",headline:"표지",visualPrompt:"선명한 완성 음식 한 상을 정면에서 담은 사진",textPosition:"top"},{role:"how-to",headline:"먹는 법",visualPrompt:"젓가락으로 한 점을 만드는 손동작 음식 사진",textPosition:"bottom"},{role:"visit",headline:"방문",visualPrompt:"편안한 완성 상차림을 담은 음식 사진 장면",textPosition:"bottom"}]};
+const plan={slideCount:3,styleAnchor:"따뜻한 흰 그릇과 나무 테이블의 일관된 음식 사진",design:{palette:"warm"},slides:[{role:"cover",headline:"표지",points:[],visualPrompt:"선명한 완성 음식 한 상을 정면에서 담은 사진",textPosition:"top",layout:"fullscreen",keywords:["홍어"],figure:""},{role:"how-to",headline:"먹는 법",points:[],visualPrompt:"젓가락으로 한 점을 만드는 손동작 음식 사진",textPosition:"bottom",layout:"frame",keywords:["먹는 법"],figure:""},{role:"visit",headline:"방문",points:[],visualPrompt:"편안한 완성 상차림을 담은 음식 사진 장면",textPosition:"bottom",layout:"frame",keywords:["방문"],figure:""}]};
 describe("DraftWizard",()=>{
   it.each([["ai-edited",true],["design",false]] as const)("restores the image brief and passes %s provenance into new copy",async(source,hasAiImages)=>{
     const id="33333333-3333-4333-8333-333333333333",mediaId="22222222-2222-4222-8222-222222222222";

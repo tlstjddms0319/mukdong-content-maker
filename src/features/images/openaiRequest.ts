@@ -1,5 +1,6 @@
 import type { ImageBrief } from "./schema";
 import { IMAGE_STYLE_DIRECTIONS, resolveImageStyle } from "./style";
+import { CARD_LAYOUTS } from "./design";
 import { toFile } from "openai";
 
 function foodDirection(input:ImageBrief):string {
@@ -19,13 +20,34 @@ function foodDirection(input:ImageBrief):string {
   return preparations.join(" ")+" 이번 장면에 해당하는 조리법만 표현한다. 두꺼운 정육면체 회, 두부 같은 고기 블록, 탑처럼 높은 적층, 초밥이나 연어로 바꾸는 표현은 금지한다. 메뉴와 무관한 장식 소스는 추가하지 않는다.";
 }
 
+// 후보마다 다른 구도. 같은 프롬프트를 n번 보내면 모델의 우연 말고는 차이가 없어서, 후보 번호로 각도와 거리를 갈라 준다.
+export const CANDIDATE_VARIANTS:readonly string[]=[
+  "45도 위에서 접시 전체와 주변 곁들임이 보이게. 테이블 가장자리에 젓가락을 든 손이 살짝 들어온다",
+  "눈높이에서 가까이. 젓가락으로 집어 올린 한 점이 앞에, 상차림은 뒤에서 흐릿하게",
+  "바로 위에서 내려다본 상차림. 마주 앉은 두 사람의 손과 잔이 양쪽 가장자리에",
+  "옆에서 낮게. 테이블 위 그릇의 높이 차이와 조명의 결이 보이게",
+];
+
+// 후보 한 장마다 구도가 다른 요청으로 나눈다. 한 장만 만들 때는 구도를 따로 주지 않는다.
+export function candidateBriefs(input:ImageBrief):ImageBrief[] {
+  const offset=input.candidateOffset??0;
+  const total=offset+input.count;
+  return Array.from({length:input.count},(_,index)=>({
+    ...input,
+    count:1,
+    candidateOffset:undefined,
+    variant:total>1?CANDIDATE_VARIANTS[(offset+index)%CANDIDATE_VARIANTS.length]:input.variant,
+  }));
+}
+
 // 참고 이미지를 어떻게 쓸지 알려 주는 문장. 어떤 모드든 참고 이미지 속 글자·표·캐릭터를 베끼지 않게 한다.
 function referenceDirection(input:ImageBrief):string {
   const noCopy="참고 이미지 안의 글자, 표, 로고, 캐릭터, 장식은 복제하지 말 것.";
   if(input.referenceMode==="continuity") return input.refinement
     // 수정 요청이 있는 재생성에서 "동일하게 유지"를 그대로 두면 요청이 묻히므로, 기준은 잇되 요청을 우선시킨다.
     ? `첨부 이미지는 선택된 AI 표지의 글자 없는 원본이다. 음식의 종류와 그릇, 테이블, 색감의 기준은 이어 가되, 사용자의 수정 요청과 충돌하면 수정 요청을 우선한다. ${noCopy}`
-    : `첨부 이미지는 선택된 AI 표지의 글자 없는 원본이다. 음식의 형태, 그릇, 테이블, 조명과 색감을 동일하게 유지하면서 이번 슬라이드 장면에 맞게 촬영 거리와 구도만 바꿀 것. ${noCopy}`;
+    // 표지를 그대로 잠그면 거리만 다른 같은 접시가 반복된다. 분위기만 잇고 장면은 새로 만든다.
+    : `첨부 이미지는 선택된 AI 표지의 글자 없는 원본이다. 색감, 조명의 방향, 그릇과 테이블의 재질 같은 분위기만 이어 가고, 장면·구도·촬영 거리·피사체 배치는 이번 슬라이드 장면 설명대로 새로 만들 것. 표지와 같은 접시 배치를 다시 그리지 말 것. ${noCopy}`;
   if(input.referenceMode==="style") return `첨부 이미지는 화풍, 색감, 조명, 분위기만 참고한다. 참고 이미지 속 음식과 사물의 배치는 따르지 말고 선택 주제와 슬라이드 장면에 맞는 새 구도로 만들 것. ${noCopy}`;
   return `첨부한 원본 음식의 형태와 특징은 유지하고 조명, 색감, 구도만 자연스럽게 보완할 것. ${noCopy}`;
 }
@@ -46,17 +68,16 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 장면 설명이나 공통 스타일에 "사진"이 남아 있어도 화풍 지시가 이기도록 한 번 더 못 박는다.
     styleId==="photo" ? "" : `화풍: ${style.anchor}. 장면 설명이나 공통 스타일에 '사진'이라는 말이 있어도 사진처럼 만들지 말고 이 화풍으로 그릴 것.`,
     input.slide?.role==="detail"?"Macro detail: emphasize the actual texture of one bite with a gently blurred background. Keep the focal food clear of the title area; the plate may extend beyond the frame.":input.slide?.role==="overview"?"Top-down overview: keep the whole plate inside the central 75% crop-safe area, with sufficient depth of field to read the arrangement.":"Keep the main food inside the central 75% crop-safe area; use depth of field appropriate to this scene, without losing the food's recognizable shape.",
+    input.variant ? `이 후보만의 구도: ${input.variant}.` : "",
+    // 사람이 먹고 있는 느낌은 장면 설명이 요구할 때만, 얼굴이 식별되지 않는 범위에서 넣는다.
+    "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
     foodDirection(input),
-    // 카드형은 사진이 카드 안에 통째로 들어가므로 글자 여백이 필요 없고, 사진 위 글자형만 위/아래 여백을 요청한다.
-    input.slide ? (input.slideLayout==="overlay"
-      ? (input.slide.points?.length
-        ? `나중에 제목과 요점 문구를 합성할 수 있도록 이미지의 ${input.slide.textPosition==="top"?"위쪽":"아래쪽"} 40% 정도를 복잡하지 않은 안전 여백으로 둘 것.`
-        : `나중에 제목을 합성할 수 있도록 이미지의 ${input.slide.textPosition==="top"?"위쪽":"아래쪽"}에 복잡하지 않은 안전 여백을 둘 것.`)
-      : "이 이미지는 카드 안에 가로로 넓게 잘려 들어가므로 음식을 화면 가운데에 크게 두고 위아래 가장자리에는 중요한 요소를 두지 말 것.") : "",
+    // 레이아웃마다 사진이 쓰이는 방식이 달라서, 그 레이아웃의 사진 분위기와 여백 요청을 붙인다.
+    input.slide ? CARD_LAYOUTS[input.slideLayout==="overlay"?"fullscreen":input.slide.layout].photoHint : "",
     reference ? referenceDirection(input) : "",
     // 수정 요청은 위의 화풍·구도 지침보다 우선한다고 명시해야 "애니메이션 풍으로" 같은 요청이 사진 지시에 묻히지 않는다.
     input.refinement ? `사용자의 수정 요청(가장 우선): ${JSON.stringify(input.refinement)}. 위의 화풍·구도·조명 지침과 충돌하면 이 요청을 따른다. 음식의 종류와 사실 기준은 유지한다.` : "",
-    "이미지 안에 글자, 로고, 가격표를 넣지 말 것. 실제 매장 외관, 손님 얼굴, 확인되지 않은 원산지나 메뉴 구성을 만들지 말 것.",
+    "이미지 안에 글자, 로고, 가격표를 넣지 말 것. 실제 매장 외관, 식별되는 얼굴, 확인되지 않은 원산지나 메뉴 구성을 만들지 말 것.",
     NO_TEXT_DIRECTIVE,
   ].filter(Boolean).join(" ");
 };
@@ -69,8 +90,9 @@ export async function buildImageEditRequest(input:ImageBrief&{referenceImage:str
   const [,mime,encoded]=input.referenceImage.match(/^data:image\/(png|jpeg|webp);base64,(.+)$/)??[];
   if(!mime||!encoded)throw new Error("참고 이미지 형식이 올바르지 않습니다.");
   const image=await toFile(Buffer.from(encoded,"base64"),`reference.${mime==="jpeg"?"jpg":mime}`,{type:`image/${mime}`});
-  // 높은 충실도는 참고 이미지를 거의 그대로 잠근다. 화풍만 참고하거나, 수정 요청이 있거나, 그림 화풍이면 낮춰서 바뀔 여지를 준다.
-  const keepClose=input.referenceMode!=="style"&&!input.refinement&&resolveImageStyle(input)==="photo";
+  // 높은 충실도는 참고 이미지를 거의 그대로 잠근다. 사용자가 올린 실제 음식 사진을 그대로 살릴 때만 쓰고,
+  // 화풍 참고, 표지 이어 가기, 수정 요청, 그림 화풍에서는 낮춰서 장면이 바뀔 여지를 준다.
+  const keepClose=(input.referenceMode??"source")==="source"&&!input.refinement&&resolveImageStyle(input)==="photo";
   const input_fidelity:"high"|"low"=keepClose?"high":"low";
   return {model:"gpt-image-1.5" as const,quality,image,prompt:buildImagePrompt(input,true),size:"1024x1536" as const,n:input.count,input_fidelity};
 }

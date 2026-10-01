@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ImageStudio } from "@/components/images/ImageStudio";
 import { resetGenerationStore } from "@/features/images/generationStore";
 
-const plan={slideCount:3,styleAnchor:"따뜻한 흰 그릇과 나무 테이블의 일관된 음식 사진",slides:[{role:"cover",headline:"표지",visualPrompt:"선명한 완성 음식 한 상을 정면에서 담은 사진",textPosition:"top"},{role:"how-to",headline:"먹는 법",visualPrompt:"젓가락으로 한 점을 만드는 손동작 음식 사진",textPosition:"bottom"},{role:"visit",headline:"방문",visualPrompt:"편안한 완성 상차림을 담은 음식 사진 장면",textPosition:"bottom"}]};
+const plan={slideCount:3,styleAnchor:"따뜻한 흰 그릇과 나무 테이블의 일관된 음식 사진",design:{palette:"warm"},slides:[{role:"cover",headline:"표지",points:[],visualPrompt:"선명한 완성 음식 한 상을 정면에서 담은 사진",textPosition:"top",layout:"fullscreen",keywords:["홍어"],figure:""},{role:"how-to",headline:"먹는 법",points:[],visualPrompt:"젓가락으로 한 점을 만드는 손동작 음식 사진",textPosition:"bottom",layout:"frame",keywords:["먹는 법"],figure:""},{role:"visit",headline:"방문",points:[],visualPrompt:"편안한 완성 상차림을 담은 음식 사진 장면",textPosition:"bottom",layout:"frame",keywords:["방문"],figure:""}]};
 describe("ImageStudio carousel",()=>{
   it("uses the clean selected cover as a reference and can replace only one slide",async()=>{
     let slideCalls=0;
@@ -108,7 +108,7 @@ describe("ImageStudio carousel",()=>{
     const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:["slide"]})});vi.stubGlobal("fetch",request);
     render(<ImageStudio topic="디자인 주제" slideCount={3} onApprove={()=>undefined}/>);
     fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));
-    expect(screen.getByRole("button",{name:"카드형"})).toHaveAttribute("aria-pressed","true");
+    expect(screen.getByRole("button",{name:"장마다 자동"})).toHaveAttribute("aria-pressed","true");
     fireEvent.click(screen.getByRole("button",{name:"사진 위 글자"}));
     fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));await screen.findByRole("button",{name:"표지 후보 1 선택"});
     const body=JSON.parse(String(request.mock.calls.find(([url])=>url==="/api/images/generate")![1]?.body));
@@ -124,6 +124,18 @@ describe("ImageStudio carousel",()=>{
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({message:"사진을 올릴 수 없어요."})})));
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["b"],"failure.png",{type:"image/png"})]}});
     expect(await screen.findByRole("alert")).toHaveTextContent("사진을 올릴 수 없어요.");expect(screen.getByRole("button",{name:"실제 사진 사용"})).toHaveAttribute("aria-pressed","true");expect(screen.getByText("사진을 여기에 끌어놓으세요")).toBeInTheDocument();
+  });
+  it("stops before making covers when the plan came from the prepared fallback and retries on request",async()=>{
+    let planCalls=0;
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan,provider:++planCalls===1?"fallback":"gemini"})}:{ok:true,json:async()=>({images:JSON.parse(String(init?.body)).count===2?["cover-1","cover-2"]:["slide"]})});
+    vi.stubGlobal("fetch",request);render(<ImageStudio topic="기본 문안" slideCount={3} onApprove={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
+    expect(await screen.findByRole("alert")).toHaveTextContent("기본 문안으로 채웠어요");
+    expect(request.mock.calls.filter(([url])=>url==="/api/images/generate")).toHaveLength(0);
+    expect(screen.getByRole("button",{name:"기본 구성안으로 표지 만들기"})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"구성안 다시 만들기"}));
+    await screen.findByRole("button",{name:"표지 후보 1 선택"});
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
   it("keeps AI mode selected when plan generation fails",async()=>{
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({message:"구성안을 만들 수 없어요."})})));render(<ImageStudio topic="AI 오류" slideCount={3} onApprove={()=>undefined}/>);

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
-import { buildImageEditRequest, buildImageRequest } from "@/features/images/openaiRequest";
+import { CANDIDATE_VARIANTS, buildImageEditRequest, buildImagePrompt, buildImageRequest, candidateBriefs } from "@/features/images/openaiRequest";
 import { POST as generateImages } from "@/app/api/images/generate/route";
 import { composeSlideImage } from "@/features/images/composeSlide";
 import { ImageBriefSchema } from "@/features/images/schema";
@@ -25,11 +25,14 @@ const visitSlide={
   points:[],
   visualPrompt:"따뜻한 저녁 조명 아래 편안한 홍어 한 상을 넓게 담은 음식 사진",
   textPosition:"bottom" as const,
+  layout:"frame" as const,
+  keywords:["방문 전"],
+  figure:"",
 };
 
 const carouselStyleAnchor="따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트";
 const visitSlideMetadata={slide:visitSlide,slideIndex:5,slideTotal:5,styleAnchor:carouselStyleAnchor};
-const coverSlide={...visitSlide,role:"cover" as const,headline:"비 오는 날 홍어 한 상"};
+const coverSlide={...visitSlide,role:"cover" as const,headline:"비 오는 날 홍어 한 상",layout:"fullscreen" as const};
 
 describe("OpenAI image request", () => {
   it("uses the cooked preparation instead of a raw-slice directive for hongeo jeon",()=>{
@@ -175,6 +178,39 @@ describe("OpenAI image request", () => {
     expect(await response.json()).toMatchObject({retryable:true});
     expect(generateImage).not.toHaveBeenCalled();
   });
+  it("gives each cover candidate its own camera setup and continues numbering after a partial provider", () => {
+    const briefs=candidateBriefs({topic:"홍어 표지",count:2,aspectRatio:"4:5",slide:coverSlide,slideIndex:1,slideTotal:5,styleAnchor:carouselStyleAnchor});
+    expect(briefs.map(brief=>brief.count)).toEqual([1,1]);
+    expect(briefs.map(brief=>brief.variant)).toEqual([CANDIDATE_VARIANTS[0],CANDIDATE_VARIANTS[1]]);
+    expect(buildImagePrompt(briefs[1])).toContain(`이 후보만의 구도: ${CANDIDATE_VARIANTS[1]}`);
+    expect(candidateBriefs({topic:"홍어 표지",count:1,aspectRatio:"4:5",candidateOffset:1})[0].variant).toBe(CANDIDATE_VARIANTS[1]);
+    expect(candidateBriefs({topic:"홍어 한 장",count:1,aspectRatio:"4:5"})[0].variant).toBeUndefined();
+  });
+
+  it("sends two different prompts to OpenAI for two cover candidates", async () => {
+    generateImage.mockResolvedValue({data:[{b64_json:"aW1n"}]});
+    const response=await generateImages(new Request("http://localhost/api/images/generate",{
+      method:"POST",
+      body:JSON.stringify({topic:"홍어 표지",count:2,aspectRatio:"4:5"}),
+    }));
+    expect(response.status).toBe(200);
+    expect(generateImage).toHaveBeenCalledTimes(2);
+    const prompts=generateImage.mock.calls.map(([request])=>request.prompt);
+    expect(prompts[0]).not.toBe(prompts[1]);
+    expect(generateImage.mock.calls.every(([request])=>request.n===1)).toBe(true);
+  });
+
+  it("keeps only the mood of the cover for later slides and lowers fidelity so the scene can change", async () => {
+    const reference="data:image/png;base64,"+Buffer.from("png").toString("base64");
+    const request=await buildImageEditRequest({slide:visitSlide,slideIndex:5,slideTotal:5 as const,styleAnchor:carouselStyleAnchor,topic:"홍어 한 상",count:1,aspectRatio:"4:5",referenceImage:reference,referenceMode:"continuity"});
+    expect(request.input_fidelity).toBe("low");
+    expect(request.prompt).toContain("분위기만 이어 가고");
+    expect(request.prompt).toContain("표지와 같은 접시 배치를 다시 그리지 말 것");
+    expect(request.prompt).not.toContain("동일하게 유지");
+    expect(request.prompt).toContain("손, 젓가락, 잔, 뒷모습");
+    expect(request.prompt).not.toContain("손님 얼굴");
+  });
+
   it("omits the unsupported response_format parameter", () => {
     const request = buildImageRequest({ topic:"홍어 삼합", count:1, aspectRatio:"4:5" });
     expect(request).not.toHaveProperty("response_format");
@@ -202,12 +238,13 @@ describe("OpenAI image request", () => {
     expect(request.prompt).toContain("비 오는 날 홍어와 막걸리");
     expect(request.prompt).toContain("창가의 빗빛");
     expect(request.prompt).toContain(visitSlide.visualPrompt);
-    expect(request.prompt).toContain("아래쪽");
+    // 사진 위 글자형은 모든 장을 풀스크린으로 그리므로 아래쪽 여백과 필름 톤을 요청한다.
+    expect(request.prompt).toContain("bottom 45%");
     expect(request.prompt).not.toContain("하나의 음식 피사체");
-    // 카드형(기본)은 사진이 카드 안에 들어가므로 글자 여백 대신 가운데 배치를 요청한다.
+    // 장마다 자동(기본)은 그 장의 레이아웃(여기서는 대조 프레임)에 맞는 사진 분위기를 요청한다.
     const card=buildImageRequest({topic:"비 오는 날 홍어와 막걸리",count:1,aspectRatio:"4:5",slide:visitSlide,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트"});
-    expect(card.prompt).toContain("카드 안에");
-    expect(card.prompt).not.toContain("안전 여백");
+    expect(card.prompt).toContain("calm subject centered");
+    expect(card.prompt).not.toContain("bottom 45%");
   });
 
   it("uses a reference image as style only when requested", async () => {

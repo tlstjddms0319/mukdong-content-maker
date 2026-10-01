@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { composeSlideImage, renderSlideHeadline, renderSlidePoints } from "@/features/images/composeSlide";
+import { access } from "node:fs/promises";
+import { FONTS, composeSlideImage, renderSlideHeadline, renderSlidePoints } from "@/features/images/composeSlide";
 import type { CarouselSlidePlan } from "@/features/images/carousel";
 
 const coverSlide:CarouselSlidePlan={
@@ -10,6 +11,9 @@ const coverSlide:CarouselSlidePlan={
   points:[],
   visualPrompt:"창가의 빗빛 아래 홍어와 막걸리를 담은 선명한 음식 사진",
   textPosition:"top",
+  layout:"fullscreen",
+  keywords:["홍어","막걸리"],
+  figure:"",
 };
 
 describe("slide composition", () => {
@@ -37,7 +41,7 @@ describe("slide composition", () => {
     expect(await renderSlidePoints([" ",""])).toBeNull();
 
     const input=await sharp({create:{width:40,height:40,channels:3,background:"#4f643f"}}).png().toBuffer();
-    const slide:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",points:["코가 뾰족하면 홍어예요","가오리는 살이 부드러워요"]};
+    const slide:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",layout:"collage",points:["코가 뾰족하면 홍어예요","가오리는 살이 부드러워요"]};
     const withPoints=await composeSlideImage(input,slide,2,5);
     const withoutPoints=await composeSlideImage(input,{...slide,points:[]},2,5);
     expect(await sharp(withPoints).metadata()).toMatchObject({format:"jpeg",width:1080,height:1350});
@@ -45,7 +49,7 @@ describe("slide composition", () => {
   }, 20_000);
   it("renders the card layout by default with a light paper background and keeps overlay as an option", async () => {
     const input=await sharp({create:{width:40,height:40,channels:3,background:"#202020"}}).png().toBuffer();
-    const slide:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",points:["코가 뾰족하면 홍어예요","가오리는 살이 부드러워요"]};
+    const slide:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",layout:"collage",points:["코가 뾰족하면 홍어예요","가오리는 살이 부드러워요"]};
     const card=await composeSlideImage(input,slide,2,5);
     const overlay=await composeSlideImage(input,slide,2,5,"overlay");
     const cover=await composeSlideImage(input,coverSlide,1,5,"card");
@@ -57,4 +61,18 @@ describe("slide composition", () => {
     expect(await corner(overlay)).toBeLessThan(80);
     expect(await sharp(cover).metadata()).toMatchObject({format:"jpeg",width:1080,height:1350});
   }, 30_000);
+  it("bleeds the cover photo to the top edge, keeps body slides on paper, and sets body text in the regular weight", async () => {
+    const input=await sharp({create:{width:40,height:40,channels:3,background:"#202020"}}).png().toBuffer();
+    const body:CarouselSlidePlan={...coverSlide,role:"detail",textPosition:"bottom",layout:"collage",points:["얇게 썰려 빛에 비치면 결이 보여요","씹을수록 탄력이 느껴지는 부분이에요"]};
+    const corner=async(image:Buffer)=>{const {data}=await sharp(image).extract({left:8,top:8,width:1,height:1}).raw().toBuffer({resolveWithObject:true});return data[0];};
+    expect(await corner(await composeSlideImage(input,coverSlide,1,5))).toBeLessThan(80);
+    expect(await corner(await composeSlideImage(input,body,2,5))).toBeGreaterThan(200);
+    for(const font of Object.values(FONTS))await expect(access(font.file)).resolves.toBeUndefined();
+    // 본문 요점은 보통 굵기라 같은 글을 굵게 찍은 것보다 잉크가 적다.
+    const regular=await renderSlidePoints(["얇게 썰려 빛에 비치면 결이 보여요"],{bullets:false,color:"#000000"});
+    const bold=await sharp({text:{text:"얇게 썰려 빛에 비치면 결이 보여요",font:`${FONTS.bold.family} 36`,fontfile:FONTS.bold.file,width:936,rgba:true}}).png().toBuffer({resolveWithObject:true});
+    const ink=async(png:Buffer)=>{const {data}=await sharp(png).ensureAlpha().raw().toBuffer({resolveWithObject:true});let sum=0;for(let i=3;i<data.length;i+=4)sum+=data[i];return sum;};
+    expect(await ink(regular!.data)).toBeLessThan(await ink(bold.data));
+  }, 30_000);
+
 });

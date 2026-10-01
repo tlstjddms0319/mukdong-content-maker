@@ -2,6 +2,7 @@ import { z } from "zod";
 import { CarouselSlidePlanSchema, rolesForCount } from "./carousel";
 import { ImageStyleSchema } from "./style";
 import { SlideLayoutSchema } from "./slideLayout";
+import { DesignSpecSchema } from "./design";
 
 export const ImageBriefSchema = z.object({
   topic: z.string().trim().min(1).max(200),
@@ -15,8 +16,14 @@ export const ImageBriefSchema = z.object({
   slideIndex:z.number().int().min(1).max(10).optional(),
   slideTotal:z.union([z.literal(3),z.literal(5),z.literal(7),z.literal(10)]).optional(),
   styleAnchor:z.string().trim().min(12).max(500).optional(),
+  // 캐러셀 공통 디자인(색 조합). 없으면 기본 색으로 그린다.
+  design:DesignSpecSchema.optional(),
   referenceImage: z.string().regex(/^data:image\/(?:png|jpeg|webp);base64,/).max(18_000_000).optional(),
   referenceMode:z.enum(["source","style","continuity"]).optional(),
+  // 후보 여러 장을 만들 때 이 요청이 몇 번째 후보부터인지. 앞 제공자가 만든 장수를 이어서 구도를 배정하는 데 쓴다.
+  candidateOffset:z.number().int().min(0).max(3).optional(),
+  // 이 한 장만의 구도 지시. 후보마다 다른 각도·거리로 만들기 위해 서버가 채운다.
+  variant:z.string().trim().min(1).max(200).optional(),
 }).superRefine((brief,ctx)=>{
   if(!brief.slide)return;
   if(brief.slideIndex===undefined)ctx.addIssue({code:"custom",path:["slideIndex"],message:"슬라이드 순번이 필요합니다."});
