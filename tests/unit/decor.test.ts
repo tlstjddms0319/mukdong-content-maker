@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { access } from "node:fs/promises";
-import { MASCOT_FILE, blob, cornerMarks, dotGrid, doodleArrow, grainLayer, mascotLayer, ring, softShadow, sparkles, stickerBadge, washiTape, wavyUnderline } from "@/features/images/decor";
+import { MASCOT_FILE, MASCOT_POSES, blob, cornerMarks, dotGrid, doodleArrow, grainLayer, mascotFile, mascotLayer, ring, softShadow, sparkles, stickerBadge, washiTape, wavyUnderline } from "@/features/images/decor";
 
 const rasterize=(body:string)=>sharp(Buffer.from(`<svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">${body}</svg>`)).png().toBuffer({resolveWithObject:true});
 const inkOf=async(png:Buffer)=>{const {data}=await sharp(png).ensureAlpha().raw().toBuffer({resolveWithObject:true});let sum=0;for(let i=3;i<data.length;i+=4)sum+=data[i];return sum;};
@@ -58,5 +58,20 @@ describe("card decorations", () => {
     expect(meta.hasAlpha).toBe(true);
     expect(anchored).toMatchObject({left:300-200,top:400-meta.height!});
     expect((flipped!.input as Buffer).equals(plain!.input as Buffer)).toBe(false);
+  });
+
+  it("ships every mascot pose as a transparent cut-out and draws different poses differently", async () => {
+    for(const pose of MASCOT_POSES){
+      await expect(access(mascotFile(pose))).resolves.toBeUndefined();
+      const meta=await sharp(mascotFile(pose)).metadata();
+      expect(meta.hasAlpha).toBe(true);
+      // 모서리는 배경이 지워져 투명해야 한다(오려 내기가 제대로 됐는지 확인).
+      const {data,info}=await sharp(mascotFile(pose)).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+      expect(data[3]).toBe(0);
+      expect(data[(info.width*info.height-1)*4+3]).toBe(0);
+    }
+    const hello=await mascotLayer({width:180,left:0,top:0,pose:"hello"});
+    const tip=await mascotLayer({width:180,left:0,top:0,pose:"tip"});
+    expect((hello!.input as Buffer).equals(tip!.input as Buffer)).toBe(false);
   });
 });

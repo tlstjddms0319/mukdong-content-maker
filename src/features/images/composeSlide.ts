@@ -200,7 +200,7 @@ async function composeIllustration(inputs:Buffer[],slide:CarouselSlidePlan,index
     layers.push({input:text.data,left:bx+36,top:by+20});
   }
   // 마스코트가 카드의 왼쪽 아래 모서리를 살짝 가리며 고개를 내민다. 채널명 줄 위에서 끝난다.
-  const mascot=await mascotLayer({width:200,left:MARGIN-26,top:Math.min(1244,cardTop+tilted.info.height+36),anchor:"bottom-left"});
+  const mascot=await mascotLayer({width:200,pose:"hello",left:MARGIN-26,top:Math.min(1244,cardTop+tilted.info.height+36),anchor:"bottom-left"});
   if(mascot)layers.push(mascot);
   const brand=await textLayer(`${STORE_NAME} · ${index} / ${total}`,{size:22,color:palette.ink,width:500,height:32,font:FONTS.semibold});
   layers.push({input:brand.data,left:MARGIN,top:1350-MARGIN-20});
@@ -282,7 +282,7 @@ async function composeBrowser(slide:CarouselSlidePlan,index:number,total:number,
   const brand=await textLayer(STORE_NAME,{size:24,color:palette.ink,width:600,height:34,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:24,color:palette.ink,width:200,height:34,font:FONTS.semibold});
   // 마스코트가 창의 왼쪽 아래 모서리에 걸터앉는다. 채널명은 마스코트 오른쪽으로 비킨다.
-  const mascot=await mascotLayer({width:150,left:MARGIN-12,top:WIN_TOP+WIN_H+88,anchor:"bottom-left"});
+  const mascot=await mascotLayer({width:150,pose:"curious",left:MARGIN-12,top:WIN_TOP+WIN_H+88,anchor:"bottom-left"});
   return canvas(palette.soft,[
     // 창 뒤 배경 장식: 오른쪽 위 밝은 덩어리, 왼쪽 아래 옅은 강조색 덩어리, 창 모서리 밖 반짝이.
     svgLayer(blob({cx:960,cy:130,r:210,color:palette.highlight,opacity:.5,seed:5})+blob({cx:110,cy:1230,r:170,color:palette.accent,opacity:.12,seed:11})
@@ -435,7 +435,7 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
   const a=await textLayer(answer||"—",{size:34,color:palette.onAccent,width:BUBBLE_W-PAD*2,height:320,font:FONTS.bold,spacing:8});
   // 마스코트가 오른쪽 아래에서 답변을 거든다. 마스코트가 있으면 팁 글은 그만큼 좁게 접는다.
   const MASCOT_W=210;
-  const mascot=await mascotLayer({width:MASCOT_W,left:1080-MARGIN+18,top:1266,anchor:"bottom-right",flip:true});
+  const mascot=await mascotLayer({width:MASCOT_W,pose:"tip",left:1080-MARGIN+18,top:1266,anchor:"bottom-right"});
   const tipLayer=tip?await textLayer(tip,{size:28,color:bgInk,width:CONTENT-120-(mascot?MASCOT_W-20:0),height:120,font:FONTS.semibold,spacing:6}):null;
   const qH=q.info.height+PAD*2,aH=a.info.height+PAD*2;
   // 질문·답변·팁 블록을 화면 세로 가운데에 둔다.

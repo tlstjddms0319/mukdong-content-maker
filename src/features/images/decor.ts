@@ -116,14 +116,25 @@ export function grainLayer(options:{opacity?:number;width?:number;height?:number
 }
 
 // 마스코트(홍어 캐릭터) 레이어. 자산 파일이 없으면 null을 돌려주고 카드는 마스코트 없이 그려진다.
-export const MASCOT_FILE=path.join(process.cwd(),"assets/design/mascot.webp");
+// 포즈별 투명 webp는 scripts/extract-mascot.mjs가 캐릭터 스티커 시트에서 오려 만든다.
+export const MASCOT_POSES=["hello","curious","tip","wow","love","bye"] as const;
+export type MascotPose=typeof MASCOT_POSES[number];
+const MASCOT_DIR=path.join(process.cwd(),"assets/design/mascot");
+export const mascotFile=(pose:MascotPose)=>path.join(MASCOT_DIR,`${pose}.webp`);
+export const MASCOT_FILE=mascotFile("hello");
 const mascotCache=new Map<string,Promise<{data:Buffer;info:{width:number;height:number}}|null>>();
-export async function mascotLayer(options:{width:number;left:number;top:number;flip?:boolean;rotate?:number;anchor?:"top-left"|"bottom-left"|"bottom-right"|"top-right"}):Promise<OverlayOptions|null> {
-  const key=`${options.width}:${options.flip?1:0}:${options.rotate??0}`;
+export async function mascotLayer(options:{width:number;left:number;top:number;pose?:MascotPose;flip?:boolean;rotate?:number;anchor?:"top-left"|"bottom-left"|"bottom-right"|"top-right"}):Promise<OverlayOptions|null> {
+  const pose=options.pose??"hello";
+  const key=`${pose}:${options.width}:${options.flip?1:0}:${options.rotate??0}`;
   if(!mascotCache.has(key)){
     mascotCache.set(key,(async()=>{
-      try{await access(MASCOT_FILE);}catch{return null;}
-      let image=sharp(MASCOT_FILE).resize({width:options.width});
+      // 요청한 포즈 파일이 없으면 기본 포즈(hello)로, 그것도 없으면 마스코트를 생략한다.
+      let file=mascotFile(pose);
+      try{await access(file);}catch{
+        file=MASCOT_FILE;
+        try{await access(file);}catch{return null;}
+      }
+      let image=sharp(file).resize({width:options.width});
       if(options.flip)image=image.flop();
       if(options.rotate)image=sharp(await image.png().toBuffer()).rotate(options.rotate,{background:{r:0,g:0,b:0,alpha:0}});
       return image.png().toBuffer({resolveWithObject:true});
