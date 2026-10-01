@@ -57,7 +57,11 @@ describe("carousel planning", () => {
     const body=await response.json();
     const prompt=String(generateJson.mock.calls[0][0]);
 
-    expect(body).toEqual({plan:providerPlan,provider:"gemini"});
+    // 글은 AI 구성안 그대로이고, 레이아웃·장 글꼴만 캐러셀마다 섞인다(variety.ts).
+    expect(body.provider).toBe("gemini");
+    expect(body.plan.design).toEqual(providerPlan.design);
+    expect(body.plan.slides.map((slide:{headline:string;points:string[]})=>[slide.headline,slide.points])).toEqual(providerPlan.slides.map(slide=>[slide.headline,slide.points]));
+    expect(body.plan.slides.every((slide:{layout:string},index:number)=>index===0||slide.layout!==body.plan.slides[index-1].layout)).toBe(true);
     expect(prompt).toContain("비 오는 날 홍어");
     expect(prompt).toContain("가격, 원산지, 영업시간, 매장 정보");
     expect(prompt).toContain("짧은 한국어");

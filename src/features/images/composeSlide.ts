@@ -5,7 +5,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { CarouselSlidePlan } from "./carousel";
 import { DEFAULT_SLIDE_LAYOUT, STORE_NAME, slideEyebrow, type SlideLayout } from "./slideLayout";
 import { type CardLayout, type DesignSpecInput, type Palette, inkOn, mutedOn, normalizeCardLayout, paletteOf, photosNeeded } from "./design";
-import { typographyOf, type FontFace, type Typography } from "./typography";
+import { resolveSlideFonts, typographyOf, type FontFace, type Typography } from "./typography";
 import { blob, cornerMarks, dotGrid, grainLayer, mascotLayer, ring, softShadow, sparkles, washiTape, wavyUnderline } from "./decor";
 
 function escapeXml(value:string):string {
@@ -556,7 +556,8 @@ async function composeQuote(inputs:Buffer[],slide:CarouselSlidePlan,index:number
   const white="#ffffff";
   const background=await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover"}).modulate({saturation:.3,brightness:.55}).png().toBuffer();
   const mark=await textLayer("“",{size:220,color:palette.highlight,width:300,height:240,font:DECOR_FONT,spacing:0});
-  const quote=await renderSlideHeadline(slide.headline,{size:56,color:white,align:"left",width:860,height:420,balance:false});
+  // 인용구는 표지로도 쓰이므로 쉼표 같은 의미 단위에서 두 줄로 나눠 "…막걸리 한 / 잔"처럼 한 글자만 남는 줄을 막는다.
+  const quote=await renderSlideHeadline(slide.headline,{size:56,color:white,align:"left",width:860,height:420,balance:true});
   const lines=cleanPoints(slide.points);
   // 마지막 장이면 오른쪽 아래에서 마스코트가 손을 흔든다(bye). 출처·부연 글은 마스코트 폭만큼 좁게 접는다.
   const MASCOT_W=230;
@@ -601,5 +602,6 @@ export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlid
   const inputs=Array.isArray(input)?input:[input];
   const card:CardLayout=layout==="overlay"?"fullscreen":normalizeCardLayout(slide);
   if(photosNeeded(card)>0&&!inputs.length)throw new Error("slide image required");
-  return typographyStore.run(typographyOf(design?.titleFont,design?.bodyFont),()=>CARD_RENDERERS[card](inputs,slide,index,total,paletteOf(design)));
+  const fonts=resolveSlideFonts(design,slide);
+  return typographyStore.run(typographyOf(fonts.titleFont,fonts.bodyFont),()=>CARD_RENDERERS[card](inputs,slide,index,total,paletteOf(design)));
 }

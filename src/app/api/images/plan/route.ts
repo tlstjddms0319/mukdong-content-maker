@@ -4,6 +4,7 @@ import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
 import { CarouselPlanInputSchema, CarouselPlanSchema, buildCarouselPlanPrompt, planCarousel } from "@/features/images/carousel";
 import { guardSlidePoints } from "@/features/images/slidePoints";
+import { randomSeed } from "@/features/images/variety";
 
 export async function POST(request:Request) { const denied=await ownerApiError(); if(denied)return denied;
   const input=CarouselPlanInputSchema.safeParse(await request.json());
@@ -21,6 +22,6 @@ export async function POST(request:Request) { const denied=await ownerApiError()
       provider=client.provider??"gemini";
       return candidate;
     },
-  });
+  },{seed:randomSeed()});
   return NextResponse.json({plan:guardSlidePoints(plan),provider});
 }

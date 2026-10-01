@@ -2,6 +2,7 @@
 
 import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { readJsonResponse } from "@/lib/http/readJson";
 
 export function PlanningControls({ draftId, topic, plannedPublishAt, finalReviewComplete, canReview }: { draftId:string; topic:string; plannedPublishAt?:string|null; finalReviewComplete?:boolean; canReview:boolean }) {
   const router=useRouter();
@@ -19,8 +20,8 @@ export function PlanningControls({ draftId, topic, plannedPublishAt, finalReview
     try{
       const planned=date?new Date(`${date}:00+09:00`).toISOString():null;
       const response=await fetch("/api/drafts",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:draftId,planned_publish_at:planned,final_review_complete:reviewed})});
-      if(!response.ok)throw new Error((await response.json()).error||"저장하지 못했어요.");
-      const updated=await response.json();
+      if(!response.ok)throw new Error((await readJsonResponse(response)).error||"저장하지 못했어요.");
+      const updated=await readJsonResponse(response);
       setSavedDate(updated.planned_publish_at?new Date(Date.parse(updated.planned_publish_at)+9*60*60*1000).toISOString().slice(0,16):"");
       setSavedReview(!!updated.final_review_complete);
       setMessage("예약 준비를 저장했어요.");

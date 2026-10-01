@@ -14,6 +14,7 @@ import { selectedDraftMedia } from "@/features/drafts/selection";
 import type { CarouselSlideCount } from "@/features/images/carousel";
 import { useGenerationState } from "@/features/images/generationStore";
 import { clearWizardSession, readWizardSession, saveWizardSession } from "@/features/drafts/wizardSession";
+import { readJsonResponse } from "@/lib/http/readJson";
 
 const DEFAULT_TOPICS:TopicSuggestion[] = fallbackTopics();
 
@@ -58,7 +59,7 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
     try{
       const response=await fetch("/api/topics", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({storeProfile:{name:"묵동홍어마을"},recommendationRound:round,excludeTitles}) });
       if(!response.ok) throw new Error();
-      const data=await response.json();
+      const data=await readJsonResponse(response);
       if(requestId===topicRequestRef.current&&Array.isArray(data.topics)&&data.topics.length===3){
         setTopics(data.topics);setTopicsFallback(data.source==="fallback");
         if(topicSelectionRef.current.topic===topicAtRequest)changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",false,data.topics[0].summary ?? "");
@@ -123,7 +124,7 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
         try{
           const response=await fetch(`/api/drafts?id=${encodeURIComponent(savedId)}`);
           if(response.ok){
-            const draft=await response.json();
+            const draft=await readJsonResponse(response);
             const selected=selectedDraftMedia(draft);
             if(active&&draft?.id&&draft?.topic){changeTopic(draft.topic,draft.audience,draft.image_brief??"",true,draft.content_brief??"");draftIdRef.current=draft.id;createdAtRef.current=draft.created_at??new Date().toISOString();setDraftId(draft.id);setImages(selected.map(item=>({id:item.id,preview:item.file_id,source:item.source})));setCaption(draft.caption??"");setSavedCaption(draft.caption??"");setSaveState("saved");localStorage.setItem("mukdong-current-draft",draft.id);if(requestedId||!selected.length)setStep(selected.length&&draft.caption?.trim()?"review":"image");if(!requestedId&&session&&session.draftId===draft.id)setStep(session.step);return;}
           }

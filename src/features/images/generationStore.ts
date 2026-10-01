@@ -4,6 +4,7 @@ import type { ImageStyle } from "./style";
 import { DEFAULT_SLIDE_LAYOUT, type SlideLayout } from "./slideLayout";
 import { normalizeCardLayout, photosNeeded, type DesignSpec } from "./design";
 import type { BodyFontId, TitleFontId } from "./typography";
+import { readJsonResponse } from "@/lib/http/readJson";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
 // 화면(ImageStudio)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
@@ -85,6 +86,10 @@ export function setBodyFont(bodyFont:FontChoice<BodyFontId>){patch({bodyFont});}
 export function effectiveDesign(design:DesignSpec,current:Pick<GenerationState,"titleFont"|"bodyFont">=state):DesignSpec {
   return {...design,...(current.titleFont!=="auto"?{titleFont:current.titleFont}:{}),...(current.bodyFont!=="auto"?{bodyFont:current.bodyFont}:{})};
 }
+// 장마다 AI가 고른 글꼴도 사용자가 직접 고른 글꼴이 있으면 덮어쓴다(직접 고른 글꼴은 모든 장에 같게 적용).
+export function effectiveSlide<T extends {titleFont?:string;bodyFont?:string}>(slide:T,current:Pick<GenerationState,"titleFont"|"bodyFont">=state):T {
+  return {...slide,...(current.titleFont!=="auto"?{titleFont:current.titleFont}:{}),...(current.bodyFont!=="auto"?{bodyFont:current.bodyFont}:{})};
+}
 export function setReferenceUse(referenceUse:ReferenceUse){patch({referenceUse});}
 export function setRefinement(index:number,value:string){patch({refinements:{...state.refinements,[index]:value}});}
 export function setActiveSlide(activeSlide:number){patch({activeSlide});}
@@ -108,7 +113,7 @@ export async function uploadPhoto(file:File|undefined,onApprove:(images:Approved
     patch({photoPreview:preview});
     const body=new FormData();body.append("file",file);
     const response=await fetch("/api/media/upload",{method:"POST",body});
-    const data=await response.json();
+    const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message);
     patch({photoStatus:`${file.name} ${reference?"참고 사진을":"사진을"} 저장했어요.`});
@@ -124,8 +129,8 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
   if(!nextPlan)return;
   patch({phase:"cover",error:""});
   try{
-    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:nextPlan.slides[0],styleAnchor:nextPlan.styleAnchor,design:effectiveDesign(nextPlan.design),slideIndex:1,count:2,...(state.refinements[0]?.trim()?{refinement:state.refinements[0].trim()}:{}),...(state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:{})})});
-    const data=await response.json();
+    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(nextPlan.slides[0]),styleAnchor:nextPlan.styleAnchor,design:effectiveDesign(nextPlan.design),slideIndex:1,count:2,...(state.refinements[0]?.trim()?{refinement:state.refinements[0].trim()}:{}),...(state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:{})})});
+    const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"표지 후보를 만들지 못했습니다.");
     if(!Array.isArray(data.images)||data.images.length!==2)throw new Error("표지 후보는 정확히 2장이 필요합니다.");
@@ -144,7 +149,7 @@ export async function startPlan(){
   try{
     const {topic,imageBrief,contentBrief,slideCount}=state.input;
     const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:state.imageStyle})});
-    const data=await response.json();
+    const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
     const next=data.plan as CarouselPlan;
@@ -160,8 +165,8 @@ export async function startPlan(){
 async function generate(slide:CarouselPlan["slides"][number],index:number,refinement=""):Promise<ApprovedImage>{
   // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
   const count=state.slideLayout==="card"?Math.max(1,photosNeeded(normalizeCardLayout(slide))):1;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:effectiveDesign(state.plan!.design),slideIndex:index,count,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFields()})});
-  const data=await response.json();
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:state.plan!.styleAnchor,design:effectiveDesign(state.plan!.design),slideIndex:index,count,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFields()})});
+  const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");
   if(data.fallback)patch({providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."});

@@ -2,7 +2,7 @@
 import { useEffect,useState,useSyncExternalStore } from "react";
 import type { PublicInstagramConnection } from "@/features/instagram/schema";
 
-type SetupStatus={appId:boolean;appSecret:boolean;redirectUri:boolean;mediaHttpsUrl:boolean;signingKey:boolean};
+type SetupStatus={appId:boolean;appSecret:boolean;redirectUri:boolean;mediaHttpsUrl:boolean;signingKey:boolean;persistentStorage?:boolean};
 type InstagramStatus=PublicInstagramConnection&{setup?:SetupStatus};
 const setupItems=[
   {key:"appId",label:"Meta 앱 ID"},
@@ -10,6 +10,7 @@ const setupItems=[
   {key:"redirectUri",label:"Instagram 연결 완료 주소"},
   {key:"mediaHttpsUrl",label:"공개 이미지 HTTPS 주소"},
   {key:"signingKey",label:"이미지 보안 키"},
+  {key:"persistentStorage",label:"영구 저장소(SUPABASE_URL·SUPABASE_SECRET_KEY). 없으면 서버가 재시작될 때마다 연결이 풀려요"},
 ] as const;
 
 // 콜백이 /settings?instagram=error&reason=... 로 돌려보낸 결과를 사용자가 확인할 항목으로 바꾼다.
@@ -33,6 +34,8 @@ function describeCallback(search:string):{ok:boolean;message:string}|null{
   return null;
 }
 
+export type { InstagramStatus };
+
 export function InstagramConnectionCard(){
   const [status,setStatus]=useState<InstagramStatus|null>(null);
   const [error,setError]=useState("");
@@ -51,7 +54,8 @@ export function InstagramConnectionCard(){
     finally{setBusy(false);}
   };
 
-  const missingSetup=status?.setup?setupItems.filter(item=>!status.setup?.[item.key]):[];
+  // 영구 저장소는 서버가 "없다"고 명시했을 때만 빠진 항목으로 본다(예전 서버 응답에는 이 값이 없다).
+  const missingSetup=status?.setup?setupItems.filter(item=>item.key==="persistentStorage"?status.setup?.persistentStorage===false:!status.setup?.[item.key]):[];
   // 앱 ID·비밀키·연결 완료 주소가 없으면 연결 시작 주소가 오류만 돌려주므로 버튼을 막고 이유를 보여 준다.
   const canConnect=!status?.setup||Boolean(status.setup.appId&&status.setup.appSecret&&status.setup.redirectUri);
 

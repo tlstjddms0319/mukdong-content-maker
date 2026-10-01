@@ -1,0 +1,69 @@
+import type { CarouselPlan, CarouselRole } from "./carousel";
+import { PaletteIdSchema, defaultCardLayout, normalizeCardLayout, type CardLayout, type DesignSpec, type PaletteId } from "./design";
+import type { BodyFontId, TitleFontId } from "./typography";
+
+// 캐러셀마다 템플릿이 달라 보이게 하는 장치.
+// 텍스트 AI는 장 순서(표지 → 자세히 → 먹는 법 …)가 같으면 거의 같은 레이아웃을 고르고, AI가 실패하면 쓰는 기본 구성안은
+// 역할별 레이아웃이 아예 고정이다. 그래서 구성안을 만들 때마다 서버가 무작위 시드(seed)로 "역할에 어울리는 후보" 안에서 섞는다.
+// AI가 기본값과 다른 레이아웃을 일부러 고른 장은 내용에 맞춘 선택으로 보고 그대로 둔다.
+
+// 역할마다 어울리는 레이아웃 후보. 첫 번째가 기본값(defaultCardLayout)과 같다.
+const ROLE_LAYOUT_CHOICES:Record<CarouselRole,CardLayout[]>={
+  cover:["fullscreen","frame","quote"],
+  overview:["collage","illustration","frame"],
+  detail:["frame","illustration","fullscreen","collage"],
+  "how-to":["browser","step","illustration"],
+  // 비교형(versus)은 글이 실제로 두 가지를 견줄 때만 맞으므로 후보에 넣지 않는다. AI가 내용을 보고 고를 때만 쓴다.
+  pairing:["illustration","collage","frame"],
+  process:["browser","step","frame"],
+  occasion:["quote","fullscreen","collage"],
+  mood:["fullscreen","quote","frame"],
+  visit:["collage","qa","frame"],
+  cta:["qa","quote","browser"],
+};
+
+// 기본 구성안처럼 디자인이 비어 있을 때 쓰는 색·글꼴 묶음. accent는 표지·분위기 장의 제목 글꼴이다.
+const FONT_SETS:Array<{titleFont:TitleFontId;bodyFont:BodyFontId;accent:TitleFontId}>=[
+  {titleFont:"pretendard",bodyFont:"pretendard",accent:"batang"},
+  {titleFont:"plex",bodyFont:"plex",accent:"batang"},
+  {titleFont:"jua",bodyFont:"dodum",accent:"jua"},
+  {titleFont:"batang",bodyFont:"batang",accent:"batang"},
+  {titleFont:"blackhan",bodyFont:"plex",accent:"blackhan"},
+];
+// 공통 제목 글꼴에 짝지을 감성 장 글꼴. 같은 글꼴이면 장마다 바꾸지 않는다.
+const ACCENT_TITLE:Record<TitleFontId,TitleFontId>={pretendard:"batang",plex:"batang",batang:"batang",jua:"jua",blackhan:"blackhan"};
+const EMOTIONAL_ROLES=new Set<CarouselRole>(["cover","mood","occasion"]);
+
+// 0 이상 2^31 미만의 정수 시드. 테스트에서는 고정값을 넘겨 결과를 재현한다.
+export const randomSeed=()=>Math.floor(Math.random()*2**31);
+const pick=<T,>(items:readonly T[],seed:number,offset=0)=>items[(seed+offset)%items.length];
+
+export function diversifyCarouselDesign(plan:CarouselPlan,seed:number,options:{fallback?:boolean}={}):CarouselPlan {
+  const fallback=options.fallback??false;
+  // 기본 구성안은 색과 글꼴도 시드로 고른다. AI 구성안은 AI가 고른 색·글꼴을 그대로 둔다.
+  const fontSet=pick(FONT_SETS,seed,3);
+  const design:DesignSpec=fallback
+    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont}
+    :plan.design;
+  const accent=fallback?fontSet.accent:ACCENT_TITLE[design.titleFont];
+  const everyFontAuto=plan.slides.every(slide=>slide.titleFont==="auto"&&slide.bodyFont==="auto");
+
+  let previous:CardLayout|undefined;
+  const used=new Set<CardLayout>();
+  const slides=plan.slides.map((slide,index)=>{
+    let layout=normalizeCardLayout(slide);
+    // AI가 기본값을 그대로 냈거나(=고르지 않은 것과 같음) 앞 장과 겹치면, 역할 후보를 시드만큼 돌려 다시 고른다.
+    // 이번 캐러셀에서 아직 안 쓴 레이아웃을 먼저 고르고, 다 썼으면 앞 장과만 겹치지 않게 한다.
+    if(fallback||layout===defaultCardLayout(slide.role)||layout===previous){
+      const choices=ROLE_LAYOUT_CHOICES[slide.role];
+      const rotated=choices.map((_,step)=>normalizeCardLayout({...slide,layout:pick(choices,seed,index+step)}));
+      layout=rotated.find(candidate=>candidate!==previous&&!used.has(candidate))??rotated.find(candidate=>candidate!==previous)??layout;
+    }
+    previous=layout;
+    used.add(layout);
+    // AI가 장마다 글꼴을 하나도 고르지 않았으면 감성 장(표지·분위기·모임)만 짝 글꼴로 바꿔 장마다 표정을 준다.
+    const titleFont=everyFontAuto&&EMOTIONAL_ROLES.has(slide.role)&&accent!==design.titleFont?accent:slide.titleFont;
+    return {...slide,layout,titleFont};
+  });
+  return {...plan,design,slides};
+}
