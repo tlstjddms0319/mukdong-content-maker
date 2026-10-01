@@ -397,4 +397,9 @@ describe("hongeo stays the hero", () => {
     // 홍어와 무관한 주제에는 붙지 않는다.
     expect(buildImagePrompt({topic:"김치찌개",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:3,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블"})).not.toContain("hero of every scene");
   });
+  it("forbids drawing the skate as a whole small fish", () => {
+    const prompt=buildImagePrompt({topic:"홍어회",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:5,styleAnchor:"따뜻한 색온도"});
+    expect(prompt).toContain("통째 생선으로 그리지 않는다");
+    expect(prompt).toContain("Never show a whole small fish");
+  });
 });
