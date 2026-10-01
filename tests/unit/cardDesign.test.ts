@@ -24,7 +24,7 @@ describe("topic-driven card design", () => {
 
   it("gives fallback slides a palette, keywords and role-based layouts that differ between neighbouring slides", () => {
     const plan=createFallbackCarouselPlan({topic:"홍어와 막걸리",slideCount:5});
-    expect(plan.design).toEqual({palette:"warm"});
+    expect(plan.design).toEqual({palette:"warm",titleFont:"pretendard",bodyFont:"pretendard"});
     expect(plan.slides.map(slide=>slide.layout)).toEqual(["fullscreen","frame","browser","illustration","collage"]);
     expect(plan.slides.every(slide=>slide.layout===defaultCardLayout(slide.role)&&slide.keywords.length>=1)).toBe(true);
   });

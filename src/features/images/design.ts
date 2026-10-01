@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CarouselRole } from "./carousel";
+import { BodyFontIdSchema, TitleFontIdSchema, fontCatalogText } from "./typography";
 
 // 카드 디자인은 "AI가 백지에 그리기"가 아니라, 아래 선택지 안에서 주제에 맞게 고르는 방식이다.
 // 선택지 밖의 값은 스키마가 걸러내고, 어울리지 않는 조합은 normalizeCardLayout이 바로잡는다.
@@ -54,11 +55,19 @@ export const CARD_LAYOUTS:Record<CardLayout,{label:string;when:string;photoCount
     photoHint:"Moody editorial photo with muted tones and side light; a back view or hands only, no recognizable face; keep the center-left area calm for text."},
 };
 
-export const DesignSpecSchema=z.object({palette:PaletteIdSchema});
-export type DesignSpec=z.infer<typeof DesignSpecSchema>;
-export const DEFAULT_DESIGN:DesignSpec={palette:"warm"};
+// 색 조합과 제목·본문 글꼴. 글꼴이 없는 예전 구성안·요청은 기본 글꼴(프리텐다드)로 채운다.
+// .default()는 입력에서만 선택이고 출력(JSON 스키마의 기준)에서는 필수라, 엄격 JSON 스키마 제공자에도 그대로 보낼 수 있다.
+export const DesignSpecSchema=z.object({
+  palette:PaletteIdSchema,
+  titleFont:TitleFontIdSchema.default("pretendard"),
+  bodyFont:BodyFontIdSchema.default("pretendard"),
+});
+export type DesignSpec=z.output<typeof DesignSpecSchema>;
+// 그리기 함수는 글꼴이 빠진 예전 값도 받는다(빠진 글꼴은 기본값).
+export type DesignSpecInput=z.input<typeof DesignSpecSchema>;
+export const DEFAULT_DESIGN:DesignSpec={palette:"warm",titleFont:"pretendard",bodyFont:"pretendard"};
 
-export const paletteOf=(design?:DesignSpec):Palette=>PALETTES[design?.palette??DEFAULT_DESIGN.palette].colors;
+export const paletteOf=(design?:DesignSpecInput):Palette=>PALETTES[design?.palette??DEFAULT_DESIGN.palette].colors;
 
 // 상대 휘도(WCAG 식)로 색이 밝은지 판단한다. 6자리 hex만 받는다.
 const luminance=(hex:string)=>{
@@ -103,5 +112,5 @@ export function normalizeCardLayout(slide:{role:CarouselRole;layout:CardLayout;f
 export function designCatalogText():string {
   const palettes=PaletteIdSchema.options.map(id=>`${id}(${PALETTES[id].label}: ${PALETTES[id].when})`).join(", ");
   const layouts=CardLayoutSchema.options.map(id=>`${id}(${CARD_LAYOUTS[id].label}: ${CARD_LAYOUTS[id].when})`).join(", ");
-  return `design.palette는 주제의 분위기에 맞게 다음 중 하나: ${palettes}. 각 slide의 layout은 그 장의 내용에 맞게 다음 중 하나: ${layouts}. 표지는 fullscreen, frame, quote 중에서, 본문은 내용에 맞게 고르되 이어지는 두 장이 같은 layout이 되지 않게 섞고, browser·qa·stat은 사진이 없으니 글자 정보가 중심인 장에만 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣으세요(해시태그·검색창·비교 이름에 쓰임). 각 slide의 figure는 stat 레이아웃에서 크게 보여 줄 숫자(예: "3가지", "48시간")이며, 주제나 내용 메모에 실제로 있는 숫자만 쓰고 그 외에는 빈 문자열로 두세요. 숫자를 지어내지 마세요.`;
+  return `design.palette는 주제의 분위기에 맞게 다음 중 하나: ${palettes}. ${fontCatalogText()} 각 slide의 layout은 그 장의 내용에 맞게 다음 중 하나: ${layouts}. 표지는 fullscreen, frame, quote 중에서, 본문은 내용에 맞게 고르되 이어지는 두 장이 같은 layout이 되지 않게 섞고, browser·qa·stat은 사진이 없으니 글자 정보가 중심인 장에만 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣으세요(해시태그·검색창·비교 이름에 쓰임). 각 slide의 figure는 stat 레이아웃에서 크게 보여 줄 숫자(예: "3가지", "48시간")이며, 주제나 내용 메모에 실제로 있는 숫자만 쓰고 그 외에는 빈 문자열로 두세요. 숫자를 지어내지 마세요.`;
 }

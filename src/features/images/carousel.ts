@@ -125,7 +125,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     // 장면 다양성: 같은 접시를 거리만 바꿔 다섯 번 찍지 않도록, 장면 유형과 사람 요소를 장마다 다르게 배정한다.
     `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도 또는 눈높이), 한 점의 질감(매크로), 젓가락으로 집거나 재료를 올리는 손, 함께 먹는 식탁(여러 손과 잔, 뒷모습), 준비 과정, 곁들임과의 조합. ${Math.max(2,Math.ceil(parsed.slideCount/2))}장 이상에는 손, 젓가락, 잔, 뒷모습처럼 사람이 먹고 있다는 느낌이 드는 요소를 넣되 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 음식이 나오는 모든 장면에서 홍어가 주인공입니다. visualPrompt에 홍어(또는 그 장의 홍어 요리)를 가장 크고 앞에, 초점이 맞게 둔다고 명시하고, 수육·묵은지·막걸리는 작게 곁들여지는 조연으로만 쓰세요. 집어 올리는 한 점도 홍어 조각이어야 합니다.`,
     `[디자인] ${designCatalogText()}`,
-    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(palette)를 두고, 각 slide는 role, headline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure를 포함해야 합니다.`,
+    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(palette, titleFont, bodyFont)를 두고, 각 slide는 role, headline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure를 포함해야 합니다.`,
   ].join("\n");
 }
 

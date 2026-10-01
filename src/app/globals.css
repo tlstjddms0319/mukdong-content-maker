@@ -87,6 +87,9 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .nav-badge { display:flex; align-items:center; gap:7px; margin:-4px 0 4px; padding:6px 12px; border-radius:999px; background:#e8efe9; color:var(--accent); font-size:13px; font-weight:800; }
 .option-picker { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .option-picker .button { min-height:36px; padding:6px 12px; font-size:14px; }
+.font-picker label { display:inline-flex; align-items:center; gap:6px; font-size:14px; }
+.font-picker select { min-height:36px; padding:4px 8px; border-radius:8px; font-size:14px; }
+.font-picker small { flex-basis:100%; color:var(--muted, #6d746f); }
 .button.secondary[aria-pressed="true"] { border-color:var(--accent); background:#e8efe9; color:var(--accent); }
 .generation-note .generation-progress, .upload-zone .generation-progress { align-self:stretch; }
 .generation-note .generation-progress > span, .upload-zone .generation-progress > span { color:inherit; font-size:inherit; }

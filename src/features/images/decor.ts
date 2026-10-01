@@ -123,9 +123,12 @@ const MASCOT_DIR=path.join(process.cwd(),"assets/design/mascot");
 export const mascotFile=(pose:MascotPose)=>path.join(MASCOT_DIR,`${pose}.webp`);
 export const MASCOT_FILE=mascotFile("hello");
 const mascotCache=new Map<string,Promise<{data:Buffer;info:{width:number;height:number}}|null>>();
-export async function mascotLayer(options:{width:number;left:number;top:number;pose?:MascotPose;flip?:boolean;rotate?:number;anchor?:"top-left"|"bottom-left"|"bottom-right"|"top-right"}):Promise<OverlayOptions|null> {
+// maxHeight를 주면 그림이 그 높이를 넘지 않게 비율대로 줄인다. 글자와 겹치지 않는 빈 공간 높이를 넘겨 쓰고,
+// minHeight보다 작아질 만큼 공간이 좁으면 null을 돌려 마스코트를 생략한다(작게 뭉개진 캐릭터보다 없는 편이 낫다).
+export async function mascotLayer(options:{width:number;left:number;top:number;pose?:MascotPose;flip?:boolean;rotate?:number;anchor?:"top-left"|"bottom-left"|"bottom-right"|"top-right";maxHeight?:number;minHeight?:number}):Promise<OverlayOptions|null> {
+  if(options.maxHeight!==undefined&&options.maxHeight<(options.minHeight??100))return null;
   const pose=options.pose??"hello";
-  const key=`${pose}:${options.width}:${options.flip?1:0}:${options.rotate??0}`;
+  const key=`${pose}:${options.width}:${options.maxHeight??0}:${options.flip?1:0}:${options.rotate??0}`;
   if(!mascotCache.has(key)){
     mascotCache.set(key,(async()=>{
       // 요청한 포즈 파일이 없으면 기본 포즈(hello)로, 그것도 없으면 마스코트를 생략한다.
@@ -134,7 +137,7 @@ export async function mascotLayer(options:{width:number;left:number;top:number;p
         file=MASCOT_FILE;
         try{await access(file);}catch{return null;}
       }
-      let image=sharp(file).resize({width:options.width});
+      let image=sharp(file).resize({width:options.width,...(options.maxHeight?{height:Math.floor(options.maxHeight),fit:"inside" as const}:{})});
       if(options.flip)image=image.flop();
       if(options.rotate)image=sharp(await image.png().toBuffer()).rotate(options.rotate,{background:{r:0,g:0,b:0,alpha:0}});
       return image.png().toBuffer({resolveWithObject:true});
