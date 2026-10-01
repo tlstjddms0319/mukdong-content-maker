@@ -1,6 +1,7 @@
 import type { CarouselPlan, CarouselRole } from "./carousel";
 import { LAYOUT_VARIANTS, PaletteIdSchema, defaultCardLayout, normalizeCardLayout, type CardLayout, type DesignSpec, type PaletteId } from "./design";
 import { ThemeIdSchema } from "./themes";
+import { StyleIdSchema } from "./styleCatalog";
 import type { BodyFontId, TitleFontId } from "./typography";
 
 // 캐러셀마다 템플릿이 달라 보이게 하는 장치.
@@ -45,9 +46,11 @@ export function diversifyCarouselDesign(plan:CarouselPlan,seed:number,options:{f
   const fontSet=pick(FONT_SETS,seed,3);
   // 게시물 테마는 AI가 기본값(classic)을 그대로 냈거나 기본 구성안이면 시드로 고른다. 게시물마다 옷이 바뀐다.
   const theme=fallback||plan.design.theme==="classic"?pick(ThemeIdSchema.options,seed,5):plan.design.theme;
+  // 스타일 계열도 같은 규칙: AI가 기본(template)을 그대로 냈거나 기본 구성안이면 게시물마다 다른 계열을 고른다.
+  const style=fallback||plan.design.style==="template"?pick(StyleIdSchema.options,seed,7):plan.design.style;
   const design:DesignSpec=fallback
-    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),theme,titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont}
-    :{...plan.design,theme};
+    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),style,theme,titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont}
+    :{...plan.design,style,theme};
   const accent=fallback?fontSet.accent:ACCENT_TITLE[design.titleFont];
   const everyFontAuto=plan.slides.every(slide=>slide.titleFont==="auto"&&slide.bodyFont==="auto");
 

@@ -60,7 +60,7 @@ describe("carousel planning", () => {
     // 글은 AI 구성안 그대로이고, 레이아웃·장 글꼴만 캐러셀마다 섞인다(variety.ts).
     expect(body.provider).toBe("gemini");
     // 색·글꼴은 AI 구성안 그대로이고, 기본값(classic)으로 남은 게시물 테마만 서버가 바꾼다.
-    expect({...body.plan.design,theme:"classic"}).toEqual(providerPlan.design);
+    expect({...body.plan.design,theme:"classic",style:"template"}).toEqual(providerPlan.design);
     expect(body.plan.slides.map((slide:{headline:string;points:string[]})=>[slide.headline,slide.points])).toEqual(providerPlan.slides.map(slide=>[slide.headline,slide.points]));
     expect(body.plan.slides.every((slide:{layout:string},index:number)=>index===0||slide.layout!==body.plan.slides[index-1].layout)).toBe(true);
     expect(prompt).toContain("비 오는 날 홍어");
