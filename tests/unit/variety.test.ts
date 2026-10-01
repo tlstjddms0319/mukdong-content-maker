@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { createFallbackCarouselPlan, planCarousel } from "@/features/images/carousel";
-import { defaultCardLayout } from "@/features/images/design";
+import { CARD_LAYOUTS, LAYOUT_VARIANTS, defaultCardLayout } from "@/features/images/design";
+import { ThemeIdSchema } from "@/features/images/themes";
 import { diversifyCarouselDesign } from "@/features/images/variety";
 import { resolveSlideFonts } from "@/features/images/typography";
 import { serverUnavailableMessage, readJsonResponse } from "@/lib/http/readJson";
@@ -17,7 +18,9 @@ describe("carousel variety", () => {
       const plan=diversifyCarouselDesign(base,seed,{fallback:true});
       // 이웃한 두 장은 같은 레이아웃이 아니고, 표지는 표지에 쓸 수 있는 레이아웃이다.
       plan.slides.forEach((slide,index)=>{if(index)expect(slide.layout).not.toBe(plan.slides[index-1].layout);});
-      expect(["fullscreen","frame","quote"]).toContain(plan.slides[0].layout);
+      expect(CARD_LAYOUTS[plan.slides[0].layout].coverAllowed).toBe(true);
+      // 변형 번호는 그 레이아웃이 그릴 수 있는 범위 안이다.
+      plan.slides.forEach(slide=>expect(slide.variant).toBeLessThan(LAYOUT_VARIANTS[slide.layout]));
       // 글은 그대로다.
       expect(plan.slides.map(slide=>slide.headline)).toEqual(base.slides.map(slide=>slide.headline));
     }
@@ -29,7 +32,9 @@ describe("carousel variety", () => {
     for(let seed=0;seed<6;seed++){
       const plan=diversifyCarouselDesign(chosen,seed);
       expect(plan.slides[2].layout).toBe("step");
-      expect(plan.design).toEqual(chosen.design);
+      // 색과 글꼴은 AI가 고른 그대로이고, 기본값(classic)으로 남은 테마만 게시물마다 바뀐다.
+      expect({...plan.design,theme:"classic"}).toEqual(chosen.design);
+      expect(ThemeIdSchema.options).toContain(plan.design.theme);
     }
     // 기본값을 그대로 낸 장은 시드에 따라 바뀔 수 있다.
     const layouts=new Set(Array.from({length:6},(_,seed)=>diversifyCarouselDesign(base,seed).slides[3].layout));
@@ -46,12 +51,22 @@ describe("carousel variety", () => {
 
   it("gives emotional slides an accent title font when the AI picked none per slide", () => {
     const base=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:5});
-    const plan=diversifyCarouselDesign({...base,design:{palette:"warm",titleFont:"plex",bodyFont:"plex"}},1);
+    const plan=diversifyCarouselDesign({...base,design:{palette:"warm",theme:"magazine",titleFont:"plex",bodyFont:"plex"}},1);
     expect(plan.slides[0].titleFont).toBe("batang");
     expect(plan.slides[2].titleFont).toBe("auto");
     expect(resolveSlideFonts(plan.design,plan.slides[0])).toEqual({titleFont:"batang",bodyFont:"plex"});
     expect(resolveSlideFonts(plan.design,plan.slides[2])).toEqual({titleFont:"plex",bodyFont:"plex"});
     expect(resolveSlideFonts(undefined,{})).toEqual({titleFont:"pretendard",bodyFont:"pretendard"});
+  });
+});
+
+describe("post themes", () => {
+  it("rotates the theme between posts unless the AI picked a specific one", () => {
+    const base=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:5});
+    const themes=new Set(Array.from({length:12},(_,seed)=>diversifyCarouselDesign(base,seed).design.theme));
+    expect(themes.size).toBeGreaterThan(3);
+    const chosen={...base,design:{...base.design,theme:"retro" as const}};
+    for(let seed=0;seed<6;seed++)expect(diversifyCarouselDesign(chosen,seed).design.theme).toBe("retro");
   });
 });
 

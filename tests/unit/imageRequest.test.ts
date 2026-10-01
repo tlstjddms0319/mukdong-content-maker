@@ -27,7 +27,7 @@ const visitSlide={
   textPosition:"bottom" as const,
   layout:"frame" as const,
   keywords:["방문 전"],
-  figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,
+  figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0,
 };
 
 const carouselStyleAnchor="따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트";
@@ -390,7 +390,7 @@ describe("OpenAI image request", () => {
 
 describe("hongeo stays the hero", () => {
   it("tells the image model that the skate is largest and in front while pork and kimchi are sides", () => {
-    const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:"",titleFont:"auto",bodyFont:"auto"}});
+    const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0}});
     expect(prompt).toContain("주인공은 홍어");
     expect(prompt).toContain("hero of every scene");
     expect(prompt).toContain("수육이 홍어보다 크거나 앞에 오면 안 된다");

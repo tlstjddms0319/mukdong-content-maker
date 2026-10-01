@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CarouselRole } from "./carousel";
 import { BodyFontIdSchema, TitleFontIdSchema, fontCatalogText } from "./typography";
+import { ThemeIdSchema, themeCatalogText } from "./themes";
 
 // 카드 디자인은 "AI가 백지에 그리기"가 아니라, 아래 선택지 안에서 주제에 맞게 고르는 방식이다.
 // 선택지 밖의 값은 스키마가 걸러내고, 어울리지 않는 조합은 normalizeCardLayout이 바로잡는다.
@@ -29,7 +30,7 @@ export const PALETTES:Record<PaletteId,{label:string;when:string;colors:Palette}
 };
 
 // 사장님이 고른 다섯 가지 카드뉴스 스타일. 글자는 코드로 찍고, 사진 분위기만 photoHint로 이미지 AI에 전달한다.
-export const CardLayoutSchema=z.enum(["fullscreen","frame","illustration","collage","browser","stat","versus","step","qa","quote"]);
+export const CardLayoutSchema=z.enum(["fullscreen","frame","illustration","collage","browser","stat","versus","step","qa","quote","magazine","split","polaroid","receipt","checklist","timeline","poster","circle"]);
 export type CardLayout=z.infer<typeof CardLayoutSchema>;
 
 export const CARD_LAYOUTS:Record<CardLayout,{label:string;when:string;photoCount:number;coverAllowed:boolean;photoHint:string}>={
@@ -53,19 +54,40 @@ export const CARD_LAYOUTS:Record<CardLayout,{label:string;when:string;photoCount
     photoHint:""},
   quote:{label:"인용구",when:"한 문장이 기억에 남게 하는 장, 분위기 장, 표지. 톤을 낮춘 사진 위에 큰 따옴표와 흰 인용구, 아래 출처 줄",photoCount:1,coverAllowed:true,
     photoHint:"Moody editorial photo with muted tones and side light; a back view or hands only, no recognizable face; keep the center-left area calm for text."},
+  magazine:{label:"잡지 편집형",when:"메뉴·재료를 차분히 소개하는 장, 표지. 위쪽 큰 사진 아래 작은 머리글, 큰 제목, 가는 선과 본문",photoCount:1,coverAllowed:true,
+    photoHint:"Editorial magazine food photo, wide composition, the dish in the upper-middle; the bottom edge of the frame can be cropped."},
+  split:{label:"반반 분할",when:"사진과 설명을 나란히 보여 주는 장, 표지. 화면 반쪽은 세로 사진, 반쪽은 제목과 요점",photoCount:1,coverAllowed:true,
+    photoHint:"Tall vertical composition with the subject centered horizontally so it survives a narrow half-width crop."},
+  polaroid:{label:"폴라로이드",when:"분위기·모임·추억처럼 장면 두 개를 함께 보여 주는 장. 기울어진 폴라로이드 사진 두 장과 손글씨 메모",photoCount:2,coverAllowed:false,
+    photoHint:"Casual snapshot-style photo with natural light, like a polaroid taken at the table; each candidate shows a different moment."},
+  receipt:{label:"영수증·메뉴판",when:"구성·가격 아닌 차림·준비물처럼 항목을 나열하는 장. 사진 없이 영수증 종이에 항목을 한 줄씩",photoCount:0,coverAllowed:false,photoHint:""},
+  checklist:{label:"체크리스트",when:"가기 전 확인할 점, 처음 먹을 때 챙길 것처럼 체크할 항목이 있는 장. 사진 없이 체크 상자 목록",photoCount:0,coverAllowed:false,photoHint:""},
+  timeline:{label:"타임라인",when:"먹는 순서, 숙성 과정처럼 시간이나 순서가 있는 장. 사진 없이 세로 선 위 번호 점과 단계",photoCount:0,coverAllowed:false,photoHint:""},
+  poster:{label:"큰 글자 포스터",when:"한 문장을 크게 외치는 장, 알림, 표지. 화면을 채우는 큰 제목과 둥근 작은 사진",photoCount:1,coverAllowed:true,
+    photoHint:"Simple close-up of the dish on a plain background, subject centered so it reads inside a small circle."},
+  circle:{label:"원형 사진",when:"한 접시를 또렷하게 보여 주는 장, 표지. 가운데 큰 원형 사진 아래 제목과 요점",photoCount:1,coverAllowed:true,
+    photoHint:"Top-down photo of one plate, centered, with the plate filling most of the frame so it fits a circle."},
 };
 
 // 색 조합과 제목·본문 글꼴. 글꼴이 없는 예전 구성안·요청은 기본 글꼴(프리텐다드)로 채운다.
 // .default()는 입력에서만 선택이고 출력(JSON 스키마의 기준)에서는 필수라, 엄격 JSON 스키마 제공자에도 그대로 보낼 수 있다.
+// 레이아웃마다 그릴 수 있는 모양 변형 수. slide.variant를 이 수로 나눈 나머지로 변형을 고른다(그리기 함수와 맞춰야 한다).
+export const LAYOUT_VARIANTS:Record<CardLayout,number>={
+  fullscreen:2,frame:2,illustration:2,collage:3,browser:2,stat:2,versus:1,step:2,qa:2,quote:2,
+  magazine:1,split:2,polaroid:1,receipt:1,checklist:1,timeline:1,poster:1,circle:1,
+};
+
 export const DesignSpecSchema=z.object({
   palette:PaletteIdSchema,
+  // 게시물 테마(themes.ts). 예전 구성안에는 없으므로 기본값은 지금까지의 스크랩북 모양(classic).
+  theme:ThemeIdSchema.default("classic"),
   titleFont:TitleFontIdSchema.default("pretendard"),
   bodyFont:BodyFontIdSchema.default("pretendard"),
 });
 export type DesignSpec=z.output<typeof DesignSpecSchema>;
 // 그리기 함수는 글꼴이 빠진 예전 값도 받는다(빠진 글꼴은 기본값).
 export type DesignSpecInput=z.input<typeof DesignSpecSchema>;
-export const DEFAULT_DESIGN:DesignSpec={palette:"warm",titleFont:"pretendard",bodyFont:"pretendard"};
+export const DEFAULT_DESIGN:DesignSpec={palette:"warm",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard"};
 
 export const paletteOf=(design?:DesignSpecInput):Palette=>PALETTES[design?.palette??DEFAULT_DESIGN.palette].colors;
 
@@ -112,5 +134,5 @@ export function normalizeCardLayout(slide:{role:CarouselRole;layout:CardLayout;f
 export function designCatalogText():string {
   const palettes=PaletteIdSchema.options.map(id=>`${id}(${PALETTES[id].label}: ${PALETTES[id].when})`).join(", ");
   const layouts=CardLayoutSchema.options.map(id=>`${id}(${CARD_LAYOUTS[id].label}: ${CARD_LAYOUTS[id].when})`).join(", ");
-  return `design.palette는 주제의 분위기에 맞게 다음 중 하나: ${palettes}. ${fontCatalogText()} 각 slide의 layout은 그 장의 내용에 맞게 다음 중 하나: ${layouts}. 표지는 fullscreen, frame, quote 중에서, 본문은 내용에 맞게 고르되 이어지는 두 장이 같은 layout이 되지 않게 섞고, browser·qa·stat은 사진이 없으니 글자 정보가 중심인 장에만 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣으세요(해시태그·검색창·비교 이름에 쓰임). 각 slide의 figure는 stat 레이아웃에서 크게 보여 줄 숫자(예: "3가지", "48시간")이며, 주제나 내용 메모에 실제로 있는 숫자만 쓰고 그 외에는 빈 문자열로 두세요. 숫자를 지어내지 마세요.`;
+  return `design.palette는 주제의 분위기에 맞게 다음 중 하나: ${palettes}. ${themeCatalogText()} ${fontCatalogText()} 각 slide의 layout은 그 장의 내용에 맞게 다음 중 하나: ${layouts}. 표지는 fullscreen, frame, quote 중에서, 본문은 내용에 맞게 고르되 이어지는 두 장이 같은 layout이 되지 않게 섞고, browser·qa·stat·receipt·checklist·timeline은 사진이 없으니 글자 정보가 중심인 장에만 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣으세요(해시태그·검색창·비교 이름에 쓰임). 각 slide의 figure는 stat 레이아웃에서 크게 보여 줄 숫자(예: "3가지", "48시간")이며, 주제나 내용 메모에 실제로 있는 숫자만 쓰고 그 외에는 빈 문자열로 두세요. 숫자를 지어내지 마세요.`;
 }

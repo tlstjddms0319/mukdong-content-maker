@@ -1,5 +1,6 @@
 import type { CarouselPlan, CarouselRole } from "./carousel";
-import { PaletteIdSchema, defaultCardLayout, normalizeCardLayout, type CardLayout, type DesignSpec, type PaletteId } from "./design";
+import { LAYOUT_VARIANTS, PaletteIdSchema, defaultCardLayout, normalizeCardLayout, type CardLayout, type DesignSpec, type PaletteId } from "./design";
+import { ThemeIdSchema } from "./themes";
 import type { BodyFontId, TitleFontId } from "./typography";
 
 // 캐러셀마다 템플릿이 달라 보이게 하는 장치.
@@ -9,17 +10,17 @@ import type { BodyFontId, TitleFontId } from "./typography";
 
 // 역할마다 어울리는 레이아웃 후보. 첫 번째가 기본값(defaultCardLayout)과 같다.
 const ROLE_LAYOUT_CHOICES:Record<CarouselRole,CardLayout[]>={
-  cover:["fullscreen","frame","quote"],
-  overview:["collage","illustration","frame"],
-  detail:["frame","illustration","fullscreen","collage"],
-  "how-to":["browser","step","illustration"],
+  cover:["fullscreen","frame","quote","magazine","split","poster","circle"],
+  overview:["collage","illustration","frame","magazine","polaroid","receipt"],
+  detail:["frame","illustration","fullscreen","collage","circle","split","magazine"],
+  "how-to":["browser","step","illustration","timeline","checklist"],
   // 비교형(versus)은 글이 실제로 두 가지를 견줄 때만 맞으므로 후보에 넣지 않는다. AI가 내용을 보고 고를 때만 쓴다.
-  pairing:["illustration","collage","frame"],
-  process:["browser","step","frame"],
-  occasion:["quote","fullscreen","collage"],
-  mood:["fullscreen","quote","frame"],
-  visit:["collage","qa","frame"],
-  cta:["qa","quote","browser"],
+  pairing:["illustration","collage","frame","polaroid","split","circle"],
+  process:["browser","step","frame","timeline","receipt"],
+  occasion:["quote","fullscreen","collage","polaroid","split"],
+  mood:["fullscreen","quote","frame","poster","circle","magazine"],
+  visit:["collage","qa","frame","checklist","receipt","poster"],
+  cta:["qa","quote","browser","poster","checklist"],
 };
 
 // 기본 구성안처럼 디자인이 비어 있을 때 쓰는 색·글꼴 묶음. accent는 표지·분위기 장의 제목 글꼴이다.
@@ -42,9 +43,11 @@ export function diversifyCarouselDesign(plan:CarouselPlan,seed:number,options:{f
   const fallback=options.fallback??false;
   // 기본 구성안은 색과 글꼴도 시드로 고른다. AI 구성안은 AI가 고른 색·글꼴을 그대로 둔다.
   const fontSet=pick(FONT_SETS,seed,3);
+  // 게시물 테마는 AI가 기본값(classic)을 그대로 냈거나 기본 구성안이면 시드로 고른다. 게시물마다 옷이 바뀐다.
+  const theme=fallback||plan.design.theme==="classic"?pick(ThemeIdSchema.options,seed,5):plan.design.theme;
   const design:DesignSpec=fallback
-    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont}
-    :plan.design;
+    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),theme,titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont}
+    :{...plan.design,theme};
   const accent=fallback?fontSet.accent:ACCENT_TITLE[design.titleFont];
   const everyFontAuto=plan.slides.every(slide=>slide.titleFont==="auto"&&slide.bodyFont==="auto");
 
@@ -63,7 +66,9 @@ export function diversifyCarouselDesign(plan:CarouselPlan,seed:number,options:{f
     used.add(layout);
     // AI가 장마다 글꼴을 하나도 고르지 않았으면 감성 장(표지·분위기·모임)만 짝 글꼴로 바꿔 장마다 표정을 준다.
     const titleFont=everyFontAuto&&EMOTIONAL_ROLES.has(slide.role)&&accent!==design.titleFont?accent:slide.titleFont;
-    return {...slide,layout,titleFont};
+    // 같은 레이아웃도 장·게시물마다 모양 변형을 바꾼다(제목 위치, 사진 모양, 격자 배치 등).
+    const variant=(seed+index*3)%LAYOUT_VARIANTS[layout];
+    return {...slide,layout,titleFont,variant};
   });
   return {...plan,design,slides};
 }
