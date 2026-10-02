@@ -13,7 +13,7 @@ describe("topic service", () => {
     const topics = Array.from({ length:3 }, (_, index) => ({
       id:`gemini-${index}`, title:["수육 옆에는 왜 김치가 있을까?","같은 회인데 왜 식감은 다를까?","홍어는 왜 수육이랑 먹을까?"][index], summary:"익숙한 음식의 맛과 식감에 대한 질문에 답하고 홍어를 구체적인 사례로 연결한다.", reason:"이유", audience:(['A','B','C'] as const)[index], imageBrief:"음식 사진",
     }));
-    await expect(suggestTopics(input, { suggest:async () => topics })).resolves.toEqual(topics);
+    await expect(suggestTopics(input, { suggest:async () => topics })).resolves.toEqual(topics.map(topic=>({...topic,season:""})));
   });
 
   it("offers two everyday questions and one hongeo question in every offline round", async () => {

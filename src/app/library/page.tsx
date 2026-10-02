@@ -10,7 +10,7 @@ export default async function LibraryPage() {
   return <WizardShell step="topic" section="library">
     <p className="eyebrow">콘텐츠 자료</p>
     <h1>어떤 이야기로 시작할까요?</h1>
-    <p className="lead">20~30대 고객의 음식 탐색·약속 결정·첫 경험을 고려한 4주 아이디어예요. 실시간 인기 주제는 아니에요.</p>
+    <p className="lead">20~30대 고객의 음식 탐색·약속 결정·첫 경험을 고려한 4주 아이디어예요. 새 초안의 AI 추천은 오늘 날짜에 맞춰 명절·복날·김장철 같은 시기 주제도 섞어 드려요.</p>
     <div className="library-grid">{LIBRARY_TOPICS.map(card=><article className="library-card" key={card.title}>
       <div className="library-badges"><span className="soft-badge">{card.week}주차</span><span className="soft-badge">{AUDIENCE_LABELS[card.audience]}</span><span className="soft-badge">{FORMAT_LABELS[card.format]}</span></div>
       <h2>{card.title}</h2><p>{card.intent}</p>
