@@ -7,6 +7,7 @@ import type { BodyFontId, TitleFontId } from "./typography";
 import type { ThemeId } from "./themes";
 import type { StyleId } from "./styleCatalog";
 import { readJsonResponse } from "@/lib/http/readJson";
+import { fitPlanToPhotos, swapPhoto } from "./photoCarousel";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
 // 화면(ImageStudio)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
@@ -16,6 +17,9 @@ export type ApprovedImage={id:string;preview?:string;referencePreview?:string;so
 export type StudioMode="photo"|"ai"|"mix"|"free";
 export type StudioPhase="idle"|"uploading"|"planning"|"cover"|"slides";
 export type ReferenceUse="source"|"style";
+// 실제 사진 캐러셀에 쓸 사진 한 장. id는 사진 보관함(asset library) id, preview는 서버가 줄여 준 JPEG(최대 1400px).
+export type StudioPhoto={id:string;preview:string;name:string};
+export const MAX_STUDIO_PHOTOS=10;
 export type GenerationInput={topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount};
 // "auto"면 구성안 AI가 글 분위기에 맞춰 추천한 글꼴을 쓰고, 아니면 사용자가 고른 글꼴로 덮어쓴다.
 export type FontChoice<T extends string>="auto"|T;
@@ -44,16 +48,18 @@ export type GenerationState={
   error:string;
   approved:boolean;
   refinements:Record<number,string>;
+  photos:StudioPhoto[];          // 실제 사진 캐러셀에 쓸 사진(올린 순서 = 장에 배치되는 순서)
+  photoAssignment:number[][];    // 장마다 들어간 사진 번호(photos 기준). 사진 바꾸기에 쓴다.
 };
 
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",style:"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{}};
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",style:"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[]};
 }
 
 // 만든 것들만 비우고 모드·화풍·참고 사진은 남긴다(모드 카드나 표지 다시 만들기에서 쓰는 초기화).
-const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:""};
+const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[]};
 
 let state:GenerationState=initialGenerationState("",EMPTY_INPUT);
 // 늦게 도착한 응답을 버리기 위한 토큰. 새 작업이 시작되거나 상태가 초기화될 때마다 올라간다.
@@ -214,4 +220,117 @@ export async function regenerateSlide(){
   }finally{
     if(token===run)patch({phase:"idle"});
   }
+}
+
+// ── 실제 사진 여러 장으로 만드는 캐러셀 ──────────────────────────────────────────
+// 사진은 사진 보관함(/api/images/assets)에 저장해 다음 게시물에서도 다시 고를 수 있게 한다.
+// 보관함이 돌려주는 미리보기(최대 1400px JPEG, 회전 보정됨)를 카드 그리기에 그대로 쓴다.
+
+export async function addPhotos(files:File[]){
+  const room=MAX_STUDIO_PHOTOS-state.photos.length;
+  const picked=files.filter(file=>file.type.startsWith("image/")).slice(0,Math.max(0,room));
+  if(!picked.length){if(files.length&&room<=0)patch({error:`사진은 ${MAX_STUDIO_PHOTOS}장까지 쓸 수 있어요.`});return;}
+  const token=++run;
+  patch({phase:"uploading",error:""});
+  try{
+    for(const [i,file] of picked.entries()){
+      patch({photoStatus:`사진 저장 중 ${i+1}/${picked.length}`});
+      const body=new FormData();
+      body.append("file",file);
+      // 보관함 검색용 이름·검색어. 이름은 파일명, 검색어는 지금 주제.
+      body.append("name",file.name.replace(/\.[a-z0-9]+$/i,"").slice(0,60)||"매장 사진");
+      body.append("tags",[state.input.topic.slice(0,24)||"홍어","매장 사진"].join(","));
+      body.append("kind","photo");
+      body.append("credit","묵동홍어마을 직접 촬영");
+      const response=await fetch("/api/images/assets",{method:"POST",body});
+      const data=await readJsonResponse(response);
+      if(token!==run)return;
+      if(!response.ok)throw new Error(data.message||"사진을 저장하지 못했어요.");
+      patch({photos:[...state.photos,{id:data.asset.id,preview:data.asset.preview,name:data.asset.name}],...CLEARED});
+    }
+    patch({photoStatus:`사진 ${state.photos.length}장 준비됐어요.`});
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"사진을 저장하지 못했어요."});
+  }finally{
+    if(token===run)patch({phase:"idle"});
+  }
+}
+
+// 보관함에서 고른 사진을 더한다(이미 넣은 사진은 건너뛴다).
+export function addLibraryPhoto(photo:StudioPhoto){
+  if(state.photos.some(item=>item.id===photo.id))return;
+  if(state.photos.length>=MAX_STUDIO_PHOTOS){patch({error:`사진은 ${MAX_STUDIO_PHOTOS}장까지 쓸 수 있어요.`});return;}
+  run++;
+  patch({photos:[...state.photos,photo],...CLEARED});
+}
+export function removePhoto(index:number){run++;patch({photos:state.photos.filter((_,i)=>i!==index),...CLEARED});}
+// 사진 순서 바꾸기(앞으로 한 칸). 첫 사진이 표지가 된다.
+export function movePhotoForward(index:number){
+  if(index<=0)return;
+  const photos=[...state.photos];
+  [photos[index-1],photos[index]]=[photos[index],photos[index-1]];
+  run++;patch({photos,...CLEARED});
+}
+
+async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[]):Promise<ApprovedImage>{
+  const slide=plan.slides[index];
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview)}:{})})});
+  const data=await readJsonResponse(response);
+  if(!response.ok)throw new Error(data.message||"카드를 만들지 못했어요.");
+  if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
+  return {id:crypto.randomUUID(),preview:data.images[0],source:slots.length?"photo":"design",role:slide.role};
+}
+
+// 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. AI 이미지는 만들지 않는다.
+export async function buildPhotoCarousel(){
+  if(!state.photos.length)return;
+  const token=++run;
+  patch({...CLEARED,phase:"planning",slideLayout:"card"});
+  try{
+    const {topic,imageBrief,contentBrief,slideCount}=state.input;
+    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:"photo"})});
+    const data=await readJsonResponse(response);
+    if(token!==run)return;
+    if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
+    const fit=fitPlanToPhotos(data.plan as CarouselPlan,state.photos.length);
+    // 기본 문안이어도 비용이 들지 않으니 멈추지 않고, 안내만 남긴다.
+    patch({plan:fit.plan,planFallback:data.provider==="fallback",photoAssignment:fit.assignment,phase:"slides"});
+    let next:ApprovedImage[]=[];
+    for(let i=0;i<fit.plan.slides.length;i++){
+      const card=await composePhotoSlide(fit.plan,i,fit.assignment[i]);
+      if(token!==run)return;
+      next=[...next,card];
+      patch({slides:next,...(i===0?{cover:card}:{})});
+    }
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"사진 캐러셀을 만들지 못했어요."});
+  }finally{
+    if(token===run)patch({phase:"idle"});
+  }
+}
+
+// 지금 보고 있는 장의 사진(첫 칸)을 다른 사진으로 바꾸고 그 장만 다시 그린다.
+export async function swapSlidePhoto(photoIndex:number){
+  const {plan,photoAssignment}=state;
+  const index=activeSlideIndex(state);
+  if(!plan||!photoAssignment[index]?.length)return;
+  const slots=swapPhoto(photoAssignment[index],photoIndex);
+  const token=++run;
+  patch({phase:"slides",error:""});
+  try{
+    const card=await composePhotoSlide(plan,index,slots);
+    if(token!==run)return;
+    patch({slides:state.slides.map((item,i)=>i===index?card:item),photoAssignment:state.photoAssignment.map((item,i)=>i===index?slots:item),...(index===0?{cover:card}:{}),approved:false});
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"사진을 바꾸지 못했어요."});
+  }finally{
+    if(token===run)patch({phase:"idle"});
+  }
+}
+
+// 카드로 꾸미지 않고 올린 사진 그대로 캐러셀로 쓴다.
+export function approveRawPhotos(onApprove:(images:ApprovedImage[])=>void){
+  if(!state.photos.length)return;
+  patch({approved:true});
+  onApprove(state.photos.map(photo=>({id:photo.id,preview:photo.preview,source:"photo"})));
 }

@@ -173,9 +173,11 @@ describe("DraftWizard",()=>{
   });
   it("preserves an edited caption through review, back, and review again",async()=>{
     const copy={topic:"수육에는 왜 김치를 곁들일까?",audience:"A",hook:"AI 첫 문장",information:"정보",store_connection:"가게",call_to_action:"방문",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null,_meta:{provider:"fallback"}};
-    const request=vi.fn(async(url:string)=>url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/media/upload"?{ok:true,json:async()=>({id:"photo-id"})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:url==="/api/copy"?{ok:true,json:async()=>copy}:{ok:false,json:async()=>({})});
+    const request=vi.fn(async(url:string)=>url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/images/assets"?{ok:true,json:async()=>({asset:{id:"photo-id",preview:"data:image/jpeg;base64,AAAA",name:"a"}})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:url==="/api/copy"?{ok:true,json:async()=>copy}:{ok:false,json:async()=>({})});
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+    // 사진 모드는 사진을 모아 두었다가 "글자 없이 사진만 쓰기"(또는 캐러셀 만들기)로 확정한다.
+    fireEvent.click(await screen.findByRole("button",{name:"글자 없이 사진만 쓰기"}));
     await waitFor(()=>expect(screen.getByRole("button",{name:"문안 만들기"})).toBeEnabled());fireEvent.click(screen.getByRole("button",{name:"문안 만들기"}));
     const textarea=await screen.findByRole("textbox",{name:"게시물 문안"});fireEvent.change(textarea,{target:{value:"내가 고친 문안"}});
     fireEvent.click(screen.getByRole("button",{name:"최종 화면 보기"}));await waitFor(()=>expect(document.querySelector(".preserved-caption")).toHaveTextContent("내가 고친 문안"));
@@ -186,9 +188,11 @@ describe("DraftWizard",()=>{
   it("invalidates saved images and copy when the topic changes",async()=>{
     let uploads=0;
     const copy={topic:"수육에는 왜 김치를 곁들일까?",audience:"A",hook:"새 AI 문안",information:"정보",store_connection:"가게",call_to_action:"방문",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null,_meta:{provider:"fallback"}};
-    const request=vi.fn(async(url:string,init?:RequestInit)=>{void init;return url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/media/upload"?{ok:true,json:async()=>({id:`photo-${++uploads}`})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:url==="/api/copy"?{ok:true,json:async()=>copy}:url==="/api/images/plan"?{ok:false,json:async()=>({message:"계획 실패"})}:{ok:false,json:async()=>({})};});
+    const request=vi.fn(async(url:string,init?:RequestInit)=>{void init;return url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/images/assets"?{ok:true,json:async()=>({asset:{id:`photo-${++uploads}`,preview:"data:image/jpeg;base64,AAAA",name:`photo-${uploads}`}})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:url==="/api/copy"?{ok:true,json:async()=>copy}:url==="/api/images/plan"?{ok:false,json:async()=>({message:"계획 실패"})}:{ok:false,json:async()=>({})};});
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+    // 사진 모드는 사진을 모아 두었다가 "글자 없이 사진만 쓰기"(또는 캐러셀 만들기)로 확정한다.
+    fireEvent.click(await screen.findByRole("button",{name:"글자 없이 사진만 쓰기"}));
     await waitFor(()=>expect(screen.getByRole("button",{name:"문안 만들기"})).toBeEnabled());
     const firstSave=JSON.parse(String((request.mock.calls.find(([url])=>url==="/api/drafts")?.[1] as RequestInit).body));
     expect(firstSave.content_brief).toContain("홍어");
@@ -209,6 +213,7 @@ describe("DraftWizard",()=>{
     expect(planBody.topic).toBe("막걸리와 즐기는 저녁 한 상");
     fireEvent.click(screen.getByRole("button",{name:"실제 사진 사용"}));
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["b"],"b.png",{type:"image/png"})]}});
+    fireEvent.click(await screen.findByRole("button",{name:"글자 없이 사진만 쓰기"}));
     await waitFor(()=>expect(request.mock.calls.filter(([url])=>url==="/api/drafts")).toHaveLength(2));
     const secondSave=JSON.parse(String((request.mock.calls.filter(([url])=>url==="/api/drafts")[1][1] as RequestInit).body));
     expect(secondSave).toMatchObject({topic:"막걸리와 즐기는 저녁 한 상",content_brief:""});expect(secondSave.id).not.toBe(firstSave.id);
@@ -219,9 +224,10 @@ describe("DraftWizard",()=>{
   });
   it("ignores a late draft save after the topic changes",async()=>{
     let finishSave:(value:unknown)=>void=()=>{};
-    const request=vi.fn((url:string)=>url==="/api/topics"?Promise.resolve({ok:false,json:async()=>({})}):url==="/api/media/upload"?Promise.resolve({ok:true,json:async()=>({id:"photo-id"})}):url==="/api/drafts"?new Promise(resolve=>{finishSave=resolve;}):Promise.resolve({ok:false,json:async()=>({})}));
+    const request=vi.fn((url:string)=>url==="/api/topics"?Promise.resolve({ok:false,json:async()=>({})}):url==="/api/images/assets"?Promise.resolve({ok:true,json:async()=>({asset:{id:"photo-id",preview:"data:image/jpeg;base64,AAAA",name:"a"}})}):url==="/api/drafts"?new Promise(resolve=>{finishSave=resolve;}):Promise.resolve({ok:false,json:async()=>({})}));
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+    fireEvent.click(await screen.findByRole("button",{name:"글자 없이 사진만 쓰기"}));
     await waitFor(()=>expect(request).toHaveBeenCalledWith("/api/drafts",expect.anything()));
     expect(screen.getByText("이미지 선택을 저장하는 중…")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:"이전: 주제"}));
@@ -232,9 +238,10 @@ describe("DraftWizard",()=>{
   });
   it("keeps copy disabled after a save failure until retry succeeds",async()=>{
     let saves=0;
-    const request=vi.fn(async(url:string)=>url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/media/upload"?{ok:true,json:async()=>({id:"photo-id"})}:url==="/api/drafts"?{ok:++saves>1,json:async()=>({})}:{ok:false,json:async()=>({})});
+    const request=vi.fn(async(url:string)=>url==="/api/topics"?{ok:false,json:async()=>({})}:url==="/api/images/assets"?{ok:true,json:async()=>({asset:{id:"photo-id",preview:"data:image/jpeg;base64,AAAA",name:"a"}})}:url==="/api/drafts"?{ok:++saves>1,json:async()=>({})}:{ok:false,json:async()=>({})});
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+    fireEvent.click(await screen.findByRole("button",{name:"글자 없이 사진만 쓰기"}));
     expect(await screen.findByRole("button",{name:"저장 다시 시도"})).toBeInTheDocument();expect(screen.getByRole("button",{name:"문안 만들기"})).toBeDisabled();
     fireEvent.click(screen.getByRole("button",{name:"저장 다시 시도"}));await waitFor(()=>expect(screen.getByRole("button",{name:"문안 만들기"})).toBeEnabled());expect(saves).toBe(2);
   });
