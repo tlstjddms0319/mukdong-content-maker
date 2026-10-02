@@ -42,7 +42,8 @@ export const renderWebtoon:CardRenderer=async(inputs,slide,index,total)=>{
     const top=inputs.length?M+TOP_H-title.info.height-30:M+Math.round((TOP_H-title.info.height)/2);
     layers.push({input:title.data,left:Math.round((1080-title.info.width)/2),top});
   }else{
-    const box=await textLayer(content.headline,{size:44,color:LINE,width:W-140,height:160,font:STYLE_FONTS.comic,spacing:6});
+    // 오른쪽 위 효과음(약 330px)과 겹치지 않도록 해설 상자는 왼쪽에 좁게 둔다.
+    const box=await fitText(content.headline,{sizes:[44,40,36],width:W-430,maxHeight:170,color:LINE,font:STYLE_FONTS.comic,spacing:6});
     frames+=`<rect x="${M+24}" y="${M+24}" width="${box.info.width+44}" height="${box.info.height+32}" fill="${NARRATION}" stroke="${LINE}" stroke-width="5"/>`;
     layers.push({input:box.data,left:M+46,top:M+40});
   }
@@ -53,7 +54,8 @@ export const renderWebtoon:CardRenderer=async(inputs,slide,index,total)=>{
   const focusX=mascot?mascot.left+mascot.width/2:M+200,focusY=mascot?mascot.top+mascot.height*.35:BOTTOM_Y+BOTTOM_H/2;
   frames+=speedLines(M,BOTTOM_Y,W,BOTTOM_H,focusX,focusY);
   // 말풍선에는 요점 앞쪽 두 줄. 꼬리는 마스코트 얼굴을 향한다.
-  const said=content.points.slice(0,2).join("\n")||content.headline;
+  // 표지는 요점이 없으니 제목을 되풀이하지 않고 다음 장으로 이끄는 짧은 대사를 쓴다.
+  const said=content.points.slice(0,2).join("\n")||(content.cover?"오늘 이야기,\n같이 볼래요?":content.headline);
   const bubbleX=mascot?mascot.left+mascot.width+10:M+80,bubbleW=1080-M-30-bubbleX;
   const speech=await fitText(said,{sizes:[40,36,34],width:bubbleW-90,maxHeight:BOTTOM_H-200,color:LINE,font:STYLE_FONTS.comic,align:"centre",spacing:8});
   const bw=Math.max(speech.info.width+110,300),bh=speech.info.height+90;
