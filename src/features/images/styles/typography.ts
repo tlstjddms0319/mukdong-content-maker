@@ -7,11 +7,13 @@ import { STYLE_FONTS, contentOf, fitText, hashtags } from "./shared";
 const ACCENTS=["#FF5A36","#FFD23F","#7CFFB2","#FF6FB5"];
 
 // 제목을 "핵심 낱말"과 나머지로 나눈다. 키워드가 제목 안에 있으면 그것을, 없으면 가장 긴 어절을 핵심으로 고른다.
+// 키워드가 붙은 어절 전체("홍어와")를 핵심으로 잡아 "홍어 / 와 가오리는"처럼 조사가 떨어져 나가지 않게 한다.
 function splitHero(headline:string,keywords:string[]):{before:string;hero:string;after:string} {
+  const words=headline.split(" ").filter(Boolean);
   const keyword=keywords.find(word=>word&&headline.includes(word));
-  const hero=keyword??headline.split(" ").reduce((a,b)=>b.length>a.length?b:a,"");
-  const at=headline.indexOf(hero);
-  return {before:headline.slice(0,at).trim(),hero,after:headline.slice(at+hero.length).trim()};
+  const index=keyword?words.findIndex(word=>word.includes(keyword)):-1;
+  const heroIndex=index>=0?index:words.reduce((best,word,i)=>word.length>words[best].length?i:best,0);
+  return {before:words.slice(0,heroIndex).join(" "),hero:words[heroIndex]??headline,after:words.slice(heroIndex+1).join(" ")};
 }
 
 export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{

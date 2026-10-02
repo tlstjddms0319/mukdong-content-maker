@@ -61,7 +61,8 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
     y+=Math.ceil((title.info.height+20)/LINE_GAP)*LINE_GAP;
     if(hasPhoto){
       const shots=inputs.slice(0,2);
-      const side=shots.length>1?340:(content.points.length>1?360:420);
+      // 요점이 많을수록 폴라로이드를 줄여 요점 자리를 확보한다.
+      const side=shots.length>1?(content.points.length>2?290:340):(content.points.length>2?320:content.points.length>1?360:420);
       const captions=content.keywords.length?content.keywords:["한 점","한 잔"];
       for(const [i,shot] of shots.entries()){
         const pol=await rotated(await polaroid(shot,side,captions[i%captions.length],i?"left":"right"),shots.length>1?(i?5:-5):(v%2?-4:4));
@@ -79,15 +80,21 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
   if(!content.cover){
     const size=hasPhoto?50:64;
     const bottom=NY+NH-120;
-    const lines=await Promise.all(content.points.slice(0,hasPhoto?3:4).map(point=>textLayer(`✓ ${point}`,{size,color:PEN,width:TW,height:LINE_GAP*3,font:STYLE_FONTS.hand,spacing:LINE_GAP-Math.round(size*1.2)})));
-    const rowsOf=(line:typeof lines[number])=>Math.max(1,Math.round(line.info.height/LINE_GAP));
+    // 손글씨 한 줄의 실제 높이를 재서, 줄 간격(spacing)을 "노트 줄 간격 - 한 줄 높이"로 맞춘다.
+    // 그래야 요점이 두 줄로 넘어가도 둘째 줄이 다음 노트 줄 위에 앉고 다음 요점과 겹치지 않는다.
+    // 한 줄짜리 글자 높이는 잉크 부분만 재져서 실제 줄 높이보다 작으므로, 한 줄·두 줄 시험 글자의 높이 차로 줄 간격(pitch)을 잰다.
+    const probe=(text:string)=>textLayer(text,{size,color:PEN,width:TW,height:LINE_GAP*3,font:STYLE_FONTS.hand,spacing:0});
+    const oneLine=(await probe("가힣")).info.height;
+    const pitch=(await probe("가힣\n가힣")).info.height-oneLine;
+    const lines=await Promise.all(content.points.slice(0,hasPhoto?3:4).map(point=>textLayer(`✓ ${point}`,{size,color:PEN,width:TW,height:LINE_GAP*4,font:STYLE_FONTS.hand,spacing:LINE_GAP-pitch})));
+    const rowsOf=(line:typeof lines[number])=>1+Math.max(0,Math.round((line.info.height-oneLine)/LINE_GAP));
     // 글자 장은 남는 노트 줄을 요점 사이에 고르게 나눠(최대 3줄) 아래가 비지 않게 한다.
     const free=Math.floor((bottom-y)/LINE_GAP)-lines.reduce((sum,line)=>sum+rowsOf(line),0);
-    const gapLines=hasPhoto||lines.length<2?0:Math.max(1,Math.min(3,Math.floor(free/(lines.length-1))));
+    const gapLines=hasPhoto||lines.length<2?0:Math.max(0,Math.min(3,Math.floor(free/(lines.length-1))));
     for(const line of lines){
       const rows=rowsOf(line);
       if(y+rows*LINE_GAP>bottom)break;
-      layers.push({input:line.data,left:TX,top:y+LINE_GAP-Math.round(size*1.2)-2});
+      layers.push({input:line.data,left:TX,top:y+LINE_GAP-oneLine-4});
       y+=(rows+gapLines)*LINE_GAP;
     }
   }

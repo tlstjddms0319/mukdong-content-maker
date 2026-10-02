@@ -29,11 +29,14 @@ export const renderY2k:CardRenderer=async(inputs,slide,index,total)=>{
   // 사진 없는 창은 요점을 크게(40px) 써서 창을 키운다.
   const lineSize=inputs.length?34:40;
   const lines=await Promise.all(content.points.map(point=>textLayer(`> ${point}`,{size:lineSize,color:"#000000",width:WW-110,height:lineSize*4,font:STYLE_FONTS.pixel,spacing:inputs.length?8:22})));
-  const linesH=lines.reduce((sum,line)=>sum+line.info.height+14,0);
   const BUTTON_H=72,PAD=36;
-  const fixed=Math.max(title.info.height,110)+30+(lines.length?linesH+20:0)+BUTTON_H+PAD*2;
   const maxWinH=1350-TASK-40-110;
-  const photoH=inputs.length?Math.max(260,Math.min(560,maxWinH-BAR-fixed)):0;
+  const fixedOf=(list:typeof lines)=>Math.max(title.info.height,110)+30+(list.length?list.reduce((sum,line)=>sum+line.info.height+14,0)+20:0)+BUTTON_H+PAD*2;
+  // 사진을 가장 작게(260) 줄여도 창에 다 안 들어가면 뒤쪽 요점부터 뺀다(최소 2줄은 남긴다). 글자가 버튼과 겹치지 않게.
+  while(lines.length>2&&BAR+fixedOf(lines)+(inputs.length?290:0)>maxWinH)lines.pop();
+  const fixed=fixedOf(lines);
+  // 사진 아래 여백(30)까지 빼야 창 높이 안에 버튼까지 들어간다.
+  const photoH=inputs.length?Math.max(260,Math.min(560,maxWinH-BAR-fixed-30)):0;
   const WH=Math.min(maxWinH,BAR+fixed+(photoH?photoH+30:0));
   // 창이 작으면(사진 없는 장) 바탕화면 세로 가운데로 내린다. 위쪽 네온 팝업 자리(60px)는 남긴다.
   WY=Math.max(110,Math.round((1350-TASK-WH)/2));
