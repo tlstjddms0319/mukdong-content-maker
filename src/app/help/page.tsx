@@ -18,7 +18,7 @@ export default async function HelpPage() {
     </ol>
     <div className="state-card"><h2>알아두세요</h2>
       <p>AI 사용에는 계정 설정에 따라 비용이 들 수 있어요. 이미지 생성이 안 되면 직접 사진을 올려 진행하세요.</p>
-      <p>Instagram 연결 전에는 자동 게시되지 않아요. 실시간 인기 주제 수집은 포함되지 않아요. 추천 음악은 Instagram 보관함에서 직접 검색하고 사용 가능 여부를 확인해 주세요.</p>
+      <p>Instagram 연결 전에는 자동 게시되지 않아요. 추천 주제는 오늘 날짜의 계절과 명절·복날·김장철 같은 시기를 반영하지만, 실시간 검색 인기도는 아직 반영하지 않아요. 추천 음악은 Instagram 보관함에서 직접 검색하고 사용 가능 여부를 확인해 주세요.</p>
     </div>
     <div className="bottom-action"><Link className="button primary" href="/?new=1">새 초안 만들기</Link><Link className="button secondary" href="/drafts">내 초안 보기</Link><Link className="button secondary" href="/images">이미지 제작실</Link><Link className="button secondary" href="/settings">설정 보기</Link></div>
   </WizardShell>;

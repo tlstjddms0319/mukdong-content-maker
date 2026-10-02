@@ -131,6 +131,9 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .topic-card { min-height:190px; display:flex; flex-direction:column; align-items:flex-start; gap:12px; padding:20px; text-align:left; border:1px solid var(--line); border-radius:var(--panel-radius); background:white; }
 .topic-card strong { font-size:20px; line-height:1.3; }
 .topic-card>span:last-child { color:var(--muted); }
+.topic-badges { display:flex; flex-wrap:wrap; gap:6px; }
+.season-badge { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:#FFF1D6; color:#8A5200; font-size:13px; font-weight:700; }
+.season-line { margin:-4px 0 12px; color:var(--muted); font-size:14px; }
 .topic-card.selected { border:2px solid var(--accent); padding:19px; box-shadow:0 8px 28px rgb(31 90 67 / 10%); }
 .custom-topic { display:flex; flex-direction:column; gap:7px; margin-top:20px; font-weight:700; }
 .custom-topic input { max-width:640px; padding:8px 12px; border:1px solid var(--line); border-radius:var(--control-radius); background:white; }

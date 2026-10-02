@@ -61,6 +61,8 @@ describe("topic route", () => {
     }));
     const body=await response.json();
 
-    expect(body.topics.every((topic:{id:string})=>topic.id.startsWith("fallback-2-"))).toBe(true);
+    // 오늘 날짜에 시즌 행사가 있으면 첫 칸이 시즌 주제(fallback-season-*)로 바뀔 수 있다.
+    expect(body.topics.filter((topic:{id:string})=>!topic.id.startsWith("fallback-season-")).every((topic:{id:string})=>topic.id.startsWith("fallback-2-"))).toBe(true);
+    expect(body.season.name).toMatch(/^(봄|여름|가을|겨울)$/);
   });
 });

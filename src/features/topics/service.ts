@@ -1,7 +1,8 @@
-import { TopicInputSchema, TopicSuggestionsSchema, type TopicInput, type TopicSuggestion } from "./schema";
+import { TopicInputSchema, TopicSuggestionsSchema, type TopicInput, type TopicSuggestion, type TopicSuggestionInput } from "./schema";
+import type { SeasonContext } from "./season";
 
 export interface TopicAiClient {
-  suggest(input:TopicInput):Promise<TopicSuggestion[]>;
+  suggest(input:TopicInput):Promise<TopicSuggestionInput[]>;
 }
 
 const TOPIC_DIRECTIONS = [
@@ -11,7 +12,7 @@ const TOPIC_DIRECTIONS = [
   ["곁들임이 맛에 주는 변화","음식 이름과 식문화에 대한 궁금증","홍어와 다른 해산물 비교"],
 ] as const;
 
-const FALLBACK_TOPIC_ROUNDS:Omit<TopicSuggestion,"id">[][] = [
+const FALLBACK_TOPIC_ROUNDS:Omit<TopicSuggestion,"id"|"season">[][] = [
   [
     {title:"수육에는 왜 김치를 곁들일까?",summary:"수육에 김치를 곁들이는 익숙한 장면에서 맛과 식감의 차이를 설명합니다. 여기에 홍어를 더한 삼합을 사례로 연결하며, 특정 성분이 냄새를 없앤다는 설명은 확인 전 사용하지 않습니다.",reason:"수육을 먹어 본 사람이 익숙한 곁들임의 이유를 떠올릴 수 있어요.",audience:"C",imageBrief:"홍어·수육·묵은지 세 재료가 구분되는 정돈된 한 접시"},
     {title:"같은 회인데 왜 식감은 다를까?",summary:"회를 고를 때 부드러움과 탄력 중 무엇을 좋아하는지 질문합니다. 종류와 부위에 따른 식감 차이는 출처를 확인해 설명하고, 홍어의 식감과 향을 함께 알아보는 흐름으로 연결합니다.",reason:"회를 즐기던 사람이 자신의 취향으로 읽기 시작할 수 있어요.",audience:"A",imageBrief:"홍어의 얇은 단면과 결이 보이는 한 점"},
@@ -34,19 +35,38 @@ const FALLBACK_TOPIC_ROUNDS:Omit<TopicSuggestion,"id">[][] = [
   ],
 ];
 
+// AI를 쓰지 못할 때 준비된 주제의 첫 칸(홍어를 제목에 넣지 않는 칸)을 이번 시기 주제로 바꿔 끼운다.
+// season.ts 행사 id로 찾는다. 제목은 홍어·삼합 없이, summary에는 홍어로 이어지는 방향을 둔다.
+type SeasonalTopic=Omit<TopicSuggestion,"id"|"season">;
+const SEASONAL_TOPICS:Record<string,SeasonalTopic>={
+  seollal:{title:"명절 상에는 왜 지역마다 다른 음식이 오를까?",summary:"설 연휴 가족 상차림에서 지역마다 빠지지 않는 음식이 다른 장면을 다룹니다. 전라도 잔칫상에 오르는 홍어를 사례로 소개하되, 유래와 역사는 출처를 확인한 뒤에만 씁니다.",reason:"명절에 고향 상차림을 떠올리는 사람이 많은 시기예요.",audience:"C",imageBrief:"명절 상 위에 놓인 홍어 한 접시"},
+  chuseok:{title:"명절 상에는 왜 지역마다 다른 음식이 오를까?",summary:"추석 가족 상차림에서 지역마다 빠지지 않는 음식이 다른 장면을 다룹니다. 전라도 잔칫상에 오르는 홍어를 사례로 소개하되, 유래와 역사는 출처를 확인한 뒤에만 씁니다.",reason:"명절에 고향 상차림을 떠올리는 사람이 많은 시기예요.",audience:"C",imageBrief:"명절 상 위에 놓인 홍어 한 접시"},
+  boknal:{title:"복날엔 왜 기운 나는 음식을 찾을까?",summary:"복날마다 보양 음식을 찾는 익숙한 장면에서 시작합니다. 효능을 단정하지 않고, 더운 날 든든한 한 끼로 수육과 홍어를 곁들이는 선택지를 소개합니다.",reason:"복날을 앞두고 무엇을 먹을지 고민하는 시기예요.",audience:"A",imageBrief:"수육과 홍어를 곁들인 든든한 한 상"},
+  makgeolli:{title:"막걸리엔 왜 전이나 회를 곁들일까?",summary:"막걸리의 날 즈음 막걸리 안주를 고르는 장면을 다룹니다. 새콤하고 탄산감 있는 막걸리와 어울리는 조합을 살피고 홍어와 막걸리를 함께 먹는 이유로 이어갑니다.",reason:"10월 마지막 목요일 막걸리의 날을 앞둔 시기예요.",audience:"B",imageBrief:"막걸리 한 잔과 홍어 한 접시"},
+  spring:{title:"봄 모임 메뉴는 왜 고르기 어려울까?",summary:"새 학기·새 직장 모임처럼 처음 만난 사람들과 메뉴를 정하는 장면을 다룹니다. 취향이 갈리는 음식을 조금씩 나눠 맛보는 방법으로 홍어삼합을 소개합니다.",reason:"모임이 늘어나는 봄에 메뉴를 정하는 사람이 많아요.",audience:"B",imageBrief:"여럿이 나눠 먹는 홍어삼합 한 상"},
+  family:{title:"부모님 세대가 좋아하는 음식은 왜 다를까?",summary:"가정의 달 가족 외식에서 세대마다 좋아하는 음식이 다른 장면을 다룹니다. 부모님 세대에 익숙한 홍어를 함께 맛보며 이야기를 나누는 흐름으로 이어갑니다.",reason:"어버이날 가족 외식 메뉴를 고민하는 시기예요.",audience:"B",imageBrief:"가족이 함께 나눠 먹는 홍어 한 상"},
+  rainy:{title:"비 오는 날엔 왜 막걸리가 생각날까?",summary:"장마철 비 오는 날 막걸리와 전이 생각나는 익숙한 장면에서 시작합니다. 원인을 단정하지 않고, 막걸리와 함께 곁들이는 홍어 한 점으로 이어갑니다.",reason:"장마철마다 많이 나누는 이야기예요.",audience:"C",imageBrief:"비 오는 창가의 막걸리와 홍어 한 접시"},
+  kimjang:{title:"김장하는 날엔 왜 수육을 삶을까?",summary:"김장날 갓 담근 김치에 수육을 곁들이는 장면을 다룹니다. 새 김치와 묵은지의 차이를 살피고, 수육·묵은지에 홍어를 더한 삼합으로 이어갑니다.",reason:"김장철에 집집마다 떠올리는 장면이에요.",audience:"A",imageBrief:"수육과 묵은지, 홍어가 놓인 한 접시"},
+  yearend:{title:"송년회 메뉴는 왜 나눠 먹는 음식이 좋을까?",summary:"연말 모임에서 여럿이 한 상을 나누는 장면을 다룹니다. 각자 조금씩 골라 먹는 홍어삼합처럼 취향을 맞추기 쉬운 상차림을 소개합니다.",reason:"연말 모임 장소와 메뉴를 정하는 시기예요.",audience:"B",imageBrief:"여럿이 둘러앉아 나눠 먹는 홍어 한 상"},
+  newyear:{title:"새해 첫 모임엔 어떤 음식을 고를까?",summary:"신년회와 새해 첫 만남에서 메뉴를 정하는 장면을 다룹니다. 함께 나눠 먹기 좋은 한 상으로 홍어삼합을 소개하고, 처음 먹는 사람을 위한 작은 한입을 덧붙입니다.",reason:"새해 모임 메뉴를 고민하는 시기예요.",audience:"B",imageBrief:"새해 모임 상 위의 홍어삼합"},
+};
+
 const titleKey=(title:string)=>title.normalize("NFKC").toLocaleLowerCase("ko-KR").replace(/[^\p{L}\p{N}]/gu,"");
 
 export function topicDirectionsForRound(round:number):readonly string[] {
   return TOPIC_DIRECTIONS[round%TOPIC_DIRECTIONS.length];
 }
 
-export function fallbackTopics(round=0,excludeTitles:readonly string[]=[]):TopicSuggestion[] {
+export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season?:SeasonContext):TopicSuggestion[] {
   const excluded=new Set(excludeTitles.map(titleKey));
+  // 이번 시기 행사 가운데 준비된 주제가 있고 제외 목록에 없는 첫 행사를 고른다.
+  const event=season?.events.find(item=>SEASONAL_TOPICS[item.id]&&!excluded.has(titleKey(SEASONAL_TOPICS[item.id].title)));
   // Input permits at most three exclusions; one of four disjoint rounds stays available.
   for(let offset=0;offset<FALLBACK_TOPIC_ROUNDS.length;offset++){
     const index=(round+offset)%FALLBACK_TOPIC_ROUNDS.length;
-    const topics=FALLBACK_TOPIC_ROUNDS[index];
-    if(topics.every(topic=>!excluded.has(titleKey(topic.title))))return topics.map((topic,itemIndex)=>({...topic,id:"fallback-"+(index+1)+"-"+(itemIndex+1)}));
+    const topics:TopicSuggestion[]=FALLBACK_TOPIC_ROUNDS[index].map((topic,itemIndex)=>({...topic,season:"",id:"fallback-"+(index+1)+"-"+(itemIndex+1)}));
+    if(event)topics[0]={...SEASONAL_TOPICS[event.id],season:event.name,id:`fallback-season-${event.id}`};
+    if(topics.every(topic=>!excluded.has(titleKey(topic.title))))return topics;
   }
   throw new Error("다른 추천 주제를 찾지 못했습니다.");
 }
@@ -58,15 +78,21 @@ export function followsCuriosityBrief(topics:TopicSuggestion[],storeName:string)
     && /홍어|삼합/.test(topics[2]?.title??"");
 }
 
-export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string)=>void):Promise<TopicSuggestion[]> {
+// AI가 season에 적은 이름이 이번 시기(계절·행사)에 없는 말이면 화면에 잘못된 표시가 붙지 않게 지운다.
+function normalizeSeasonLabels(topics:TopicSuggestion[],season?:SeasonContext):TopicSuggestion[] {
+  const allowed=new Set(season?[season.season,...season.events.map(event=>event.name)]:[]);
+  return topics.map(topic=>({...topic,season:allowed.has(topic.season.trim())?topic.season.trim():""}));
+}
+
+export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string)=>void,season?:SeasonContext):Promise<TopicSuggestion[]> {
   const parsed=TopicInputSchema.parse(input);
-  const fallback=(reason="no AI client")=>{onFallback?.(reason);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles);};
+  const fallback=(reason="no AI client")=>{onFallback?.(reason);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season);};
   if(!ai)return fallback();
   try{
     const suggestions=TopicSuggestionsSchema.parse(await ai.suggest(parsed));
     const titles=suggestions.map(item=>titleKey(item.title));
     const excluded=new Set(parsed.excludeTitles.map(titleKey));
     if(new Set(titles).size!==titles.length||titles.some(title=>excluded.has(title))||!followsCuriosityBrief(suggestions,parsed.storeName))return fallback("suggestions broke the topic rules");
-    return suggestions;
+    return normalizeSeasonLabels(suggestions,season);
   }catch(error){return fallback(error instanceof Error?error.message.replace(/\s+/g," ").slice(0,300):"AI request failed");}
 }
