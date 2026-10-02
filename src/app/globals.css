@@ -297,3 +297,21 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .modal-card h2 { margin:0 0 8px; font-size:20px; }
 .modal-card p { margin:0 0 12px; line-height:1.6; }
 .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+
+/* 실제 사진 캐러셀(PhotoCarouselStudio): 고른 사진 줄, 보관함, 장마다 사진 바꾸기 */
+.photo-studio { display:grid; gap:14px; }
+.photo-studio-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.photo-strip { display:flex; flex-wrap:wrap; gap:10px; margin:0; padding:0; list-style:none; }
+.photo-strip li { position:relative; width:110px; height:110px; border-radius:12px; overflow:hidden; border:1px solid var(--line); background:white; }
+.photo-strip img { width:100%; height:100%; object-fit:cover; }
+.photo-order { position:absolute; left:6px; top:6px; padding:2px 8px; border-radius:999px; background:rgb(0 0 0 / 65%); color:white; font-size:12px; font-weight:700; }
+.photo-strip-actions { position:absolute; right:4px; bottom:4px; display:flex; gap:4px; }
+.photo-strip-actions button { width:28px; height:28px; border:0; border-radius:50%; background:rgb(255 255 255 / 92%); font-size:13px; cursor:pointer; }
+.photo-library { display:flex; flex-wrap:wrap; gap:8px; }
+.photo-thumb { padding:0; width:96px; height:96px; border:2px solid transparent; border-radius:10px; overflow:hidden; background:white; cursor:pointer; }
+.photo-thumb img { width:100%; height:100%; object-fit:cover; }
+.photo-thumb[aria-pressed="true"] { border-color:var(--accent); }
+.photo-thumb:disabled { opacity:.45; cursor:default; }
+.photo-swap { display:grid; gap:8px; }
+.photo-swap .photo-thumb { width:80px; height:80px; }
+@media (max-width:600px){ .photo-strip li { width:88px; height:88px; } .photo-thumb { width:76px; height:76px; } }

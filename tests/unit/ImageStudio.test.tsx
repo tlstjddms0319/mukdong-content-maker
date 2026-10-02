@@ -82,7 +82,7 @@ describe("ImageStudio carousel",()=>{
     render(<ImageStudio topic="주제" slideCount={3} onApprove={()=>undefined}/>); fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"})); fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"})); await screen.findByRole("button",{name:"표지 후보 1 선택"}); fireEvent.click(screen.getByRole("button",{name:"표지 후보 1 선택"})); fireEvent.click(screen.getByRole("button",{name:"이 표지로 3장 완성하기"}));
     expect(await screen.findByRole("button",{name:"남은 슬라이드 다시 만들기"})).toBeInTheDocument(); fireEvent.click(screen.getByRole("button",{name:"남은 슬라이드 다시 만들기"})); await screen.findByRole("button",{name:"이 캐러셀 사용"});
   });
-  it("approves one uploaded photo",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({id:"stored-photo"})}));const approve=vi.fn();render(<ImageStudio topic="사진 주제" slideCount={3} onApprove={approve}/>);fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});await waitFor(()=>expect(approve).toHaveBeenCalledWith([expect.objectContaining({id:"stored-photo",source:"photo"})]));});
+  it("approves uploaded photos as they are",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({asset:{id:"stored-photo",preview:"data:image/jpeg;base64,AAAA",name:"a"}})}));const approve=vi.fn();render(<ImageStudio topic="사진 주제" slideCount={3} onApprove={approve}/>);fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});fireEvent.click(await screen.findByRole("button",{name:"글자 없이 사진만 쓰기"}));await waitFor(()=>expect(approve).toHaveBeenCalledWith([expect.objectContaining({id:"stored-photo",source:"photo"})]));});
   it("keeps a recoverable retry after incomplete cover candidates",async()=>{
     const request=vi.fn(async(url:string)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:["only-one"]})});vi.stubGlobal("fetch",request);
     render(<ImageStudio topic="주제" slideCount={3} onApprove={()=>undefined}/>);fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));expect(await screen.findByRole("button",{name:"표지 후보 다시 만들기"})).toBeEnabled();
@@ -115,15 +115,16 @@ describe("ImageStudio carousel",()=>{
     expect(body.slideLayout).toBe("overlay");
   });
   it("ignores a late AI plan after switching to photo mode",async()=>{
-    let resolve:(value:unknown)=>void=()=>{};vi.stubGlobal("fetch",vi.fn(()=>new Promise(response=>{resolve=response;})));render(<ImageStudio topic="늦은 응답" slideCount={3} onApprove={()=>undefined}/>);fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));fireEvent.click(screen.getByRole("button",{name:"실제 사진 사용"}));resolve({ok:true,json:async()=>({plan})});await Promise.resolve();await Promise.resolve();expect(screen.queryByRole("button",{name:"표지 후보 1 선택"})).not.toBeInTheDocument();expect(screen.getByText("사진을 여기에 끌어놓으세요")).toBeInTheDocument();
+    let resolve:(value:unknown)=>void=()=>{};vi.stubGlobal("fetch",vi.fn(()=>new Promise(response=>{resolve=response;})));render(<ImageStudio topic="늦은 응답" slideCount={3} onApprove={()=>undefined}/>);fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));fireEvent.click(screen.getByRole("button",{name:"실제 사진 사용"}));resolve({ok:true,json:async()=>({plan})});await Promise.resolve();await Promise.resolve();expect(screen.queryByRole("button",{name:"표지 후보 1 선택"})).not.toBeInTheDocument();expect(screen.getByText(/사진을 여기에 끌어놓으세요/)).toBeInTheDocument();
   });
   it("shows the uploaded photo preview and leaves photo mode usable after an upload error",async()=>{
-    const request=vi.fn(async()=>({ok:true,json:async()=>({id:"stored-photo"})}));vi.stubGlobal("fetch",request);render(<ImageStudio topic="사진 주제" slideCount={3} onApprove={()=>undefined}/>);
+    const request=vi.fn(async()=>({ok:true,json:async()=>({asset:{id:"stored-photo",preview:"data:image/jpeg;base64,AAAA",name:"success"}})}));vi.stubGlobal("fetch",request);render(<ImageStudio topic="사진 주제" slideCount={3} onApprove={()=>undefined}/>);
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"success.png",{type:"image/png"})]}});
-    expect(await screen.findByAltText("선택한 사진 미리보기")).toBeInTheDocument();
+    expect(await screen.findByAltText("success")).toBeInTheDocument();
+    expect(request).toHaveBeenCalledWith("/api/images/assets",expect.anything());
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({message:"사진을 올릴 수 없어요."})})));
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["b"],"failure.png",{type:"image/png"})]}});
-    expect(await screen.findByRole("alert")).toHaveTextContent("사진을 올릴 수 없어요.");expect(screen.getByRole("button",{name:"실제 사진 사용"})).toHaveAttribute("aria-pressed","true");expect(screen.getByText("사진을 여기에 끌어놓으세요")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("사진을 올릴 수 없어요.");expect(screen.getByRole("button",{name:"실제 사진 사용"})).toHaveAttribute("aria-pressed","true");expect(screen.getByText(/사진을 여기에 끌어놓으세요/)).toBeInTheDocument();expect(screen.getByAltText("success")).toBeInTheDocument();
   });
   it("stops before making covers when the plan came from the prepared fallback and retries on request",async()=>{
     let planCalls=0;
