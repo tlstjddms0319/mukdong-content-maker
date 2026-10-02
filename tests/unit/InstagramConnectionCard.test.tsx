@@ -12,6 +12,13 @@ describe("InstagramConnectionCard",()=>{
     expect(await screen.findByRole("alert")).toHaveTextContent("Instagram 앱 시크릿");
   });
 
+  it("서버가 알아낸 토큰 거절 원인(hint)이 있으면 그 항목만 콕 집어 안내한다",async()=>{
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:false})}));
+    window.history.replaceState(null,"","/settings?instagram=error&reason=token&hint=redirect");
+    render(<InstagramConnectionCard/>);
+    expect(await screen.findByRole("alert")).toHaveTextContent("INSTAGRAM_REDIRECT_URI");
+  });
+
   it("연결 전에는 쉬운 안내와 연결 버튼을 보여준다",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:false})}));
     render(<InstagramConnectionCard/>);
