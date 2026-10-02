@@ -68,3 +68,14 @@ export async function completeInstagramOAuth(
     scopes:[...INSTAGRAM_SCOPES],connectedAt:now.toISOString(),updatedAt:now.toISOString(),
   });
 }
+
+// 토큰 교환 거절 메시지(Meta 원문)를 고칠 항목 코드로 분류한다. 원문에는 비밀값이 없지만 그래도 주소에는 코드만 남긴다.
+//  secret: 앱 시크릿 불일치, redirect: 연결 완료 주소 불일치, code: 인증 코드 재사용·만료, app: 앱 ID 불일치
+export function tokenRejectionHint(detail:string|undefined):"secret"|"redirect"|"code"|"app"|undefined {
+  if(!detail)return undefined;
+  if(/client[_ ]secret|app secret/i.test(detail))return "secret";
+  if(/redirect[_ ]?uri/i.test(detail))return "redirect";
+  if(/code has been used|authorization code|code.*expired|expired.*code/i.test(detail))return "code";
+  if(/client[_ ]id|platform app|app id/i.test(detail))return "app";
+  return undefined;
+}

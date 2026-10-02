@@ -21,6 +21,13 @@ const callbackMessages:Record<string,string>={
   profile:"계정 정보를 가져오지 못했어요. 테스터 초대를 수락했는지, 프로페셔널 계정인지 확인해 주세요.",
   config:"게시 서버 설정이 부족해요. 아래 게시 서버 설정 항목을 확인해 주세요.",
 };
+// 토큰 거절(reason=token) 가운데 서버가 원인을 알아낸 경우(hint)에는 고칠 곳 하나만 콕 집어 안내한다.
+const tokenHintMessages:Record<string,string>={
+  secret:"Instagram이 앱 시크릿을 거절했어요. Render의 INSTAGRAM_APP_SECRET에 Meta 앱의 ‘Instagram 앱 시크릿’(Instagram → API 설정 → Instagram 로그인 비즈니스 설정)을 넣어 주세요. Facebook 앱 시크릿(앱 설정 → 기본 설정)과는 다른 값이에요.",
+  redirect:"연결 완료 주소가 Meta에 등록한 주소와 달라요. Render의 INSTAGRAM_REDIRECT_URI와 Meta의 ‘OAuth 리디렉션 URI’를 글자 하나까지(https, 끝의 / 포함) 똑같이 맞춰 주세요.",
+  code:"Instagram 인증 코드가 이미 쓰였거나 만료됐어요. 서버가 잠에서 깨는 동안 생기는 일이 많아요. 잠시 뒤 연결 버튼을 다시 눌러 주세요.",
+  app:"Instagram이 앱 ID를 알아보지 못했어요. Render의 INSTAGRAM_APP_ID에 ‘Instagram 앱 ID’(Facebook 앱 ID와 다른 값)를 넣어 주세요.",
+};
 const unknownCallbackMessage="Instagram 연결에 실패했어요. 서버 로그에서 [instagram] 줄을 확인해 주세요.";
 
 // 주소창의 쿼리는 이 화면에 있는 동안 바뀌지 않으므로 구독할 것이 없다.
@@ -30,7 +37,11 @@ function describeCallback(search:string):{ok:boolean;message:string}|null{
   const params=new URLSearchParams(search);
   const result=params.get("instagram");
   if(result==="connected")return {ok:true,message:"Instagram 계정을 연결했어요."};
-  if(result==="error")return {ok:false,message:callbackMessages[params.get("reason")??""]??unknownCallbackMessage};
+  if(result==="error"){
+    const reason=params.get("reason")??"";
+    const hinted=reason==="token"?tokenHintMessages[params.get("hint")??""]:undefined;
+    return {ok:false,message:hinted??callbackMessages[reason]??unknownCallbackMessage};
+  }
   return null;
 }
 

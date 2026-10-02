@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createInstagramRepository } from "@/features/instagram/repository";
-import { completeInstagramOAuth,getInstagramConfig,InstagramOAuthError,publicAppOrigin } from "@/features/instagram/oauth";
+import { completeInstagramOAuth,getInstagramConfig,InstagramOAuthError,publicAppOrigin,tokenRejectionHint } from "@/features/instagram/oauth";
 import { exchangeInstagramCode,getInstagramProfile } from "@/features/instagram/metaClient";
 
 export async function GET(request:Request){
@@ -25,6 +25,9 @@ export async function GET(request:Request){
     console.error("[instagram] callback failed",{reason,message:error instanceof Error?error.message:String(error),detail:error instanceof InstagramOAuthError?error.detail:undefined});
     settingsUrl.searchParams.set("instagram","error");
     settingsUrl.searchParams.set("reason",reason);
+    // Meta 원문은 주소에 싣지 않고, 알려진 거절 사유만 짧은 코드로 바꿔 화면이 무엇을 고칠지 콕 집어 안내하게 한다.
+    const hint=reason==="token"&&error instanceof InstagramOAuthError?tokenRejectionHint(error.detail):undefined;
+    if(hint)settingsUrl.searchParams.set("hint",hint);
   }
   const response=NextResponse.redirect(settingsUrl);
   response.cookies.delete("instagram_oauth_state");

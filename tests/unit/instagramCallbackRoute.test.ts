@@ -39,7 +39,8 @@ describe("Instagram callback route",()=>{
   it("토큰 교환이 거절되면 사유를 붙이고 Meta 원문은 로그에만 남긴다",async()=>{
     fetchMock.mockResolvedValueOnce(Response.json({error_type:"OAuthException",code:400,error_message:"Invalid client_secret"},{status:400}));
     const response=await GET(internalCallback("code=abc&state=same-state"));
-    expect(response.headers.get("location")).toBe(`${PUBLIC}/settings?instagram=error&reason=token`);
+    expect(response.headers.get("location")).toBe(`${PUBLIC}/settings?instagram=error&reason=token&hint=secret`);
+    expect(response.headers.get("location")).not.toContain("Invalid");
     const logged=JSON.stringify(vi.mocked(console.error).mock.calls);
     expect(logged).toContain("Invalid client_secret");
     expect(logged).not.toContain("private-app-secret");
@@ -55,5 +56,17 @@ describe("Instagram callback route",()=>{
   it("사용자가 취소하면 cancelled 사유로 돌려보낸다",async()=>{
     const response=await GET(internalCallback("error=access_denied&error_reason=user_denied"));
     expect(response.headers.get("location")).toBe(`${PUBLIC}/settings?instagram=error&reason=cancelled`);
+  });
+});
+
+describe("tokenRejectionHint",()=>{
+  it("Meta 거절 원문을 고칠 항목 코드로 분류한다",async()=>{
+    const { tokenRejectionHint }=await import("@/features/instagram/oauth");
+    expect(tokenRejectionHint("HTTP 400 Error validating client secret.")).toBe("secret");
+    expect(tokenRejectionHint("HTTP 400 Invalid redirect_uri")).toBe("redirect");
+    expect(tokenRejectionHint("HTTP 400 This authorization code has been used")).toBe("code");
+    expect(tokenRejectionHint("HTTP 400 Invalid platform app")).toBe("app");
+    expect(tokenRejectionHint("HTTP 500")).toBeUndefined();
+    expect(tokenRejectionHint(undefined)).toBeUndefined();
   });
 });
