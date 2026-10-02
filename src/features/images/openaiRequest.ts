@@ -1,6 +1,7 @@
 import type { ImageBrief } from "./schema";
 import { IMAGE_STYLE_DIRECTIONS, resolveImageStyle } from "./style";
 import { CARD_LAYOUTS } from "./design";
+import { STYLES } from "./styleCatalog";
 import { toFile } from "openai";
 
 function foodDirection(input:ImageBrief):string {
@@ -79,6 +80,8 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     foodDirection(input),
     // 레이아웃마다 사진이 쓰이는 방식이 달라서, 그 레이아웃의 사진 분위기와 여백 요청을 붙인다.
     input.slide ? CARD_LAYOUTS[input.slideLayout==="overlay"?"fullscreen":input.slide.layout].photoHint : "",
+    // 디자인 계열(컬러 블록·신문 등)은 사진을 누끼·흑백·픽셀처럼 따로 가공하므로, 그 가공에 맞는 촬영 조건을 덧붙인다.
+    input.slide && input.slideLayout!=="overlay" && input.design?.style && input.design.style!=="template" ? STYLES[input.design.style].photoHint : "",
     reference ? referenceDirection(input) : "",
     // 수정 요청은 위의 화풍·구도 지침보다 우선한다고 명시해야 "애니메이션 풍으로" 같은 요청이 사진 지시에 묻히지 않는다.
     input.refinement ? `사용자의 수정 요청(가장 우선): ${JSON.stringify(input.refinement)}. 위의 화풍·구도·조명 지침과 충돌하면 이 요청을 따른다. 음식의 종류와 사실 기준은 유지한다.` : "",

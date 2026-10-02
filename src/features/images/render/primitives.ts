@@ -63,8 +63,8 @@ const breakOnlyAtSpaces=(value:string)=>value.replace(/(\S)(?=\S)/g,"$1⁠");
 export async function textLayer(value:string,style:TextStyle):Promise<Layer> {
   const font=resolveFont(style.font??FONTS.bold);
   await access(font.file);
-  return sharp({text:{text:`<span foreground="${style.color}">${escapeXml(breakOnlyAtSpaces(value))}</span>`,font:`${font.family} ${style.size}`,fontfile:font.file,width:style.width,wrap:"word-char",align:style.align??"left",spacing:style.spacing??12,rgba:true}})
-    .resize({width:style.width,height:style.height,fit:"inside",withoutEnlargement:true})
+  return sharp({text:{text:`<span foreground="${style.color}">${escapeXml(breakOnlyAtSpaces(value))}</span>`,font:`${font.family} ${style.size}`,fontfile:font.file,width:Math.round(style.width),wrap:"word-char",align:style.align??"left",spacing:style.spacing??12,rgba:true}})
+    .resize({width:Math.round(style.width),height:Math.round(style.height),fit:"inside",withoutEnlargement:true})
     .png().toBuffer({resolveWithObject:true});
 }
 

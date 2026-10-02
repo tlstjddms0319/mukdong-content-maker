@@ -6,6 +6,7 @@ import { type CardLayout, type DesignSpecInput, type Palette, inkOn, mutedOn, no
 import { resolveSlideFonts, typographyOf } from "./typography";
 import { BODY, CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, canvas, cleanPoints, cornerMarks, croppedPhoto, currentVariant, dotGrid, grainLayer, mascotLayer, photoOverlayLayer, pointLayers, renderSlideHeadline, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, withRenderContext } from "./render/primitives";
 import { EXTRA_RENDERERS } from "./render/extraLayouts";
+import { STYLE_RENDERERS } from "./styles";
 
 // 공용 그리기 도구는 render/primitives.ts에 있다. 테스트와 다른 화면이 쓰던 이름은 여기서도 그대로 내보낸다.
 export { FONTS, balanceHeadline, renderSlideHeadline, renderSlidePoints } from "./render/primitives";
@@ -556,5 +557,9 @@ export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlid
   const fonts=resolveSlideFonts(design,slide);
   const palette=paletteOf(design);
   // 글꼴·게시물 테마·레이아웃 변형 번호를 이 카드를 그리는 동안에만 쓰도록 묶어 둔다(render/primitives.ts).
-  return withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:slide.variant??0,palette},()=>CARD_RENDERERS[card](inputs,slide,index,total,palette));
+  // 스타일 계열이 정해져 있으면(template이 아님) 레이아웃 대신 그 계열의 그리기 함수가 장 전체를 그린다.
+  // 단 "사진 위 글자"(overlay)로 고른 경우는 계열과 무관하게 풀스크린으로 그린다.
+  const style=design?.style??"template";
+  const render=style!=="template"&&layout!=="overlay"?STYLE_RENDERERS[style]:CARD_RENDERERS[card];
+  return withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:slide.variant??0,palette},()=>render(inputs,slide,index,total,palette));
 }

@@ -32,8 +32,8 @@ describe("carousel variety", () => {
     for(let seed=0;seed<6;seed++){
       const plan=diversifyCarouselDesign(chosen,seed);
       expect(plan.slides[2].layout).toBe("step");
-      // 색과 글꼴은 AI가 고른 그대로이고, 기본값(classic)으로 남은 테마만 게시물마다 바뀐다.
-      expect({...plan.design,theme:"classic"}).toEqual(chosen.design);
+      // 색과 글꼴은 AI가 고른 그대로이고, 기본값(classic·template)으로 남은 테마와 계열만 게시물마다 바뀐다.
+      expect({...plan.design,theme:"classic",style:"template"}).toEqual(chosen.design);
       expect(ThemeIdSchema.options).toContain(plan.design.theme);
     }
     // 기본값을 그대로 낸 장은 시드에 따라 바뀔 수 있다.
@@ -51,7 +51,7 @@ describe("carousel variety", () => {
 
   it("gives emotional slides an accent title font when the AI picked none per slide", () => {
     const base=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:5});
-    const plan=diversifyCarouselDesign({...base,design:{palette:"warm",theme:"magazine",titleFont:"plex",bodyFont:"plex"}},1);
+    const plan=diversifyCarouselDesign({...base,design:{palette:"warm",style:"template",theme:"magazine",titleFont:"plex",bodyFont:"plex"}},1);
     expect(plan.slides[0].titleFont).toBe("batang");
     expect(plan.slides[2].titleFont).toBe("auto");
     expect(resolveSlideFonts(plan.design,plan.slides[0])).toEqual({titleFont:"batang",bodyFont:"plex"});
