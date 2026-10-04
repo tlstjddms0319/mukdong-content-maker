@@ -20,6 +20,19 @@ import { STYLES, StyleIdSchema, type StyleId } from "@/features/images/styleCata
 import { PLAN_DATE_PATTERN, PLAN_POST_TIME_KST } from "@/features/drafts/planLink";
 
 const DEFAULT_TOPICS:TopicSuggestion[] = fallbackTopics();
+// 이 브라우저에서 최근에 보여 준 추천 주제(최대 15개)와 마지막 추천 방향 번호. 같은 주제가 매번 나오지 않게 서버에 알려 준다.
+const RECENT_TOPICS_KEY="mukdong-recent-topics",TOPIC_ROUND_KEY="mukdong-topic-round";
+function readRecentTopics():string[] {
+  try{const value=JSON.parse(localStorage.getItem(RECENT_TOPICS_KEY)??"[]");return Array.isArray(value)?value.filter((item):item is string=>typeof item==="string").slice(0,15):[];}catch{return [];}
+}
+function rememberTopics(titles:string[]){
+  try{localStorage.setItem(RECENT_TOPICS_KEY,JSON.stringify([...new Set([...titles,...readRecentTopics()])].slice(0,15)));}catch{/* 저장 공간이 막혀도 추천은 계속한다 */}
+}
+// 처음 열 때마다 지난번에 본 추천 방향의 다음 방향으로 시작한다(0번 방향만 반복하지 않게). 처음 쓰는 브라우저는 0번.
+function nextInitialRound():number {
+  try{const last=localStorage.getItem(TOPIC_ROUND_KEY);return last===null?0:((Number(last)||0)+1)%1000;}catch{return 0;}
+}
+function rememberRound(round:number){try{localStorage.setItem(TOPIC_ROUND_KEY,String(round));}catch{/* 무시 */}}
 // 주소·세션에서 받은 게시일·계열 값을 확인해 기획 연결로 만든다. 날짜 형식이 틀리면 연결하지 않고, 모르는 계열은 버린다.
 function planLinkFrom(date:string|null|undefined,style:string|null|undefined):{date:string;style?:StyleId}|null {
   if(!date||!PLAN_DATE_PATTERN.test(date))return null;
@@ -70,16 +83,18 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
     topicSelectionRef.current=next;setTopic(next.topic);setAudience(next.audience);setImageBrief(next.imageBrief);setContentBrief(next.contentBrief);
     if(changed&&!preserveDraft){setPlanLink(null);const nextDraftId=crypto.randomUUID();draftIdRef.current=nextDraftId;createdAtRef.current=new Date().toISOString();setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopySaveState("idle");setDraftId(nextDraftId);localStorage.removeItem("mukdong-current-draft");if(window.location.search)window.history.replaceState({},"","/");}
   },[]);
-  const loadTopics=useCallback(async(round=0,excludeTitles:string[]=[])=>{
+  // round를 주지 않으면(처음 열 때) 지난번 다음 방향으로 시작한다.
+  const loadTopics=useCallback(async(requestedRound?:number,excludeTitles:string[]=[])=>{
+    const round=requestedRound??nextInitialRound();
     const requestId=++topicRequestRef.current;
     const topicAtRequest=topicSelectionRef.current.topic;
     setTopicsLoading(true);
     try{
-      const response=await fetch("/api/topics", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({storeProfile:{name:"묵동홍어마을"},recommendationRound:round,excludeTitles}) });
+      const response=await fetch("/api/topics", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({storeProfile:{name:"묵동홍어마을"},recommendationRound:round,excludeTitles,recentTitles:readRecentTopics()}) });
       if(!response.ok) throw new Error();
       const data=await readJsonResponse(response);
       if(requestId===topicRequestRef.current&&Array.isArray(data.topics)&&data.topics.length===3){
-        setTopics(data.topics);setTopicsFallback(data.source==="fallback");if(data.season)setSeasonInfo(data.season);if(Array.isArray(data.trends))setTrendInfo(data.trends);
+        setTopics(data.topics);setTopicsFallback(data.source==="fallback");rememberTopics(data.topics.map((item:TopicSuggestion)=>item.title));rememberRound(round);if(data.season)setSeasonInfo(data.season);if(Array.isArray(data.trends))setTrendInfo(data.trends);
         // 주제 단계에 머물러 있고 그사이 주제를 직접 바꾸지 않았을 때만 첫 추천으로 자동 선택한다.
         // (이미지 단계로 넘어간 뒤 바꾸면 새 초안이 시작돼 올리던 사진·만들던 이미지가 사라진다.)
         if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest)changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",false,data.topics[0].summary ?? "");

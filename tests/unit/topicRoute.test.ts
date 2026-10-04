@@ -65,4 +65,13 @@ describe("topic route", () => {
     expect(body.topics.filter((topic:{id:string})=>!topic.id.startsWith("fallback-season-")).every((topic:{id:string})=>topic.id.startsWith("fallback-2-"))).toBe(true);
     expect(body.season.name).toMatch(/^(봄|여름|가을|겨울)$/);
   });
+
+  it("passes recently shown titles to the prompt so the same topics do not repeat", async () => {
+    await POST(new Request("http://localhost/api/topics", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ storeProfile:{ name:"묵동홍어마을" }, recommendationRound:2, recentTitles:["수육에는 왜 김치를 곁들일까?"] }),
+    }));
+    expect(String(generateJson.mock.calls[0][0])).toContain('"recentTitles":["수육에는 왜 김치를 곁들일까?"]');
+  });
 });

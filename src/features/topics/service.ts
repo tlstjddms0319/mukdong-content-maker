@@ -57,18 +57,58 @@ export function topicDirectionsForRound(round:number):readonly string[] {
   return TOPIC_DIRECTIONS[round%TOPIC_DIRECTIONS.length];
 }
 
-export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season?:SeasonContext):TopicSuggestion[] {
+// avoidTitles: 최근에 보여 준 주제. 되도록 피하지만, 다 피할 수 없으면 제외 목록만 지킨다.
+export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season?:SeasonContext,avoidTitles:readonly string[]=[]):TopicSuggestion[] {
   const excluded=new Set(excludeTitles.map(titleKey));
-  // 이번 시기 행사 가운데 준비된 주제가 있고 제외 목록에 없는 첫 행사를 고른다.
-  const event=season?.events.find(item=>SEASONAL_TOPICS[item.id]&&!excluded.has(titleKey(SEASONAL_TOPICS[item.id].title)));
-  // Input permits at most three exclusions; one of four disjoint rounds stays available.
-  for(let offset=0;offset<FALLBACK_TOPIC_ROUNDS.length;offset++){
-    const index=(round+offset)%FALLBACK_TOPIC_ROUNDS.length;
+  const avoided=new Set(avoidTitles.map(titleKey));
+  // 이번 시기 행사 가운데 준비된 주제가 있고 제외·최근 목록에 없는 첫 행사를 고른다.
+  const event=season?.events.find(item=>SEASONAL_TOPICS[item.id]&&!excluded.has(titleKey(SEASONAL_TOPICS[item.id].title))&&!avoided.has(titleKey(SEASONAL_TOPICS[item.id].title)))
+    ??season?.events.find(item=>SEASONAL_TOPICS[item.id]&&!excluded.has(titleKey(SEASONAL_TOPICS[item.id].title)));
+  const roundAt=(index:number)=>{
     const topics:TopicSuggestion[]=FALLBACK_TOPIC_ROUNDS[index].map((topic,itemIndex)=>({...topic,season:"",id:"fallback-"+(index+1)+"-"+(itemIndex+1)}));
     if(event)topics[0]={...SEASONAL_TOPICS[event.id],season:event.name,id:`fallback-season-${event.id}`};
-    if(topics.every(topic=>!excluded.has(titleKey(topic.title))))return topics;
+    return topics;
+  };
+  // 1순위: 제외·최근 목록과 하나도 겹치지 않는 묶음, 2순위: 제외 목록만 피한 묶음(최근 것이 일부 겹쳐도).
+  for(const strict of [true,false]){
+    for(let offset=0;offset<FALLBACK_TOPIC_ROUNDS.length;offset++){
+      const topics=roundAt((round+offset)%FALLBACK_TOPIC_ROUNDS.length);
+      if(topics.every(topic=>!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title)))))return topics;
+    }
   }
   throw new Error("다른 추천 주제를 찾지 못했습니다.");
+}
+
+// 주제 한 개가 기본 조건(물음표 질문, 가게 이름 없음, 홍어로 이어지는 설명)을 지키는지.
+const isHongeoTitle=(title:string)=>/홍어|삼합/.test(title);
+const meetsTopicBasics=(topic:TopicSuggestion,storeName:string)=>/[?？]$/.test(topic.title.trim())&&!topic.title.includes(storeName)&&topic.summary.trim().length>=30&&topic.summary.includes("홍어");
+
+// AI가 준 주제 3개를 통째로 버리지 않고, 조건에 맞는 것만 살려 "일상 질문 2개 + 홍어 질문 1개" 순서로 맞춘다.
+// 모자란 칸만 준비된 주제(이번 시기·최근에 안 보인 것 우선)로 채운다. filled = 준비된 주제로 채운 칸 수.
+export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:string;round:number;excludeTitles:readonly string[];avoidTitles:readonly string[];season?:SeasonContext}):{topics:TopicSuggestion[];filled:number} {
+  const blocked=new Set([...options.excludeTitles,...options.avoidTitles].map(titleKey));
+  const used=new Set<string>();
+  const take=(topic:TopicSuggestion)=>{used.add(titleKey(topic.title));return topic;};
+  const usable=suggestions.filter(topic=>meetsTopicBasics(topic,options.storeName)&&!blocked.has(titleKey(topic.title)))
+    .filter(topic=>{const key=titleKey(topic.title);if(used.has(key))return false;used.add(key);return true;});
+  used.clear();
+  const general=usable.filter(topic=>!isHongeoTitle(topic.title)).slice(0,2).map(take);
+  const hongeo=usable.filter(topic=>isHongeoTitle(topic.title)).slice(0,1).map(take);
+  // 채울 후보: 이번 묶음부터 차례로 돌며, 최근에 안 보인 것 → 제외 목록만 피한 것 순서.
+  const excluded=new Set(options.excludeTitles.map(titleKey));
+  const avoided=new Set(options.avoidTitles.map(titleKey));
+  const pool=Array.from({length:FALLBACK_TOPIC_ROUNDS.length},(_,offset)=>fallbackTopics((options.round+offset)%FALLBACK_TOPIC_ROUNDS.length,[],options.season,options.avoidTitles)).flat();
+  const pick=(wantHongeo:boolean)=>{
+    for(const strict of [true,false]){
+      const found=pool.find(topic=>isHongeoTitle(topic.title)===wantHongeo&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
+      if(found)return take(found);
+    }
+    throw new Error("다른 추천 주제를 찾지 못했습니다.");
+  };
+  const filled=(2-general.length)+(1-hongeo.length);
+  while(general.length<2)general.push(pick(false));
+  if(!hongeo.length)hongeo.push(pick(true));
+  return {topics:[...general,...hongeo],filled};
 }
 
 // Structural editorial checks, not a fact checker or a judgment of marketing performance.
@@ -84,15 +124,16 @@ function normalizeSeasonLabels(topics:TopicSuggestion[],season?:SeasonContext):T
   return topics.map(topic=>({...topic,season:allowed.has(topic.season.trim())?topic.season.trim():""}));
 }
 
-export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string)=>void,season?:SeasonContext):Promise<TopicSuggestion[]> {
+// onFallback: 세 칸 모두 준비된 주제로 대체됐을 때(이유와 함께). onPartial: 일부 칸만 채웠을 때.
+export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string)=>void,season?:SeasonContext,onPartial?:(filled:number)=>void):Promise<TopicSuggestion[]> {
   const parsed=TopicInputSchema.parse(input);
-  const fallback=(reason="no AI client")=>{onFallback?.(reason);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season);};
+  const fallback=(reason="no AI client")=>{onFallback?.(reason);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season,parsed.avoidTitles);};
   if(!ai)return fallback();
   try{
-    const suggestions=TopicSuggestionsSchema.parse(await ai.suggest(parsed));
-    const titles=suggestions.map(item=>titleKey(item.title));
-    const excluded=new Set(parsed.excludeTitles.map(titleKey));
-    if(new Set(titles).size!==titles.length||titles.some(title=>excluded.has(title))||!followsCuriosityBrief(suggestions,parsed.storeName))return fallback("suggestions broke the topic rules");
-    return normalizeSeasonLabels(suggestions,season);
+    const suggestions=normalizeSeasonLabels(TopicSuggestionsSchema.parse(await ai.suggest(parsed)),season);
+    const {topics,filled}=assembleTopics(suggestions,{storeName:parsed.storeName,round:parsed.recommendationRound,excludeTitles:parsed.excludeTitles,avoidTitles:parsed.avoidTitles,season});
+    if(filled>=3)return fallback(`suggestions broke the topic rules: ${suggestions.map(topic=>topic.title).join(" / ").slice(0,200)}`);
+    if(filled>0)onPartial?.(filled);
+    return topics;
   }catch(error){return fallback(error instanceof Error?error.message.replace(/\s+/g," ").slice(0,300):"AI request failed");}
 }

@@ -45,7 +45,7 @@ export async function POST(request:Request){
     let fallbackWeeks=0;
     for(const [index,weekDates] of groupByWeek(dates).entries()){
       const season=seasonContext(new Date(`${weekDates[0]}T12:00:00+09:00`));
-      const input={storeName:STORE_NAME,recommendationRound:index,excludeTitles:recent.slice(-3)};
+      const input={storeName:STORE_NAME,recommendationRound:index,excludeTitles:recent.slice(-3),avoidTitles:recent.slice(-30)};
       const topics=await suggestTopics(input,{suggest:()=>client.generateJson(buildTopicPrompt(input,season,likedTitles),topicGenerationSchema(topicDirectionsForRound(index)))},()=>{fallbackWeeks++;},season);
       const picked=pickWeekTopics(topics,weekDates.length,used);
       for(const topic of picked){used.add(titleKey(topic.title));recent.push(topic.title);}
