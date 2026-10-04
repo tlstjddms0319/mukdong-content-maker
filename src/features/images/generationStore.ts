@@ -13,7 +13,8 @@ import { fitPlanToPhotos, swapPhoto } from "./photoCarousel";
 // 화면(ImageStudio)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
 // 새로고침을 하면 사라진다(모듈이 다시 로드되므로). 그 경우는 서버 작업 큐가 필요하다.
 
-export type ApprovedImage={id:string;preview?:string;referencePreview?:string;source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole};
+// check: AI 표지 점검 결과(coverCheck.ts). 점수와 경고 배지를 후보 위에 보여 준다.
+export type ApprovedImage={id:string;preview?:string;referencePreview?:string;source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]}};
 export type StudioMode="photo"|"ai"|"mix"|"free";
 export type StudioPhase="idle"|"uploading"|"planning"|"cover"|"slides";
 export type ReferenceUse="source"|"style";
@@ -147,7 +148,7 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
     if(!response.ok)throw new Error(data.message||"표지 후보를 만들지 못했습니다.");
     if(!Array.isArray(data.images)||data.images.length!==2)throw new Error("표지 후보는 정확히 2장이 필요합니다.");
     const source=sourceOf(data.source);
-    patch({...(data.fallback?{providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],source,role:nextPlan.slides[0].role}))});
+    patch({...(data.fallback?{providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],source,role:nextPlan.slides[0].role,...(data.checks?.[i]?{check:data.checks[i]}:{})}))});
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"표지 후보를 만들지 못했습니다."});
   }finally{

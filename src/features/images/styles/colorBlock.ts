@@ -1,6 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { STORE_NAME } from "../slideLayout";
-import { croppedPhoto, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { croppedPhoto, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
 import { STYLE_FONTS, contentOf, cutoutPhoto, fitText, hashtags, stickerize } from "./shared";
 
 // 대담한 컬러 블록: 장마다 화면 전체를 진한 단색으로 칠하고, 화면을 꽉 채우는 굵은 글자와 배경을 지운 음식(누끼)을
@@ -75,7 +74,7 @@ export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
     layers.push({input:counter.data,left:bx-Math.round(counter.info.width/2),top:byy-Math.round(counter.info.height/2)});
   }
   layers.push(...pillLayers);
-  const brand=await textLayer(`${STORE_NAME}${hasPhoto?"":`  ·  ${index}/${total}`}`,{size:26,color:block.ink,width:700,height:40,font:STYLE_FONTS.sansSemi});
+  const brand=await textLayer(`${brandName()}${hasPhoto?"":`  ·  ${index}/${total}`}`,{size:26,color:block.ink,width:700,height:40,font:STYLE_FONTS.sansSemi});
   layers.push({input:brand.data,left:M,top:1350-70});
   return sharp({create:{width:1080,height:1350,channels:3,background:block.bg}}).composite(layers).jpeg({quality:92}).toBuffer();
 };

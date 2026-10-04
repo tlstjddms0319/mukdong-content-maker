@@ -12,6 +12,7 @@ import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
 import { AppSettingsSchema, type AppSettings } from "@/features/settings/schema";
 import { HiggsfieldConfigurationError, HiggsfieldImageError, HiggsfieldPartialImageError, generateHiggsfieldImages, isHiggsfieldConfigured } from "@/features/images/higgsfieldRequest";
 import sharp from "sharp";
+import { checkCoverCandidates, coverRank } from "@/features/images/coverCheck";
 
 type ImageProvider="higgsfield"|"cloudflare"|"openai";
 const PROVIDER_LABELS:Record<ImageProvider,string>={higgsfield:"Higgsfield",cloudflare:"Cloudflare",openai:"OpenAI"};
@@ -37,19 +38,22 @@ export async function POST(request: Request) { const denied=await ownerApiError(
   try {
     // An unreadable settings file falls back to defaults, but fails closed on cost: no paid OpenAI call
     // can be triggered by a settings read failure, only the free Cloudflare path.
+    const settings:AppSettings=(await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 무료 이미지 경로만 사용합니다:",error instanceof Error?error.message:String(error));return null;}))
+      ??{...AppSettingsSchema.parse(DEFAULT_SETTINGS),imageAiProvider:"cloudflare"};
+    // 브랜드 키트: 카드 바닥글에 가게 이름과 함께 찍을 Instagram 계정(설정 화면).
+    const cardOptions={brandHandle:settings.brandHandle??""};
     // 브라우저형·Q&A·대형 숫자처럼 사진이 없는 레이아웃은 이미지 AI를 부르지 않는다.
     if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&photosNeeded(normalizeCardLayout(parsed.data.slide))===0){
-      const composed=await composeSlideImage([],parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design);
+      const composed=await composeSlideImage([],parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design,cardOptions);
       return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"design",provider:"none",fallback:false});
     }
     // 사장님이 올린 실제 사진으로 만드는 장: 이미지 AI 없이 그 사진들로 바로 카드를 그린다.
     if(parsed.data.slide&&parsed.data.photos?.length){
       const originals=await Promise.all(parsed.data.photos.map(imageBytes));
-      const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,{enhance:true});
+      const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,{...cardOptions,enhance:true});
       return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"photo",provider:"none",fallback:false});
     }
-    const settings:AppSettings=(await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 무료 이미지 경로만 사용합니다:",error instanceof Error?error.message:String(error));return null;}))
-      ??{...AppSettingsSchema.parse(DEFAULT_SETTINGS),imageAiProvider:"cloudflare"};
+
     // 후보마다 구도가 다른 프롬프트라 n장을 한 번에 요청하지 않고, 한 장씩 동시에 요청한다.
     const generateWithOpenAI=async(input:ImageBrief)=>{
       const client=getOpenAIClient();
@@ -86,11 +90,14 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const fallback=used[0]!==chain[0]||used.length>1;
     const notice=fallback?`${PROVIDER_LABELS[chain[0]]} 생성이 어려워 ${PROVIDER_LABELS[used[used.length-1]]}(으)로 전환했어요.`:undefined;
     if (images.length !== parsed.data.count) throw new Error("incomplete image result");
+    // 표지 후보가 여러 장이면 글자를 얹기 전 원본을 AI로 점검한다(이미지 속 글자, 홍어로 안 보임, 어색한 손).
+    // 점검은 순서와 경고 배지에만 쓰고 다시 만들지는 않는다. 키가 없거나 실패하면 null(점검 없음).
+    const checks=parsed.data.slide?.role==="cover"&&images.length>1?await checkCoverCandidates(await Promise.all(images.map(imageBytes))):null;
     const referenceImages:string[]=[];
     // 콜라주·비교처럼 사진 여러 장을 쓰는 레이아웃은 만든 사진을 모두 한 카드에 넣는다.
     if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&photosNeeded(normalizeCardLayout(parsed.data.slide))>1&&images.length>1){
       const originals=await Promise.all(images.map(imageBytes));
-      const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design);
+      const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design,cardOptions);
       images=[`data:image/jpeg;base64,${composed.toString("base64")}`];
     }else if(parsed.data.slide)images=await Promise.all(images.map(async (source,index)=>{
       const slideIndex=parsed.data.slideIndex ?? index+1;
@@ -100,10 +107,17 @@ export async function POST(request: Request) { const denied=await ownerApiError(
         const reference=await sharp(original).rotate().resize({width:1024,height:1024,fit:"inside",withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
         referenceImages[index]=`data:image/jpeg;base64,${reference.toString("base64")}`;
       }
-      const composed=await composeSlideImage(original,parsed.data.slide!,slideIndex,slideTotal,parsed.data.slideLayout,parsed.data.design);
+      const composed=await composeSlideImage(original,parsed.data.slide!,slideIndex,slideTotal,parsed.data.slideLayout,parsed.data.design,cardOptions);
       return `data:image/jpeg;base64,${composed.toString("base64")}`;
     }));
-    return NextResponse.json({ images, ...(referenceImages.length?{referenceImages}:{}), source:parsed.data.referenceImage&&parsed.data.referenceMode!=="continuity"?"ai-edited":"ai-generated", provider, fallback, ...(notice?{notice}:{}), disclosure:"AI 연출 이미지입니다. 실제 메뉴와 다를 수 있어요." });
+    // 점검 결과가 있으면 점수가 높은(경고가 적은) 후보를 앞에 둔다. 참고 원본도 같은 순서로 맞춘다.
+    if(checks&&checks.length===images.length){
+      const order=checks.map((check,index)=>({index,rank:coverRank(check)})).sort((a,b)=>b.rank-a.rank).map(item=>item.index);
+      images=order.map(index=>images[index]);
+      if(referenceImages.length===order.length){const sorted=order.map(index=>referenceImages[index]);referenceImages.splice(0,referenceImages.length,...sorted);}
+      checks.splice(0,checks.length,...order.map(index=>checks[index]));
+    }
+    return NextResponse.json({ images, ...(referenceImages.length?{referenceImages}:{}), ...(checks?{checks:checks.map(({score,note,warnings})=>({score,note,warnings}))}:{}), source:parsed.data.referenceImage&&parsed.data.referenceMode!=="continuity"?"ai-edited":"ai-generated", provider, fallback, ...(notice?{notice}:{}), disclosure:"AI 연출 이미지입니다. 실제 메뉴와 다를 수 있어요." });
   } catch (error) {
     if(error instanceof HiggsfieldConfigurationError)return NextResponse.json({message:error.message,retryable:false},{status:503});
     if(error instanceof HiggsfieldImageError)return NextResponse.json({message:HIGGSFIELD_MESSAGES[error.reason],retryable:error.reason!=="auth"&&error.reason!=="credits"},{status:error.reason==="nsfw"?422:502});

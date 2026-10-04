@@ -1,6 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { STORE_NAME } from "../slideLayout";
-import { grainLayer, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { grainLayer, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
 import { STYLE_FONTS, contentOf, filmPhoto, fitText , snap } from "./shared";
 
 // 감성 필름: 검은 필름 띠 양옆에 톱니 구멍과 주황 가장자리 글자("MUKDONG 400", 프레임 번호)를 넣고,
@@ -69,7 +68,7 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
       y+=line.info.height+14;
     }
   }
-  const edgeBottom=await textLayer(`${STORE_NAME}   ·   ${index} / ${total}   ·   KEEP THE MOMENT`,{size:22,color:EDGE_TEXT,width:FW,height:34,font:STYLE_FONTS.sansBold,align:"centre"});
+  const edgeBottom=await textLayer(`${brandName()}   ·   ${index} / ${total}   ·   KEEP THE MOMENT`,{size:22,color:EDGE_TEXT,width:FW,height:34,font:STYLE_FONTS.sansBold,align:"centre"});
   layers.push({input:edgeBottom.data,left:Math.round((1080-edgeBottom.info.width)/2),top:1350-50});
   layers.unshift(svgLayer(deco));
   layers.push(await grainLayer({opacity:.3}));

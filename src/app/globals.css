@@ -322,3 +322,10 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .grid-preview-cells span { aspect-ratio:3/4; background:#e7e4dd; }
 .grid-preview-cells .grid-preview-cover { background-size:cover; background-position:center; }
 .grid-preview figcaption { color:var(--muted); font-size:13px; }
+
+/* AI 표지 점검 배지(표지 후보 위). 후보 버튼의 기본 span 스타일보다 우선하도록 버튼 아래로 한정한다. */
+.food-placeholder { position:relative; }
+.food-placeholder .cover-check { position:absolute; left:8px; top:8px; display:flex; flex-wrap:wrap; gap:4px; padding:0; background:none; }
+.food-placeholder .cover-check-badge { padding:3px 8px; border-radius:999px; font-size:12px; font-weight:700; }
+.food-placeholder .cover-check-badge.good { background:#1f5a43; color:white; }
+.food-placeholder .cover-check-badge.warn { background:#fff1d6; color:#8a5200; }

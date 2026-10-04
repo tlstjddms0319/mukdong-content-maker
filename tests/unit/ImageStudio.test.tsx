@@ -138,6 +138,14 @@ describe("ImageStudio carousel",()=>{
     await screen.findByRole("button",{name:"표지 후보 1 선택"});
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+  it("shows the AI cover check on the candidates",async()=>{
+    const checks=[{score:8,note:"선명해요",warnings:[]},{score:6,note:"글자가 보여요",warnings:["이미지 속 글자"]}];
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan,provider:"gemini"})}:{ok:true,json:async()=>({images:["cover-1","cover-2"],checks})}));
+    render(<ImageStudio topic="표지 점검" slideCount={3} onApprove={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
+    expect(await screen.findByText("AI 추천 · 8점")).toBeInTheDocument();
+    expect(screen.getByText("⚠ 이미지 속 글자")).toBeInTheDocument();
+  });
   it("keeps AI mode selected when plan generation fails",async()=>{
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({message:"구성안을 만들 수 없어요."})})));render(<ImageStudio topic="AI 오류" slideCount={3} onApprove={()=>undefined}/>);
     fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));

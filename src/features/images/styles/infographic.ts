@@ -1,6 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
-import { croppedPhoto, mascotLayer, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { croppedPhoto, mascotLayer, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText , snap } from "./shared";
 
 // 인포그래픽·도감: 모눈종이 바탕에 "홍어 도감 No.03" 표제, 둥근 사진에서 점선 지시선을 뽑아 부위·특징 설명을 단다.
@@ -108,7 +108,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
   const mascot=await mascotLayer({width:150,pose:content.cover?"hello":"tip",left:1080-M+10,top:footerTop+40,anchor:"bottom-right",maxHeight:200});
   if(mascot&&(inputs.length!==1||content.cover))layers.push(mascot);
   deco+=`<path d="M${M} ${footerTop+14}H${1080-M}" stroke="${INK}" stroke-width="2"/>`;
-  const folio=await textLayer(`${STORE_NAME} 홍어 도감  ·  ${index} / ${total}`,{size:26,color:INK,width:700,height:40,font:STYLE_FONTS.sansSemi});
+  const folio=await textLayer(`${brandName()}  ·  홍어 도감 ${index} / ${total}`,{size:26,color:INK,width:700,height:40,font:STYLE_FONTS.sansSemi});
   layers.push({input:folio.data,left:M,top:footerTop+30});
   // 원 안·배지 위 글자는 가운데 정렬해서 마지막에 얹는다.
   for(const text of texts){

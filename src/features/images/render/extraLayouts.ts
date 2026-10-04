@@ -2,7 +2,7 @@ import sharp, { type OverlayOptions } from "sharp";
 import type { CarouselSlidePlan } from "../carousel";
 import { STORE_NAME } from "../slideLayout";
 import { inkOn, mutedOn, readableOn } from "../design";
-import { BODY, CONTENT, DECOR_FONT, FONTS, MARGIN, META, canvas, cleanPoints, croppedPhoto, currentVariant, grainLayer, pointLayers, renderSlideHeadline, ring, softShadow, sparkles, svgLayer, textLayer, washiTape, wavyUnderline, type CardRenderer } from "./primitives";
+import { BODY, CONTENT, DECOR_FONT, FONTS, MARGIN, META, brandName, canvas, cleanPoints, croppedPhoto, currentVariant, grainLayer, pointLayers, renderSlideHeadline, ring, softShadow, sparkles, svgLayer, textLayer, washiTape, wavyUnderline, type CardRenderer } from "./primitives";
 
 // 추가 레이아웃 8종: 잡지 편집형, 반반 분할, 폴라로이드, 영수증, 체크리스트, 타임라인, 큰 글자 포스터, 원형 사진.
 // 모두 같은 원칙을 따른다. ① 글자 레이어를 먼저 그려 높이를 잰다 ② 남는 높이에 맞춰 사진·간격을 정한다
@@ -14,7 +14,7 @@ const keywordLine=(slide:CarouselSlidePlan)=>slide.keywords.length?slide.keyword
 
 // 아래 채널명·장 번호 줄.
 async function footer(index:number,total:number,ink:string,muted:string,options:{brandLeft?:number;width?:number}={}):Promise<OverlayOptions[]> {
-  const brand=await textLayer(STORE_NAME,{size:META,color:muted,width:500,height:36,font:FONTS.regular});
+  const brand=await textLayer(brandName(),{size:META,color:muted,width:500,height:36,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:ink,width:200,height:36,font:FONTS.semibold});
   const right=(options.brandLeft??MARGIN)+(options.width??CONTENT);
   return [{input:brand.data,left:options.brandLeft??MARGIN,top:FOOTER_TOP},{input:counter.data,left:right-counter.info.width,top:FOOTER_TOP}];

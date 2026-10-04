@@ -77,3 +77,19 @@ describe("photo enhancement", () => {
     expect(contrastRatio(fixed,"#1f2023")).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe("brand kit", () => {
+  it("prints the Instagram handle next to the store name in every family's footer", async () => {
+    const photo=await sharp({create:{width:900,height:1100,channels:3,background:"#c08070"}}).jpeg().toBuffer();
+    const slide={visualPrompt:"",textPosition:"bottom" as const,figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,keywords:["홍어"],variant:0,role:"detail" as const,layout:"frame" as CardLayout,headline:"홍어 한 점은 씹을수록 맛이 올라와요",points:["홍어 살은 얇게 썰려 결이 보여요","묵은지에 싸 한입에 넣어요"]};
+    for(const style of StyleIdSchema.options){
+      const plain=await composeSlideCard([photo],slide,2,5,"card",{palette:"warm",style},{brandHandle:""});
+      const branded=await composeSlideCard([photo],slide,2,5,"card",{palette:"warm",style},{brandHandle:"@mukdong_hongeo"});
+      // 계정이 들어간 바닥글 글자 상자가 하나 이상 더 넓어지고, 넘침·겹침은 없다.
+      const widest=(boxes:{width:number}[])=>boxes.reduce((max,box)=>Math.max(max,box.width),0);
+      expect(branded.report.issues,style).toEqual([]);
+      expect(branded.report.boxes.length,style).toBe(plain.report.boxes.length);
+      expect(widest(branded.report.boxes),style).toBeGreaterThanOrEqual(widest(plain.report.boxes));
+    }
+  },120_000);
+});
