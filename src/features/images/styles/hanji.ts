@@ -48,7 +48,8 @@ export const renderHanji:CardRenderer=async(inputs,slide,index,total)=>{
   // 표지: 왼쪽에 세로로 쓴 가게 이름. 본문: 위에 "第 二 張" 대신 작은 장 번호.
   if(content.cover||!shots.length){
     // 표지와 글자 장은 왼쪽 가장자리에 세로로 쓴 가게 이름으로 옆을 채운다.
-    const vertical=await textLayer([..."묵동홍어마을"].join("\n"),{size:30,color:DIM,width:44,height:400,font:STYLE_FONTS.serif,align:"centre",spacing:6});
+    // 긴 제목의 먹 번짐이 왼쪽 가장자리까지 닿아도 읽히도록 옅은 색 대신 본문 글자색을 쓴다.
+    const vertical=await textLayer([..."묵동홍어마을"].join("\n"),{size:30,color:SOFT,width:44,height:400,font:STYLE_FONTS.serif,align:"centre",spacing:6});
     layers.push({input:vertical.data,left:44,top:130});
   }
   if(!content.cover){

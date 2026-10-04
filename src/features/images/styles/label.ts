@@ -148,7 +148,7 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
   }else{
     // ── 본문 장 공통: 제목 + 장식선 ──
     const textOnly=content.kind==="text";
-    const title=await fitText(content.headline,{sizes:textOnly?[92,84,76,68,60]:[64,60,56],width:W,maxHeight:textOnly?340:180,color:INK,font:STYLE_FONTS.serifHeavy,align:"centre",spacing:8});
+    const title=await fitText(content.headline,{sizes:textOnly?[92,84,76,68,60]:[64,60,56],width:W,maxHeight:textOnly?260:180,color:INK,font:STYLE_FONTS.serifHeavy,align:"centre",spacing:8});
     const ruleGap=18,ruleH=14,afterRule=textOnly?40:36;
     const placeTitle=(top:number)=>{
       layers.push({input:title.data,left:540-title.info.width/2,top});

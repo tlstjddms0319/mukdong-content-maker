@@ -25,8 +25,8 @@ const r1=(value:number)=>Math.round(value*10)/10;
 // ── 바탕 ────────────────────────────────────────────────────────────────────────────
 // 흰 종이: 아주 옅은 가로 결(섬유)과 고운 알갱이. 글자 대비에 영향이 없도록 농도는 6~7%만.
 function paper():string {
-  return `<filter id="wcFiber"><feTurbulence type="fractalNoise" baseFrequency="0.015 0.5" numOctaves="2" seed="9"/><feColorMatrix values="0 0 0 0 .6  0 0 0 0 .55  0 0 0 0 .45  0 0 0 .06 0"/></filter>`
-    +`<filter id="wcGrain"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="5"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .46  0 0 0 0 .38  0 0 0 .07 0"/></filter>`
+  return `<filter id="wcFiber"><feTurbulence type="fractalNoise" baseFrequency="0.015 0.5" numOctaves="1" seed="9"/><feColorMatrix values="0 0 0 0 .6  0 0 0 0 .55  0 0 0 0 .45  0 0 0 .06 0"/></filter>`
+    +`<filter id="wcGrain"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="1" seed="5"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .46  0 0 0 0 .38  0 0 0 .07 0"/></filter>`
     +`<filter id="wcDot" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>`
     +`<filter id="wcDotIn" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="1.1"/></filter>`
     +`<rect width="1080" height="1350" filter="url(#wcFiber)"/><rect width="1080" height="1350" filter="url(#wcGrain)"/>`;
@@ -34,19 +34,23 @@ function paper():string {
 // 물감 필터: 낮은 주파수 난류로 모양을 크게 일그러뜨리고(displacement), 높은 주파수 난류를 알파에 곱해 얼룩덜룩한
 // 안료 자국(granulation)을 만든 뒤 흐려서 번지게 한다. 같은 seed·같은 요소 크기면 두 필터가 똑같이 일그러져
 // 채움 얼룩과 가장자리 선이 겹친다.
-function wash(id:string,seed:number,options:{scale:number;blur:number;freq:number;mottle:number}):string {
-  return `<filter id="${id}" x="-35%" y="-35%" width="170%" height="170%" color-interpolation-filters="sRGB">`
-    +`<feTurbulence type="fractalNoise" baseFrequency="${options.freq}" numOctaves="2" seed="${seed}" result="warp"/>`
+// 필터 영역은 도형 상자에 "일그러지는 폭 + 흐림 폭"만 더해 꼭 맞게 잡는다. 난류 계산은 영역 넓이에 비례해 느려서,
+// 기본값(상자의 120%)이나 넉넉한 비율을 쓰면 큰 얼룩 하나에 1초 가까이 걸린다.
+type Box={x:number;y:number;w:number;h:number};
+function wash(id:string,seed:number,options:{scale:number;blur:number;freq:number;mottle:number;box:Box}):string {
+  const pad=Math.ceil(options.scale*.55+options.blur*3+8),{x,y,w,h}=options.box;
+  return `<filter id="${id}" filterUnits="userSpaceOnUse" x="${r1(x-pad)}" y="${r1(y-pad)}" width="${r1(w+pad*2)}" height="${r1(h+pad*2)}" color-interpolation-filters="sRGB">`
+    +`<feTurbulence type="fractalNoise" baseFrequency="${options.freq}" numOctaves="1" seed="${seed}" result="warp"/>`
     +`<feDisplacementMap in="SourceGraphic" in2="warp" scale="${options.scale}" xChannelSelector="R" yChannelSelector="G" result="shape"/>`
-    +`<feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="${seed+1}" result="grain"/>`
+    +`<feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="1" seed="${seed+1}" result="grain"/>`
     +`<feColorMatrix in="grain" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 ${options.mottle} ${1-options.mottle*.55}" result="mottle"/>`
     +`<feComposite in="shape" in2="mottle" operator="in" result="wet"/>`
     +`<feGaussianBlur in="wet" stdDeviation="${options.blur}"/></filter>`;
 }
 // 큰 수채 얼룩: 타원을 크게 일그러뜨리고 번지게 한 채움 + 같은 모양의 가는 진한 선(물감 가장자리가 마르며 진해지는 느낌) + 안쪽에 옅은 물 고임.
 function blot(cx:number,cy:number,rx:number,ry:number,p:Pastel,seed:number,rotate=0,opacity=.78):string {
-  const id=`wcBlot${seed}`;
-  return wash(`${id}a`,seed,{scale:84,blur:7,freq:.011,mottle:.9})+wash(`${id}b`,seed,{scale:84,blur:2.4,freq:.011,mottle:.6})
+  const id=`wcBlot${seed}`,box={x:cx-rx,y:cy-ry,w:rx*2,h:ry*2};
+  return wash(`${id}a`,seed,{scale:84,blur:7,freq:.011,mottle:.9,box})+wash(`${id}b`,seed,{scale:84,blur:2.4,freq:.011,mottle:.6,box})
     +`<g transform="rotate(${rotate} ${r1(cx)} ${r1(cy)})">`
     +`<ellipse cx="${r1(cx)}" cy="${r1(cy)}" rx="${r1(rx)}" ry="${r1(ry)}" fill="${p.fill}" opacity="${opacity}" filter="url(#${id}a)"/>`
     +`<ellipse cx="${r1(cx)}" cy="${r1(cy)}" rx="${r1(rx)}" ry="${r1(ry)}" fill="none" stroke="${p.edge}" stroke-width="7" opacity=".55" filter="url(#${id}b)"/>`
@@ -55,7 +59,7 @@ function blot(cx:number,cy:number,rx:number,ry:number,p:Pastel,seed:number,rotat
 // 제목 뒤 거친 붓 띠: 사각형 가장자리를 잘게 일그러뜨려 마른 붓 자국처럼. 아래쪽에 진한 선을 얹어 물감이 고인 느낌.
 function brushBand(x:number,y:number,w:number,h:number,p:Pastel,seed:number,rotate=-1):string {
   const id=`wcBand${seed}`,cx=x+w/2,cy=y+h/2;
-  return wash(id,seed,{scale:24,blur:1.1,freq:.035,mottle:.7})
+  return wash(id,seed,{scale:24,blur:1.1,freq:.035,mottle:.7,box:{x,y,w,h}})
     +`<g transform="rotate(${rotate} ${r1(cx)} ${r1(cy)})" filter="url(#${id})">`
     +`<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" rx="6" fill="${p.fill}" opacity=".82"/>`
     +`<path d="M${r1(x+10)} ${r1(y+h-4)}H${r1(x+w-14)}" stroke="${p.edge}" stroke-width="4" opacity=".5"/></g>`;
@@ -63,7 +67,7 @@ function brushBand(x:number,y:number,w:number,h:number,p:Pastel,seed:number,rota
 // 사진 뒤 파스텔 붓 사각형: 가장자리가 거친 큰 색면. 사진보다 조금 크고 살짝 어긋나게 놓는다.
 function brushRect(x:number,y:number,w:number,h:number,p:Pastel,seed:number,rotate:number):string {
   const id=`wcRect${seed}`,cx=x+w/2,cy=y+h/2;
-  return wash(id,seed,{scale:30,blur:1.4,freq:.028,mottle:.55})
+  return wash(id,seed,{scale:30,blur:1.4,freq:.028,mottle:.55,box:{x,y,w,h}})
     +`<g transform="rotate(${rotate} ${r1(cx)} ${r1(cy)})" filter="url(#${id})">`
     +`<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" rx="18" fill="${p.fill}" opacity=".88"/>`
     +`<rect x="${r1(x+6)}" y="${r1(y+6)}" width="${r1(w-12)}" height="${r1(h-12)}" rx="14" fill="none" stroke="${p.edge}" stroke-width="5" opacity=".35"/></g>`;
@@ -145,16 +149,23 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     const text=!shots.length;
     const tag=await textLayer(`${index} / ${total}`,{size:28,color:INK,width:220,height:44,font:soft});
     texts.push({input:tag.data,left:M+2,top:50});
-    const title=await fitText(content.headline,{sizes:text?[76,68,62,56]:[68,62,56],width:W,maxHeight:text?330:220,color:INK,font:soft,spacing:6});
+    const title=await fitText(content.headline,{sizes:text?[92,84,76,68,60]:[68,62,56],width:W,maxHeight:text?360:220,color:INK,font:soft,spacing:6});
     // 요점: 사진 장 42px, 글자 장 48px. 글머리 자리(56px)를 비운다.
     const points=content.points.slice(0,4);
-    const pointSize=text?48:42,indent=56,gap=text?28:16;
+    const pointSize=text?48:42,indent=56;
+    let gap=text?28:16;
     const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:pointSize,color:INK,width:W-indent,height:600,font:dodum,spacing:Math.round(pointSize*.2)})));
-    const pointsH=pointLayers.reduce((sum,layer)=>sum+layer.info.height+gap,0);
+    const sumPoints=()=>pointLayers.reduce((sum,layer)=>sum+layer.info.height+gap,0);
     // 글자 장은 제목·요점·튄 물감 덩어리를 세로 가운데에(장 번호 아래부터 바닥글 위까지).
+    // 요점이 짧아 많이 남으면 남는 높이의 절반까지 요점 사이 간격을 키워(최대 +44) 덩어리가 작게 뭉치지 않게 한다.
     let ty=112;
     const titleGap=text?52:34;
-    if(text)ty=Math.max(112,Math.round((112+FOOTER_TOP-(title.info.height+titleGap+pointsH+70))/2));
+    if(text){
+      const spare=FOOTER_TOP-112-(title.info.height+titleGap+sumPoints()+70);
+      if(pointLayers.length>1&&spare>0)gap+=Math.min(44,Math.floor(spare*.5/(pointLayers.length-1)));
+      ty=Math.max(112,Math.round((112+FOOTER_TOP-(title.info.height+titleGap+sumPoints()+70))/2));
+    }
+    const pointsH=sumPoints();
     // 얼룩: 제목 뒤(글자 장은 더 크게), 그리고 장마다 다른 구석에 하나.
     const tw=Math.min(title.info.width,W);
     under+=text
@@ -167,7 +178,7 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     if(shots.length){
       // 남는 높이에서 요점 자리를 뺀 만큼 사진 높이로. 요점이 길면(4개×2줄) 사진이 300까지 줄어든다.
       const room=FOOTER_TOP-y-(pointsH?pointsH+36:0)-12;
-      const PH=Math.round(Math.max(300,Math.min(shots.length>1?560:640,room)));
+      const PH=Math.round(Math.max(300,Math.min(shots.length>1?560:700,room)));
       const extra=Math.max(0,room-PH);
       const py=y+Math.round(extra/2);
       if(shots.length===1){
@@ -200,8 +211,8 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     if(text&&pointLayers.length)over+=splatter(M+W*.62,py+30,230,26,[A,B],rand,8);
   }
   // 바닥글: 가게 이름(둥근 손글씨) 양옆에 작은 하트·잎.
-  const footer=await fitText(brandName(),{sizes:[content.cover?30:28,26],width:760,maxHeight:50,color:INK,font:soft,align:"centre"});
-  const fx=Math.round((1080-footer.info.width)/2),fy=FOOTER_TOP+(content.cover?14:16);
+  const footer=await fitText(brandName(),{sizes:content.cover?[34,30,26]:[28,26],width:760,maxHeight:52,color:INK,font:soft,align:"centre"});
+  const fx=Math.round((1080-footer.info.width)/2),fy=FOOTER_TOP+(content.cover?12:16);
   texts.push({input:footer.data,left:fx,top:fy});
   over+=heart(fx-34,fy+footer.info.height/2,22,A)+leaf(fx+footer.info.width+16,fy+footer.info.height/2+2,34,-18,B);
   const layers:OverlayOptions[]=[svgLayer(under),...photos,svgLayer(over),...texts];

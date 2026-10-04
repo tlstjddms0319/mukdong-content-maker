@@ -212,8 +212,8 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
       const numbers=await Promise.all(points.map((_,i)=>textLayer(String(i+1).padStart(2,"0"),{size:numSize,color:RED,width:NUM_W,height:60,font:STYLE_FONTS.mono,spacing:0})));
       const used=title.info.height+10+14+36+(points.length?sumH(points,GAP):0);
       const spare=Math.max(0,avail-used);
-      // 요점이 있으면 남는 높이를 요점 사이에 나누고(최대 56px), 그래도 남으면 덩어리를 세로 가운데에 둔다.
-      const extra=points.length>1?Math.min(56,spare/(points.length-1)):0;
+      // 요점이 있으면 남는 높이를 요점 사이에 나누고(최대 76px), 그래도 남으면 덩어리를 세로 가운데에 둔다.
+      const extra=points.length>1?Math.min(76,spare/(points.length-1)):0;
       const blockH=used+extra*Math.max(0,points.length-1);
       let y=titleTop+Math.max(0,(avail-blockH)/2);
       layers.push({input:title.data,left:CX,top:y});

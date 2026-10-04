@@ -13,6 +13,15 @@ function filmStrip():string {
   return holes+`<path d="M70 0V1350M${1080-70} 0V1350" stroke="#2A2724" stroke-width="2"/>`;
 }
 
+// 사진 위 자막용: 들어가는 가장 큰 크기를 고르되 글자 둘레에 그림자를 깐다(fitText는 그림자 옵션이 없다).
+async function fitShadowText(value:string,sizes:number[],width:number,maxHeight:number){
+  for(const size of sizes){
+    const layer=await textLayer(value,{size,color:SUB,width,height:4000,font:STYLE_FONTS.brushSerif,align:"centre",spacing:12,shadow:true});
+    if(layer.info.height<=maxHeight)return layer;
+  }
+  return textLayer(value,{size:sizes[sizes.length-1],color:SUB,width,height:maxHeight,font:STYLE_FONTS.brushSerif,align:"centre",spacing:12,shadow:true});
+}
+
 export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   const frame=String(index).padStart(2,"0");
@@ -38,9 +47,12 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
       layers.push({input:await sharp(stamp.data).blur(.6).png().toBuffer(),left:FX+FW-stamp.info.width-30,top:y+(content.cover?60:FH-stamp.info.height-24)});
       if(content.cover){
         // 표지 자막: 사진 아래쪽을 어둡게 깔고 그 위에 큰 제목을 영화 자막처럼 얹는다.
-        deco+=`<defs><linearGradient id="filmFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".8"/></linearGradient></defs><rect x="${FX}" y="${y+Math.round(FH*.5)}" width="${FW}" height="${Math.round(FH*.5)}" fill="url(#filmFade)"/>`;
-        const title=await fitText(content.headline,{sizes:[88,78,70,62],width:FW-100,maxHeight:360,color:SUB,font:STYLE_FONTS.brushSerif,align:"centre",spacing:12});
-        layers.push({input:title.data,left:Math.round((1080-title.info.width)/2),top:y+FH-title.info.height-50});
+        // 흰 접시 사진처럼 밝은 사진에서도 읽히도록 글자 둘레에 그림자(shadow)를 깔고, 그 아래쪽은 진하게 어둡게 한다.
+        const title=await fitShadowText(content.headline,[88,78,70,62],FW-100,360);
+        const titleTop=y+FH-title.info.height-50;
+        // 어둡게 하는 띠는 사진 위에 와야 하므로 바닥 장식(deco)이 아니라 사진 다음 레이어로 넣는다.
+        layers.push(svgLayer(`<defs><linearGradient id="filmFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".45" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity=".92"/></linearGradient></defs><rect x="${FX}" y="${titleTop-240}" width="${FW}" height="${y+FH-(titleTop-240)}" fill="url(#filmFade)"/>`));
+        layers.push({input:title.data,left:Math.round((1080-title.info.width)/2),top:titleTop});
       }
       y+=FH+24;
     }
