@@ -464,3 +464,31 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .help-tips li { display:grid; gap:4px; padding:16px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; }
 .help-tips small { color:var(--accent); font-weight:700; }
 .help-tips p { margin:4px 0 0; color:var(--muted); }
+/* 사진 보관함 찾기·관리 */
+.library-picker { display:grid; gap:10px; }
+.library-filter { display:grid; gap:8px; }
+.library-filter-row { display:flex; flex-wrap:wrap; gap:8px; }
+.library-filter-row input { flex:1 1 220px; min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:var(--control-radius); background:#fff; }
+.library-filter-row select { padding:8px 12px; border:1px solid var(--line); border-radius:var(--control-radius); background:#fff; }
+.library-filter .field-help { margin:0; }
+.library-tags { display:flex; flex-wrap:wrap; gap:6px; }
+.library-tags .button { min-height:36px; padding:4px 12px; font-size:14px; }
+.library-thumb { position:relative; }
+.library-thumb span { position:absolute; left:4px; bottom:4px; padding:1px 6px; border-radius:999px; background:rgb(0 0 0 / 62%); color:#fff; font-size:12px; font-weight:700; }
+.photo-library-manager { display:grid; gap:14px; margin:32px 0; padding:20px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; }
+.photo-library-manager h2 { margin:0 0 4px; }
+.photo-library-manager > div > p { margin:0; color:var(--muted); }
+.library-assets { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; margin:0; padding:0; list-style:none; }
+.library-asset { display:grid; grid-template-columns:110px minmax(0,1fr); gap:12px; padding:12px; border:1px solid var(--line); border-radius:12px; }
+.library-asset img { width:110px; height:110px; border-radius:10px; object-fit:cover; }
+.library-asset > div { display:grid; gap:6px; min-width:0; }
+.library-asset small { color:var(--muted); }
+.library-asset label { display:grid; gap:2px; font-size:13px; font-weight:700; }
+.library-asset input { width:100%; min-width:0; padding:8px 10px; border:1px solid var(--line); border-radius:var(--control-radius); }
+.library-asset-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.library-asset .field-help { margin:0; }
+@media (max-width:720px) {
+  .library-tags .button { min-height:44px; }
+  .library-asset { grid-template-columns:84px minmax(0,1fr); }
+  .library-asset img { width:84px; height:84px; }
+}
