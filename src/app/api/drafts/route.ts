@@ -3,6 +3,7 @@ import { ownerApiError } from "@/features/auth/guard";
 import { createDraftRepository } from "@/features/drafts/repository";
 import { DraftSchema } from "@/features/drafts/schema";
 import { selectedDraftMedia } from "@/features/drafts/selection";
+import { plannedAtFromPlanDate } from "@/features/drafts/planLink";
 import { z } from "zod";
 
 function privateJson(body: unknown, init?: ResponseInit) { const headers=new Headers(init?.headers); headers.set("Cache-Control","no-store"); return NextResponse.json(body,{...init,headers}); }
@@ -21,7 +22,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
   const parsed = DraftSchema.safeParse(await request.json());
   if (!parsed.success) return privateJson({ error: "초안 내용을 확인해 주세요." }, { status: 400 });
   const previous=await repository.readDraft(parsed.data.id);
-  return privateJson(await repository.saveDraft({...parsed.data,planned_publish_at:previous?.planned_publish_at??null,final_review_complete:false}), { status: 201 });
+  // 게시 희망일시는 PATCH(게시 계획)로만 바꾼다. 단, 한 달 기획에서 시작한 새 초안은 처음 저장할 때 그 게시일의 기본 시각을 채운다.
+  const plan_date=previous?previous.plan_date:parsed.data.plan_date;
+  const planned_publish_at=previous?previous.planned_publish_at??null:plannedAtFromPlanDate(plan_date);
+  return privateJson(await repository.saveDraft({...parsed.data,plan_date,planned_publish_at,final_review_complete:false}), { status: 201 });
 }
 
 const CaptionInput = z.object({ id:z.string().uuid(), caption:z.string().trim().min(1).max(2200) });

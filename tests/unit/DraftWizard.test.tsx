@@ -203,6 +203,22 @@ describe("DraftWizard",()=>{
     expect((screen.getByLabelText("직접 주제를 적고 싶다면") as HTMLInputElement).value).toBe(initial);
   });
 
+  it("carries the month plan date and recommended style into the new draft",async()=>{
+    window.history.replaceState({},"","/?"+new URLSearchParams({topic:"막걸리엔 왜 전일까?",audience:"A",imageBrief:"전 한 접시",brief:"막걸리와 전의 궁합에서 홍어로 잇는다.",planDate:"2099-01-06",style:"newspaper"}));
+    let uploads=0;
+    const request=vi.fn(async(url:string,init?:RequestInit)=>{void init;return url==="/api/images/assets"?{ok:true,json:async()=>({asset:{id:`photo-${++uploads}`,preview:"data:image/jpeg;base64,AAAA",name:"p"}})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:{ok:false,json:async()=>({})};});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);
+    expect(await screen.findByText(/한 달 기획 · 1\/6\(화\) 18:00 게시 예정 · 추천 계열 신문·기사/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
+    // 추천 계열이 디자인 계열 선택의 기본값이 된다.
+    expect(screen.getByRole("combobox",{name:"디자인 계열"})).toHaveValue("newspaper");
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+    fireEvent.click(await screen.findByRole("button",{name:"글자 없이 사진만 쓰기"}));
+    await waitFor(()=>expect(request.mock.calls.some(([url])=>url==="/api/drafts")).toBe(true));
+    const saved=JSON.parse(String((request.mock.calls.find(([url])=>url==="/api/drafts")?.[1] as RequestInit).body));
+    expect(saved).toMatchObject({topic:"막걸리엔 왜 전일까?",plan_date:"2099-01-06"});
+  });
+
   it("invalidates saved images and copy when the topic changes",async()=>{
     let uploads=0;
     const copy={topic:"수육에는 왜 김치를 곁들일까?",audience:"A",hook:"새 AI 문안",information:"정보",store_connection:"가게",call_to_action:"방문",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null,_meta:{provider:"fallback"}};

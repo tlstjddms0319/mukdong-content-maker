@@ -21,7 +21,8 @@ export type ReferenceUse="source"|"style";
 // 실제 사진 캐러셀에 쓸 사진 한 장. id는 사진 보관함(asset library) id, preview는 서버가 줄여 준 JPEG(최대 1400px).
 export type StudioPhoto={id:string;preview:string;name:string};
 export const MAX_STUDIO_PHOTOS=10;
-export type GenerationInput={topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount};
+// preferredStyle: 한 달 기획이 추천한 디자인 계열. 새 초안의 계열 선택 기본값이 된다(사용자가 바꾸면 그쪽을 따른다).
+export type GenerationInput={topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount;preferredStyle?:StyleId};
 // "auto"면 구성안 AI가 글 분위기에 맞춰 추천한 글꼴을 쓰고, 아니면 사용자가 고른 글꼴로 덮어쓴다.
 export type FontChoice<T extends string>="auto"|T;
 
@@ -56,7 +57,7 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",style:"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[]};
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[]};
 }
 
 // 만든 것들만 비우고 모드·화풍·참고 사진은 남긴다(모드 카드나 표지 다시 만들기에서 쓰는 초기화).

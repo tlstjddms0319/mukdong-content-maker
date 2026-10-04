@@ -34,6 +34,8 @@ export const DraftSchema = z.object({
   caption: z.string().max(2200).optional(),
   planned_publish_at: z.string().datetime().nullable().optional(),
   final_review_complete: z.boolean().optional(),
+  // 한 달 기획의 어느 게시일에서 시작한 초안인지(YYYY-MM-DD). 기획표가 진행 상태를 보여 줄 때 쓴다.
+  plan_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   facts_to_verify: z.array(z.string()),
   store_profile_version: z.string(),
   created_at: z.string().datetime(),
