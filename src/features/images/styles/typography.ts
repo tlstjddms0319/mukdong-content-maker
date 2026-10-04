@@ -20,8 +20,11 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   const accent=ACCENTS[(index-1+(slide.variant??0))%ACCENTS.length];
   const M=64,W=1080-M*2;
-  const base=inputs.length
-    ?await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover"}).grayscale().blur(18).modulate({brightness:.42}).png().toBuffer()
+  // 사진을 흑백·흐리게 깐 뒤, 사진이 밝을수록 더 어둡게 눌러 평균 밝기를 0.12 안팎으로 맞춘다(흰 접시 사진에서도 글자가 뜨게).
+  const blurred=inputs.length?await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover",position:"attention"}).grayscale().blur(18).png().toBuffer():null;
+  const brightness=blurred?Math.min(.42,.12/Math.max(.05,(await sharp(blurred).stats()).channels[0].mean/255)):1;
+  const base=blurred
+    ?await sharp(blurred).modulate({brightness}).png().toBuffer()
     :await sharp({create:{width:1080,height:1350,channels:3,background:"#141414"}}).png().toBuffer();
   const layers:OverlayOptions[]=[];
   const {before,hero,after}=splitHero(content.headline,content.keywords);
@@ -41,7 +44,7 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
   let py=Math.max(y+50,1350-110-pointsH);
   if(points.length)layers.push(svgLayer(`<rect x="${M}" y="${py}" width="8" height="${pointsH-14}" fill="${accent}"/>`));
   for(const point of points){layers.push({input:point.data,left:M+32,top:py});py+=point.info.height+14;}
-  const folio=await textLayer(`묵동홍어마을   ${String(index).padStart(2,"0")} / ${String(total).padStart(2,"0")}`,{size:26,color:"#BDBDBD",width:W,height:40,font:STYLE_FONTS.sansSemi});
+  const folio=await textLayer(`묵동홍어마을   ${String(index).padStart(2,"0")} / ${String(total).padStart(2,"0")}`,{size:26,color:"#E2E2E2",width:W,height:40,font:STYLE_FONTS.sansSemi});
   layers.push({input:folio.data,left:M,top:1350-70});
   return sharp(base).composite(layers).jpeg({quality:92}).toBuffer();
 };

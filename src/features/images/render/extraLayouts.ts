@@ -1,7 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import type { CarouselSlidePlan } from "../carousel";
 import { STORE_NAME } from "../slideLayout";
-import { inkOn, mutedOn } from "../design";
+import { inkOn, mutedOn, readableOn } from "../design";
 import { BODY, CONTENT, DECOR_FONT, FONTS, MARGIN, META, canvas, cleanPoints, croppedPhoto, currentVariant, grainLayer, pointLayers, renderSlideHeadline, ring, softShadow, sparkles, svgLayer, textLayer, washiTape, wavyUnderline, type CardRenderer } from "./primitives";
 
 // 추가 레이아웃 8종: 잡지 편집형, 반반 분할, 폴라로이드, 영수증, 체크리스트, 타임라인, 큰 글자 포스터, 원형 사진.
@@ -24,7 +24,7 @@ async function footer(index:number,total:number,ink:string,muted:string,options:
 const composeMagazine:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const ink=inkOn(palette.paper,palette),muted=mutedOn(palette.paper,palette);
   const cover=slide.role==="cover";
-  const eyebrow=await textLayer(keywordLine(slide),{size:META,color:palette.accent,width:CONTENT,height:40,font:FONTS.semibold});
+  const eyebrow=await textLayer(keywordLine(slide),{size:META,color:readableOn(palette.accent,palette.paper),width:CONTENT,height:40,font:FONTS.semibold});
   const headline=await renderSlideHeadline(slide.headline,{size:cover?66:58,color:ink,align:"left",width:CONTENT,height:240,balance:cover});
   const lines=cleanPoints(slide.points);
   const body=lines.length?await textLayer(lines.join(" "),{size:BODY,color:ink,width:CONTENT,height:260,font:FONTS.regular,spacing:14}):null;
@@ -53,7 +53,7 @@ const composeSplit:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const panelX=photoRight?0:HALF,photoX=photoRight?HALF:0;
   const ink=inkOn(palette.paper,palette),muted=mutedOn(palette.paper,palette);
   const cover=slide.role==="cover";
-  const eyebrow=await textLayer(keywordLine(slide),{size:META,color:palette.accent,width:W,height:80,font:FONTS.semibold});
+  const eyebrow=await textLayer(keywordLine(slide),{size:META,color:readableOn(palette.accent,palette.paper),width:W,height:80,font:FONTS.semibold});
   const headline=await renderSlideHeadline(slide.headline,{size:cover?58:50,color:ink,align:"left",width:W,height:420,balance:false});
   const lines=cleanPoints(slide.points);
   const measured=await pointLayers(lines,0,{left:panelX+PAD,width:W,color:ink,markerColor:palette.accent});
@@ -117,7 +117,7 @@ const composeReceipt:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   const shop=await textLayer(STORE_NAME,{size:34,color:paperInk,width:TEXT_W,height:48,font:FONTS.semibold,align:"centre"});
   const title=await renderSlideHeadline(slide.headline,{size:52,color:paperInk,align:"centre",width:TEXT_W,height:200,balance:true});
   const items=await Promise.all(lines.map(line=>textLayer(line,{size:BODY+4,color:paperInk,width:TEXT_W-80,height:(BODY+4)*3,font:FONTS.regular,spacing:6})));
-  const numbers=await Promise.all(lines.map((_,i)=>textLayer(String(i+1).padStart(2,"0"),{size:34,color:palette.accent,width:70,height:44,font:FONTS.bold})));
+  const numbers=await Promise.all(lines.map((_,i)=>textLayer(String(i+1).padStart(2,"0"),{size:34,color:readableOn(palette.accent,palette.soft,3),width:70,height:44,font:FONTS.bold})));
   const totalLabel=await textLayer("TOTAL",{size:30,color:paperInk,width:200,height:40,font:DECOR_FONT});
   const totalValue=await textLayer(`${lines.length}가지`,{size:30,color:paperInk,width:200,height:40,font:FONTS.bold});
   const thanks=await textLayer(keywordLine(slide),{size:META,color:dim,width:TEXT_W,height:36,font:FONTS.regular,align:"centre"});
@@ -191,7 +191,7 @@ const composeChecklist:CardRenderer=async(_inputs,slide,index,total,palette)=>{
 // 16. 타임라인: 위에 머리글·제목, 왼쪽 세로 선 위에 번호 점, 오른쪽에 각 단계. 남는 높이는 단계 사이로 나눈다.
 const composeTimeline:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   const ink=inkOn(palette.soft,palette),muted=mutedOn(palette.soft,palette);
-  const eyebrow=await textLayer(keywordLine(slide),{size:META,color:palette.accent,width:CONTENT,height:40,font:FONTS.semibold});
+  const eyebrow=await textLayer(keywordLine(slide),{size:META,color:readableOn(palette.accent,palette.paper),width:CONTENT,height:40,font:FONTS.semibold});
   const headline=await renderSlideHeadline(slide.headline,{size:54,color:ink,align:"left",width:CONTENT,height:220,balance:false});
   const lines=cleanPoints(slide.points);
   const LINE_X=MARGIN+36,TEXT_X=MARGIN+110,TEXT_W=1080-MARGIN-TEXT_X;
@@ -220,7 +220,7 @@ const composeTimeline:CardRenderer=async(_inputs,slide,index,total,palette)=>{
 // 17. 큰 글자 포스터: 화면을 채우는 큰 제목, 오른쪽 아래 둥근 사진, 왼쪽 아래 요점.
 const composePoster:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const ink=inkOn(palette.paper,palette),muted=mutedOn(palette.paper,palette);
-  const tag=await textLayer(keywordLine(slide),{size:META+2,color:palette.accent,width:CONTENT,height:40,font:FONTS.semibold});
+  const tag=await textLayer(keywordLine(slide),{size:META+2,color:readableOn(palette.accent,palette.paper),width:CONTENT,height:40,font:FONTS.semibold});
   const D=360,CX=1080-MARGIN-D/2,CY=FOOTER_TOP-60-D/2;
   const lines=cleanPoints(slide.points).slice(0,3);
   const points=lines.length?await pointLayers(lines,0,{width:CONTENT-D-40,color:ink,markerColor:palette.accent}):null;

@@ -22,12 +22,12 @@ export type Palette={
 };
 
 export const PALETTES:Record<PaletteId,{label:string;when:string;colors:Palette}>={
-  warm:{label:"따뜻한 종이",when:"기본. 구운 음식, 저녁 식탁, 편안한 분위기",colors:{paper:"#f6f2ea",soft:"#f3e3d3",ink:"#1f2b27",accent:"#c65138",muted:"#6d746f",highlight:"#f5c84b",onAccent:"#fff4ec"}},
-  sea:{label:"바다·비",when:"생선·해산물의 신선함, 비 오는 날, 차분한 설명",colors:{paper:"#eef3f4",soft:"#d9e8ee",ink:"#15303a",accent:"#2f6f8f",muted:"#5f7a84",highlight:"#f2d16b",onAccent:"#eef6fa"}},
+  warm:{label:"따뜻한 종이",when:"기본. 구운 음식, 저녁 식탁, 편안한 분위기",colors:{paper:"#f6f2ea",soft:"#f3e3d3",ink:"#1f2b27",accent:"#c65138",muted:"#5c635f",highlight:"#f5c84b",onAccent:"#fff4ec"}},
+  sea:{label:"바다·비",when:"생선·해산물의 신선함, 비 오는 날, 차분한 설명",colors:{paper:"#eef3f4",soft:"#d9e8ee",ink:"#15303a",accent:"#2f6f8f",muted:"#4c6670",highlight:"#f2d16b",onAccent:"#eef6fa"}},
   night:{label:"밤·술자리",when:"저녁 술자리, 막걸리, 어두운 조명의 분위기",colors:{paper:"#1d2420",soft:"#2b332e",ink:"#f3efe6",accent:"#e0a458",muted:"#b5b0a3",highlight:"#e0a458",onAccent:"#1d2420"}},
-  herb:{label:"풀·신선",when:"채소, 곁들임, 가볍고 신선한 이야기",colors:{paper:"#f1f4ec",soft:"#dcebd0",ink:"#22311f",accent:"#4f7a3a",muted:"#6b7566",highlight:"#f1d46a",onAccent:"#f3f7ee"}},
-  clay:{label:"흙·숙성",when:"삭힘, 숙성, 전통, 오래된 방법 이야기",colors:{paper:"#f3e9df",soft:"#ead5c3",ink:"#3a2a22",accent:"#b4532b",muted:"#7a6a60",highlight:"#f0c35a",onAccent:"#fbf1e8"}},
-  plum:{label:"자두·묵은지",when:"묵은지, 발효 향, 강한 맛을 다루는 이야기",colors:{paper:"#f4eef2",soft:"#e8d6e2",ink:"#2b1e2a",accent:"#8a3f6b",muted:"#7a6a76",highlight:"#f2cf6a",onAccent:"#f8eef4"}},
+  herb:{label:"풀·신선",when:"채소, 곁들임, 가볍고 신선한 이야기",colors:{paper:"#f1f4ec",soft:"#dcebd0",ink:"#22311f",accent:"#4f7a3a",muted:"#586252",highlight:"#f1d46a",onAccent:"#f3f7ee"}},
+  clay:{label:"흙·숙성",when:"삭힘, 숙성, 전통, 오래된 방법 이야기",colors:{paper:"#f3e9df",soft:"#ead5c3",ink:"#3a2a22",accent:"#b4532b",muted:"#66574e",highlight:"#f0c35a",onAccent:"#fbf1e8"}},
+  plum:{label:"자두·묵은지",when:"묵은지, 발효 향, 강한 맛을 다루는 이야기",colors:{paper:"#f4eef2",soft:"#e8d6e2",ink:"#2b1e2a",accent:"#8a3f6b",muted:"#665763",highlight:"#f2cf6a",onAccent:"#f8eef4"}},
 };
 
 // 사장님이 고른 다섯 가지 카드뉴스 스타일. 글자는 코드로 찍고, 사진 분위기만 photoHint로 이미지 AI에 전달한다.
@@ -101,11 +101,27 @@ const luminance=(hex:string)=>{
   return .2126*r+.7152*g+.0722*b;
 };
 export const isLight=(hex:string)=>luminance(hex)>.4;
+// WCAG 대비율(1~21). 6자리 hex만 본다(투명도 자리는 무시).
+export const contrastRatio=(a:string,b:string)=>{const la=luminance(a),lb=luminance(b);return (Math.max(la,lb)+.05)/(Math.min(la,lb)+.05);};
+const mixHex=(a:string,b:string,t:number)=>{
+  const pa=parseInt(a.slice(1,7),16),pb=parseInt(b.slice(1,7),16);
+  const ch=(n:number,shift:number)=>(n>>shift)&255;
+  return "#"+[16,8,0].map(shift=>Math.round(ch(pa,shift)*(1-t)+ch(pb,shift)*t).toString(16).padStart(2,"0")).join("");
+};
+// 글자색이 배경에서 잘 안 읽히면(대비율 min 미만) 배경 반대쪽(검정/흰색)으로 조금씩 섞어 읽히는 가장 가까운 색을 찾는다.
+// 팔레트의 강조색(accent)을 글자에 쓸 때, 원래 색감은 최대한 살리면서 읽기 쉽게 만드는 용도.
+export function readableOn(color:string,background:string,min=4.5):string {
+  const hex=color.slice(0,7);
+  if(contrastRatio(hex,background)>=min)return color;
+  const target=isLight(background)?"#000000":"#ffffff";
+  for(let t=.08;t<1;t+=.08){const mixed=mixHex(hex,target,t);if(contrastRatio(mixed,background)>=min)return mixed;}
+  return target;
+}
 
 // 흰 상자나 고정된 연한 바탕처럼 팔레트와 무관한 면 위의 글자색. 밤 팔레트는 ink가 밝아 그런 면에서 사라지므로
 // 배경과 글자의 밝기가 같을 때만 짙은(또는 밝은) 기본색으로 바꾼다.
 export const inkOn=(background:string,palette:Palette)=>isLight(background)===isLight(palette.ink)?(isLight(background)?"#22272a":"#f3efe6"):palette.ink;
-export const mutedOn=(background:string,palette:Palette)=>isLight(background)===isLight(palette.muted)?(isLight(background)?"#6d746f":"#b5b0a3"):palette.muted;
+export const mutedOn=(background:string,palette:Palette)=>isLight(background)===isLight(palette.muted)?(isLight(background)?"#5c635f":"#b5b0a3"):palette.muted;
 export const photosNeeded=(layout:CardLayout)=>CARD_LAYOUTS[layout].photoCount;
 
 // AI가 레이아웃을 고르지 못했을 때와 준비 문안에서 쓰는 역할별 기본 레이아웃. 이웃한 장이 겹치지 않게 짰다.

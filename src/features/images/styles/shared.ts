@@ -171,9 +171,9 @@ export async function stickerize(cutout:{data:Buffer;width:number;height:number}
 }
 
 // 흑백·대비 강화(신문), 강한 흐림·어둡게(타이포그래피) 같은 사진 보정.
-export const grayscalePhoto=(input:Buffer,width:number,height:number)=>sharp(input).rotate().resize(width,height,{fit:"cover"}).grayscale().linear(1.25,-24).png().toBuffer();
+export const grayscalePhoto=(input:Buffer,width:number,height:number)=>sharp(input).rotate().resize(Math.round(width),Math.round(height),{fit:"cover",position:"attention"}).grayscale().linear(1.25,-24).png().toBuffer();
 // 도트(픽셀) 사진: 작게 줄였다가 가장 가까운 픽셀로 다시 키운다.
-export const pixelPhoto=(input:Buffer,width:number,height:number,cell=8)=>sharp(input).rotate().resize(Math.round(width/cell),Math.round(height/cell),{fit:"cover"}).resize(width,height,{kernel:"nearest"}).png().toBuffer();
+export const pixelPhoto=(input:Buffer,width:number,height:number,cell=8)=>sharp(input).rotate().resize(Math.round(width/cell),Math.round(height/cell),{fit:"cover",position:"attention"}).resize(width,height,{kernel:"nearest"}).png().toBuffer();
 
 // 들어가는 가장 큰 크기의 외곽선 글자. fitText와 같이 큰 크기부터 그려 보고 높이가 맞는 첫 크기를 쓴다.
 export async function fitOutlined(value:string,options:Omit<Parameters<typeof outlinedText>[1],"size">&{sizes:number[];maxHeight:number}):Promise<Layer> {
@@ -201,7 +201,8 @@ export const rotated=async(input:Buffer,degrees:number):Promise<Layer>=>sharp(in
 
 // 필름 사진 느낌: 채도를 조금 낮추고 채널별 곱셈으로 따뜻하게 만든 뒤(tint는 단색 사진이 되므로 쓰지 않는다), 가장자리를 어둡게(비네트) 하고 한쪽에 주황빛 빛샘을 얹는다.
 export async function filmPhoto(input:Buffer,width:number,height:number,leak:"left"|"right"="right"):Promise<Buffer> {
-  const base=await sharp(input).rotate().resize(width,height,{fit:"cover"}).modulate({saturation:.88,brightness:1.03}).linear([1.06,1.0,.88],[8,4,-2]).png().toBuffer();
+  width=Math.round(width);height=Math.round(height);
+  const base=await sharp(input).rotate().resize(width,height,{fit:"cover",position:"attention"}).modulate({saturation:.88,brightness:1.03}).linear([1.06,1.0,.88],[8,4,-2]).png().toBuffer();
   const lx=leak==="right"?width:0;
   const overlay=Buffer.from(`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="v" cx="50%" cy="50%" r="72%"><stop offset="60%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".45"/></radialGradient><radialGradient id="l" cx="${lx}" cy="${height*.2}" r="${width*.6}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FF7A1A" stop-opacity=".55"/><stop offset="1" stop-color="#FF7A1A" stop-opacity="0"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#v)"/><rect width="100%" height="100%" fill="url(#l)"/></svg>`);
   return sharp(base).composite([{input:overlay,left:0,top:0}]).png().toBuffer();

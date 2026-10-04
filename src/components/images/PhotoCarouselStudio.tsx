@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { GenerationProgress } from "@/components/states/GenerationState";
+import { GridPreview } from "./GridPreview";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { MAX_STUDIO_PHOTOS, activeSlideIndex, addLibraryPhoto, addPhotos, approveRawPhotos, buildPhotoCarousel, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState, type StudioPhoto } from "@/features/images/generationStore";
 
@@ -64,6 +65,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
           <span aria-live="polite">{activeIndex+1} / {slides.length}</span>
           <button type="button" className="button secondary" aria-label="다음 슬라이드" disabled={activeIndex>=slides.length-1} onClick={()=>setActiveSlide(activeIndex+1)}>다음</button>
         </div>
+        <GridPreview cover={slides[0]?.preview}/>
         <div className="carousel-thumbnails" aria-label="만든 슬라이드 목록">{slides.map((slide,index)=><button key={slide.id} type="button" aria-label={`슬라이드 ${index+1} 보기`} aria-pressed={activeIndex===index} className="feed-thumb" style={slide.preview?{backgroundImage:`url(${slide.preview})`}:undefined} onClick={()=>setActiveSlide(index)}/>)}</div>
       </div>
       {done&&(usedInActive.length?<div className="photo-swap">
