@@ -32,6 +32,9 @@ describe("topic-driven card design", () => {
   it("repairs a cover drawn as a body-only layout instead of rejecting the plan", async () => {
     expect(normalizeCardLayout({role:"cover",layout:"collage"})).toBe("fullscreen");
     expect(normalizeCardLayout({role:"cover",layout:"frame"})).toBe("frame");
+    // 레이아웃이 없던 시절에 저장된 초안: 역할 기본값으로 채워 화면이 멈추지 않게 한다.
+    expect(normalizeCardLayout({role:"detail"})).toBe("frame");
+    expect(normalizeCardLayout({role:"cover",layout:"unknown" as never})).toBe("fullscreen");
     expect(normalizeCardLayout({role:"cover",layout:"quote"})).toBe("quote");
     expect(normalizeCardLayout({role:"visit",layout:"fullscreen"})).toBe("fullscreen");
     // 숫자 없는 대형 숫자형과 이름 두 개가 없는 비교형은 재료가 있는 레이아웃으로 바뀐다.

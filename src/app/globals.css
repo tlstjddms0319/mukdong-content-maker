@@ -261,7 +261,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
   .bottom-action { align-items:stretch; flex-direction:column; }
   .bottom-action .button { width:100%; }
   .settings-section { grid-template-columns:1fr; gap:16px; }
-  .field-grid { grid-template-columns:1fr; }
+  .field-grid { grid-template-columns:minmax(0,1fr); }
   .settings-actions { align-items:stretch; flex-direction:column; }
   .carousel-controls { gap:8px; }
   .carousel-controls .button { width:100%; }
@@ -314,7 +314,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .photo-thumb:disabled { opacity:.45; cursor:default; }
 .photo-swap { display:grid; gap:8px; }
 .photo-swap .photo-thumb { width:80px; height:80px; }
-@media (max-width:600px){ .photo-strip li { width:88px; height:88px; } .photo-thumb { width:76px; height:76px; } }
+@media (max-width:600px){ .photo-thumb { width:76px; height:76px; } }
 
 /* 인스타 프로필 격자 미리보기(GridPreview): 표지를 3:4로 잘라 가운데 칸에, 양옆은 빈 칸 */
 .grid-preview { margin:12px 0 0; display:grid; gap:6px; justify-items:start; }
@@ -357,3 +357,52 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .reel-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .reel-preview canvas, .reel-preview video { width:min(100%,300px); aspect-ratio:9/16; border-radius:12px; background:#000; display:block; }
 .reel-preview canvas[hidden] { display:none; }
+
+/* ── 휴대폰 화면 다듬기 ──
+   사장님이 휴대폰으로 쓰는 경우를 기준으로 맞춘다.
+   1) 가로로 넘치는 곳 없애기: 그리드·플렉스 자식은 기본 min-width:auto라서 긴 글자(환경변수 이름)나
+      넓은 미리보기가 부모를 화면 밖으로 밀어낸다 → min-width:0과 minmax(0,1fr)로 줄어들 수 있게 한다.
+   2) 손가락으로 누르기 쉬운 크기: 누르는 곳은 최소 44px(애플·구글 권장)로 키운다. 데스크톱은 그대로 둔다. */
+.photo-studio { grid-template-columns:minmax(0,1fr); min-width:0; }
+.photo-studio > * { min-width:0; }
+.connection-card > div { min-width:0; }
+/* 고르기 상자는 가장 긴 선택지 글자만큼 넓어지려 해서 좁은 화면을 밀어낸다 → 칸 너비에 맞춘다. */
+.field-grid label { min-width:0; }
+.field-grid select { width:100%; min-width:0; }
+.connection-missing li, .connection-help { overflow-wrap:anywhere; }
+/* 완성 카드 위의 "N번 슬라이드" 표시는 카드 오른쪽 위 장식(쪽 번호·딱지)을 가린다.
+   아래 "1 / 5" 표시가 같은 정보를 주므로 화면에서는 숨기고 화면 읽기 프로그램에만 남긴다. */
+.generated-carousel .post-image span { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+@media (max-width:720px) {
+  /* 머리줄: 가게 이름은 한 줄, 버튼은 조금 좁게 */
+  .topbar { padding:10px 16px; gap:10px; }
+  .brand { white-space:nowrap; min-height:44px; }
+  .topbar-actions { flex-wrap:nowrap; gap:6px; }
+  .topbar-actions .button { padding-inline:12px; }
+}
+/* 360px대 작은 휴대폰: 가게 이름과 버튼 두 개가 한 줄에 들어가도록 글자를 한 단계 줄인다. */
+@media (max-width:400px) {
+  .brand { font-size:15px; gap:8px; }
+  .topbar-actions .button { padding-inline:10px; font-size:14px; }
+}
+@media (max-width:720px) {
+  /* 메뉴: 옆으로 밀어야 보이던 "설정"까지 한눈에 보이게 3칸 두 줄로 */
+  .side-nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); overflow:visible; gap:6px; padding:10px 16px; }
+  .side-nav a { justify-content:center; min-height:44px; padding:8px 4px; text-align:center; font-size:15px; }
+  .side-nav .nav-badge { grid-column:1 / -1; order:99; margin:0; justify-content:center; }
+  .main-content { padding:24px 16px; }
+  /* 단계 버튼·작은 선택 버튼·고르기 상자를 44px로 */
+  .step-list { gap:4px 6px; }
+  .step-list button { min-width:56px; min-height:44px; padding:4px 8px; }
+  .option-picker .button, .font-picker select { min-height:44px; }
+  .font-picker label { flex-wrap:wrap; }
+  .font-picker select { max-width:100%; }
+  /* 올린 사진의 "앞으로·빼기" 버튼: 28px → 40px(사진 칸이 작아 44px면 사진을 다 가린다) */
+  .photo-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .photo-strip li { width:auto; height:auto; aspect-ratio:1; }
+  .photo-strip-actions button { width:40px; height:40px; font-size:15px; }
+  .upload-zone { min-height:220px; padding:16px; }
+  .photo-studio-actions .button { flex:1 1 140px; }
+  .upload-zone .photo-studio-actions { align-self:stretch; flex-direction:column; }
+  .upload-zone .photo-studio-actions .button { flex:none; }
+}

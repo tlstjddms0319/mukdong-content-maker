@@ -34,7 +34,7 @@ test("creates, saves, previews, and exports a five-slide carousel without live p
         visualPrompt:["완성된 홍어 한 상을 정면에서 담은 히어로 음식 사진", "홍어의 결, 윤기와 곁들임을 가까이 담은 음식 사진", "젓가락으로 한 점을 만드는 손동작 음식 사진", "막걸리와 홍어를 대각선 구도로 담은 음식 사진", "따뜻한 식탁 위 완성 상차림을 담은 방문 유도 음식 사진"][index],
         textPosition:index % 2 === 0 ? "top" : "bottom",
       })),
-    }, provider:"fallback" } });
+    }, provider:"gemini" } });
   });
   await page.route("**/api/images/generate", async route => {
     const request = route.request().postDataJSON() as Record<string, unknown>;
