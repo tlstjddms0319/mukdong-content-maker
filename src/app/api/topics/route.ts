@@ -8,6 +8,7 @@ import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
 import { createDraftRepository } from "@/features/drafts/repository";
 import { likedTopicTitles } from "@/features/drafts/performance";
+import { cachedTrendKeywords, trendLabel } from "@/features/topics/naverTrend";
 import { seasonContext } from "@/features/topics/season";
 
 const RequestSchema = z.object({
@@ -26,14 +27,16 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const season = seasonContext();
     // 사장님이 적어 둔 성과에서 반응 좋았던 주제(없으면 빈 목록). 초안을 못 읽어도 추천은 계속한다.
     const likedTitles = likedTopicTitles(await createDraftRepository().listDrafts().catch(() => []));
+    // 네이버 검색이 늘어난 음식 말(키가 없거나 실패하면 빈 목록, 12시간 기억).
+    const trends = await cachedTrendKeywords();
     const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     let source: "ai" | "fallback" = "ai";
     const topics = await suggestTopics(input, { suggest:() => client.generateJson(
-      buildTopicPrompt(input, season, likedTitles),
+      buildTopicPrompt(input, season, likedTitles, trends.map(trendLabel)),
       topicGenerationSchema(directions),
     ) }, (reason) => { source = "fallback"; console.warn("[topics] using prepared topics:", reason); }, season);
-    return NextResponse.json({ topics, source, provider: source === "ai" ? client.provider : null, season: { name: season.season, events: season.events.map(({ name, daysAway }) => ({ name, daysAway })) } });
+    return NextResponse.json({ topics, source, provider: source === "ai" ? client.provider : null, season: { name: season.season, events: season.events.map(({ name, daysAway }) => ({ name, daysAway })) }, trends: trends.map(({ keyword, growth }) => ({ keyword, growth })) });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: "입력 내용을 확인해 주세요." }, { status: 400 });

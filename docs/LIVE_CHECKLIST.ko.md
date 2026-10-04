@@ -13,6 +13,7 @@
 | 표지 점검 · Gemini 이미지 보기 | `견본 사진 점수 N/10 · 홍어로 보임` | "홍어로 안 보임"이면 `GEMINI_VISION_MODEL`을 더 큰 모델로 |
 | 이미지 AI · Higgsfield | `키 인증 통과 (크레딧 사용 없음)` | 401/403이면 `HF_API_KEY_ID`·`HF_API_KEY_SECRET`이 한 쌍인지 |
 | 이미지 AI · OpenAI | `키 인증 통과` | 401이면 `OPENAI_API_KEY` |
+| 검색 트렌드 · 네이버 데이터랩 | `요즘 늘어난 말: 굴 +40%` 또는 `정상 응답` | 401/403이면 `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`, 예전 개발자센터 키면 `NAVER_API_STYLE=legacy` |
 
 문안 AI는 자동 전환 때문에 첫 순서(Gemini)가 실패해도 화면에서는 티가 나지 않습니다. 이 점검에서 각각 따로 보입니다.
 
