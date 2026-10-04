@@ -141,8 +141,10 @@ const ROLE_LAYOUTS:Record<CarouselRole,CardLayout>={
 export const defaultCardLayout=(role:CarouselRole):CardLayout=>ROLE_LAYOUTS[role];
 
 // 표지에 본문 전용 레이아웃을 주거나, 숫자 없는 대형 숫자형, 이름 두 개가 없는 비교형처럼 재료가 모자라면 바꾼다.
-export function normalizeCardLayout(slide:{role:CarouselRole;layout:CardLayout;figure?:string;keywords?:string[]}):CardLayout {
-  const {role,layout}=slide;
+export function normalizeCardLayout(slide:{role:CarouselRole;layout?:CardLayout;figure?:string;keywords?:string[]}):CardLayout {
+  const {role}=slide;
+  // 레이아웃이 생기기 전에 저장된 초안처럼 layout이 없거나 모르는 값이면 장 역할의 기본 레이아웃을 쓴다(화면이 멈추지 않게).
+  const layout=slide.layout&&slide.layout in CARD_LAYOUTS?slide.layout:ROLE_LAYOUTS[role]??"fullscreen";
   if(role==="cover"&&!CARD_LAYOUTS[layout].coverAllowed)return ROLE_LAYOUTS.cover;
   if(layout==="stat"&&!slide.figure?.trim())return "browser";
   if(layout==="versus"&&(slide.keywords?.length??0)<2)return "frame";

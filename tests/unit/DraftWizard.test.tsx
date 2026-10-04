@@ -191,13 +191,15 @@ describe("DraftWizard",()=>{
     const topics=[{id:"t1",title:"늦게 온 추천 주제일까?",summary:"홍어로 이어지는 설명 방향입니다. 충분히 긴 요약입니다.",reason:"이유",audience:"B",imageBrief:"사진",season:""},{id:"t2",title:"두 번째 주제일까?",summary:"홍어로 이어지는 설명 방향입니다. 충분히 긴 요약입니다.",reason:"이유",audience:"A",imageBrief:"사진",season:""},{id:"t3",title:"홍어는 왜 그럴까?",summary:"홍어로 이어지는 설명 방향입니다. 충분히 긴 요약입니다.",reason:"이유",audience:"C",imageBrief:"사진",season:""}];
     vi.stubGlobal("fetch",vi.fn((url:string)=>url==="/api/topics"?late:Promise.resolve({ok:true,json:async()=>({})})));
     render(<DraftWizard/>);
-    const initial=(screen.getByRole("textbox") as HTMLInputElement).value;
+    // 첫 화면(주제 입력란)이 그려질 때까지 기다린다. 전체 테스트를 함께 돌리면 첫 렌더가 늦을 수 있다.
+    const initial=((await screen.findByRole("textbox",undefined,{timeout:5000})) as HTMLInputElement).value;
     fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
     answer({ok:true,json:async()=>({topics,source:"ai"})});
     await waitFor(()=>expect(screen.getByRole("button",{name:"실제 사진 사용"})).toBeInTheDocument());
-    await new Promise(resolve=>setTimeout(resolve,20));
+    // 늦은 응답의 처리(json 읽기·상태 반영)가 이미지 단계에서 모두 끝나도록 기다린다(고정 시간 대신 응답 자체를 기다려 부하에 흔들리지 않게).
+    await act(async()=>{await late;await new Promise(resolve=>setTimeout(resolve,0));});
     fireEvent.click(screen.getByRole("button",{name:"1 주제"}));
-    expect(await screen.findByText("늦게 온 추천 주제일까?")).toBeInTheDocument();
+    expect(await screen.findByText("늦게 온 추천 주제일까?",undefined,{timeout:5000})).toBeInTheDocument();
     expect((screen.getByLabelText("직접 주제를 적고 싶다면") as HTMLInputElement).value).toBe(initial);
   });
 
