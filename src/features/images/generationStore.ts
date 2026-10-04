@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { CarouselPlan, CarouselRole, CarouselSlideCount } from "./carousel";
+import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan, type CarouselRole, type CarouselSlideCount } from "./carousel";
 import type { ImageStyle } from "./style";
 import { DEFAULT_SLIDE_LAYOUT, type SlideLayout } from "./slideLayout";
 import { normalizeCardLayout, photosNeeded, type DesignSpec } from "./design";
@@ -14,7 +14,8 @@ import { fitPlanToPhotos, swapPhoto } from "./photoCarousel";
 // 새로고침을 하면 사라진다(모듈이 다시 로드되므로). 그 경우는 서버 작업 큐가 필요하다.
 
 // check: AI 표지 점검 결과(coverCheck.ts). 점수와 경고 배지를 후보 위에 보여 준다.
-export type ApprovedImage={id:string;preview?:string;referencePreview?:string;source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]}};
+// bases: 글자를 얹기 전 밑바탕 사진(AI 이미지). 카드 글자만 고쳐 다시 그릴 때 쓴다. 초안에는 저장하지 않는다(화면에서만).
+export type ApprovedImage={id:string;preview?:string;referencePreview?:string;bases?:string[];source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]}};
 export type StudioMode="photo"|"ai"|"mix"|"free";
 export type StudioPhase="idle"|"uploading"|"planning"|"cover"|"slides";
 export type ReferenceUse="source"|"style";
@@ -149,7 +150,7 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
     if(!response.ok)throw new Error(data.message||"표지 후보를 만들지 못했습니다.");
     if(!Array.isArray(data.images)||data.images.length!==2)throw new Error("표지 후보는 정확히 2장이 필요합니다.");
     const source=sourceOf(data.source);
-    patch({...(data.fallback?{providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],source,role:nextPlan.slides[0].role,...(data.checks?.[i]?{check:data.checks[i]}:{})}))});
+    patch({...(data.fallback?{providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],...(data.baseImages?.[i]?{bases:data.baseImages[i]}:{}),source,role:nextPlan.slides[0].role,...(data.checks?.[i]?{check:data.checks[i]}:{})}))});
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"표지 후보를 만들지 못했습니다."});
   }finally{
@@ -191,7 +192,7 @@ async function generate(slide:CarouselPlan["slides"][number],index:number,refine
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");
   if(data.fallback)patch({providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."});
-  return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],source:sourceOf(data.source),role:slide.role};
+  return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],...(data.baseImages?.[0]?{bases:data.baseImages[0]}:{}),source:sourceOf(data.source),role:slide.role};
 }
 
 // 고른 표지 뒤의 남은 장을 차례로 만든다. 화면이 사라져도 이 루프는 계속 돌고 결과는 저장소에 쌓인다.
@@ -332,6 +333,61 @@ export async function swapSlidePhoto(photoIndex:number){
     patch({slides:state.slides.map((item,i)=>i===index?card:item),photoAssignment:state.photoAssignment.map((item,i)=>i===index?slots:item),...(index===0?{cover:card}:{}),approved:false});
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"사진을 바꾸지 못했어요."});
+  }finally{
+    if(token===run)patch({phase:"idle"});
+  }
+}
+
+// ── 카드 글자 직접 고치기 ──────────────────────────────────────────────────────
+// 완성된 장의 제목·요점만 바꿔 그 장을 다시 그린다. 이미지 AI를 부르지 않아 비용이 없다.
+// 밑바탕: 실제 사진 캐러셀은 그 장에 배정된 사장님 사진(보정 포함), AI 캐러셀은 서버가 돌려준 글자 없는 원본(보정 없음),
+// 사진이 없는 레이아웃(브라우저·Q&A·대형 숫자)은 밑바탕 없이 그린다.
+export type SlideTextEdit={headline:string;points:string[]};
+
+// 구성안 스키마와 같은 한도(제목 42자, 요점 4줄·줄마다 40자)로 확인한다. 문제가 없으면 null.
+export function slideTextProblem(edit:SlideTextEdit):string|null {
+  const headline=edit.headline.trim();
+  if(!headline)return "제목을 적어 주세요.";
+  if(headline.length>42)return `제목은 42자까지예요(지금 ${headline.length}자).`;
+  const points=edit.points.map(point=>point.trim()).filter(Boolean);
+  if(points.length>SLIDE_POINT_MAX_COUNT)return `요점은 ${SLIDE_POINT_MAX_COUNT}줄까지예요.`;
+  const long=points.findIndex(point=>point.length>SLIDE_POINT_MAX_LENGTH);
+  if(long>=0)return `${long+1}번째 요점이 ${SLIDE_POINT_MAX_LENGTH}자를 넘어요(지금 ${points[long].length}자).`;
+  return null;
+}
+
+// 이 장의 밑바탕을 고른다. 다시 그릴 수 없으면(예: 저장된 초안에서 연 AI 카드) null.
+function textEditBase(current:GenerationState,index:number):{photos:string[];enhance:boolean}|null {
+  const slide=current.plan?.slides[index];
+  if(!slide||!current.slides[index])return null;
+  const slots=current.photoAssignment[index];
+  if(slots?.length)return {photos:slots.map(i=>current.photos[i]?.preview).filter((preview):preview is string=>!!preview),enhance:true};
+  if(current.slideLayout==="card"&&photosNeeded(normalizeCardLayout(slide))===0)return {photos:[],enhance:false};
+  const bases=current.slides[index].bases;
+  return bases?.length?{photos:bases,enhance:false}:null;
+}
+export const canEditSlideText=(current:GenerationState,index:number)=>textEditBase(current,index)!==null;
+
+export async function editSlideText(index:number,edit:SlideTextEdit){
+  const {plan}=state;
+  const base=textEditBase(state,index);
+  if(!plan||!base)return;
+  const problem=slideTextProblem(edit);
+  if(problem){patch({error:problem});return;}
+  const slide={...plan.slides[index],headline:edit.headline.trim(),points:edit.points.map(point=>point.trim()).filter(Boolean)};
+  const token=++run;
+  patch({phase:"slides",error:""});
+  try{
+    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,enhance:base.enhance}:{})})});
+    const data=await readJsonResponse(response);
+    if(token!==run)return;
+    if(!response.ok)throw new Error(data.message||"카드를 다시 그리지 못했어요.");
+    if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
+    // 출처(실제 사진/AI)와 밑바탕은 그대로 두고 그림만 바꾼다. 구성안도 고친 글자로 바꿔 캡션이 같은 흐름을 따르게 한다.
+    const updated={...state.slides[index],id:crypto.randomUUID(),preview:data.images[0]};
+    patch({plan:{...plan,slides:plan.slides.map((item,i)=>i===index?slide:item)},slides:state.slides.map((item,i)=>i===index?updated:item),...(index===0?{cover:updated}:{}),approved:false});
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"카드를 다시 그리지 못했어요."});
   }finally{
     if(token===run)patch({phase:"idle"});
   }

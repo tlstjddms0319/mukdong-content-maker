@@ -22,6 +22,8 @@ export const ImageBriefSchema = z.object({
   referenceMode:z.enum(["source","style","continuity"]).optional(),
   // 실제 사진으로 만드는 캐러셀: 이 장에 넣을 사진들(사장님이 올린 사진). 있으면 이미지 AI를 부르지 않고 바로 카드를 그린다.
   photos:z.array(z.string().regex(/^data:image\/(?:png|jpeg|webp);base64,/).max(8_000_000)).min(1).max(3).optional(),
+  // photos를 그릴 때 사진 보정(밝기·색)을 할지. 사장님 사진은 기본 보정, AI 이미지 밑바탕으로 글자만 다시 그릴 때는 false.
+  enhance:z.boolean().optional(),
   // 후보 여러 장을 만들 때 이 요청이 몇 번째 후보부터인지. 앞 제공자가 만든 장수를 이어서 구도를 배정하는 데 쓴다.
   candidateOffset:z.number().int().min(0).max(3).optional(),
   // 이 한 장만의 구도 지시. 후보마다 다른 각도·거리로 만들기 위해 서버가 채운다.
