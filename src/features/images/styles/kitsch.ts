@@ -1,7 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { STORE_NAME } from "../slideLayout";
-import { croppedPhoto, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
-import { STYLE_FONTS, contentOf, fitOutlined, rotated , snap } from "./shared";
+import { croppedPhoto, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
+import { STYLE_FONTS, contentOf, fitOutlined, fitText, rotated , snap } from "./shared";
 
 // B급 감성·하이퍼 키치: 그림판 무지개 그라데이션 바탕, 빨강·노랑 외곽선 글자가 화면을 꽉 채우고,
 // 톱니 별 딱지에 "이걸 아직도 안 먹어봤다고?!" 같은 외침을 넣는다. 사진은 두꺼운 색 테두리를 둘러 삐딱하게 붙인다.
@@ -70,7 +69,8 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
   }
   // 아래 검은 띠에 노란 가게 이름(전광판 느낌).
   deco+=`<rect x="0" y="${footerTop+10}" width="1080" height="80" fill="#111"/>`;
-  const brand=await textLayer(`☆ ${STORE_NAME} ☆  ${index}/${total}`,{size:34,color:"#FFE600",width:1000,height:60,font:STYLE_FONTS.heavy,align:"centre"});
+  // 계정 이름이 길면 한 줄에 들어가는 크기로 줄인다(두 줄로 넘어가 작아지지 않게).
+  const brand=await fitText(`☆ ${brandName()} ☆  ${index}/${total}`,{sizes:[34,30,26,22],width:1000,maxHeight:52,color:"#FFE600",font:STYLE_FONTS.heavy,align:"centre"});
   layers.push({input:brand.data,left:Math.round((1080-brand.info.width)/2),top:footerTop+10+Math.round((80-brand.info.height)/2)});
   layers.unshift(svgLayer(deco));
   layers.push({input:shoutTilt.data,left:Math.round(bx-shoutTilt.info.width/2),top:Math.round(by-shoutTilt.info.height/2)});

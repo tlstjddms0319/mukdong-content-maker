@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS = {
   textAiProvider: "automatic",
   imageAiProvider: "automatic",
   imageQuality: "medium",
+  brandHandle: "",
   aiModelMode: "automatic",
   preserveOriginals: true,
   blockUnverifiedClaims: true,

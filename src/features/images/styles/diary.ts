@@ -1,6 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
-import { grainLayer, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { grainLayer, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
 import { washiTape } from "../decor";
 import { STYLE_FONTS, contentOf, filmPhoto, fitText, rotated , snap } from "./shared";
 
@@ -99,7 +99,7 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
     }
   }
   // 오른쪽 아래 빨간 펜 낙서와 쪽수.
-  const sign=await textLayer(`${STORE_NAME} 다이어리  ${index}/${total}`,{size:40,color:RED_PEN,width:640,height:60,font:STYLE_FONTS.hand,align:"centre"});
+  const sign=await textLayer(`${brandName()}  ${index}/${total}`,{size:40,color:RED_PEN,width:640,height:60,font:STYLE_FONTS.hand,align:"centre"});
   layers.push({input:sign.data,left:1080-NX-40-sign.info.width,top:1350-60-sign.info.height-26});
   deco+=`<path d="M${1080-NX-60-sign.info.width} ${1350-82}q${sign.info.width/2} 18 ${sign.info.width+40} 0" fill="none" stroke="${RED_PEN}" stroke-width="3"/>`;
   layers.unshift(svgLayer(deco));

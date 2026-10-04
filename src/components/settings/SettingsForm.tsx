@@ -21,6 +21,9 @@ export function SettingsForm({ onSave = saveSettings, connections = { gemini:fal
       <label>이미지 AI<select aria-label="이미지 AI" value={settings.imageAiProvider} onChange={e=>update("imageAiProvider",e.target.value as AppSettings["imageAiProvider"])}><option value="automatic">자동 (Higgsfield → Cloudflare → OpenAI)</option><option value="higgsfield">Higgsfield만 (크레딧 사용)</option><option value="cloudflare">Cloudflare만 (초과 과금 가능)</option><option value="openai">OpenAI만 (유료 가능)</option></select></label>
       <label>문안 AI<select aria-label="문안 AI" value={settings.textAiProvider} onChange={e=>update("textAiProvider",e.target.value as AppSettings["textAiProvider"])}><option value="automatic">자동 (Gemini → Groq → Cloudflare)</option><option value="gemini">Gemini만</option><option value="groq">Groq만</option><option value="cloudflare">Cloudflare만 (이미지와 무료 한도 공유)</option></select></label>
     </div></section>
+    <section className="settings-section"><div><h2>브랜드 키트</h2><p>모든 디자인 계열의 카드 바닥글에 가게 이름과 함께 같은 모양으로 찍혀요. 비우면 가게 이름만 찍혀요.</p></div><div className="field-grid">
+      <label>Instagram 계정<input aria-label="Instagram 계정" placeholder="@mukdong_hongeo" maxLength={31} value={settings.brandHandle??""} onChange={e=>update("brandHandle",e.target.value.trim())}/><small className="field-help">카드 예시: 묵동홍어마을 · {settings.brandHandle?.trim()?`@${settings.brandHandle.trim().replace(/^@/,"")}`:"@계정"}</small></label>
+    </div></section>
     <section className="settings-section"><div><h2>AI 연결 상태</h2><p>키가 저장됐는지만 표시해요. 실제 생성 성공 여부는 제작 화면에서 확인해 주세요.</p></div><div className="connection-panel">
       <p>이미지 AI의 자동은 키가 있으면 Higgsfield를 먼저 쓰고, 실패하면 Cloudflare, 그다음 OpenAI로 전환해요. Higgsfield는 한 장마다 크레딧을 쓰고 한 장에 2분 정도 걸려요. 제공자 요금제에 따라 비용이 들 수 있어요.</p>
       <p>고품질로 만들려면 이미지 AI에서 OpenAI를 선택하세요. 품질 옵션은 OpenAI 호출에 적용되며, Cloudflare에는 적용되지 않아요.</p>

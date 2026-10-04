@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { croppedPhoto, softShadow, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { brandHandle, croppedPhoto, softShadow, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText } from "./shared";
 
 // 오마카세·하이엔드 미니멀: 따뜻한 베이지(또는 흰) 바탕에 여백을 크게 두고, 가운데에 작고 정갈한 사진 한 장.
@@ -38,8 +38,10 @@ export const renderOmakase:CardRenderer=async(inputs,slide,index,total)=>{
     layers.push({input:line.data,left:Math.round((1080-line.info.width)/2),top:y});
     y+=line.info.height+22;
   }
-  const folio=await textLayer(`—  ${String(index).padStart(2,"0")}  —`,{size:26,color:surface.dim,width:300,height:40,font:STYLE_FONTS.serif,align:"centre"});
-  layers.push({input:folio.data,left:Math.round((1080-folio.info.width)/2),top:1350-100});
+  // 쪽 번호 아래에 브랜드 키트의 Instagram 계정을 작게(설정에 있을 때만). 여백을 해치지 않게 쪽 번호와 같은 색·크기.
+  const handle=brandHandle();
+  const folio=await textLayer(`—  ${String(index).padStart(2,"0")}  —${handle?`\n${handle}`:""}`,{size:handle?22:26,color:surface.dim,width:500,height:handle?70:40,font:STYLE_FONTS.serif,align:"centre",spacing:8});
+  layers.push({input:folio.data,left:Math.round((1080-folio.info.width)/2),top:1350-(handle?118:100)});
   layers.unshift(svgLayer(lines));
   return sharp({create:{width:1080,height:1350,channels:3,background:surface.bg}}).composite(layers).jpeg({quality:94}).toBuffer();
 };

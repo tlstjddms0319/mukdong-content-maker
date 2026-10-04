@@ -1,6 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { STORE_NAME } from "../slideLayout";
-import { croppedPhoto, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { croppedPhoto, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
 import { STYLE_FONTS, contentOf, cutoutPhoto, extrudedText, stickerize , snap } from "./shared";
 
 // 3D 모션·팝업북: 진한 바탕 한가운데 스포트라이트, 아래쪽에 펼친 책을 놓고 그 위로 음식(누끼)이 튀어나오게 한다.
@@ -83,7 +82,7 @@ export const renderPopup:CardRenderer=async(inputs,slide,index,total)=>{
   const sparkles=[[110,y-40,26],[980,y+40,34],[150,spineY-120,20],[950,spineY-200,24]] as const;
   let front=sparkles.map(([x,yy,r],i)=>i%2?star(x,yy,r,scene.tab):spark(x,yy,r,"#FFFFFF")).join("");
   front+=puff(70,spineY+40,34)+puff(890,spineY+60,30);
-  const brand=await textLayer(`${STORE_NAME}  ·  ${index} / ${total}`,{size:28,color:"#FFFFFF",width:800,height:44,font:STYLE_FONTS.sansSemi,align:"centre"});
+  const brand=await textLayer(`${brandName()}  ·  ${index} / ${total}`,{size:28,color:"#FFFFFF",width:800,height:44,font:STYLE_FONTS.sansSemi,align:"centre"});
   return sharp({create:{width:1080,height:1350,channels:3,background:scene.bg}})
     .composite(snap([svgLayer(deco),...tabLayers,...popped,...layers,svgLayer(front),{input:brand.data,left:Math.round((1080-brand.info.width)/2),top:1350-70}]))
     .jpeg({quality:92}).toBuffer();

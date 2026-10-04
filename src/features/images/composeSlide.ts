@@ -6,7 +6,7 @@ import type { CarouselSlidePlan } from "./carousel";
 import { DEFAULT_SLIDE_LAYOUT, STORE_NAME, slideEyebrow, type SlideLayout } from "./slideLayout";
 import { type CardLayout, type DesignSpecInput, type Palette, inkOn, mutedOn, normalizeCardLayout, paletteOf, photosNeeded, readableOn } from "./design";
 import { resolveSlideFonts, typographyOf } from "./typography";
-import { BODY, CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, canvas, cleanPoints, cornerMarks, croppedPhoto, currentVariant, dotGrid, grainLayer, mascotLayer, photoOverlayLayer, pointLayers, renderSlideHeadline, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, withRenderContext } from "./render/primitives";
+import { BODY, CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, brandName, canvas, cleanPoints, cornerMarks, croppedPhoto, currentVariant, dotGrid, grainLayer, mascotLayer, photoOverlayLayer, pointLayers, renderSlideHeadline, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, withRenderContext } from "./render/primitives";
 import { EXTRA_RENDERERS } from "./render/extraLayouts";
 import { STYLE_RENDERERS } from "./styles";
 
@@ -17,7 +17,7 @@ export { FONTS, balanceHeadline, renderSlideHeadline, renderSlidePoints } from "
 // 장식: 네 귀퉁이 크롭 마크, 제목 옆 작은 반짝이, 필름 그레인.
 async function composeFullscreen(inputs:Buffer[],slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
   const white="#ffffff";
-  const brand=await textLayer(STORE_NAME,{size:META,color:"#fffffff2",width:400,height:36,font:FONTS.semibold,shadow:true});
+  const brand=await textLayer(brandName(),{size:META,color:"#fffffff2",width:400,height:36,font:FONTS.semibold,shadow:true});
   const corner=slide.role==="cover"
     ? await textLayer("음식 이야기",{size:META,color:"#fffffff2",width:400,height:36,font:FONTS.semibold,shadow:true})
     : await textLayer(`${index} / ${total}`,{size:META,color:"#fffffff2",width:200,height:36,font:FONTS.semibold,shadow:true});
@@ -75,7 +75,7 @@ async function composeFrame(inputs:Buffer[],slide:CarouselSlidePlan,index:number
   const textTop=FRAME_TOP+frameHeight+44;
   const background=await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover",position:"attention"}).blur(26).modulate({brightness:.62,saturation:.85}).png().toBuffer();
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:"#fffffff2",width:200,height:36,font:FONTS.semibold,shadow:true});
-  const brand=await textLayer(STORE_NAME,{size:META,color:"#fffffff2",width:400,height:36,font:FONTS.semibold,shadow:true});
+  const brand=await textLayer(brandName(),{size:META,color:"#fffffff2",width:400,height:36,font:FONTS.semibold,shadow:true});
   // 변형 0: 사진 바깥에 얇은 흰 선(기존). 변형 1: 사진 둘레에 두꺼운 흰 매트를 두른 액자, 위 가운데 테이프 한 장.
   const matted=currentVariant()%2===1;
   const MAT=26;
@@ -165,7 +165,7 @@ async function composeIllustration(inputs:Buffer[],slide:CarouselSlidePlan,index
     layers.push({input:text.data,left:x+36,top:y+20});
   }
   // 다른 카드와 같게 채널명은 왼쪽, 장 번호는 오른쪽 아래. 마스코트가 있으면 채널명은 그 오른쪽으로 비킨다.
-  const brand=await textLayer(STORE_NAME,{size:META,color:palette.ink,width:500,height:36,font:FONTS.semibold});
+  const brand=await textLayer(brandName(),{size:META,color:palette.ink,width:500,height:36,font:FONTS.semibold});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:palette.ink,width:200,height:36,font:FONTS.semibold});
   layers.push({input:brand.data,left:MARGIN+(mascot?180:0),top:1290},{input:counter.data,left:1080-MARGIN-counter.info.width,top:1290});
   layers.push(await grainLayer());
@@ -230,7 +230,7 @@ async function composeCollage(inputs:Buffer[],slide:CarouselSlidePlan,index:numb
     }
   }
   // 채널명과 장 번호는 다른 카드와 같은 모양(왼쪽 채널명, 오른쪽 "4 / 10")으로 맞춘다.
-  const brand=await textLayer(STORE_NAME,{size:META,color:palette.muted,width:600,height:36,font:FONTS.regular});
+  const brand=await textLayer(brandName(),{size:META,color:palette.muted,width:600,height:36,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:palette.ink,width:200,height:36,font:FONTS.semibold});
   layers.push(svgLayer(`<path d="M${MARGIN} 1266H${1080-MARGIN}" stroke="${palette.ink}" stroke-opacity=".2" stroke-width="2"/>`),{input:brand.data,left:MARGIN,top:1284},{input:counter.data,left:1080-MARGIN-counter.info.width,top:1284});
   layers.push(await grainLayer());
@@ -267,7 +267,7 @@ async function composeBrowser(slide:CarouselSlidePlan,index:number,total:number,
   // 검색창 캡슐은 밝은 강조색이라 글자는 늘 짙게 쓴다.
   const search=await textLayer(query,{size:30,color:"#141414",width:WIN_W-PAD*2-160,height:42,font:FONTS.bold});
   const capW=Math.min(WIN_W-PAD*2,search.info.width+150),capX=WIN_LEFT+PAD;
-  const brand=await textLayer(STORE_NAME,{size:META,color:palette.ink,width:600,height:36,font:FONTS.regular});
+  const brand=await textLayer(brandName(),{size:META,color:palette.ink,width:600,height:36,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:palette.ink,width:200,height:36,font:FONTS.semibold});
   // 마스코트가 창의 왼쪽 아래 모서리에 걸터앉는다. 채널명은 마스코트 오른쪽으로 비킨다.
   // 검색창 캡슐 아래로만 올라오게 높이를 제한한다(캡슐 글자를 가리지 않게).
@@ -306,7 +306,7 @@ async function composeStat(slide:CarouselSlidePlan,index:number,total:number,pal
   const note=lines.length?await textLayer(lines.join("\n"),{size:BODY,color:gray,width:CONTENT,height:200,font:FONTS.regular,align:"centre",spacing:8}):null;
   const blockHeight=figure.info.height+28+headline.info.height+(note?36+note.info.height:0);
   const blockTop=Math.max(190,Math.round((1350-blockHeight)/2)-20);
-  const brand=await textLayer(STORE_NAME,{size:META,color:gray,width:600,height:36,font:FONTS.regular});
+  const brand=await textLayer(brandName(),{size:META,color:gray,width:600,height:36,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:white,width:200,height:36,font:FONTS.semibold});
   // 숫자 뒤에 강조색 빛무리와 점선 고리, 주변에 반짝이. 네 귀퉁이에는 옅은 크롭 마크.
   const figureCy=blockTop+Math.round(figure.info.height/2);
@@ -378,7 +378,7 @@ async function composeVersus(inputs:Buffer[],slide:CarouselSlidePlan,index:numbe
     +softShadow({x:pillX,y:pillY+8,width:pillW,height:pillH,rx:pillH/2,blur:12,opacity:.14})
     +`<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillH/2}" fill="#ffffff" fill-opacity=".94"/>`));
   layers.push({input:headline.data,left:Math.round((1080-headline.info.width)/2),top:titleTop});
-  const brand=await textLayer(STORE_NAME,{size:META,color:mutedOn(left,palette),width:400,height:36,font:FONTS.regular});
+  const brand=await textLayer(brandName(),{size:META,color:mutedOn(left,palette),width:400,height:36,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:inkOn(right,palette),width:200,height:36,font:FONTS.semibold});
   layers.push({input:brand.data,left:MARGIN,top:1290},{input:counter.data,left:1080-MARGIN-counter.info.width,top:1290});
   layers.push(await grainLayer());
@@ -404,7 +404,7 @@ async function composeStep(inputs:Buffer[],slide:CarouselSlidePlan,index:number,
   const boxTop=textFirst?contentTop:contentTop+PHOTO_H+32;
   const photoTop=textFirst?boxTop+boxH+32:contentTop;
   const points=await pointLayers(lines,boxTop+40,{left:MARGIN+40,width:CONTENT-80,numbered:true,color:boxInk,markerColor:palette.accent});
-  const brand=await textLayer(STORE_NAME,{size:META,color:palette.ink,width:600,height:36,font:FONTS.regular});
+  const brand=await textLayer(brandName(),{size:META,color:palette.ink,width:600,height:36,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:palette.ink,width:200,height:36,font:FONTS.semibold});
   const layers:OverlayOptions[]=[
     // STEP 스티커는 점선 고리로 한 번 더 두르고, 옆에 반짝이. 사진과 설명 상자 뒤에는 번진 그림자.
@@ -495,7 +495,7 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
   }
   // 마스코트는 답변 말풍선과 겹치지 않을 때만 올린다.
   if(mascot&&aY+aH+16<=1266-Math.round(MASCOT_W*598/640))layers.push(mascot);
-  const brand=await textLayer(STORE_NAME,{size:META,color:bgMuted,width:600,height:36,font:FONTS.regular});
+  const brand=await textLayer(brandName(),{size:META,color:bgMuted,width:600,height:36,font:FONTS.regular});
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:bgInk,width:200,height:36,font:FONTS.semibold});
   layers.push({input:brand.data,left:MARGIN,top:1284},{input:counter.data,left:1080-MARGIN-counter.info.width,top:1284});
   layers.push(await grainLayer());
@@ -553,12 +553,12 @@ const CARD_RENDERERS:Record<CardLayout,(inputs:Buffer[],slide:CarouselSlidePlan,
 
 // 사진 한 장 또는 여러 장(콜라주)을 받아 한 장의 카드로 만든다. 브라우저형은 사진 없이 그린다.
 // options.enhance: 사장님이 찍은 실제 사진이면 카드에 넣기 전에 색·밝기·대비를 자동 보정한다(render/photoEnhance.ts).
-export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:{enhance?:boolean}={}):Promise<Buffer> {
+export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:{enhance?:boolean;brandHandle?:string}={}):Promise<Buffer> {
   return (await composeSlideCard(input,slide,index,total,layout,design,options)).image;
 }
 
 // 카드와 자동 검수 결과를 함께 돌려준다. options.contrast를 켜면 글자 대비까지 잰다(검수 스크립트·테스트용).
-export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:{enhance?:boolean;contrast?:boolean}={}):Promise<{image:Buffer;report:AuditReport}> {
+export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:{enhance?:boolean;contrast?:boolean;brandHandle?:string}={}):Promise<{image:Buffer;report:AuditReport}> {
   await access(FONTS.bold.file);
   const raw=Array.isArray(input)?input:[input];
   const inputs=options.enhance?await Promise.all(raw.map(enhancePhoto)):raw;
@@ -571,7 +571,7 @@ export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlide
   // 단 "사진 위 글자"(overlay)로 고른 경우는 계열과 무관하게 풀스크린으로 그린다.
   const style=design?.style??"template";
   const render=style!=="template"&&layout!=="overlay"?STYLE_RENDERERS[style]:CARD_RENDERERS[card];
-  const draw=(current:CarouselSlidePlan)=>withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:current.variant??0,palette},()=>render(inputs,current,index,total,palette));
+  const draw=(current:CarouselSlidePlan)=>withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:current.variant??0,palette,brandHandle:options.brandHandle},()=>render(inputs,current,index,total,palette));
   // 그린 카드를 바로 검수해서(render/audit.ts) 글자가 넘치거나 겹치면 요점을 뒤에서부터 하나씩 빼고 다시 그린다(최대 2번).
   // 그래도 남으면 문제가 가장 적은 결과를 쓰고 서버 로그에 남긴다. 대비 검사는 무거워서 자동 검수 테스트에서만 한다.
   let current=slide,best:{image:Buffer;report:AuditReport;count:number}|null=null;

@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText, hashtags } from "./shared";
 
 // 타이포그래피 텍스처(글자 중심): 사진은 흑백으로 아주 흐리게 깔고(없으면 단색), 굵기·크기가 크게 다른 글자가
@@ -44,7 +44,7 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
   let py=Math.max(y+50,1350-110-pointsH);
   if(points.length)layers.push(svgLayer(`<rect x="${M}" y="${py}" width="8" height="${pointsH-14}" fill="${accent}"/>`));
   for(const point of points){layers.push({input:point.data,left:M+32,top:py});py+=point.info.height+14;}
-  const folio=await textLayer(`묵동홍어마을   ${String(index).padStart(2,"0")} / ${String(total).padStart(2,"0")}`,{size:26,color:"#E2E2E2",width:W,height:40,font:STYLE_FONTS.sansSemi});
+  const folio=await textLayer(`${brandName()}   ${String(index).padStart(2,"0")} / ${String(total).padStart(2,"0")}`,{size:26,color:"#E2E2E2",width:W,height:40,font:STYLE_FONTS.sansSemi});
   layers.push({input:folio.data,left:M,top:1350-70});
   return sharp(base).composite(layers).jpeg({quality:92}).toBuffer();
 };

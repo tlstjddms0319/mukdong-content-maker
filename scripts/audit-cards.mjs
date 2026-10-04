@@ -1,5 +1,5 @@
 // 모든 디자인 계열과 템플릿 레이아웃을 까다로운 문안·밝은/어두운 사진으로 그려 자동 검수(render/audit.ts) 결과를 모은다.
-// 실행: node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/audit-cards.mjs [--verbose]
+// 실행: node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/audit-cards.mjs [--verbose] [--style=계열] [--handle=계정]
 import sharp from "sharp";
 import { readFile } from "node:fs/promises";
 import { composeSlideCard } from "../src/features/images/composeSlide.ts";
@@ -9,6 +9,8 @@ import { describeIssue } from "../src/features/images/render/audit.ts";
 
 const verbose=process.argv.includes("--verbose");
 const only=process.argv.find(arg=>arg.startsWith("--style="))?.slice(8);
+// --handle=계정 : 브랜드 키트 계정을 바닥글에 넣고 검수(긴 계정에서도 넘치지 않는지).
+const brandHandle=process.argv.find(arg=>arg.startsWith("--handle="))?.slice(9)??"";
 const sample=name=>readFile(`assets/design/samples/${name}.jpg`);
 const dark=await sample("hands-makgeolli"),bright=await sample("studio-hongeo"),busy=await sample("table-topdown");
 const white=await sharp({create:{width:900,height:1100,channels:3,background:"#f4f2ee"}}).jpeg().toBuffer();
@@ -37,7 +39,7 @@ const counts={};let failed=0;
 for(const c of cases){
   const slide={...base,...c.copy,role:c.role,layout:c.layout,variant:c.variant,points:c.role==="cover"?[]:c.copy.points};
   const index=c.role==="cover"?1:2;
-  const {report}=await composeSlideCard(c.photos.slice(0,Math.max(1,photosNeeded(c.layout))),slide,index,5,"card",{palette:"warm",style:c.style},{contrast:true});
+  const {report}=await composeSlideCard(c.photos.slice(0,Math.max(1,photosNeeded(c.layout))),slide,index,5,"card",{palette:"warm",style:c.style},{contrast:true,brandHandle});
   if(report.issues.length){
     failed++;
     for(const issue of report.issues){const key=`${c.style}/${c.style==="template"?c.layout:"*"} ${issue.kind}`;counts[key]=(counts[key]??0)+1;}

@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { croppedPhoto, mascotLayer, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { croppedPhoto, mascotLayer, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
 import type { MascotPose } from "../decor";
 import { STYLE_FONTS, contentOf, fitText, outlinedText } from "./shared";
 
@@ -81,7 +81,7 @@ export const renderWebtoon:CardRenderer=async(inputs,slide,index,total)=>{
   layers.push({input:tilted.data,left:1080-M-tilted.info.width+10,top:M+10});
   // 칸 테두리는 맨 위에 다시 그려 사진·글자가 칸 밖으로 넘치지 않은 것처럼 보이게 한다.
   layers.push(svgLayer(`<rect x="${M}" y="${M}" width="${W}" height="${TOP_H}" fill="none" stroke="${LINE}" stroke-width="${B}"/><rect x="${M}" y="${BOTTOM_Y}" width="${W}" height="${BOTTOM_H}" fill="none" stroke="${LINE}" stroke-width="${B}"/>`));
-  const page=await textLayer(`묵동홍어마을 웹툰  ·  ${index}화 / ${total}`,{size:26,color:LINE,width:900,height:40,font:STYLE_FONTS.comic,align:"centre"});
+  const page=await textLayer(`${brandName()}  ·  ${index}화 / ${total}`,{size:26,color:LINE,width:900,height:40,font:STYLE_FONTS.comic,align:"centre"});
   layers.push({input:page.data,left:Math.round((1080-page.info.width)/2),top:1350-M-page.info.height+4});
   return sharp({create:{width:1080,height:1350,channels:3,background:"#F7F5F0"}}).composite(layers).jpeg({quality:92}).toBuffer();
 };

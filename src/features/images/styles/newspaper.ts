@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { svgLayer, textLayer, grainLayer, type CardRenderer } from "../render/primitives";
+import { svgLayer, textLayer, grainLayer, type CardRenderer, brandName } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText, grayscalePhoto, hashtags } from "./shared";
 
 // 신문·매거진 기사: 누런 신문지 바탕, 맨 위 "묵동일보" 제호와 두 줄 괘선, 굵은 명조 제목, 흑백 보도사진과 사진 설명,
@@ -60,7 +60,7 @@ export const renderNewspaper:CardRenderer=async(inputs,slide,index,total)=>{
     const gap=paragraphs.length>1?Math.max(30,Math.min(180,Math.floor((footerTop-40-y-used)/(paragraphs.length-1)))):0;
     for(const paragraph of paragraphs){layers.push({input:paragraph.data,left:M,top:y});y+=paragraph.info.height+gap;}
     rules+=`<path d="M${M} ${footerTop}H${1080-M}" stroke="${INK}" stroke-width="1.5"/>`;
-    const folio=await textLayer(`묵동홍어마을  ·  ${index} / ${total}`,{size:26,color:DIM,width:W,height:40,font:STYLE_FONTS.serif,align:"centre"});
+    const folio=await textLayer(`${brandName()}  ·  ${index} / ${total}`,{size:26,color:DIM,width:W,height:40,font:STYLE_FONTS.serif,align:"centre"});
     layers.push({input:folio.data,left:Math.round((1080-folio.info.width)/2),top:footerTop+16});
     layers.unshift(svgLayer(rules));
     layers.push(await grainLayer({opacity:.22}));
@@ -76,7 +76,7 @@ export const renderNewspaper:CardRenderer=async(inputs,slide,index,total)=>{
   if(body.length)rules+=`<rect x="${M}" y="${columnTop-26}" width="14" height="14" fill="${RED}"/><path d="M${M+COL_W+COL_GAP/2} ${columnTop}V${columnTop+columns-10}" stroke="${INK}" stroke-opacity=".5" stroke-width="1.5"/>`;
   // 아래 괘선과 쪽수.
   rules+=`<path d="M${M} ${footerTop}H${1080-M}" stroke="${INK}" stroke-width="1.5"/>`;
-  const folio=await textLayer(`묵동홍어마을  ·  ${index} / ${total}`,{size:26,color:DIM,width:W,height:40,font:STYLE_FONTS.serif,align:"centre"});
+  const folio=await textLayer(`${brandName()}  ·  ${index} / ${total}`,{size:26,color:DIM,width:W,height:40,font:STYLE_FONTS.serif,align:"centre"});
   layers.push({input:folio.data,left:Math.round((1080-folio.info.width)/2),top:footerTop+16});
   layers.unshift(svgLayer(rules));
   layers.push(await grainLayer({opacity:.22}));
