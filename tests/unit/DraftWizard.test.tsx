@@ -219,6 +219,22 @@ describe("DraftWizard",()=>{
     expect(saved).toMatchObject({topic:"막걸리엔 왜 전일까?",plan_date:"2099-01-06"});
   });
 
+  it("starts each visit from the next recommendation direction and sends recently shown topics",async()=>{
+    const bodies:Array<Record<string,unknown>>=[];
+    const topics=["굴은 왜 겨울에 맛있을까?","국밥엔 왜 깍두기가 어울릴까?","홍어는 왜 겨울에 더 찾을까?"].map((title,i)=>({id:String(i),title,summary:"익숙한 장면에서 출발해 홍어로 이어지는 설명입니다. 충분히 긴 요약.",reason:"이유",audience:"A",imageBrief:"사진",season:""}));
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{if(url==="/api/topics"){bodies.push(JSON.parse(String(init?.body)));return {ok:true,json:async()=>({topics,source:"ai"})};}return {ok:false,json:async()=>({})};}));
+    const first=render(<DraftWizard/>);
+    await waitFor(()=>expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toMatchObject({recommendationRound:0,recentTitles:[]});
+    await screen.findByText("굴은 왜 겨울에 맛있을까?");
+    first.unmount();sessionStorage.clear();localStorage.removeItem("mukdong-current-draft");
+    render(<DraftWizard/>);
+    await waitFor(()=>expect(bodies).toHaveLength(2));
+    // 두 번째 방문: 다음 추천 방향으로, 지난번에 보여 준 세 주제는 피해 달라고 알린다.
+    expect(bodies[1]).toMatchObject({recommendationRound:1});
+    expect(bodies[1].recentTitles).toEqual(expect.arrayContaining(topics.map(topic=>topic.title)));
+  });
+
   it("invalidates saved images and copy when the topic changes",async()=>{
     let uploads=0;
     const copy={topic:"수육에는 왜 김치를 곁들일까?",audience:"A",hook:"새 AI 문안",information:"정보",store_connection:"가게",call_to_action:"방문",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null,_meta:{provider:"fallback"}};

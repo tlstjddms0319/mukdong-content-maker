@@ -5,6 +5,8 @@ export const TopicInputSchema = z.object({
   intent: z.string().trim().max(300).optional().default(""),
   recommendationRound: z.number().int().nonnegative().max(9999).optional().default(0),
   excludeTitles: z.array(z.string().trim().min(1).max(120)).max(3).optional().default([]),
+  // 최근에 보여 줬거나 이미 초안으로 만든 주제. excludeTitles(지금 화면, 반드시 제외)와 달리 "되도록 피하기"용이다.
+  avoidTitles: z.array(z.string().trim().min(1).max(120)).max(30).optional().default([]),
 });
 
 export const TopicSuggestionSchema = z.object({
