@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { WizardShell, type WizardStep } from "./WizardShell";
+import { ReelMaker } from "@/components/reels/ReelMaker";
 import { ImageStudio } from "@/components/images/ImageStudio";
 import { CopyEditor } from "@/components/copy/CopyEditor";
 import { PostPreview } from "@/components/review/PostPreview";
@@ -20,6 +21,9 @@ const DEFAULT_TOPICS:TopicSuggestion[] = fallbackTopics();
 
 export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
   const [step,setStep]=useState<WizardStep>("topic");
+  // 추천 주제는 늦게 도착할 수 있다. 그사이 사용자가 이미지 단계로 넘어갔으면 주제를 바꾸지 않도록 지금 단계를 ref로 본다.
+  const stepRef=useRef<WizardStep>("topic");
+  useEffect(()=>{stepRef.current=step;},[step]);
   const [topic,setTopic]=useState(DEFAULT_TOPICS[0].title);
   const [audience,setAudience]=useState<"A"|"B"|"C">("C");
   const [imageBrief,setImageBrief]=useState("");
@@ -64,7 +68,9 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
       const data=await readJsonResponse(response);
       if(requestId===topicRequestRef.current&&Array.isArray(data.topics)&&data.topics.length===3){
         setTopics(data.topics);setTopicsFallback(data.source==="fallback");if(data.season)setSeasonInfo(data.season);
-        if(topicSelectionRef.current.topic===topicAtRequest)changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",false,data.topics[0].summary ?? "");
+        // 주제 단계에 머물러 있고 그사이 주제를 직접 바꾸지 않았을 때만 첫 추천으로 자동 선택한다.
+        // (이미지 단계로 넘어간 뒤 바꾸면 새 초안이 시작돼 올리던 사진·만들던 이미지가 사라진다.)
+        if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest)changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",false,data.topics[0].summary ?? "");
         setRecommendationRound(round);
       }
     }catch{if(requestId===topicRequestRef.current)setTopicsFallback(true);}finally{if(requestId===topicRequestRef.current)setTopicsLoading(false);}
@@ -156,6 +162,6 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
   if(loadError)return <WizardShell step="topic" {...shell}><div className="state-card"><p role="alert">{loadError}</p><Link className="button secondary" href="/drafts">내 초안으로 돌아가기</Link></div></WizardShell>;
   if(step==="image") return <WizardShell step={step} {...shell}><ImageStudio topic={topic} imageBrief={imageBrief.trim()||undefined} contentBrief={contentBrief.trim()||undefined} slideCount={slideCount} approvedImages={images} onApprove={approveImage} sessionKey={draftId}/><div className="bottom-action"><button type="button" className="button secondary" onClick={()=>setStep("topic")}>이전: 주제</button>{saveState!=="idle"&&<span role="status">{saveState==="saving"?"이미지 선택을 저장하는 중…":saveState==="saved"?`이미지 ${images.length}장을 저장했어요.`:"저장하지 못했어요. 다시 선택해 주세요."}</span>}{saveState==="error"&&<button type="button" className="button secondary" onClick={()=>void approveImage(images)}>저장 다시 시도</button>}<button className="button primary" disabled={!images.length||saveState!=="saved"} onClick={()=>setStep("copy")}>문안 만들기</button></div></WizardShell>;
   if(step==="copy") return <WizardShell step={step} {...shell}><CopyEditor topic={topic} audience={audience} contentBrief={contentBrief} imageBrief={imageBrief} slideOutline={slideOutline} hasAiImages={images.some(image=>image.source==="ai-generated"||image.source==="ai-edited")} initialText={caption} onTextChange={setCaption} saving={copySaveState==="saving"} onContinue={text=>void saveCaption(text)}/>{copySaveState==="error"&&<p role="alert">문안을 저장하지 못했어요. 다시 시도해 주세요.</p>}<div className="bottom-action"><button type="button" className="button secondary" onClick={()=>setStep("image")}>이전: 이미지</button></div></WizardShell>;
-  if(step==="review") {const reviewImages=images.flatMap(image=>image.preview?[{url:image.preview,source:image.source}]:[]);return <WizardShell step={step} {...shell}><p className="eyebrow">4 최종 확인</p><h1>게시하기 전에 한 번만 확인해요</h1><div className="review-status" aria-label="게시 전 확인할 항목"><span>사진과 AI 이미지의 출처를 확인해 주세요</span><span>가격·영업시간·메뉴 표현을 확인해 주세요</span><span>원본 사진은 따로 보관해 주세요</span></div><PostPreview caption={caption} imageUrls={reviewImages.map(image=>image.url)}/><ExportActions caption={caption} images={reviewImages} topic={topic} audience={audience} draftId={draftId}/><div className="bottom-action"><button type="button" className="button secondary" onClick={()=>setStep("copy")}>이전: 문안</button></div></WizardShell>;}
+  if(step==="review") {const reviewImages=images.flatMap(image=>image.preview?[{url:image.preview,source:image.source}]:[]);return <WizardShell step={step} {...shell}><p className="eyebrow">4 최종 확인</p><h1>게시하기 전에 한 번만 확인해요</h1><div className="review-status" aria-label="게시 전 확인할 항목"><span>사진과 AI 이미지의 출처를 확인해 주세요</span><span>가격·영업시간·메뉴 표현을 확인해 주세요</span><span>원본 사진은 따로 보관해 주세요</span></div><PostPreview caption={caption} imageUrls={reviewImages.map(image=>image.url)}/><ExportActions caption={caption} images={reviewImages} topic={topic} audience={audience} draftId={draftId}/><ReelMaker cards={reviewImages.map(image=>image.url)} coverSource={images[0]?.referencePreview} topic={topic}/><div className="bottom-action"><button type="button" className="button secondary" onClick={()=>setStep("copy")}>이전: 문안</button></div></WizardShell>;}
   return <WizardShell step="topic" {...shell}><p className="eyebrow">새 게시물 · 1분이면 충분해요</p><h1>오늘은 어떤 이야기로 가게를 소개할까요?</h1><p className="lead">일상 음식 궁금증 2개와 홍어 질문 1개를 추천해요. 이번 시기에 맞는 주제도 섞어 드려요.</p>{seasonInfo&&<p className="season-line">이번 시즌 · {seasonInfo.name}{seasonInfo.events.map(event=><span key={event.name}> · {event.name}{event.daysAway>0?` ${event.daysAway}일 뒤`:" 진행 중"}</span>)}</p>}<div className="topic-tools"><button type="button" className="button secondary" disabled={topicsLoading} onClick={()=>void loadTopics(recommendationRound + 1,topics.map(item=>item.title))}>AI 추천 새로고침</button>{topicsLoading&&<GenerationProgress label="추천 주제"/>}</div>{topicsFallback&&!topicsLoading&&<p role="status" className="field-help">AI 추천을 불러오지 못해 준비된 주제를 보여드려요. 잠시 후 AI 추천 새로고침을 다시 눌러 보세요.</p>}<div className="topic-grid">{topics.map(item=><button key={item.id} type="button" className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "")}><span className="topic-badges"><span className="soft-badge">추천 {item.audience}</span>{item.season&&<span className="season-badge">이번 시즌 · {item.season}</span>}</span><strong>{item.title}</strong><span>{item.summary}</span><span>{item.reason}</span></button>)}</div><label className="custom-topic"><span>직접 주제를 적고 싶다면</span><input maxLength={120} value={topic} onChange={e=>changeTopic(e.target.value,topicSelectionRef.current.audience)} /></label><div className="bottom-action"><span>나머지는 권장 설정으로 자동 진행돼요.</span><button type="button" className="button primary" disabled={!topic.trim()} onClick={()=>setStep("image")}>이미지 선택</button></div></WizardShell>;
 }

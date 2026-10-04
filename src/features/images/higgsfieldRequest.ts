@@ -36,7 +36,7 @@ export function isHiggsfieldConfigured(env:NodeJS.ProcessEnv=process.env):boolea
   return Boolean(env.HF_API_KEY_ID?.trim()&&env.HF_API_KEY_SECRET?.trim());
 }
 
-function authorization():string {
+export function authorization():string {
   const id=process.env.HF_API_KEY_ID?.trim();
   const secret=process.env.HF_API_KEY_SECRET?.trim();
   if(!id||!secret)throw new HiggsfieldConfigurationError();
@@ -47,7 +47,7 @@ function errorFor(status:number):HiggsfieldImageError {
   return new HiggsfieldImageError(status,status===401?"auth":status===402||status===403?"credits":"failed");
 }
 
-async function api<T>(path:string,init:{method:"GET"|"POST";body?:unknown},auth:string):Promise<T> {
+export async function api<T>(path:string,init:{method:"GET"|"POST";body?:unknown},auth:string):Promise<T> {
   let response:Response;
   try {
     response=await fetch(path.startsWith("https://")?path:`${BASE_URL}${path}`,{
@@ -62,7 +62,7 @@ async function api<T>(path:string,init:{method:"GET"|"POST";body?:unknown},auth:
 }
 
 // Higgsfield는 참고 이미지를 공개 URL로만 받는다. 미리 서명된 주소에 올리고 받은 public_url을 넘긴다.
-async function uploadReference(dataUrl:string,auth:string):Promise<string> {
+export async function uploadReference(dataUrl:string,auth:string):Promise<string> {
   const match=dataUrl.match(/^data:image\/(?:png|jpeg|webp);base64,(.+)$/);
   if(!match)throw new HiggsfieldImageError(400);
   const jpeg=await sharp(Buffer.from(match[1],"base64")).rotate().resize({width:1536,height:1536,fit:"inside",withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
@@ -77,12 +77,13 @@ async function uploadReference(dataUrl:string,auth:string):Promise<string> {
   return target.public_url;
 }
 
-type Job={status?:string;status_url?:string;request_id?:string;images?:{url?:string}[]};
+export type Job={status?:string;status_url?:string;request_id?:string;images?:{url?:string}[];video?:{url?:string}};
 
-async function waitForJob(job:Job,auth:string):Promise<string> {
+// 작업이 끝날 때까지 상태를 물어 완료된 작업을 돌려준다(이미지·영상 공통). 영상은 한 편에 수 분 걸릴 수 있어 timeout을 받는다.
+export async function waitForCompletion(job:Job,auth:string,timeoutMs=JOB_TIMEOUT_MS):Promise<Job> {
   const statusUrl=job.status_url??(job.request_id?`${BASE_URL}/requests/${job.request_id}/status`:"");
   if(!statusUrl)throw new HiggsfieldImageError(502);
-  const deadline=Date.now()+JOB_TIMEOUT_MS;
+  const deadline=Date.now()+timeoutMs;
   let current=job;
   while(current.status!=="completed"){
     if(current.status==="nsfw")throw new HiggsfieldImageError(422,"nsfw");
@@ -91,7 +92,11 @@ async function waitForJob(job:Job,auth:string):Promise<string> {
     await new Promise(resolve=>setTimeout(resolve,POLL_INTERVAL_MS));
     current=await api<Job>(statusUrl,{method:"GET"},auth);
   }
-  const url=current.images?.[0]?.url;
+  return current;
+}
+
+async function waitForJob(job:Job,auth:string):Promise<string> {
+  const url=(await waitForCompletion(job,auth)).images?.[0]?.url;
   if(!url)throw new HiggsfieldImageError(502);
   return url;
 }
