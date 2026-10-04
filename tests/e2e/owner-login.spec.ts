@@ -16,6 +16,8 @@ test("wrong password stays on login, then logout blocks drafts", async ({ page }
   await loginAsOwner(page, "/drafts");
   await page.getByRole("button", { name: "로그아웃" }).click();
   await expect(page).toHaveURL(/\/login$/);
+  // 로그아웃과 겹친 요청이 로그인 쿠키를 되살리지 않아야 한다(프록시가 쿠키를 다시 굽던 문제).
+  await expect.poll(async () => (await page.context().cookies()).some(cookie => cookie.name.includes("session-token"))).toBe(false);
   await page.goto("/drafts");
   await expect(page).toHaveURL(/\/login\?next=%2Fdrafts$/);
 });
