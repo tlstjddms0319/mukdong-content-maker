@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DesignStyleSchema, PerformanceSchema } from "./performance";
 
 export const MediaCandidateSchema = z.object({
   id: z.string().uuid(),
@@ -36,6 +37,10 @@ export const DraftSchema = z.object({
   final_review_complete: z.boolean().optional(),
   // 한 달 기획의 어느 게시일에서 시작한 초안인지(YYYY-MM-DD). 기획표가 진행 상태를 보여 줄 때 쓴다.
   plan_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // 이 초안 카드에 쓴 디자인 계열(성과를 계열별로 비교할 때 쓴다).
+  design_style: DesignStyleSchema.optional(),
+  // 게시 후 사장님이 직접 적은 성과(좋아요·댓글·저장·공유·도달).
+  performance: PerformanceSchema.optional(),
   facts_to_verify: z.array(z.string()),
   store_profile_version: z.string(),
   created_at: z.string().datetime(),

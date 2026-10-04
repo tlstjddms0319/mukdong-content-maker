@@ -242,6 +242,31 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .draft-details h2 { margin:9px 0 5px; font-size:22px; }
 .draft-details p { overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; margin:0 0 6px; color:var(--muted); }
 .draft-details small { color:var(--muted); }
+/* 성과 기록(초안 카드 맨 아래, 접어 둔다) */
+.performance-form { grid-column:2 / -1; padding-top:12px; border-top:1px solid var(--line); }
+.performance-form summary { min-height:44px; display:flex; align-items:center; cursor:pointer; font-weight:800; }
+.performance-form summary::before { content:"＋"; margin-right:8px; color:var(--accent); }
+.performance-form[open] summary::before { content:"－"; }
+.performance-form form { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px 12px; margin-top:8px; }
+.performance-form label { display:flex; flex-direction:column; gap:4px; min-width:0; font-size:14px; font-weight:700; }
+.performance-form input { width:100%; min-width:0; padding:8px 10px; border:1px solid var(--line); border-radius:var(--control-radius); background:#fff; }
+.performance-actions, .performance-form .field-help, .performance-form [role="alert"] { grid-column:1 / -1; margin:0; }
+.performance-actions { display:flex; flex-wrap:wrap; gap:8px; }
+/* 성과 돌아보기 */
+.performance-insights { display:grid; gap:14px; margin:24px 0; padding:20px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; }
+.performance-insights h2 { margin:0 0 4px; }
+.performance-insights > div > p { margin:0; color:var(--muted); }
+.insight-top { display:grid; gap:8px; margin:0; padding:0; list-style:none; }
+.insight-top li { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.insight-top a { min-height:44px; display:inline-flex; align-items:center; font-weight:800; }
+.insight-rank { width:28px; height:28px; display:inline-grid; place-items:center; border-radius:50%; background:var(--accent); color:#fff; font-weight:800; font-size:14px; }
+.insight-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+.insight-group h3 { margin:0 0 8px; font-size:16px; }
+.insight-group ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.insight-group li { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto; align-items:center; gap:8px; font-size:14px; }
+.insight-group small { color:var(--muted); }
+.insight-bar { height:10px; border-radius:999px; background:#eef0ec; overflow:hidden; }
+.insight-bar > span { display:block; height:100%; border-radius:inherit; background:var(--accent); }
 .draft-planning { grid-column:2 / -1; display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding-top:14px; border-top:1px solid var(--line); }
 .draft-planning > label:not(.planning-check) { flex-basis:100%; font-weight:700; }
 .draft-planning input[type="datetime-local"] { min-height:44px; min-width:220px; padding:8px 12px; border:1px solid var(--line); border-radius:var(--control-radius); background:#fff; }
@@ -284,7 +309,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
   .draft-card > .button, .draft-actions { grid-column:1 / -1; justify-content:center; }
   .draft-actions { flex-direction:row; flex-wrap:wrap; }
   .draft-actions .button { flex:1 1 140px; }
-  .draft-planning { grid-column:1 / -1; }
+  .draft-planning, .performance-form { grid-column:1 / -1; }
   .draft-planning input[type="datetime-local"],.draft-planning .button { width:100%; }
 }
 

@@ -8,6 +8,8 @@ import { MonthSchema, groupByWeek, pickWeekTopics, postDatesForMonth, rotateStyl
 import { readMonthPlan, writeMonthPlan } from "@/features/topics/monthPlanRepository";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
+import { createDraftRepository } from "@/features/drafts/repository";
+import { likedTopicTitles } from "@/features/drafts/performance";
 
 const STORE_NAME="묵동홍어마을";
 const titleKey=(title:string)=>title.replace(/[\s?!.,]/g,"");
@@ -33,6 +35,8 @@ export async function POST(request:Request){
     const today=seasonContext().today;
     const dates=postDatesForMonth(month,undefined,month===today.slice(0,7)?today:undefined);
     if(!dates.length)return NextResponse.json({message:"이 달에는 남은 게시일이 없어요. 다음 달을 기획해 보세요."},{status:400});
+    // 사장님이 적어 둔 성과에서 반응 좋았던 주제(없으면 빈 목록).
+    const likedTitles=likedTopicTitles(await createDraftRepository().listDrafts().catch(()=>[]));
     const settings=await readSettings().catch(()=>null);
     const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
     const used=new Set<string>();
@@ -42,7 +46,7 @@ export async function POST(request:Request){
     for(const [index,weekDates] of groupByWeek(dates).entries()){
       const season=seasonContext(new Date(`${weekDates[0]}T12:00:00+09:00`));
       const input={storeName:STORE_NAME,recommendationRound:index,excludeTitles:recent.slice(-3)};
-      const topics=await suggestTopics(input,{suggest:()=>client.generateJson(buildTopicPrompt(input,season),topicGenerationSchema(topicDirectionsForRound(index)))},()=>{fallbackWeeks++;},season);
+      const topics=await suggestTopics(input,{suggest:()=>client.generateJson(buildTopicPrompt(input,season,likedTitles),topicGenerationSchema(topicDirectionsForRound(index)))},()=>{fallbackWeeks++;},season);
       const picked=pickWeekTopics(topics,weekDates.length,used);
       for(const topic of picked){used.add(titleKey(topic.title));recent.push(topic.title);}
       weekly.push({dates:weekDates,topics:picked});

@@ -97,10 +97,14 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
   },[changeTopic,loadTopics]);
   const approveImage=async (approved:ApprovedImage[]) => {
     const savingDraftId=draftIdRef.current;
+    // 성과를 디자인 계열별로 비교할 수 있게, 이 초안 카드에 쓴 계열(직접 고른 계열 → 구성안이 고른 계열)을 함께 저장한다.
+    // 구성안 없이 사진만 쓴 초안은 계열이 없으므로 남기지 않는다.
+    const sameDraft=generation.key===`${savingDraftId}|${slideCount}`;
+    const designStyle=sameDraft&&generation.plan?(generation.style!=="auto"?generation.style:generation.plan.design?.style):undefined;
     setImages(approved); setSaveState("saving");
     const now=new Date().toISOString();
     try {
-      const response=await fetch("/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:savingDraftId,status:"ready",topic,audience,image_brief:imageBrief,content_brief:contentBrief,media_candidates:approved.map((item,index)=>({id:item.id,source:item.source,file_id:item.preview ?? item.id,purpose:approved.length===1?"instagram-primary":`instagram-${item.role ?? (index===0?"cover":"slide")}`})),selected_media_id:approved[0]?.id ?? null,...(approved.length?{selected_media_ids:approved.map(item=>item.id)}:{}),copy:null,...(caption.trim()?{caption}:{}),...(planLink?{plan_date:planLink.date}:{}),facts_to_verify:[],store_profile_version:"2026-09-10",created_at:createdAtRef.current,updated_at:now})});
+      const response=await fetch("/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:savingDraftId,status:"ready",topic,audience,image_brief:imageBrief,content_brief:contentBrief,media_candidates:approved.map((item,index)=>({id:item.id,source:item.source,file_id:item.preview ?? item.id,purpose:approved.length===1?"instagram-primary":`instagram-${item.role ?? (index===0?"cover":"slide")}`})),selected_media_id:approved[0]?.id ?? null,...(approved.length?{selected_media_ids:approved.map(item=>item.id)}:{}),copy:null,...(caption.trim()?{caption}:{}),...(planLink?{plan_date:planLink.date}:{}),...(designStyle?{design_style:designStyle}:{}),facts_to_verify:[],store_profile_version:"2026-09-10",created_at:createdAtRef.current,updated_at:now})});
       if(!response.ok) throw new Error();
       if(draftIdRef.current!==savingDraftId)return;
       localStorage.setItem("mukdong-current-draft",savingDraftId);
