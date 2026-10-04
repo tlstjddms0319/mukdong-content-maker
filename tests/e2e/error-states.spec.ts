@@ -16,3 +16,13 @@ test("settings explains AI connection without exposing a key", async ({ page }) 
   await page.getByRole("button", { name:"설정 저장" }).click();
   await expect(page.getByRole("status").filter({hasText:"저장했어요."})).toHaveText("저장했어요.");
 });
+
+test("AI connection check runs on the server and shows each provider without keys", async ({ page }) => {
+  await loginAsOwner(page);
+  await page.goto("/settings");
+  const card=page.getByRole("region",{name:"AI 연결 실제 점검"});
+  await card.getByRole("button",{name:"AI 연결 점검하기"}).click();
+  // 테스트 서버에는 키가 없으므로 모두 "건너뜀"이고, 키를 넣으라는 안내가 나온다.
+  await expect(card.getByRole("status")).toHaveText(/설정된 AI 키가 없어요/);
+  for(const label of ["문안 AI · Gemini","문안 AI · Groq","문안 AI · Cloudflare","표지 점검 · Gemini 이미지 보기","이미지 AI · Higgsfield","이미지 AI · OpenAI"])await expect(card.getByText(`${label} · 건너뜀`)).toBeVisible();
+});

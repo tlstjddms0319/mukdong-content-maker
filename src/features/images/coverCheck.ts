@@ -42,7 +42,8 @@ export function coverRank(check:CoverCheck):number {
 }
 
 type Fetch=typeof fetch;
-export async function checkCoverCandidates(images:Buffer[],options:{apiKey?:string;model?:string;fetch?:Fetch}={}):Promise<CoverCheck[]|null> {
+// strict: 실패를 삼키지 않고 그대로 던진다(설정 화면의 "AI 연결 점검"이 실패 이유를 보여 주려고 쓴다).
+export async function checkCoverCandidates(images:Buffer[],options:{apiKey?:string;model?:string;fetch?:Fetch;strict?:boolean}={}):Promise<CoverCheck[]|null> {
   const apiKey=options.apiKey??process.env.GEMINI_API_KEY??"";
   if(!apiKey||!images.length)return null;
   const model=options.model??process.env.GEMINI_VISION_MODEL??process.env.GEMINI_TEXT_MODEL??"gemini-3.5-flash-lite";
@@ -62,6 +63,7 @@ export async function checkCoverCandidates(images:Buffer[],options:{apiKey?:stri
       return {...check,warnings:coverWarnings(check)};
     }));
   }catch(error){
+    if(options.strict)throw error;
     console.warn("[cover-check] 표지 점검을 건너뜁니다:",error instanceof Error?error.message:String(error));
     return null;
   }
