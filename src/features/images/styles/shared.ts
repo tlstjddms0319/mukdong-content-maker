@@ -23,6 +23,10 @@ export const STYLE_FONTS={
   sans:face("Pretendard-Regular.otf","Pretendard"),
   sansBold:face("Pretendard-Bold.otf","Pretendard Bold"),
   sansSemi:face("Pretendard-SemiBold.otf","Pretendard SemiBold"),
+  round:face("Jua-Regular.ttf","Jua"),                        // 네온 간판(둥근 글자)
+  brush:face("NanumBrushScript-Regular.ttf","Nanum Brush Script"), // 한지·수묵(붓글씨)
+  chalk:face("Gaegu-Bold.ttf","Gaegu Bold"),                  // 칠판(분필 손글씨)
+  marker:face("EastSeaDokdo-Regular.ttf","East Sea Dokdo"),   // 사진 위 낙서(마커 손글씨)
 } as const;
 
 // 장 하나를 스타일이 그리기 쉬운 모양으로 정리한다. 표지·사진 장·글자 장 가운데 어느 쪽인지 kind로 알려 준다.

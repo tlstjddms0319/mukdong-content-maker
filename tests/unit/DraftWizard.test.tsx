@@ -208,10 +208,10 @@ describe("DraftWizard",()=>{
     let uploads=0;
     const request=vi.fn(async(url:string,init?:RequestInit)=>{void init;return url==="/api/images/assets"?{ok:true,json:async()=>({asset:{id:`photo-${++uploads}`,preview:"data:image/jpeg;base64,AAAA",name:"p"}})}:url==="/api/drafts"?{ok:true,json:async()=>({})}:{ok:false,json:async()=>({})};});
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);
-    expect(await screen.findByText(/한 달 기획 · 1\/6\(화\) 18:00 게시 예정 · 추천 계열 신문·기사/)).toBeInTheDocument();
+    expect(await screen.findByText(/한 달 기획 · 1\/6\(화\) 18:00 게시 예정 · 추천 계열 한지·수묵/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
     // 추천 계열이 디자인 계열 선택의 기본값이 된다.
-    expect(screen.getByRole("combobox",{name:"디자인 계열"})).toHaveValue("newspaper");
+    expect(screen.getByRole("combobox",{name:"디자인 계열"})).toHaveValue("hanji");
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
     fireEvent.click(await screen.findByRole("button",{name:"글자 없이 사진만 쓰기"}));
     await waitFor(()=>expect(request.mock.calls.some(([url])=>url==="/api/drafts")).toBe(true));

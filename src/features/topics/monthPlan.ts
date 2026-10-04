@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { StyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
+import { StoredStyleIdSchema, StyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
 import { TopicSuggestionSchema, type TopicSuggestion } from "./schema";
 
 // 한 달 콘텐츠 기획. 한 달 안의 게시일(기본: 매주 화·금)을 정하고, 주마다 그 주 날짜의 시즌을 반영한 추천 주제를
@@ -8,7 +8,7 @@ import { TopicSuggestionSchema, type TopicSuggestion } from "./schema";
 export const MonthSchema=z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 export const MonthPlanItemSchema=TopicSuggestionSchema.extend({
   date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  style:StyleIdSchema,
+  style:StoredStyleIdSchema,
 });
 export const MonthPlanSchema=z.object({month:MonthSchema,createdAt:z.string().datetime(),items:z.array(MonthPlanItemSchema).max(31)});
 export type MonthPlanItem=z.infer<typeof MonthPlanItemSchema>;

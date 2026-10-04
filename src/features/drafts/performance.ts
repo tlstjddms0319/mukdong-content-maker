@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { STYLES, StyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
+import { STYLES, StoredStyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
 
 // 게시물 성과 직접 기록과 분석(순수 함수).
 // Instagram 연동 전이라도 사장님이 인사이트 화면의 숫자를 옮겨 적으면, 어떤 주제·디자인·요일이 잘 됐는지 모아 보여 주고
@@ -18,7 +18,7 @@ export const PerformanceSchema=z.object({
 export type Performance=z.infer<typeof PerformanceSchema>;
 
 // 초안에 남기는 디자인 계열. 구성안이 고른 계열이나 직접 고른 계열(사진만 쓴 초안은 기록하지 않는다).
-export const DesignStyleSchema=StyleIdSchema;
+export const DesignStyleSchema=StoredStyleIdSchema;
 
 // 반응 점수: 저장·공유는 "다시 보고 싶다/알리고 싶다"는 강한 신호라 3배, 댓글 2배, 좋아요 1배.
 // (Instagram도 저장·공유를 추천 노출에 크게 반영한다고 알려져 있다. 절대 기준이 아니라 내 게시물끼리 비교하는 용도.)
