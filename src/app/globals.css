@@ -443,3 +443,8 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
   .upload-zone .photo-studio-actions { align-self:stretch; flex-direction:column; }
   .upload-zone .photo-studio-actions .button { flex:none; }
 }
+
+/* AI 연결 실제 점검 결과 목록 */
+.ai-check-list { display:grid; gap:8px; width:100%; margin:0; padding:0; list-style:none; }
+.ai-check-list p { margin:2px 0 0; overflow-wrap:anywhere; }
+.status-dot.muted { background:#c9cbc4; }
