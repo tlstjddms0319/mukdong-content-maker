@@ -458,3 +458,9 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .slide-text-editor input, .slide-text-editor textarea { width:100%; min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:var(--control-radius); font:inherit; background:#fff; }
 .slide-text-editor textarea { resize:vertical; line-height:1.6; }
 .slide-text-editor [role="alert"] { margin:0; color:#a33d32; }
+/* 도움말: 자주 쓰는 기능 카드 */
+.help-tips { margin:28px 0; }
+.help-tips ul { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin:12px 0 0; padding:0; list-style:none; }
+.help-tips li { display:grid; gap:4px; padding:16px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; }
+.help-tips small { color:var(--accent); font-weight:700; }
+.help-tips p { margin:4px 0 0; color:var(--muted); }
