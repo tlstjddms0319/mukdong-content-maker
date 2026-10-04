@@ -3,7 +3,7 @@ import { z } from "zod";
 // 스타일 계열. 게시물 전체의 디자인 방향을 통째로 정한다. "template"은 레이아웃(18종)+게시물 테마로 그리는 기본 방식이고,
 // 나머지는 계열마다 색·사진 처리·글꼴·장식을 모두 따로 가진 디자인이다(그리기 코드는 styles/*.ts).
 // 이 파일은 화면 코드도 불러오므로 그리기 코드(sharp 등)를 넣지 않는다.
-export const StyleIdSchema=z.enum(["template","colorblock","webtoon","omakase","typography","kitsch","diary","infographic","popup","film","neon","hanji","chalkboard","doodle"]);
+export const StyleIdSchema=z.enum(["template","colorblock","webtoon","omakase","typography","kitsch","diary","infographic","popup","film","neon","hanji","chalkboard","doodle","label","grid","gold","watercolor","ticket","editorial"]);
 export type StyleId=z.infer<typeof StyleIdSchema>;
 
 // 없앤 계열(뉴트로 픽셀 y2k, 신문 newspaper)이 저장된 초안·한 달 기획·주소에 남아 있어도 열리도록 비슷한 새 계열로 바꿔 읽는다.
@@ -38,6 +38,18 @@ export const STYLES:Record<StyleId,{label:string;when:string;photoHint:string}>=
     photoHint:"Clear, well-lit shot of the dish centered on the table, simple background, like a menu photo pinned on a board."},
   doodle:{label:"사진 위 낙서",when:"\"여기 좀 봐\" 하고 친근하게 짚어 주는 글. 사진을 크게 쓰고 마커 동그라미·화살표·형광펜 제목",
     photoHint:"Close, appetizing shot with the dish filling the middle of the frame and some empty space at the top and bottom for handwriting."},
+  label:{label:"막걸리 라벨",when:"막걸리·전통주·오래된 방법 이야기. 크림색 종이에 둥근 배지와 리본, 양각 느낌 세리프, 병 라벨 테두리",
+    photoHint:"Classic still-life of the dish with a bowl or bottle of makgeolli, warm even light, plain background, composed like a product label illustration."},
+  grid:{label:"모던 그리드",when:"부위·단계·비교처럼 정리된 정보를 깔끔하고 현대적으로. 흰 바탕, 굵은 검은 격자선, 빨간 포인트, 큰 고딕과 숫자",
+    photoHint:"Clean, sharp, evenly lit shot with the dish centered on a plain surface, strong edges, no clutter, like a product catalog photo."},
+  gold:{label:"블랙 & 골드",when:"연말 모임·기념일·특별한 날, 프리미엄 코스처럼 격식 있는 글. 검은 바탕에 금박 선·꽃 테두리와 세리프",
+    photoHint:"Luxurious low-key shot on a dark table, warm candle-like highlights on the dish, deep black background, elegant plating."},
+  watercolor:{label:"수채화",when:"가볍고 따뜻한 일상, 계절 이야기, 부드러운 안부 글. 파스텔 물감 번짐 바탕, 둥근 손글씨, 붓 자국 장식",
+    photoHint:"Soft, bright, airy photo with pastel tones and natural daylight, gentle shadows, the dish on a light table."},
+  ticket:{label:"티켓·승차권",when:"방문 안내·오시는 길·모임 초대처럼 \"오세요\" 하는 글. 절취선과 스텁이 있는 입장권, 도장과 번호",
+    photoHint:"Welcoming shot of the restaurant table or entrance, bright and inviting, horizontal composition that fits inside a ticket frame."},
+  editorial:{label:"푸드 매거진 표지",when:"큰 한 마디로 눈길을 끄는 글, 시즌 특집, 베스트 정리. 큰 제호와 호수, 표지 문구 띠, 바코드",
+    photoHint:"Magazine-cover style: the dish large and centered with empty space at the top for a masthead, dramatic but clean lighting, vertical composition."},
   film:{label:"감성 필름",when:"비 오는 날, 술 한잔, 하루의 끝 같은 감성 이야기. 필름 띠, 바랜 색감 사진, 영화 자막 같은 문장",
     photoHint:"Cinematic, moody scene with warm practical lights and natural shadows, like a still frame from a film."},
 };

@@ -6,7 +6,7 @@ import { seeded, wobblyLine } from "./handDrawn";
 // 한지·수묵(전통): 닥나무 섬유 결이 보이는 한지 바탕, 붓글씨 제목 뒤로 번진 먹, 붉은 낙관 도장.
 // 사진은 가장자리가 한지에 스며들 듯 흐리게(표지) 또는 먹선 두 줄 테두리(본문). 요점 앞에는 붉은 一·二·三.
 // 전라도 잔칫상·삼합 같은 전통 음식 이야기를 고급스럽게 전할 때 쓴다.
-const PAPER="#F1E7D3",INK="#1D1A16",SOFT="#4A4238",DIM="#5C5244",SEAL="#B3261E";
+const PAPER="#F1E7D3",INK="#1D1A16",SOFT="#2E2822",DIM="#5C5244",SEAL="#B3261E";
 const NUMERALS=["一","二","三","四"];
 
 // 한지: 가로 섬유 결 + 큰 얼룩 + 가장자리 바램.
@@ -17,11 +17,11 @@ function paper():string {
     +`<rect width="1080" height="1350" filter="url(#blot)"/><rect width="1080" height="1350" filter="url(#fiber)"/><rect width="1080" height="1350" fill="url(#age)"/>`;
 }
 // 붓으로 크게 쓸어 번진 먹(제목 뒤 배경).
-function inkWash(x:number,y:number,w:number,h:number,seed:number):string {
+function inkWash(x:number,y:number,w:number,h:number,seed:number,opacity=.16):string {
   const rand=seeded(seed);
   const id=`wash${seed}`;
   return `<filter id="${id}" x="-20%" y="-50%" width="140%" height="200%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="${seed}" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="40"/><feGaussianBlur stdDeviation="10"/></filter>`
-    +`<path d="${wobblyLine(x,y+h/2,x+w,y+h/2+((rand()-.5)*30),rand,h*.12,6)}" stroke="#2A241D" stroke-width="${h}" stroke-linecap="round" fill="none" opacity=".1" filter="url(#${id})"/>`;
+    +`<path d="${wobblyLine(x,y+h/2,x+w,y+h/2+((rand()-.5)*30),rand,h*.12,6)}" stroke="#2A241D" stroke-width="${h}" stroke-linecap="round" fill="none" opacity="${opacity}" filter="url(#${id})"/>`;
 }
 // 낙관(붉은 도장): 테두리가 살짝 거친 붉은 사각형 안에 흰 글자 두 줄.
 async function seal(size:number,seed:number):Promise<{svg:(x:number,y:number)=>string;text:Awaited<ReturnType<typeof textLayer>>}> {
@@ -46,10 +46,12 @@ export const renderHanji:CardRenderer=async(inputs,slide,index,total)=>{
   const shots=inputs.slice(0,2);
   let y=content.cover?120:100;
   // 표지: 왼쪽에 세로로 쓴 가게 이름. 본문: 위에 "第 二 張" 대신 작은 장 번호.
-  if(content.cover){
+  if(content.cover||!shots.length){
+    // 표지와 글자 장은 왼쪽 가장자리에 세로로 쓴 가게 이름으로 옆을 채운다.
     const vertical=await textLayer([..."묵동홍어마을"].join("\n"),{size:30,color:DIM,width:44,height:400,font:STYLE_FONTS.serif,align:"centre",spacing:6});
     layers.push({input:vertical.data,left:44,top:130});
-  }else{
+  }
+  if(!content.cover){
     const no=await textLayer(`${index} / ${total}`,{size:26,color:DIM,width:300,height:40,font:STYLE_FONTS.serif});
     layers.push({input:no.data,left:M,top:60});
   }
@@ -68,7 +70,7 @@ export const renderHanji:CardRenderer=async(inputs,slide,index,total)=>{
   if(content.cover)y+=120;
   else{deco+=`<path d="${wobblyLine(M,y,M+220,y+2,seeded(index),2,5)}" stroke="${SEAL}" stroke-width="3" fill="none" opacity=".8"/>`;y+=34;}
   const points=content.points.slice(0,shots.length?3:4);
-  const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:shots.length?36:44,color:SOFT,width:W-70,height:140,font:STYLE_FONTS.serif,spacing:10})));
+  const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:shots.length?40:46,color:SOFT,width:W-70,height:150,font:STYLE_FONTS.serif,spacing:10})));
   const numerals=await Promise.all(points.map((_,i)=>textLayer(NUMERALS[i],{size:44,color:SEAL,width:60,height:60,font:STYLE_FONTS.brush})));
   const pointsH=pointLayers.reduce((sum,layer)=>sum+Math.max(layer.info.height,48)+26,0);
   if(shots.length){
@@ -89,6 +91,8 @@ export const renderHanji:CardRenderer=async(inputs,slide,index,total)=>{
   }
   // 사진 장은 사진 바로 아래에, 글자 장은 남은 칸 가운데보다 조금 위에.
   let py=shots.length?y:Math.max(y+40,Math.round((y+footerTop-pointsH)/2)-40);
+  // 글자 장: 요점 뒤에 옅은 묵선 붓자국을 넓게 깔아 수묵 느낌을 더한다(글자보다 아래 레이어, 아주 옅게).
+  if(!shots.length&&pointLayers.length)deco+=inkWash(M-30,py-10,W+60,pointsH+20,index*11+7,.07);
   for(const [i,layer] of pointLayers.entries()){
     layers.push({input:numerals[i].data,left:M,top:py-6},{input:layer.data,left:M+70,top:py});
     py+=Math.max(layer.info.height,48)+26;

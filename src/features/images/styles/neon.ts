@@ -1,7 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { brandName, croppedPhoto, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText, snap } from "./shared";
-import { glowText, neonStroke } from "./handDrawn";
+import { glowText, handStar, neonStroke, seeded } from "./handDrawn";
 
 // 네온 간판(밤 술집): 어두운 벽돌 벽에 빛나는 네온관 글자. 맨 위 작은 간판("묵동 홍어 · 막걸리"),
 // 가운데 네온 테두리를 두른 사진, 아래 요점은 밝은 글자에 네온 점. 퇴근 후 한잔 분위기의 저녁 게시물용.
@@ -13,17 +13,21 @@ const THEMES=[
 ] as const;
 const WALL="#0E0B13",TEXT="#F2EEF7",DIM="#9C94AE";
 
-// 벽돌 벽 + 가장자리 어둡게 + 바닥에 번진 빛.
-function wall(glow:string):string {
+// 벽돌 벽 + 가장자리 어둡게 + 바닥에 번진 빛. 벽돌마다 밝기를 조금씩 다르게 하고 거친 알갱이를 얹어 진짜 벽처럼 보이게 한다.
+function wall(glow:string,seed:number):string {
+  const rand=seeded(seed);
   let bricks="";
   for(let row=0;row<1350/46;row++){
     const y=row*46,shift=row%2?60:0;
+    for(let x=-shift;x<1080;x+=120){const tone=rand();if(tone<.35)bricks+=`<rect x="${x+2}" y="${y+2}" width="116" height="42" fill="${tone<.12?"#000":"#fff"}" opacity="${.02+rand()*.04}"/>`;}
     bricks+=`<path d="M0 ${y}H1080" stroke="#1C1724" stroke-width="3"/>`;
     for(let x=-shift;x<1080;x+=120)bricks+=`<path d="M${x} ${y}V${y+46}" stroke="#1C1724" stroke-width="3"/>`;
   }
+  bricks+=`<filter id="neonGrit"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="${seed}"/><feColorMatrix values="0 0 0 0 .6  0 0 0 0 .55  0 0 0 0 .7  0 0 0 .07 0"/></filter><rect width="1080" height="1350" filter="url(#neonGrit)"/>`;
   return `<defs><radialGradient id="vig" cx="50%" cy="45%" r="75%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".7"/></radialGradient>`
-    +`<radialGradient id="spill" cx="50%" cy="38%" r="55%"><stop offset="0" stop-color="${glow}" stop-opacity=".16"/><stop offset="1" stop-color="${glow}" stop-opacity="0"/></radialGradient></defs>`
-    +bricks+`<rect width="1080" height="1350" fill="url(#spill)"/><rect width="1080" height="1350" fill="url(#vig)"/>`;
+    +`<radialGradient id="spill" cx="50%" cy="38%" r="55%"><stop offset="0" stop-color="${glow}" stop-opacity=".16"/><stop offset="1" stop-color="${glow}" stop-opacity="0"/></radialGradient>`
+    +`<radialGradient id="floor" cx="50%" cy="100%" r="55%"><stop offset="0" stop-color="${glow}" stop-opacity=".2"/><stop offset="1" stop-color="${glow}" stop-opacity="0"/></radialGradient></defs>`
+    +bricks+`<rect width="1080" height="1350" fill="url(#spill)"/><rect width="1080" height="1350" fill="url(#floor)"/><rect width="1080" height="1350" fill="url(#vig)"/>`;
 }
 const roundedRect=(x:number,y:number,w:number,h:number,r:number)=>`M${x+r} ${y}H${x+w-r}Q${x+w} ${y} ${x+w} ${y+r}V${y+h-r}Q${x+w} ${y+h} ${x+w-r} ${y+h}H${x+r}Q${x} ${y+h} ${x} ${y+h-r}V${y+r}Q${x} ${y} ${x+r} ${y}Z`;
 
@@ -31,7 +35,10 @@ export const renderNeon:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   const theme=THEMES[(index-1+(slide.variant??0))%THEMES.length];
   const layers:OverlayOptions[]=[];
-  let deco=wall(theme.glow);
+  const rand=seeded(index*41+(slide.variant??0));
+  let deco=wall(theme.glow,index*17+(slide.variant??0));
+  // 간판 양옆 작은 네온 별(표지·글자 장). 사진 장은 사진이 주인공이라 두지 않는다.
+  if(content.cover||!inputs.length)deco+=neonStroke(handStar(150,96,22,rand),theme.accent,3)+neonStroke(handStar(930,86,18,rand),theme.glow,3);
   // 맨 위 작은 간판.
   const sign=await glowText(content.cover?"묵동 홍어 · 막걸리":`${index} / ${total}`,{sizes:[34],width:600,maxHeight:60,font:STYLE_FONTS.round,core:"#FFFFFF",glow:theme.accent,align:"centre"});
   const signW=sign.info.width-sign.pad*2+64,signX=Math.round((1080-signW)/2),signY=48;
@@ -44,7 +51,7 @@ export const renderNeon:CardRenderer=async(inputs,slide,index,total)=>{
   const titleH=title.info.height-title.pad*2;
   const footerTop=1350-70;
   const points=content.points.slice(0,shots.length?3:4);
-  const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:shots.length?36:44,color:TEXT,width:800,height:140,font:STYLE_FONTS.sansSemi,spacing:8})));
+  const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:shots.length?40:46,color:TEXT,width:800,height:150,font:STYLE_FONTS.sansSemi,spacing:8})));
   const pointsH=pointLayers.reduce((sum,layer)=>sum+layer.info.height+22,0);
   // 글자 장: 제목과 요점 상자를 한 덩어리로 세로 가운데에 둔다.
   if(!shots.length)y=Math.max(y,Math.round((y+footerTop-(titleH+70+pointsH+40))/2));

@@ -36,13 +36,14 @@ export const renderDoodle:CardRenderer=async(inputs,slide,index,total)=>{
   }
   // 제목(형광펜 띠). 표지는 크게.
   const title=await highlightedTitle(content.headline,{sizes:content.cover?[92,82,72,64]:hasPhoto?[64,58,52,46]:[80,70,62,56],width:860,maxHeight:content.cover?300:hasPhoto?200:280,angle:(rand()-.5)*3});
-  const titleTop=hasPhoto?70:Math.max(110,Math.round(1350/2-300));
-  layers.push({input:title.data,left:M-10,top:titleTop});
-  const y=titleTop+title.info.height+20;
   // 요점(아래부터 쌓는다): 사진 위는 흰 손글씨에 그림자, 종이 위는 검은 손글씨.
   const points=content.points.slice(0,hasPhoto?3:4);
-  const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:hasPhoto?40:52,color:hasPhoto?"#FFFFFF":INK,width:860,height:150,font:STYLE_FONTS.chalk,spacing:6,...(hasPhoto?{shadow:true}:{})})));
+  const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:hasPhoto?44:54,color:hasPhoto?"#FFFFFF":INK,width:860,height:160,font:STYLE_FONTS.chalk,spacing:6,...(hasPhoto?{shadow:true}:{})})));
   const pointsH=pointLayers.reduce((sum,layer)=>sum+layer.info.height+18,0);
+  // 종이 장은 제목·요점·메모 덩어리를 세로 가운데에 둔다(메모 자리 150px 포함).
+  const titleTop=hasPhoto?70:Math.max(110,Math.round((footerTop-(title.info.height+90+pointsH+150))/2));
+  layers.push({input:title.data,left:M-10,top:titleTop});
+  const y=titleTop+title.info.height+20;
   let py=hasPhoto?footerTop-pointsH-16:y+70;
   // 사진 위 낙서: 가운데 비어 있는 곳(제목과 요점 사이)에 동그라미 + 메모 + 화살표.
   const gapTop=y,gapBottom=py-30;
@@ -71,7 +72,9 @@ export const renderDoodle:CardRenderer=async(inputs,slide,index,total)=>{
     deco+=`<path d="${handArrow(fromX,fromY,toX,toY,rand)}" stroke="${HIGHLIGHT}" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
     deco+=`<path d="${handStar(cx+(cx>540?rx*.85:-rx*.85),cy+ry*.7,26,rand)}" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linejoin="round"/>`;
   }else if(!hasPhoto){
-    deco+=`<path d="${handStar(1080-M-40,titleTop+title.info.height+40,30,rand)}" fill="none" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>`;
+    // 종이 장 낙서: 제목 띠를 한 바퀴 두른 손그림 동그라미, 오른쪽 위 별, 아래쪽 노란 띠 위 마커 메모와 화살표.
+    deco+=`<path d="${handEllipse(M-10+title.info.width/2,titleTop+title.info.height/2,title.info.width/2+36,title.info.height/2+26,rand,6)}" stroke="${INK}" stroke-width="5" fill="none" stroke-linecap="round" opacity=".9"/>`
+      +`<path d="${handStar(1080-M-30,Math.max(60,titleTop-40),30,rand)}" fill="none" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>`;
   }
   // 요점 앞에 손으로 그린 체크 상자.
   for(const layer of pointLayers){
@@ -80,7 +83,17 @@ export const renderDoodle:CardRenderer=async(inputs,slide,index,total)=>{
     layers.push({input:layer.data,left:M+56,top:py});
     py+=layer.info.height+18;
   }
-  if(!hasPhoto&&pointLayers.length)deco+=`<path d="${squiggle(M,py+6,420,rand,12)}" stroke="${INK}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+  if(!hasPhoto&&pointLayers.length){
+    deco+=`<path d="${squiggle(M,py+6,420,rand,12)}" stroke="${INK}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+    // 남는 자리에 노란 띠 위 마커 메모 + 마지막 요점을 가리키는 화살표.
+    if(footerTop-py>150){
+      const note=await textLayer(NOTES[(index+(slide.variant??0))%NOTES.length],{size:60,color:INK,width:460,height:100,font:STYLE_FONTS.marker});
+      const nx=1080-M-note.info.width-20,ny=py+40;
+      deco+=`<path d="M${nx-16} ${ny+6} L${nx+note.info.width+18} ${ny} L${nx+note.info.width+14} ${ny+note.info.height+6} L${nx-12} ${ny+note.info.height+10} Z" fill="${HIGHLIGHT}" opacity=".95"/>`
+        +`<path d="${handArrow(nx-30,ny+note.info.height/2,M+480,py-30,rand,.2)}" stroke="${INK}" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+      layers.push({input:note.data,left:nx,top:ny});
+    }
+  }
   const footer=await fitText(`${brandName()}  ·  ${index}/${total}`,{sizes:[26,23,20],width:900,maxHeight:40,color:hasPhoto?"#F2F2F2":"#5C574E",font:STYLE_FONTS.sansSemi,align:"centre",...(hasPhoto?{}:{})});
   layers.push({input:footer.data,left:Math.round((1080-footer.info.width)/2),top:footerTop+22});
   layers.splice(hasPhoto?1:0,0,svgLayer(deco));

@@ -45,7 +45,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
   if(inputs.length===1){
     // 둥근 사진 + 오른쪽 지시선 설명(최대 3개). 표지는 사진을 가운데 크게, 설명 대신 "FIELD GUIDE" 도장.
     // 원과 설명 묶음을 남은 공간의 세로 가운데에 둔다(아래가 휑하게 비지 않도록).
-    const R=content.cover?300:Math.min(270,Math.round((footerTop-y-60)/2));
+    const R=content.cover?330:Math.min(240,Math.round((footerTop-y-60)/2));
     const cx=content.cover?540:M+R,cy=content.cover?Math.min(y+R+20,footerTop-R-30):Math.round((y+footerTop-20)/2);
     deco+=`<circle cx="${cx+10}" cy="${cy+12}" r="${R+12}" fill="${INK}" opacity=".15"/><circle cx="${cx}" cy="${cy}" r="${R+12}" fill="#fff" stroke="${INK}" stroke-width="4"/>`;
     layers.push({input:await croppedPhoto(inputs[0],R*2,R*2,0,{circle:true}),left:cx-R,top:cy-R});
@@ -53,11 +53,16 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
       deco+=`<g transform="rotate(-12 ${cx+R+20} ${cy-R+40})"><rect x="${cx+R-110}" y="${cy-R}" width="260" height="80" rx="8" fill="none" stroke="${ACCENT}" stroke-width="5"/></g>`;
       texts.push({value:"FIELD GUIDE",cx:cx+R+20,cy:cy-R+40,size:34,color:ACCENT});
     }else{
-      const LX=cx+R+80,LW=1080-M-LX+20;
-      const labels=await Promise.all(points.map(point=>textLayer(point,{size:31,color:INK,width:LW-40,height:180,font:STYLE_FONTS.sansSemi,spacing:6})));
+      const LX=cx+R+60,LW=1080-M-LX+20;
+      // 설명 글자는 36px(긴 요점은 34px). 설명 묶음이 원 높이 안에 들어가면 고르게 나눠 놓고, 넘치면 위에서부터 차례로 쌓는다.
+      const labels=await Promise.all(points.map(point=>textLayer(point,{size:point.length>22?34:36,color:INK,width:LW-40,height:200,font:STYLE_FONTS.sansSemi,spacing:6})));
       const span=R*2+20,step=labels.length>1?span/(labels.length):span;
+      const stackH=labels.reduce((sum,label)=>sum+label.info.height+36,0);
+      const sequential=stackH>span;
+      let stackY=Math.max(y,Math.round(cy-stackH/2));
       for(const [i,label] of labels.entries()){
-        const ly=Math.round(cy-R+step*i+step/2-label.info.height/2);
+        const ly=sequential?stackY:Math.round(cy-R+step*i+step/2-label.info.height/2);
+        stackY+=label.info.height+36;
         const a=-Math.PI/3+(i*(Math.PI*2/3))/Math.max(1,labels.length-1||1);
         const ex=Math.round(cx+Math.cos(labels.length>1?a:0)*R*.75),ey=Math.round(cy+Math.sin(labels.length>1?a:0)*R*.75);
         deco+=`<circle cx="${ex}" cy="${ey}" r="9" fill="${ACCENT}" stroke="#fff" stroke-width="3"/><path d="M${ex} ${ey}L${LX-50} ${ly+label.info.height/2}H${LX-14}" fill="none" stroke="${INK}" stroke-width="2.5" stroke-dasharray="6 6"/>`;
@@ -69,7 +74,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
     }
   }else if(inputs.length>=2){
     // A·B 비교 도감: 두 원형 사진과 아래 특징 목록.
-    const R=180;
+    const R=215;
     for(const [i,shot] of inputs.slice(0,2).entries()){
       const cx=i?1080-M-R-30:M+R+30,cy=y+R+10;
       deco+=`<circle cx="${cx}" cy="${cy}" r="${R+10}" fill="#fff" stroke="${INK}" stroke-width="4"/>`;
@@ -80,7 +85,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
     deco+=dashedArrow(540-60,y+R+10,540+60,y+R+10);
     y+=R*2+70;
     for(const [i,point] of points.entries()){
-      const line=await textLayer(point,{size:34,color:INK,width:W-110,height:110,font:STYLE_FONTS.sansSemi,spacing:6});
+      const line=await textLayer(point,{size:38,color:INK,width:W-110,height:130,font:STYLE_FONTS.sansSemi,spacing:6});
       if(y+line.info.height>footerTop-20)break;
       const b=badge(M+26,y+line.info.height/2,22,String(i+1));
       deco+=b.svg+`<path d="M${M+70} ${y+line.info.height+14}H${1080-M}" stroke="${GRID_MAJOR}" stroke-width="2" stroke-dasharray="4 6"/>`;
