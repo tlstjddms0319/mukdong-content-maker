@@ -28,6 +28,12 @@ test("keeps a planned time and final-review mark after reopening saved drafts", 
     await expect(controls.getByText("게시 준비 완료")).toBeVisible();
     const overview=page.getByRole("region",{name:"게시 계획"});
     const calendar=overview.locator('[aria-label="콘텐츠 캘린더"]');
+    // 캘린더는 가장 가까운 예약 달부터 보여 준다. 다른 테스트가 더 이른 예약을 만들었을 수 있으니 2030년 5월까지 넘겨 본다.
+    const heading=calendar.getByRole("heading",{level:3});
+    const [shownYear,shownMonth]=((await heading.textContent())??"").match(/(\d+)년 (\d+)월/)!.slice(1).map(Number);
+    const offset=(2030-shownYear)*12+(5-shownMonth);
+    for(let i=0;i<Math.abs(offset);i++)await calendar.getByRole("button",{name:offset>0?"다음 달":"이전 달"}).click();
+    await expect(heading).toHaveText("2030년 5월");
     await expect(calendar.getByRole("link",{name:new RegExp(topic)})).toBeVisible();
     await expect(overview.locator(".planning-list").getByRole("listitem").filter({hasText:topic}).getByText("최종 확인 완료")).toBeVisible();
 

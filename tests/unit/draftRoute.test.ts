@@ -126,3 +126,22 @@ it("rejects final review for an unfinished draft and rejects past planned times"
   expect((await update("2020-05-15T09:00:00.000Z",false)).status).toBe(400);
   expect(await repository.readDraft(id)).not.toHaveProperty("planned_publish_at");
 });
+
+it("fills the planned time from the month plan only when a draft is first saved", async () => {
+  directory=await mkdtemp(path.join(tmpdir(),"mukdong-plan-"));
+  process.env.DATA_DIR=directory;
+  vi.resetModules();
+  const { createDraftRepository }=await import("@/features/drafts/repository");
+  const { POST }=await import("@/app/api/drafts/route");
+  const id="44444444-4444-4444-8444-444444444444";
+  const body=(over:Record<string,unknown>)=>new Request("http://localhost/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,status:"ready",topic:"막걸리엔 왜 전일까?",audience:"A",media_candidates:[],selected_media_id:null,copy:null,facts_to_verify:[],store_profile_version:"2026-09-10",created_at:"2026-09-10T00:00:00.000Z",updated_at:"2026-09-10T00:00:00.000Z",...over})});
+  expect((await POST(body({plan_date:"2099-01-06"}))).status).toBe(201);
+  expect(await createDraftRepository(directory).readDraft(id)).toMatchObject({plan_date:"2099-01-06",planned_publish_at:"2099-01-06T09:00:00.000Z"});
+  // 다시 저장(이미지 다시 고르기)해도 처음 연결한 기획 날짜·시각은 바뀌지 않는다.
+  await POST(body({plan_date:"2099-02-03"}));
+  expect(await createDraftRepository(directory).readDraft(id)).toMatchObject({plan_date:"2099-01-06",planned_publish_at:"2099-01-06T09:00:00.000Z"});
+  // 지난 날짜에서 시작한 초안은 연결만 하고 자동 게시 시각은 비워 둔다.
+  const pastId="55555555-5555-4555-8555-555555555555";
+  await POST(new Request("http://localhost/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...JSON.parse(await body({}).text()),id:pastId,plan_date:"2020-01-07"})}));
+  expect(await createDraftRepository(directory).readDraft(pastId)).toMatchObject({plan_date:"2020-01-07",planned_publish_at:null});
+});

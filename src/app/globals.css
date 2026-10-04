@@ -343,7 +343,14 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .month-planner-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .month-plan-list { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
 .month-plan-item { display:grid; grid-template-columns:90px 1fr auto; gap:12px; align-items:start; padding:12px; border:1px solid var(--line); border-radius:12px; }
-.month-plan-item.done { opacity:.7; }
+/* 기획 칸 진행 상태: 끝난 칸은 흐리게, 날짜 지난 칸은 붉은 글자로 알아보게 한다. */
+.month-plan-item.state-reviewed { opacity:.75; }
+.month-plan-summary { margin:0; font-weight:700; color:var(--accent); }
+.plan-state { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:13px; font-weight:800; background:#eef0ec; color:var(--muted); }
+.plan-state-images,.plan-state-caption { background:#fff3d6; color:#7a5200; }
+.plan-state-reviewed { background:#e3f1e8; color:var(--accent); }
+.plan-state-missed { background:#fbe9e6; color:#a33d32; }
+.month-plan-item .topic-badges { align-items:center; }
 .month-plan-item p { margin:4px 0 8px; color:var(--muted); font-size:14px; }
 .month-plan-date { font-weight:700; }
 @media (max-width:700px){ .month-plan-item { grid-template-columns:1fr; } }
