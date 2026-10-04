@@ -50,6 +50,7 @@ it("renders a saved draft with a way to reopen it", async () => {
   expect(html).toContain("게시 희망일시 (한국시간)");
   expect(html).toContain("최종 확인 완료");
   expect(html).toContain("자동 게시되지 않아요");
+  expect(html).toContain("같은 주제로 새로");
 });
 
 it("shows planned drafts in upcoming order and keeps overdue plans visible", async () => {
