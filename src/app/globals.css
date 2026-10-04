@@ -329,3 +329,8 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .food-placeholder .cover-check-badge { padding:3px 8px; border-radius:999px; font-size:12px; font-weight:700; }
 .food-placeholder .cover-check-badge.good { background:#1f5a43; color:white; }
 .food-placeholder .cover-check-badge.warn { background:#fff1d6; color:#8a5200; }
+
+/* 첫 문장 후보(CopyEditor) */
+.hook-options { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
+.hook-options>span { width:100%; color:var(--muted); font-size:13px; }
+.hook-options .button { text-align:left; white-space:normal; }

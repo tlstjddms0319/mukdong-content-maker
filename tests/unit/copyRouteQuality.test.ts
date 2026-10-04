@@ -27,7 +27,8 @@ describe("copy quality",()=>{
     const response=await POST(request());
     expect(response.status).toBe(200);
     expect(generate.mock.calls[0][0]).toContain("500~800자");
-    expect((await response.json()).hashtags).toEqual(["#묵동맛집","#홍어","#중랑구맛집"]);
+    // 주제 태그(최대 3개) + 지역 태그 + 가게 태그. AI가 넣은 지역 태그(#중랑구맛집 등)는 정해진 지역 태그로 바뀐다.
+    expect((await response.json()).hashtags).toEqual(["#홍어","#묵동맛집","#묵동홍어마을"]);
   });
   it("reports failed or too-short generation instead of returning a fixed samhap caption",async()=>{
     generate.mockResolvedValue({...result,information:"너무 짧음"});
@@ -47,7 +48,7 @@ describe("copy quality",()=>{
   it("returns only the requested replacement for a partial rewrite",async()=>{
     generate.mockResolvedValue({hashtags:["#홍어","#묵동맛집","#중랑구맛집"]});
     const response=await POST(request({focus:"hashtags",currentText:"내가 쓴 글"}));
-    expect(await response.json()).toMatchObject({replacement:"#홍어 #묵동맛집 #중랑구맛집",_meta:{provider:"gemini"}});
+    expect(await response.json()).toMatchObject({replacement:"#홍어 #묵동맛집 #묵동홍어마을",_meta:{provider:"gemini"}});
   });
   it("repairs repetitive copy once, using the image brief and audience context",async()=>{
     generate.mockResolvedValueOnce({...result,information:"똑같은 문장을 반복해서 분량을 채웁니다. ".repeat(24)}).mockResolvedValueOnce(result);
