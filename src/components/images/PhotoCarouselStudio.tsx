@@ -5,14 +5,20 @@ import { GenerationProgress } from "@/components/states/GenerationState";
 import { GridPreview } from "./GridPreview";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { SlideTextEditor } from "./SlideTextEditor";
-import { MAX_STUDIO_PHOTOS, activeSlideIndex, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState, type StudioPhoto } from "@/features/images/generationStore";
+import { LibraryFilterBar } from "./LibraryFilterBar";
+import type { LibraryAsset } from "@/features/images/freeCards";
+import { filterLibrary, popularTags, usageLabel, type LibrarySort } from "@/features/images/libraryFilter";
+import { MAX_STUDIO_PHOTOS, activeSlideIndex, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, recordPhotoUse, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
 // 실제 사진 여러 장으로 캐러셀을 만드는 화면. 상태는 generationStore에 있고, 이 컴포넌트는 보여 주고 버튼을 잇는다.
 // 1) 사진 고르기(새로 올리기 또는 사진 보관함에서) → 2) 캐러셀 만들기(구성안 + 사진 배치 + 카드 그리기)
 // → 3) 장마다 사진 바꾸기 → 4) 사용. 카드로 꾸미지 않고 사진 그대로 쓰는 길도 남겨 둔다.
 export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:GenerationState;slideCount:number;onApprove:(images:ApprovedImage[])=>void}) {
   const inputRef=useRef<HTMLInputElement>(null);
-  const [library,setLibrary]=useState<StudioPhoto[]|null>(null);
+  const [library,setLibrary]=useState<LibraryAsset[]|null>(null);
+  // 보관함 찾기·정렬. 기본은 "안 쓴 사진 먼저"라 같은 사진만 반복해 올리지 않게 돕는다.
+  const [query,setQuery]=useState("");
+  const [sort,setSort]=useState<LibrarySort>("unused");
   const [libraryError,setLibraryError]=useState("");
   const {photos,photoStatus,phase,slides,plan,planFallback,photoAssignment,approved}=state;
   const busy=phase!=="idle";
@@ -28,7 +34,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       const response=await fetch("/api/images/assets");
       const data=await readJsonResponse(response);
       if(!response.ok)throw new Error(data.message);
-      setLibrary((data.assets as Array<{id:string;preview:string;name:string;kind:string}>).filter(asset=>asset.kind==="photo").map(({id,preview,name})=>({id,preview,name})));
+      setLibrary((data.assets as LibraryAsset[]).filter(asset=>asset.kind==="photo"));
     }catch(caught){setLibraryError(caught instanceof Error&&caught.message?caught.message:"사진 보관함을 불러오지 못했어요.");}
   };
 
@@ -43,7 +49,10 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       </div>
     </div>
     {libraryError&&<p role="alert">{libraryError}</p>}
-    {library&&<div className="photo-library" aria-label="사진 보관함">{library.length?library.map(photo=><button key={photo.id} type="button" className="photo-thumb" disabled={busy||photos.some(item=>item.id===photo.id)} onClick={()=>addLibraryPhoto(photo)} aria-label={`${photo.name} 추가`}><Image src={photo.preview} alt="" width={96} height={96} unoptimized/></button>):<p className="field-help">보관함에 저장된 사진이 아직 없어요. 사진을 올리면 다음에도 여기서 고를 수 있어요.</p>}</div>}
+    {library&&(library.length?<div className="library-picker">
+      <LibraryFilterBar query={query} onQuery={setQuery} sort={sort} onSort={setSort} tags={popularTags(library)} count={filterLibrary(library,query,sort).length}/>
+      <div className="photo-library" aria-label="사진 보관함">{filterLibrary(library,query,sort).map(photo=><button key={photo.id} type="button" className="photo-thumb library-thumb" disabled={busy||photos.some(item=>item.id===photo.id)} onClick={()=>addLibraryPhoto({id:photo.id,preview:photo.preview,name:photo.name})} aria-label={`${photo.name} 추가 (${usageLabel(photo)})`} title={`${photo.name} · ${photo.tags.join(", ")}`}><Image src={photo.preview} alt="" width={96} height={96} unoptimized/><span>{photo.useCount?`${photo.useCount}번`:"새 사진"}</span></button>)}</div>
+    </div>:<p className="field-help">보관함에 저장된 사진이 아직 없어요. 사진을 올리면 다음에도 여기서 고를 수 있어요.</p>)}
     {photos.length>0&&<ol className="photo-strip" aria-label="고른 사진">{photos.map((photo,index)=><li key={photo.id}>
       <Image src={photo.preview} alt={photo.name} width={110} height={110} unoptimized/>
       <span className="photo-order">{index===0?"표지":index+1}</span>
@@ -76,7 +85,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       {done&&plan?.slides[activeIndex]&&<SlideTextEditor key={`${activeIndex}|${plan.slides[activeIndex].headline}|${(plan.slides[activeIndex].points??[]).join("|")}`} index={activeIndex} headline={plan.slides[activeIndex].headline} points={plan.slides[activeIndex].points??[]} busy={busy} canEdit={canEditSlideText(state,activeIndex)}/>}
       {done&&<div className="photo-studio-actions">
         <button type="button" className="button secondary" disabled={busy} onClick={()=>void buildPhotoCarousel()}>다시 만들기</button>
-        <button type="button" className="button primary" disabled={approved||busy} onClick={()=>{markApproved();onApprove(slides);}}>이 캐러셀 사용</button>
+        <button type="button" className="button primary" disabled={approved||busy} onClick={()=>{markApproved();onApprove(slides);recordPhotoUse(photoAssignment.flat().map(i=>photos[i]?.id));}}>이 캐러셀 사용</button>
       </div>}
     </>}
   </div>;

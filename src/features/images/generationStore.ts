@@ -393,9 +393,17 @@ export async function editSlideText(index:number,edit:SlideTextEdit){
   }
 }
 
+// 게시물에 쓴 보관함 사진의 사용 횟수를 올린다(보관함 "자주 쓴 순"·"안 쓴 사진 먼저" 정렬용).
+// 실패해도 게시물 만들기에는 영향이 없으므로 기다리지 않고 조용히 넘어간다.
+export function recordPhotoUse(ids:Array<string|undefined>){
+  const unique=[...new Set(ids.filter((id):id is string=>!!id))].slice(0,10);
+  if(unique.length)void fetch("/api/images/assets/used",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:unique})}).catch(()=>undefined);
+}
+
 // 카드로 꾸미지 않고 올린 사진 그대로 캐러셀로 쓴다.
 export function approveRawPhotos(onApprove:(images:ApprovedImage[])=>void){
   if(!state.photos.length)return;
   patch({approved:true});
   onApprove(state.photos.map(photo=>({id:photo.id,preview:photo.preview,source:"photo"})));
+  recordPhotoUse(state.photos.map(photo=>photo.id));
 }

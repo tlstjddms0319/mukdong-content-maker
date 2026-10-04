@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import sharp from "sharp";
@@ -45,11 +45,28 @@ export function createAssetLibrary(root=process.env.DATA_DIR??path.join(process.
       try{preview=await sharp(Buffer.from(await file.arrayBuffer()),{limitInputPixels:40_000_000}).rotate().resize(1400,1400,{fit:"inside",withoutEnlargement:true}).flatten({background:"#f5f1e8"}).jpeg({quality:88}).toBuffer();}
       catch{throw new MediaValidationError("읽을 수 있는 이미지 파일을 골라 주세요. 최대 4천만 화소까지 지원해요.");}
       const original=await createMediaStore(root).saveOriginal(file);
-      return save({...metadata,id:original.id,preview:`data:image/jpeg;base64,${preview.toString("base64")}`,createdAt:new Date().toISOString(),lastUsedAt:null});
+      return save({...metadata,id:original.id,preview:`data:image/jpeg;base64,${preview.toString("base64")}`,createdAt:new Date().toISOString(),lastUsedAt:null,useCount:0});
     },
     async markUsed(ids:string[]) {
       const now=new Date().toISOString();
-      for(const id of ids){const asset=await read(id);if(asset)await save({...asset,lastUsedAt:now});}
+      for(const id of new Set(ids)){const asset=await read(id);if(asset)await save({...asset,lastUsedAt:now,useCount:asset.useCount+1});}
+    },
+    // 이름·검색어 고치기(사진 보관함 관리). 없는 사진이면 null.
+    async update(id:string,changes:Partial<Pick<AssetDetails,"name"|"tags">>):Promise<LibraryAsset|null> {
+      const asset=await read(id);
+      if(!asset)return null;
+      const details=AssetDetailsSchema.parse({...asset,...changes});
+      return save({...asset,name:details.name,tags:details.tags});
+    },
+    // 보관함에서 빼기. 보관함 목록 정보만 지우고, 처음 올린 원본 파일(originals)은 만일을 위해 남겨 둔다.
+    // 이미 만든 초안·카드는 사진을 따로 담고 있어 영향이 없다.
+    async remove(id:string):Promise<boolean> {
+      z.string().uuid().parse(id);
+      if(!(await read(id)))return false;
+      const remote=remoteStore();
+      if(remote)await remote.remove(`asset-library/${id}.json`);
+      else await rm(path.join(folder,`${id}.json`),{force:true});
+      return true;
     },
   };
 }

@@ -11,6 +11,8 @@ export const AssetDetailsSchema=z.object({
 export const LibraryAssetSchema=AssetDetailsSchema.extend({
   id:z.string().uuid(),preview:z.string().startsWith("data:image/jpeg;base64,").max(6_000_000),
   createdAt:z.string().datetime(),lastUsedAt:z.string().datetime().nullable(),
+  // 게시물에 쓴 횟수(사진 보관함의 "자주 쓴 사진" 정렬용). 예전에 저장한 사진에는 없으므로 0부터.
+  useCount:z.number().int().min(0).default(0),
 });
 export type LibraryAsset=z.infer<typeof LibraryAssetSchema>;
 export type AssetDetails=z.infer<typeof AssetDetailsSchema>;
