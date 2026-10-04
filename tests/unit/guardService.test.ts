@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { checkTextClaims } from "@/features/guard/service";
 
 describe("claim guard", () => {
-  it.each(["흑산도 홍어", "냄새 없음", "누구나 먹음", "삭힘 선택 가능"])("blocks unsupported claim: %s", (text) => {
+  it.each(["흑산도 홍어", "냄새 없음", "누구나 먹음", "삭힘 선택 가능", "홍어는 누구나 좋아해요", "향이 전혀 없어요"])("blocks unsupported claim: %s", (text) => {
     expect(checkTextClaims(text).blocked).toHaveLength(1);
   });
 
