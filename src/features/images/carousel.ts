@@ -82,7 +82,7 @@ const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role"|"layout"
   pairing:{headline:"같이 놓으면 맛이 잡히는 조합이에요",points:["곁들임이 맛의 균형을 잡아 줘요","음료는 담백한 것이 잘 어울려요","이제 가기 전에 확인할 것만 남았어요"],visualPrompt:"핵심 음식과 잘 어울리는 음료와 곁들임을 대각선 구도로 담은 식탁. 잔을 든 손과 젓가락이 함께 보이고 얼굴 없음",textPosition:"bottom"},
   process:{headline:"손질부터 담음새까지 이렇게 준비해요",points:["재료를 손질해 접시에 가지런히 담아요","한 접시씩 순서대로 준비해요","이렇게 나온 한 상을 다음 장에서 볼게요"],visualPrompt:"깨끗한 손이 재료를 접시에 가지런히 담는 준비 과정을 옆 각도에서 담은 사진. 얼굴 없음",textPosition:"top"},
   occasion:{headline:"여럿이 나눠 먹을 때 더 좋은 자리예요",points:["가운데 한 상을 두고 각자 한 점씩 집어요","이야기하면서 천천히 먹기 좋은 구성이에요","분위기가 어떤지 이어서 볼게요"],visualPrompt:"여럿이 둘러앉은 식탁을 옆에서 담은 사진. 한 상을 향해 뻗은 여러 손과 잔이 보이고, 사람은 뒷모습이나 어깨까지만 나오고 얼굴 없음",textPosition:"bottom"},
-  mood:{headline:"서두르지 않아도 되는 저녁이에요",points:["부드러운 조명 아래 한 상 앞에서 쉬어 가요","한 점씩 천천히 먹어도 괜찮은 자리예요","가기 전에 확인할 것만 남았어요"],visualPrompt:"부드러운 저녁 조명 아래 한 상을 넓은 여백과 함께 담은 식탁 사진. 테이블 끝에 잔을 든 손이 보이고 얼굴 없음",textPosition:"top"},
+  mood:{headline:"서두르지 않아도 되는 저녁이에요",points:["부드러운 조명 아래 한 상 앞에서 쉬어 가요","한 점씩 천천히 먹어도 괜찮은 자리예요","마지막으로 방문 전에 볼 것만 정리해요"],visualPrompt:"부드러운 저녁 조명 아래 한 상을 넓은 여백과 함께 담은 식탁 사진. 테이블 끝에 잔을 든 손이 보이고 얼굴 없음",textPosition:"top"},
   visit:{headline:"가기 전에 이것만 확인하면 돼요",points:["메뉴 구성은 프로필의 플레이스에서 확인해요","처음이라면 직원에게 편하게 물어봐도 돼요","저장해 두면 다음에 찾기 편해요"],visualPrompt:"푸짐하고 편안한 완성 상차림을 눈높이에서 담은 사진. 마주 앉은 사람의 손이 젓가락을 들고 있고 얼굴 없음, 매장 외관 없음",textPosition:"bottom"},
   cta:{headline:"다음 한 점은 직접 확인해 보세요",points:["저장해 두면 다음 방문 때 편해요","궁금한 점은 댓글로 남겨 주세요"],visualPrompt:"비어 가는 접시 가장자리와 마지막 한 점을 대비해 담은 사진. 접시를 향한 젓가락과 손만 보이고 얼굴 없음",textPosition:"bottom"},
 };

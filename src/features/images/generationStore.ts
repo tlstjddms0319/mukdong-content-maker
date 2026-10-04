@@ -155,6 +155,13 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
   }
 }
 
+// 서버가 구성안 문안을 한 번 더 검수해 고쳤으면(planReview.ts) 몇 곳을 다듬었는지 한 줄로 알려 준다.
+function reviewNotice(review?:{applied?:boolean;before?:number;after?:number}|null):Partial<GenerationState> {
+  if(!review?.applied)return {};
+  const fixed=Math.max(0,(review.before??0)-(review.after??0));
+  return {providerNotice:fixed?`AI가 카드 문안을 한 번 더 검수해 ${fixed}곳을 다듬었어요.`:"AI가 카드 문안의 흐름을 한 번 더 다듬었어요."};
+}
+
 export async function startPlan(){
   const token=++run;
   patch({...CLEARED,phase:"planning"});
@@ -167,7 +174,7 @@ export async function startPlan(){
     const next=data.plan as CarouselPlan;
     // 기본 문안은 주제와 무관한 일반 문장이라, 그걸로 이미지를 만들어 크레딧을 쓰기 전에 멈추고 알린다.
     if(data.provider==="fallback"){patch({plan:next,planFallback:true,phase:"idle"});return;}
-    patch({plan:next,planFallback:false});
+    patch({plan:next,planFallback:false,...reviewNotice(data.review)});
     void requestCovers(next,token);
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"구성안을 만들지 못했습니다.",phase:"idle"});
@@ -294,7 +301,7 @@ export async function buildPhotoCarousel(){
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
     const fit=fitPlanToPhotos(data.plan as CarouselPlan,state.photos.length);
     // 기본 문안이어도 비용이 들지 않으니 멈추지 않고, 안내만 남긴다.
-    patch({plan:fit.plan,planFallback:data.provider==="fallback",photoAssignment:fit.assignment,phase:"slides"});
+    patch({plan:fit.plan,planFallback:data.provider==="fallback",photoAssignment:fit.assignment,phase:"slides",...reviewNotice(data.review)});
     let next:ApprovedImage[]=[];
     for(let i=0;i<fit.plan.slides.length;i++){
       const card=await composePhotoSlide(fit.plan,i,fit.assignment[i]);

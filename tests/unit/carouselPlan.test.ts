@@ -41,6 +41,18 @@ describe("carousel planning", () => {
     expect(plan.slides[0].headline).toContain("비 오는 날 홍어");
   });
 
+  it("reviews an AI plan once more and applies the cleaner wording", async () => {
+    const clean=createFallbackCarouselPlan({topic:"비 오는 날 홍어",slideCount:5});
+    const cliche={...clean,slides:clean.slides.map((slide,i)=>i===1?{...slide,headline:"풍미 가득 홍어의 세계"}:slide)};
+    // 첫 호출은 구성안, 두 번째 호출은 검수 결과(제목·요점만).
+    generateJson.mockResolvedValueOnce(cliche).mockResolvedValueOnce({slides:clean.slides.map(slide=>({headline:slide.headline,points:slide.points}))});
+    const response=await POST(new Request("http://localhost/api/images/plan",{method:"POST",body:JSON.stringify({topic:"비 오는 날 홍어"})}));
+    const body=await response.json();
+    expect(body.review).toMatchObject({applied:true,after:0});
+    expect(body.plan.slides[1].headline).toBe(clean.slides[1].headline);
+    expect(String(generateJson.mock.calls[1][0])).toContain("광고 상투어 '풍미 가득'");
+  });
+
   it("rejects a provider plan with the wrong requested count", async () => {
     const wrongCount=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:3});
     const plan=await planCarousel({topic:"홍어 한 점",slideCount:5},{generate:async()=>wrongCount});
