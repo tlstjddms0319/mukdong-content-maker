@@ -4,7 +4,7 @@ import { STYLE_FONTS, contentOf, fitText } from "./shared";
 
 // 오마카세·하이엔드 미니멀: 따뜻한 베이지(또는 흰) 바탕에 여백을 크게 두고, 가운데에 작고 정갈한 사진 한 장.
 // 가는 명조로 제목을 시 한 구절처럼, 요점은 짧은 줄로 가운데 정렬. 장식은 가는 세로선과 장 번호 "— 03 —"뿐.
-const SURFACES=[{bg:"#F4EFE6",ink:"#2B2622",dim:"#8A8075",line:"#B9AE9F"},{bg:"#FBFAF7",ink:"#1F1F1D",dim:"#85827B",line:"#C9C5BC"},{bg:"#1E1C1A",ink:"#EFE9DF",dim:"#A39B8F",line:"#5A544C"}] as const;
+const SURFACES=[{bg:"#F4EFE6",ink:"#2B2622",dim:"#6B6258",line:"#B9AE9F"},{bg:"#FBFAF7",ink:"#1F1F1D",dim:"#66635D",line:"#C9C5BC"},{bg:"#1E1C1A",ink:"#EFE9DF",dim:"#A39B8F",line:"#5A544C"}] as const;
 
 export const renderOmakase:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);

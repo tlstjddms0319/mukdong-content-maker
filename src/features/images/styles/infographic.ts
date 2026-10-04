@@ -6,7 +6,7 @@ import { STYLE_FONTS, contentOf, fitText , snap } from "./shared";
 // 인포그래픽·도감: 모눈종이 바탕에 "홍어 도감 No.03" 표제, 둥근 사진에서 점선 지시선을 뽑아 부위·특징 설명을 단다.
 // 사진이 없는 장은 요점을 단계(1단계 → 2단계 …)로 이어 붙인 점선 흐름도로, 두 장이면 A·B 비교 도감으로 그린다.
 // 구석에 마스코트를 작게 넣어 도감 속 귀여운 일러스트 역할을 맡긴다.
-const PAPER="#F6F5EE",GRID="#CFE0D8",GRID_MAJOR="#A9C9BC",INK="#22313F",ACCENT="#E4572E",SOFT="#FFF3C4";
+const PAPER="#F6F5EE",GRID="#CFE0D8",GRID_MAJOR="#A9C9BC",INK="#22313F",ACCENT="#C8401A",SOFT="#FFF3C4";
 
 function graphPaper():string {
   let d="",D="";

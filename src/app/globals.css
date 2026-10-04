@@ -315,3 +315,10 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .photo-swap { display:grid; gap:8px; }
 .photo-swap .photo-thumb { width:80px; height:80px; }
 @media (max-width:600px){ .photo-strip li { width:88px; height:88px; } .photo-thumb { width:76px; height:76px; } }
+
+/* 인스타 프로필 격자 미리보기(GridPreview): 표지를 3:4로 잘라 가운데 칸에, 양옆은 빈 칸 */
+.grid-preview { margin:12px 0 0; display:grid; gap:6px; justify-items:start; }
+.grid-preview-cells { display:grid; grid-template-columns:repeat(3,72px); gap:2px; }
+.grid-preview-cells span { aspect-ratio:3/4; background:#e7e4dd; }
+.grid-preview-cells .grid-preview-cover { background-size:cover; background-position:center; }
+.grid-preview figcaption { color:var(--muted); font-size:13px; }

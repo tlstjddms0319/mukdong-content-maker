@@ -123,7 +123,7 @@ describe("readable ink on fixed surfaces", () => {
     expect(inkOn("#ffffff",PALETTES.warm.colors)).toBe(PALETTES.warm.colors.ink);
     expect(inkOn("#ffffff",PALETTES.night.colors)).toBe("#22272a");
     expect(inkOn(PALETTES.night.colors.soft,PALETTES.night.colors)).toBe(PALETTES.night.colors.ink);
-    expect(mutedOn("#eef0f1",PALETTES.night.colors)).toBe("#6d746f");
+    expect(mutedOn("#eef0f1",PALETTES.night.colors)).toBe("#5c635f");
     // 밤 팔레트의 비교형 왼쪽 면과 단계형 흰 상자에는 짙은 글자가 찍힌다(연한 면 위 어두운 픽셀이 생긴다).
     const a=await picture("#202020"),b=await picture("#2040a0");
     const versus=await composeSlideImage([a,b],{...body,layout:"versus",keywords:["홍어","가오리"],points:["코가 뾰족해요","톡 쏘는 향이 있어요","코가 둥글어요","살이 부드러워요"]},3,5,"card",{palette:"night"});

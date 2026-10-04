@@ -31,7 +31,7 @@ export async function renderFreeCard(value:FreeCardInput,available:LibraryAsset[
     const width=layout==="compare"?460:952,height=516;
     for(const [index,asset] of assets.entries()){
       const x=64+index*492;
-      const image=await sharp(Buffer.from(asset.preview.split(",")[1],"base64"),{limitInputPixels:40_000_000}).resize(width,height,{fit:"cover"}).jpeg({quality:92}).toBuffer();
+      const image=await sharp(Buffer.from(asset.preview.split(",")[1],"base64"),{limitInputPixels:40_000_000}).resize(width,height,{fit:"cover",position:"attention"}).jpeg({quality:92}).toBuffer();
       layers.push({input:image,left:x,top:488});
       await text(`${ASSET_KIND_LABELS[asset.kind]} · ${asset.name}`,x,488+height+20,width,50,24,muted);
     }

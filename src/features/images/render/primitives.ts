@@ -1,3 +1,4 @@
+import { registerText } from "./audit";
 import sharp, { type OverlayOptions } from "sharp";
 import path from "node:path";
 import { access } from "node:fs/promises";
@@ -52,7 +53,10 @@ function resolveFont(role:Font):Font {
 }
 
 // ── 글자 ──────────────────────────────────────────────────────────────────────────────
-type TextStyle={size:number;color:string;width:number;height:number;font?:Font;align?:"left"|"centre";spacing?:number};
+// shadow: 사진 위에 얹는 글자용. 같은 글자를 검게 흐리게 한 그림자를 아래에 깔아 밝은 사진에서도 읽히게 한다.
+// 그림자가 번질 자리만큼 사방에 SHADOW_PAD를 더 붙여 돌려준다(위치 계산에는 거의 영향이 없다).
+type TextStyle={size:number;color:string;width:number;height:number;font?:Font;align?:"left"|"centre";spacing?:number;shadow?:boolean};
+const SHADOW_PAD=10;
 export type Layer={data:Buffer;info:{width:number;height:number}};
 
 // Pango는 한글 음절 사이 어디서든 줄을 바꿔 "놀\n랄까요?"처럼 단어가 잘린다. 공백이 아닌 글자 사이에
@@ -63,8 +67,25 @@ const breakOnlyAtSpaces=(value:string)=>value.replace(/(\S)(?=\S)/g,"$1⁠");
 export async function textLayer(value:string,style:TextStyle):Promise<Layer> {
   const font=resolveFont(style.font??FONTS.bold);
   await access(font.file);
-  return sharp({text:{text:`<span foreground="${style.color}">${escapeXml(breakOnlyAtSpaces(value))}</span>`,font:`${font.family} ${style.size}`,fontfile:font.file,width:Math.round(style.width),wrap:"word-char",align:style.align??"left",spacing:style.spacing??12,rgba:true}})
+  const layer=await sharp({text:{text:`<span foreground="${style.color}">${escapeXml(breakOnlyAtSpaces(value))}</span>`,font:`${font.family} ${style.size}`,fontfile:font.file,width:Math.round(style.width),wrap:"word-char",align:style.align??"left",spacing:style.spacing??12,rgba:true}})
     .resize({width:Math.round(style.width),height:Math.round(style.height),fit:"inside",withoutEnlargement:true})
+    .png().toBuffer({resolveWithObject:true});
+  const result=style.shadow?await withShadow(layer,value,style,font):layer;
+  // 자동 검수(render/audit.ts)가 이 버퍼를 "글자"로 알아보도록 등록한다.
+  registerText(result.data,{width:result.info.width,height:result.info.height,color:style.color,size:style.size,...(style.shadow?{mask:layer.data,maskOffset:SHADOW_PAD}:{})});
+  return result;
+}
+
+async function withShadow(layer:Layer,value:string,style:TextStyle,font:Font):Promise<Layer> {
+  const dark=await textLayer(value,{...style,color:"#000000",font,shadow:false});
+  const P=SHADOW_PAD;
+  // 검은 글자를 살짝 번지게(blur) 한 뒤 알파를 세게 키워 획 둘레 3px 정도의 진한 테두리를 만들고,
+  // 다시 부드럽게 풀어 92% 농도로 깐다. 자막처럼 흰 사진 위에서도 글자 둘레가 어두워져 읽힌다.
+  const shadow=await sharp(dark.data).extend({top:P,bottom:P,left:P,right:P,background:{r:0,g:0,b:0,alpha:0}})
+    .blur(2.5).ensureAlpha().linear([1,1,1,3.2],[0,0,0,0]).png().toBuffer()
+    .then(buffer=>sharp(buffer).blur(1.4).linear([1,1,1,.92],[0,0,0,0]).png().toBuffer());
+  return sharp({create:{width:layer.info.width+P*2,height:layer.info.height+P*2,channels:4,background:{r:0,g:0,b:0,alpha:0}}})
+    .composite([{input:shadow,left:0,top:1},{input:layer.data,left:P,top:P}])
     .png().toBuffer({resolveWithObject:true});
 }
 
@@ -249,8 +270,10 @@ export function photoOverlayLayer():OverlayOptions {
 
 // ── 사진·캔버스 ─────────────────────────────────────────────────────────────────────────
 // 모서리를 둥글게 자른 사진 레이어. radius는 테마에 맞게 바뀌고(잡지·포스터는 각지게), 포스터는 굵은 테두리를 두른다.
-export async function croppedPhoto(input:Buffer,width:number,height:number,radius:number,options:{circle?:boolean}={}){
-  const photo=await sharp(input).rotate().resize(width,height,{fit:"cover"}).png().toBuffer();
+export async function croppedPhoto(input:Buffer,rawWidth:number,rawHeight:number,radius:number,options:{circle?:boolean}={}){
+  // 레이아웃 계산에서 소수가 섞여 와도(긴 문안일 때 높이의 절반 등) sharp가 받을 수 있게 정수로 맞춘다.
+  const width=Math.max(1,Math.round(rawWidth)),height=Math.max(1,Math.round(rawHeight));
+  const photo=await sharp(input).rotate().resize(width,height,{fit:"cover",position:"attention"}).png().toBuffer();
   const store=renderStore.getStore();
   const r=options.circle?Math.min(width,height)/2:kit().photoRadius(radius);
   const stroke=store?kit().photoStroke(store.palette):null;

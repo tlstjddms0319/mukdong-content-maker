@@ -45,7 +45,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 사장님이 올린 실제 사진으로 만드는 장: 이미지 AI 없이 그 사진들로 바로 카드를 그린다.
     if(parsed.data.slide&&parsed.data.photos?.length){
       const originals=await Promise.all(parsed.data.photos.map(imageBytes));
-      const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design);
+      const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,{enhance:true});
       return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"photo",provider:"none",fallback:false});
     }
     const settings:AppSettings=(await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 무료 이미지 경로만 사용합니다:",error instanceof Error?error.message:String(error));return null;}))

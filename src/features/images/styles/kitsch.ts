@@ -36,7 +36,7 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
   deco+=burst(bx+8,by+10,brx,bry,"#111")+burst(bx,by,brx,bry,"#FFE600");
   const shoutTilt=await rotated(shoutText.data,content.cover?-4:8);
   // 제목: 노란 글자 + 빨간 외곽선 + 검은 그림자. 화면 폭을 꽉 채운다.
-  const titleTop=by+bry+30;
+  const titleTop=Math.round(by+bry+30);
   const hasPhoto=inputs.length>0;
   const title=await fitOutlined(content.headline,{sizes:content.cover?[118,104,92,82]:[96,86,76,68,60],maxHeight:hasPhoto?(content.cover?360:300):420,width:W,font:STYLE_FONTS.heavy,fill:v%2?"#FFFFFF":"#FFE600",stroke:"#E8001C",strokeWidth:10,align:"centre",shadow:"#111111"});
   layers.push({input:title.data,left:Math.round((1080-title.info.width)/2),top:titleTop});
@@ -46,7 +46,7 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
   const pointsRoom=content.points.length?Math.min(3,content.points.length)*92+20:0;
   if(hasPhoto){
     const shots=inputs.slice(0,2);
-    const PH=Math.max(300,Math.min(560,footerTop-y-pointsRoom-40)),PW=shots.length>1?440:Math.round(PH*1.25);
+    const PH=Math.round(Math.max(300,Math.min(560,footerTop-y-pointsRoom-40))),PW=shots.length>1?440:Math.round(PH*1.25);
     for(const [i,shot] of shots.entries()){
       const photo=await croppedPhoto(shot,PW,PH,0);
       const framed=await sharp({create:{width:PW+48,height:PH+48,channels:4,background:"#E8001C"}}).composite([{input:svgFrame(PW+48,PH+48),left:0,top:0},{input:photo,left:24,top:24}]).png().toBuffer();
