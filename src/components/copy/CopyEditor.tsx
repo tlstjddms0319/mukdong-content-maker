@@ -18,15 +18,6 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
   const [factsToVerify,setFactsToVerify]=useState<string[]>([]);
   // AI가 함께 준 첫 문장 후보(질문형·장면형·비교형). 누르면 지금 첫 문장 자리에 바꿔 끼운다.
   const [hookOptions,setHookOptions]=useState<string[]>([]);
-  const applyHook=(option:string)=>{
-    const section=copySection(text,"hook");
-    if(!section)return;
-    const previous=text.slice(section.start,section.end);
-    const next=text.slice(0,section.start)+option+text.slice(section.end);
-    edited.current=true;setText(next);onTextChange?.(next);
-    // 바꾼 원래 첫 문장은 후보 목록에 남겨 다시 고를 수 있게 한다.
-    setHookOptions(current=>current.map(item=>item===option?previous:item));
-  };
   const writingIssues=copyTextIssues(text);
   const facts=[...new Set([...factsToVerify,...checkTextClaims(text).verify])];
   const disclosureMissing=hasAiImages&&!text.includes(AI_IMAGE_DISCLOSURE);
@@ -57,6 +48,15 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
       .catch(reason=>{if(active){setStatus("fallback");setError(reason instanceof Error?reason.message:"문안을 만들지 못했어요. 다시 시도해 주세요.");}});
     return ()=>{active=false;runCounter.current++;};
   },[topic,audience,contentBrief,imageBrief,hasAiImages,outlineKey,onTextChange]);
+  const applyHook=(option:string)=>{
+    const section=copySection(text,"hook");
+    if(!section)return;
+    const previous=text.slice(section.start,section.end);
+    const next=text.slice(0,section.start)+option+text.slice(section.end);
+    edited.current=true;setText(next);onTextChange?.(next);
+    // 바꾼 원래 첫 문장은 후보 목록에 남겨 다시 고를 수 있게 한다.
+    setHookOptions(current=>current.map(item=>item===option?previous:item));
+  };
   return <section className="copy-layout" aria-labelledby="copy-title"><div>
     <p className="eyebrow">3 문안</p><h2 id="copy-title">완성된 글을 확인해요</h2><p className="lead">음식 이야기에서 묵동홍어마을 방문 안내까지 자연스럽게 이어가요. 글 길이는 설정에서 바꿀 수 있어요.</p>
     {contentBrief&&<p className="copy-brief"><strong>글의 설명 방향</strong><br/>{contentBrief}</p>}

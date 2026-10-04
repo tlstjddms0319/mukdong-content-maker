@@ -115,9 +115,12 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
       const requestedAudience=requestedAudienceValue==="B"||requestedAudienceValue==="C"?requestedAudienceValue:"A";
       const requestedImageBriefValue=query.get("imageBrief")?.trim()??"";
       const requestedImageBrief=requestedImageBriefValue.length<=500?requestedImageBriefValue:"";
+      // 한 달 기획에서 시작하면 주제 설명(brief)도 함께 넘어와 문안·구성안의 설명 방향이 된다.
+      const requestedBriefValue=query.get("brief")?.trim()??"";
+      const requestedBrief=requestedBriefValue.length<=600?requestedBriefValue:"";
       if(!requestedId&&requestedTopic&&requestedTopic.length<=120){
         localStorage.removeItem("mukdong-current-draft");
-        changeTopic(requestedTopic,requestedAudience,requestedImageBrief);
+        changeTopic(requestedTopic,requestedAudience,requestedImageBrief,false,requestedBrief);
         setStep("topic");
         return;
       }

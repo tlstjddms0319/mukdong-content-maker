@@ -334,3 +334,16 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .hook-options { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
 .hook-options>span { width:100%; color:var(--muted); font-size:13px; }
 .hook-options .button { text-align:left; white-space:normal; }
+
+/* 한 달 콘텐츠 기획(MonthPlanner) */
+.month-planner { margin:24px 0; padding:20px; border:1px solid var(--line); border-radius:var(--panel-radius); background:white; display:grid; gap:14px; }
+.month-planner-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:flex-end; }
+.month-planner-head h2 { margin:0 0 4px; }
+.month-planner-head p { margin:0; color:var(--muted); }
+.month-planner-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.month-plan-list { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+.month-plan-item { display:grid; grid-template-columns:90px 1fr auto; gap:12px; align-items:start; padding:12px; border:1px solid var(--line); border-radius:12px; }
+.month-plan-item.done { opacity:.7; }
+.month-plan-item p { margin:4px 0 8px; color:var(--muted); font-size:14px; }
+.month-plan-date { font-weight:700; }
+@media (max-width:700px){ .month-plan-item { grid-template-columns:1fr; } }
