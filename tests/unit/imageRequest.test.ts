@@ -69,6 +69,10 @@ describe("OpenAI image request", () => {
     expect(body.referenceImages).toHaveLength(1);
     expect(body.referenceImages[0]).not.toBe(body.images[0]);
     expect(await sharp(Buffer.from(body.referenceImages[0].split(",")[1],"base64")).metadata()).toMatchObject({width:40,height:40});
+    // 카드 글자만 고쳐 다시 그릴 수 있게 글자 없는 밑바탕도 함께 돌려준다.
+    expect(body.baseImages).toHaveLength(1);
+    expect(body.baseImages[0]).toHaveLength(1);
+    expect(await sharp(Buffer.from(body.baseImages[0][0].split(",")[1],"base64")).metadata()).toMatchObject({width:40,height:40,format:"jpeg"});
   });
   beforeEach(()=>{
     generateImage.mockReset();

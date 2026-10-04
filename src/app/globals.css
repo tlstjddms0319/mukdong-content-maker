@@ -448,3 +448,13 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .ai-check-list { display:grid; gap:8px; width:100%; margin:0; padding:0; list-style:none; }
 .ai-check-list p { margin:2px 0 0; overflow-wrap:anywhere; }
 .status-dot.muted { background:#c9cbc4; }
+/* 카드 글자 직접 고치기(접어 둔다) */
+.slide-text-editor { display:grid; gap:8px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+.slide-text-editor summary { min-height:44px; display:flex; align-items:center; cursor:pointer; font-weight:800; }
+.slide-text-editor summary::before { content:"＋"; margin-right:8px; color:var(--accent); }
+.slide-text-editor[open] summary::before { content:"－"; }
+.slide-text-editor label { font-weight:700; font-size:14px; }
+.slide-text-editor label small { color:var(--muted); font-weight:500; }
+.slide-text-editor input, .slide-text-editor textarea { width:100%; min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:var(--control-radius); font:inherit; background:#fff; }
+.slide-text-editor textarea { resize:vertical; line-height:1.6; }
+.slide-text-editor [role="alert"] { margin:0; color:#a33d32; }

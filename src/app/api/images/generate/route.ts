@@ -24,6 +24,12 @@ const HIGGSFIELD_MESSAGES:Record<HiggsfieldImageError["reason"],string>={
   failed:"이미지 생성에 실패했습니다. 잠시 뒤 다시 시도하거나 직접 사진을 넣어 주세요.",
 };
 
+// 글자를 얹기 전 밑바탕 사진(카드 글자 직접 고치기용). 화면이 들고 있다가 글자만 바꿔 다시 그릴 때 photos로 보낸다.
+async function baseImage(original:Buffer):Promise<string> {
+  const base=await sharp(original).rotate().resize({width:1440,height:1440,fit:"inside",withoutEnlargement:true}).jpeg({quality:88}).toBuffer();
+  return `data:image/jpeg;base64,${base.toString("base64")}`;
+}
+
 async function imageBytes(source:string):Promise<Buffer> {
   const data=source.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
   if(data)return Buffer.from(data[1],"base64");
@@ -50,7 +56,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 사장님이 올린 실제 사진으로 만드는 장: 이미지 AI 없이 그 사진들로 바로 카드를 그린다.
     if(parsed.data.slide&&parsed.data.photos?.length){
       const originals=await Promise.all(parsed.data.photos.map(imageBytes));
-      const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,{...cardOptions,enhance:true});
+      const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,{...cardOptions,enhance:parsed.data.enhance??true});
       return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"photo",provider:"none",fallback:false});
     }
 
@@ -94,11 +100,14 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 점검은 순서와 경고 배지에만 쓰고 다시 만들지는 않는다. 키가 없거나 실패하면 null(점검 없음).
     const checks=parsed.data.slide?.role==="cover"&&images.length>1?await checkCoverCandidates(await Promise.all(images.map(imageBytes))):null;
     const referenceImages:string[]=[];
+    // 결과 이미지마다 그 카드를 그린 밑바탕 사진들(콜라주는 여러 장).
+    let baseImages:string[][]=[];
     // 콜라주·비교처럼 사진 여러 장을 쓰는 레이아웃은 만든 사진을 모두 한 카드에 넣는다.
     if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&photosNeeded(normalizeCardLayout(parsed.data.slide))>1&&images.length>1){
       const originals=await Promise.all(images.map(imageBytes));
       const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design,cardOptions);
       images=[`data:image/jpeg;base64,${composed.toString("base64")}`];
+      baseImages=[await Promise.all(originals.map(baseImage))];
     }else if(parsed.data.slide)images=await Promise.all(images.map(async (source,index)=>{
       const slideIndex=parsed.data.slideIndex ?? index+1;
       const slideTotal=parsed.data.slideTotal ?? parsed.data.count;
@@ -108,6 +117,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
         referenceImages[index]=`data:image/jpeg;base64,${reference.toString("base64")}`;
       }
       const composed=await composeSlideImage(original,parsed.data.slide!,slideIndex,slideTotal,parsed.data.slideLayout,parsed.data.design,cardOptions);
+      baseImages[index]=[await baseImage(original)];
       return `data:image/jpeg;base64,${composed.toString("base64")}`;
     }));
     // 점검 결과가 있으면 점수가 높은(경고가 적은) 후보를 앞에 둔다. 참고 원본도 같은 순서로 맞춘다.
@@ -115,9 +125,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
       const order=checks.map((check,index)=>({index,rank:coverRank(check)})).sort((a,b)=>b.rank-a.rank).map(item=>item.index);
       images=order.map(index=>images[index]);
       if(referenceImages.length===order.length){const sorted=order.map(index=>referenceImages[index]);referenceImages.splice(0,referenceImages.length,...sorted);}
+      if(baseImages.length===order.length)baseImages=order.map(index=>baseImages[index]);
       checks.splice(0,checks.length,...order.map(index=>checks[index]));
     }
-    return NextResponse.json({ images, ...(referenceImages.length?{referenceImages}:{}), ...(checks?{checks:checks.map(({score,note,warnings})=>({score,note,warnings}))}:{}), source:parsed.data.referenceImage&&parsed.data.referenceMode!=="continuity"?"ai-edited":"ai-generated", provider, fallback, ...(notice?{notice}:{}), disclosure:"AI 연출 이미지입니다. 실제 메뉴와 다를 수 있어요." });
+    return NextResponse.json({ images, ...(referenceImages.length?{referenceImages}:{}), ...(baseImages.length===images.length?{baseImages}:{}), ...(checks?{checks:checks.map(({score,note,warnings})=>({score,note,warnings}))}:{}), source:parsed.data.referenceImage&&parsed.data.referenceMode!=="continuity"?"ai-edited":"ai-generated", provider, fallback, ...(notice?{notice}:{}), disclosure:"AI 연출 이미지입니다. 실제 메뉴와 다를 수 있어요." });
   } catch (error) {
     if(error instanceof HiggsfieldConfigurationError)return NextResponse.json({message:error.message,retryable:false},{status:503});
     if(error instanceof HiggsfieldImageError)return NextResponse.json({message:HIGGSFIELD_MESSAGES[error.reason],retryable:error.reason!=="auth"&&error.reason!=="credits"},{status:error.reason==="nsfw"?422:502});

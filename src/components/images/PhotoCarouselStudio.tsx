@@ -4,7 +4,8 @@ import Image from "next/image";
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { GridPreview } from "./GridPreview";
 import { readJsonResponse } from "@/lib/http/readJson";
-import { MAX_STUDIO_PHOTOS, activeSlideIndex, addLibraryPhoto, addPhotos, approveRawPhotos, buildPhotoCarousel, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState, type StudioPhoto } from "@/features/images/generationStore";
+import { SlideTextEditor } from "./SlideTextEditor";
+import { MAX_STUDIO_PHOTOS, activeSlideIndex, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState, type StudioPhoto } from "@/features/images/generationStore";
 
 // 실제 사진 여러 장으로 캐러셀을 만드는 화면. 상태는 generationStore에 있고, 이 컴포넌트는 보여 주고 버튼을 잇는다.
 // 1) 사진 고르기(새로 올리기 또는 사진 보관함에서) → 2) 캐러셀 만들기(구성안 + 사진 배치 + 카드 그리기)
@@ -72,6 +73,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
         <span>이 장 사진 바꾸기</span>
         <div className="photo-library">{photos.map((photo,index)=><button key={photo.id} type="button" className="photo-thumb" aria-pressed={usedInActive[0]===index} disabled={busy} onClick={()=>void swapSlidePhoto(index)} aria-label={`${index+1}번 사진으로 바꾸기`}><Image src={photo.preview} alt="" width={80} height={80} unoptimized/></button>)}</div>
       </div>:<p className="field-help">이 장은 사진 없이 글자로 만든 카드예요.{plan?` (${plan.slides[activeIndex]?.headline})`:""}</p>)}
+      {done&&plan?.slides[activeIndex]&&<SlideTextEditor key={`${activeIndex}|${plan.slides[activeIndex].headline}|${(plan.slides[activeIndex].points??[]).join("|")}`} index={activeIndex} headline={plan.slides[activeIndex].headline} points={plan.slides[activeIndex].points??[]} busy={busy} canEdit={canEditSlideText(state,activeIndex)}/>}
       {done&&<div className="photo-studio-actions">
         <button type="button" className="button secondary" disabled={busy} onClick={()=>void buildPhotoCarousel()}>다시 만들기</button>
         <button type="button" className="button primary" disabled={approved||busy} onClick={()=>{markApproved();onApprove(slides);}}>이 캐러셀 사용</button>
