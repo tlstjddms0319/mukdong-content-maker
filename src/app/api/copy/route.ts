@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { CopyInputSchema, GeneratedCopyContentSchema, GeneratedCopySchema } from "@/features/copy/schema";
-import { AI_IMAGE_DISCLOSURE, buildCopyPrompt, copyTextIssues, generatedCopyIssues, normalizeHashtags, storeConnectionIssues } from "@/features/copy/writing";
+import { AI_IMAGE_DISCLOSURE, buildCopyPrompt, cleanHookOptions, copyTextIssues, generatedCopyIssues, mixHashtags, storeConnectionIssues } from "@/features/copy/writing";
 import { checkTextClaims } from "@/features/guard/service";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
@@ -23,8 +23,8 @@ export async function POST(request:Request) { const denied=await ownerApiError()
       if(!input.data.currentText?.trim())return NextResponse.json({message:"먼저 문안을 만들어 주세요."},{status:400});
       const context=prompt+"\n현재 문안(내용 참고용): "+JSON.stringify(input.data.currentText)+"\n"+input.data.focus+" 부분만 새롭게 작성하세요. 부분 수정에는 전체 본문 길이 기준을 적용하지 않습니다. 다른 부분은 출력하지 마세요.";
       if(input.data.focus==="hashtags"){
-        const result=await client.generateJson(context+' JSON 필드는 hashtags(배열)만 반환하세요.',z.object({hashtags:z.array(z.string()).min(3).max(10)}));
-        const hashtags=normalizeHashtags(result.hashtags);
+        const result=await client.generateJson(context+' JSON 필드는 hashtags(배열)만 반환하세요. 본문 주제를 나타내는 태그 3개만 쓰고 가게·지역 태그는 쓰지 마세요.',z.object({hashtags:z.array(z.string()).min(1).max(10)}));
+        const hashtags=mixHashtags(result.hashtags);
         if(hashtags.length<3)throw new Error("invalid hashtags");
         return NextResponse.json({replacement:hashtags.join(" "),_meta:{provider:client.provider??"unknown"}});
       }
@@ -36,7 +36,8 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     let instruction=prompt;
     for(let attempt=0;attempt<2;attempt++){
       const copy=GeneratedCopySchema.parse({...await client.generateJson(instruction,GeneratedCopyContentSchema),topic:input.data.topic,audience:input.data.audience});
-      copy.hashtags=normalizeHashtags(copy.hashtags);
+      copy.hashtags=mixHashtags(copy.hashtags);
+      copy.hook_options=cleanHookOptions(copy.hook_options??[],copy.hook);
       copy.image_disclosure=input.data.hasAiImages?AI_IMAGE_DISCLOSURE:null;
       const issues=generatedCopyIssues(copy,copyLength);
       if(!issues.length){

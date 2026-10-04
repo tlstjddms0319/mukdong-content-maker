@@ -9,6 +9,17 @@ export function normalizeHashtags(values:string[]):string[] {
   return [...new Set(values.map(value=>`#${value.trim().replace(/^#+/,"")}`).filter(value=>/^#[\p{L}\p{N}_]+$/u.test(value)))].slice(0,5);
 }
 
+// 해시태그 조합: 가게 태그 1개 + 지역 태그 1개를 항상 넣고, 나머지(최대 3개)는 AI가 고른 주제 태그로 채운다.
+// 인스타그램은 관련성 높은 소수의 태그를 권장하므로 전체 3~5개로 맞춘다. 가게·지역 태그가 이미 있으면 중복하지 않는다.
+export const STORE_HASHTAG="#묵동홍어마을",AREA_HASHTAG="#묵동맛집";
+export function mixHashtags(values:string[]):string[] {
+  // 주제 태그만 남긴다: 가게·지역 태그(묵동, 중랑구, 묵동맛집 등)는 아래에서 정해진 것으로 넣으므로 뺀다.
+  const topic=normalizeHashtags(values)
+    .filter(tag=>tag!==STORE_HASHTAG&&!/^#(?:묵동|중랑구?|중랑)(?:맛집)?$/.test(tag))
+    .slice(0,3);
+  return [...topic,AREA_HASHTAG,STORE_HASHTAG];
+}
+
 export function formatCopy(copy:GeneratedCopy):string {
   return [copy.hook,copy.information,copy.store_connection,copy.call_to_action,copy.image_disclosure,normalizeHashtags(copy.hashtags).join(" ")].filter(Boolean).join("\n\n");
 }
@@ -31,12 +42,33 @@ export function buildCopyPrompt(input:CopyInput,length:CopyLength):string {
 store_connection은 한 문단 1~2문장으로, 음식에 대한 관심에서 지역과 가게 탐색으로 연결하세요. '정갈한 삼합 한 상을 준비하고 있습니다'처럼 실제 메뉴·서비스 제공을 주장하지 마세요. 안전한 연결 예: '이 조합이 궁금해졌다면, 묵동에서 홍어를 알아볼 때 묵동홍어마을의 메뉴도 살펴보세요.' 예문은 그대로 반복하기보다 선택 주제에 맞게 바꾸세요. facts_to_verify에 적었다고 본문의 단정이 허용되는 것은 아닙니다.
 call_to_action은 '프로필의 네이버 플레이스에서 메뉴 확인' 또는 '전화로 방문·예약 가능 여부 문의' 중 문맥에 맞는 행동 하나만 제안하세요. 온라인 예약·주문이 가능하다고 단정하지 마세요.
 call_to_action도 자연스러운 해요체 한 문장으로 쓰세요. 예: '프로필의 네이버 플레이스에서 메뉴를 확인해 보세요.' 또는 '방문을 정하기 전에 전화로 예약 가능 여부를 확인해 보세요.' '문의 부탁드립니다'처럼 갑자기 공문체로 끝내지 마세요.
-hashtags는 지역·실제 본문 주제·매장명을 조합한 서로 다른 관련 태그 3~5개. 본문이 해산물 탐색과 관련 있을 때만 해산물 태그를 쓰고 무관한 인기 키워드는 넣지 마세요. 인기 또는 실시간 순위라고 주장하지 마세요.`;
+hook_options는 hook을 대신할 수 있는 첫 문장 후보 3개입니다. 각각 다른 방식(질문형, 장면 묘사형, 비교형)으로, 40자 이내로 쓰세요. hook과 같은 문장은 넣지 마세요.
+hashtags는 실제 본문 주제를 나타내는 서로 다른 관련 태그 3개(가게·지역 태그는 서버가 붙이니 쓰지 마세요). 본문이 해산물 탐색과 관련 있을 때만 해산물 태그를 쓰고 무관한 인기 키워드는 넣지 마세요. 인기 또는 실시간 순위라고 주장하지 마세요.`;
 }
+
+// 첫 문장 후보 정리: 비었거나, 60자를 넘거나, 지금 첫 문장과 같거나, 금지 표현·상투어가 있는 후보는 뺀다.
+export function cleanHookOptions(options:string[],hook:string):string[] {
+  const key=(value:string)=>value.replace(/[\s.,!?~]/g,"");
+  const seen=new Set([key(hook)]);
+  return options.map(option=>option.trim()).filter(option=>{
+    if(!option||option.length>60||seen.has(key(option))||copyTextIssues(option).length)return false;
+    seen.add(key(option));
+    return true;
+  }).slice(0,3);
+}
+
+// 광고처럼 들려 신뢰를 떨어뜨리는 표현과 감각을 꾸미기만 하는 추상적 비유(프롬프트에서 금지한 것과 같은 목록).
+const COPY_CLICHES=["미식의 향연","풍미의 세계","놓치지 마세요","맛집 인정","인생 맛집","역대급","끝판왕","강력 추천","식감의 레이어","감촉을 선사","입안의 경쾌한 리듬","포근하게 완화"];
 
 // Deterministic writing checks; these do not verify facts or judge image quality.
 export function copyTextIssues(text:string):string[] {
   const issues=[...checkTextClaims(text).blocked];
+  const prose=text.split("\n").filter(line=>!line.trim().startsWith("#")).join("\n");
+  for(const phrase of COPY_CLICHES)if(prose.includes(phrase))issues.push(`'${phrase}' 같은 상투어·추상적 비유 대신 구체적인 맛·식감으로 쓰세요.`);
+  if((prose.match(/!/g)??[]).length>3)issues.push("느낌표를 3개 이하로 줄이세요.");
+  // 해요체로 통일: 문장 끝이 '~습니다/~합니다'로 끝나는 문장이 섞이면 알려 준다(고지 문구 제외).
+  const formal=prose.split(/(?<=[.!?])\s+|\n/).filter(line=>/(?:습니다|합니다|됩니다)[.!]?$/.test(line.trim())&&!line.includes("AI 연출 이미지"));
+  if(formal.length)issues.push("'~습니다' 문장이 섞여 있어요. 해요체로 통일하세요.");
   const sentences=text.split(/[.!?。\n]+/).map(value=>value.replace(/[\s,;:…“”"'‘’]/g,"")).filter(value=>value.length>=16&&!value.startsWith("#"));
   if(new Set(sentences).size<sentences.length)issues.push("같은 문장이 반복돼요. 문단마다 새로운 정보를 담아 주세요.");
   return issues;
@@ -50,6 +82,8 @@ export function generatedCopyIssues(copy:GeneratedCopy,length:CopyLength):string
   if(body.length<min||body.length>max)issues.push(`본문을 공백 포함 ${min}~${max}자로 맞추세요. 현재 ${body.length}자입니다.`);
   if(formatCopy(copy).length>2200)issues.push("이미지 고지와 해시태그를 포함해 2,200자 이내로 줄이세요.");
   if(copy.hashtags.length<3)issues.push("서로 다른 관련 해시태그를 3~5개 쓰세요.");
+  // 인스타그램은 캡션 첫 두 줄 정도(약 125자)까지만 보여 주고 나머지는 '더 보기'로 접는다. 첫 문장은 그 안에서 끝나야 한다.
+  if(copy.hook.trim().length>60)issues.push(`첫 문장을 60자 이내로 줄이세요. '더 보기' 전에 보이는 부분이에요. 현재 ${copy.hook.trim().length}자입니다.`);
   return issues;
 }
 

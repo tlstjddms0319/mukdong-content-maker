@@ -15,6 +15,15 @@ describe("CopyEditor generation", () => {
     fireEvent.click(screen.getByRole("button",{name:"AI 이미지 안내 넣기"}));
     expect(screen.getByLabelText("게시물 문안")).toHaveValue("냄새 없음\n\nAI 연출 이미지가 포함되어 있으며 실제 메뉴와 다를 수 있습니다.");
   });
+  it("swaps in a first-line candidate and keeps the old first line as an option",async()=>{
+    const copy={topic:"홍어",audience:"A",hook:"원래 첫 문장이에요",information:"설명 문단이에요",store_connection:"묵동에서 홍어를 알아볼 때 묵동홍어마을도 살펴보세요.",call_to_action:"메뉴를 확인해 보세요.",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null,hook_options:["홍어는 왜 수육이랑 먹을까요?","결이 보이는 홍어 한 점"]};
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>copy}));
+    render(<CopyEditor topic="홍어" onContinue={()=>undefined}/>);
+    fireEvent.click(await screen.findByRole("button",{name:"홍어는 왜 수육이랑 먹을까요?"}));
+    const value=(screen.getByLabelText("게시물 문안") as HTMLTextAreaElement).value;
+    expect(value.startsWith("홍어는 왜 수육이랑 먹을까요?\n\n설명 문단이에요")).toBe(true);
+    expect(screen.getByRole("button",{name:"원래 첫 문장이에요"})).toBeInTheDocument();
+  });
   it("keeps the user's prose intact when replacing hashtags",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({replacement:"#홍어 #묵동맛집 #중랑구맛집"})}));
     const original="내 첫 문장\n\n내 설명\n\n내 가게 소개\n\n내 마무리\n\n#기존";
