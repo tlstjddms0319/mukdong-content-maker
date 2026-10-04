@@ -406,7 +406,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 /* 고르기 상자는 가장 긴 선택지 글자만큼 넓어지려 해서 좁은 화면을 밀어낸다 → 칸 너비에 맞춘다. */
 .field-grid label { min-width:0; }
 .field-grid select { width:100%; min-width:0; }
-.connection-missing li, .connection-help { overflow-wrap:anywhere; }
+.connection-missing li, .connection-help, .connection-card p { overflow-wrap:anywhere; }
 /* 완성 카드 위의 "N번 슬라이드" 표시는 카드 오른쪽 위 장식(쪽 번호·딱지)을 가린다.
    아래 "1 / 5" 표시가 같은 정보를 주므로 화면에서는 숨기고 화면 읽기 프로그램에만 남긴다. */
 .generated-carousel .post-image span { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
@@ -492,3 +492,4 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
   .library-asset { grid-template-columns:84px minmax(0,1fr); }
   .library-asset img { width:84px; height:84px; }
 }
+.trend-line { color:#7a5200; }

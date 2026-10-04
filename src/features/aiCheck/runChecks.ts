@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { checkCoverCandidates } from "@/features/images/coverCheck";
+import { fetchTrendKeywords, naverConfigured, trendLabel } from "@/features/topics/naverTrend";
 import { TEXT_PROVIDER_ORDER, resolveTextClients, type TextAiClient, type TextProvider } from "@/lib/ai/textClient";
 
 // 설정 화면 "AI 연결 실제 점검". Render 환경변수에 넣은 키로 각 AI를 아주 작게 한 번씩 불러 실제로 되는지 확인한다.
@@ -20,11 +21,12 @@ export type AiCheckDeps={
   textClients?:Partial<Record<TextProvider,()=>TextAiClient>>;
   coverCheck?:typeof checkCoverCandidates;
   sampleImage?:()=>Promise<Buffer>;
+  trends?:typeof fetchTrendKeywords;
   timeoutMs?:number;
 };
 
 const TEXT_LABELS:Record<TextProvider,string>={gemini:"문안 AI · Gemini",groq:"문안 AI · Groq",cloudflare:"문안 AI · Cloudflare"};
-const SECRET_NAMES=["GEMINI_API_KEY","GROQ_API_KEY","CLOUDFLARE_API_TOKEN","OPENAI_API_KEY","HF_API_KEY_ID","HF_API_KEY_SECRET"];
+const SECRET_NAMES=["GEMINI_API_KEY","GROQ_API_KEY","CLOUDFLARE_API_TOKEN","OPENAI_API_KEY","HF_API_KEY_ID","HF_API_KEY_SECRET","NAVER_CLIENT_ID","NAVER_CLIENT_SECRET"];
 const SAMPLE=path.join(process.cwd(),"assets/design/samples/studio-hongeo.jpg");
 
 // 오류 메시지를 사람이 읽을 길이로 줄이고, 혹시 섞여 온 키 값을 가린다.
@@ -91,6 +93,14 @@ export async function runAiChecks(deps:AiCheckDeps={}):Promise<AiCheckItem[]> {
       return "키 인증 통과 (요금 없음)";
     }));
   }else checks.push(Promise.resolve(skip("openai","이미지 AI · OpenAI","키가 설정되지 않았어요.")));
+
+  // 5) 네이버 검색 트렌드: 실제로 한 번 조회해 늘어난 말을 보여 준다(요청 3번, 무료 쿼터 안).
+  if(naverConfigured(env)){
+    checks.push(timed("naver-trend","검색 트렌드 · 네이버 데이터랩",timeoutMs,env,async()=>{
+      const trends=await (deps.trends??fetchTrendKeywords)({env,fetch:request});
+      return trends.length?`요즘 늘어난 말: ${trends.map(trendLabel).join(", ")}`:"정상 응답 (지금은 눈에 띄게 늘어난 말이 없어요)";
+    }));
+  }else checks.push(Promise.resolve(skip("naver-trend","검색 트렌드 · 네이버 데이터랩","키가 설정되지 않았어요(선택).")));
 
   return Promise.all(checks);
 }
