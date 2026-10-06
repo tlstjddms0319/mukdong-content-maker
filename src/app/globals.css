@@ -493,3 +493,9 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
   .library-asset img { width:84px; height:84px; }
 }
 .trend-line { color:#7a5200; }
+
+/* 장 고치기(장 빼기·새 장 넣기). 글자 고치기 칸과 같은 카드 모양. */
+.deck-editor { display:grid; gap:10px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+.deck-editor-head { display:grid; gap:4px; }
+.deck-new-slide { display:grid; gap:8px; padding-top:8px; border-top:1px dashed var(--line); }
+.deck-new-slide input, .deck-new-slide textarea { width:100%; }

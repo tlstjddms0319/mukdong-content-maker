@@ -5,10 +5,11 @@ import { GenerationProgress } from "@/components/states/GenerationState";
 import { GridPreview } from "./GridPreview";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { SlideTextEditor } from "./SlideTextEditor";
+import { DeckEditor } from "./DeckEditor";
 import { LibraryFilterBar } from "./LibraryFilterBar";
 import type { LibraryAsset } from "@/features/images/freeCards";
 import { filterLibrary, popularTags, usageLabel, type LibrarySort } from "@/features/images/libraryFilter";
-import { MAX_STUDIO_PHOTOS, activeSlideIndex, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, recordPhotoUse, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
+import { MAX_STUDIO_PHOTOS, activeSlideIndex, deckComplete, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, recordPhotoUse, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
 // 실제 사진 여러 장으로 캐러셀을 만드는 화면. 상태는 generationStore에 있고, 이 컴포넌트는 보여 주고 버튼을 잇는다.
 // 1) 사진 고르기(새로 올리기 또는 사진 보관함에서) → 2) 캐러셀 만들기(구성안 + 사진 배치 + 카드 그리기)
@@ -20,11 +21,12 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
   const [query,setQuery]=useState("");
   const [sort,setSort]=useState<LibrarySort>("unused");
   const [libraryError,setLibraryError]=useState("");
-  const {photos,photoStatus,phase,slides,plan,planFallback,photoAssignment,approved}=state;
+  const {photos,photoStatus,phase,slides,plan,planFallback,photoAssignment,approved,deckEdited,deckStatus}=state;
   const busy=phase!=="idle";
   const activeIndex=activeSlideIndex(state),active=slides[activeIndex];
-  const done=slides.length===slideCount&&!busy;
-  const progress=phase==="uploading"?photoStatus||"사진을 저장하고 있어요":phase==="planning"?"캐러셀 구성을 만들고 있어요":phase==="slides"&&slides.length<slideCount?`${slides.length}/${slideCount}장 완성 · 사진을 카드에 앉히고 있어요`:phase==="slides"?`${activeIndex+1}번 장 사진을 바꾸고 있어요`:"";
+  const done=deckComplete(state)&&!busy;
+  const filling=phase==="slides"&&!deckEdited&&slides.length<slideCount;
+  const progress=deckStatus?deckStatus:phase==="uploading"?photoStatus||"사진을 저장하고 있어요":phase==="planning"?"캐러셀 구성을 만들고 있어요":filling?`${slides.length}/${slideCount}장 완성 · 사진을 카드에 앉히고 있어요`:phase==="slides"?`${activeIndex+1}번 장 사진을 바꾸고 있어요`:"";
   const usedInActive=photoAssignment[activeIndex]??[];
 
   const openLibrary=async()=>{
@@ -65,7 +67,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       <button type="button" className="button primary" onClick={()=>void buildPhotoCarousel()}>사진 {photos.length}장으로 {slideCount}장 캐러셀 만들기</button>
       <button type="button" className="button secondary" disabled={approved} onClick={()=>approveRawPhotos(onApprove)}>글자 없이 사진만 쓰기</button>
     </div>}
-    {progress&&<GenerationProgress stage={`${phase}-${slides.length}`} message={progress} progress={phase==="slides"&&slides.length<slideCount?slides.length/slideCount:undefined}/>}
+    {progress&&<GenerationProgress stage={`${phase}-${slides.length}`} message={progress} progress={filling?slides.length/slideCount:undefined}/>}
     {planFallback&&slides.length>0&&<p role="status" className="field-help">AI가 구성안을 만들지 못해 준비된 기본 문안으로 채웠어요. 문안이 주제와 다르면 다시 만들어 보세요.</p>}
     {slides.length>0&&<>
       <div className="generated-carousel">
@@ -83,8 +85,9 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
         <div className="photo-library">{photos.map((photo,index)=><button key={photo.id} type="button" className="photo-thumb" aria-pressed={usedInActive[0]===index} disabled={busy} onClick={()=>void swapSlidePhoto(index)} aria-label={`${index+1}번 사진으로 바꾸기`}><Image src={photo.preview} alt="" width={80} height={80} unoptimized/></button>)}</div>
       </div>:<p className="field-help">이 장은 사진 없이 글자로 만든 카드예요.{plan?` (${plan.slides[activeIndex]?.headline})`:""}</p>)}
       {done&&plan?.slides[activeIndex]&&<SlideTextEditor key={`${activeIndex}|${plan.slides[activeIndex].headline}|${(plan.slides[activeIndex].points??[]).join("|")}`} index={activeIndex} headline={plan.slides[activeIndex].headline} points={plan.slides[activeIndex].points??[]} busy={busy} canEdit={canEditSlideText(state,activeIndex)}/>}
+      {(done||(busy&&deckEdited))&&<DeckEditor state={state}/>}
       {done&&<div className="photo-studio-actions">
-        <button type="button" className="button secondary" disabled={busy} onClick={()=>void buildPhotoCarousel()}>다시 만들기</button>
+        <button type="button" className="button secondary" disabled={busy||!photos.length} onClick={()=>void buildPhotoCarousel()}>다시 만들기</button>
         <button type="button" className="button primary" disabled={approved||busy} onClick={()=>{markApproved();onApprove(slides);recordPhotoUse(photoAssignment.flat().map(i=>photos[i]?.id));}}>이 캐러셀 사용</button>
       </div>}
     </>}
