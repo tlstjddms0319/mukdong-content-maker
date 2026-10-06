@@ -38,7 +38,7 @@ for(const style of chosen){
     const image=await composeSlideImage(inputs,plan,index,5,"card",{palette:"warm",style});
     tiles.push(await sharp(image).resize(324,405).png().toBuffer());
   }
-  const label=await sharp({text:{text:`<span foreground="#222">${STYLES[style].label}</span>`,font:"Pretendard Bold 26",fontfile:"assets/fonts/Pretendard-Bold.otf",rgba:true}}).png().toBuffer();
+  const label=await sharp({text:{text:`<span foreground="#222">${STYLES[style].label.replace(/&/g,"&amp;")}</span>`,font:"Pretendard Bold 26",fontfile:"assets/fonts/Pretendard-Bold.otf",rgba:true}}).png().toBuffer();
   const row=await sharp({create:{width:324*4+24,height:405+44,channels:3,background:"#ffffff"}}).composite([{input:label,left:6,top:6},...tiles.map((input,i)=>({input,left:i*332,top:44}))]).png().toBuffer();
   await sharp(row).jpeg({quality:88}).toFile(`${OUT}/${style}.jpg`);
   rows.push(row);

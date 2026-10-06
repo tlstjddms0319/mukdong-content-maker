@@ -5,12 +5,21 @@ import { STYLE_FONTS, contentOf, filmPhoto, fitText , snap } from "./shared";
 // 감성 필름: 검은 필름 띠 양옆에 톱니 구멍과 주황 가장자리 글자("MUKDONG 400", 프레임 번호)를 넣고,
 // 가운데 프레임에 따뜻하게 바랜 필름 사진(빛샘·비네트)을 놓는다. 글은 영화 자막처럼 사진 아래 가운데에 흰 명조로.
 // 사진 오른쪽 아래에는 옛 필름 카메라의 주황 숫자 도장처럼 장 번호를 찍는다(실제 날짜는 넣지 않는다).
-const BASE="#121110",EDGE_TEXT="#E8923A",SUB="#F4EFE4",DIM="#A7A097";
+const BASE="#121110",EDGE_TEXT="#E8923A",SUB="#F4EFE4",DIM="#C9C2B6";
 
 function filmStrip():string {
   let holes="";
   for(let y=24;y<1350;y+=62)holes+=`<rect x="18" y="${y}" width="34" height="38" rx="6" fill="#2A2724"/><rect x="${1080-52}" y="${y}" width="34" height="38" rx="6" fill="#2A2724"/>`;
   return holes+`<path d="M70 0V1350M${1080-70} 0V1350" stroke="#2A2724" stroke-width="2"/>`;
+}
+
+// 사진 위 자막용: 들어가는 가장 큰 크기를 고르되 글자 둘레에 그림자를 깐다(fitText는 그림자 옵션이 없다).
+async function fitShadowText(value:string,sizes:number[],width:number,maxHeight:number){
+  for(const size of sizes){
+    const layer=await textLayer(value,{size,color:SUB,width,height:4000,font:STYLE_FONTS.brushSerif,align:"centre",spacing:12,shadow:true});
+    if(layer.info.height<=maxHeight)return layer;
+  }
+  return textLayer(value,{size:sizes[sizes.length-1],color:SUB,width,height:maxHeight,font:STYLE_FONTS.brushSerif,align:"centre",spacing:12,shadow:true});
 }
 
 export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
@@ -26,23 +35,35 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
   const shots=inputs.slice(0,2);
   const leak=(index+(slide.variant??0))%2?"left":"right";
   if(shots.length){
-    // 사진 칸: 한 장이면 크게, 두 장이면 위아래 두 프레임(밀착 인화지처럼).
-    const textRoom=content.cover?260:Math.min(420,170+content.points.length*70);
+    // 사진 칸: 한 장이면 크게, 두 장이면 위아래 두 프레임(밀착 인화지처럼). 표지는 사진을 거의 끝까지 키우고 자막을 사진 위에 얹는다.
+    const textRoom=content.cover?40:Math.min(470,200+content.points.length*80);
     const totalH=1350-90-y-textRoom;
-    const FH=shots.length>1?Math.round((totalH-24)/2):Math.min(content.cover?860:760,totalH);
+    const FH=shots.length>1?Math.round((totalH-24)/2):Math.min(content.cover?1100:760,totalH);
     for(const [i,shot] of shots.entries()){
       layers.push({input:await filmPhoto(shot,FW,FH,i?(leak==="left"?"right":"left"):leak),left:FX,top:y});
       deco+=`<rect x="${FX-6}" y="${y-6}" width="${FW+12}" height="${FH+12}" fill="none" stroke="#000" stroke-width="12"/>`;
       // 옛 카메라 날짜 도장 자리에 장 번호.
       const stamp=await textLayer(`'${frame}  ${i?"B":"A"}`,{size:40,color:"#FF9A3C",width:300,height:60,font:STYLE_FONTS.pixelBold});
-      layers.push({input:await sharp(stamp.data).blur(.6).png().toBuffer(),left:FX+FW-stamp.info.width-30,top:y+FH-stamp.info.height-24});
+      layers.push({input:await sharp(stamp.data).blur(.6).png().toBuffer(),left:FX+FW-stamp.info.width-30,top:y+(content.cover?60:FH-stamp.info.height-24)});
+      if(content.cover){
+        // 표지 자막: 사진 아래쪽을 어둡게 깔고 그 위에 큰 제목을 영화 자막처럼 얹는다.
+        // 흰 접시 사진처럼 밝은 사진에서도 읽히도록 글자 둘레에 그림자(shadow)를 깔고, 그 아래쪽은 진하게 어둡게 한다.
+        const title=await fitShadowText(content.headline,[88,78,70,62],FW-100,360);
+        const titleTop=y+FH-title.info.height-50;
+        // 어둡게 하는 띠는 사진 위에 와야 하므로 바닥 장식(deco)이 아니라 사진 다음 레이어로 넣는다.
+        layers.push(svgLayer(`<defs><linearGradient id="filmFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".45" stop-color="#000" stop-opacity=".45"/><stop offset="1" stop-color="#000" stop-opacity=".80"/></linearGradient></defs><rect x="${FX}" y="${titleTop-140}" width="${FW}" height="${y+FH-(titleTop-140)}" fill="url(#filmFade)"/>`));
+        layers.push({input:title.data,left:Math.round((1080-title.info.width)/2),top:titleTop});
+      }
       y+=FH+24;
     }
     y+=16;
   }else{
-    // 사진 없는 장: 빈 검은 프레임 안 가운데에 큰 자막.
+    // 사진 없는 장: 빈 검은 프레임 안 가운데에 큰 자막. 프레임 한쪽에 주황 빛샘을, 왼쪽 위에 큰 따옴표를 둔다.
     const FH=1350-90-y-170;
-    deco+=`<rect x="${FX}" y="${y}" width="${FW}" height="${FH}" fill="#1B1917" stroke="#000" stroke-width="12"/>`;
+    deco+=`<defs><radialGradient id="filmLeak" cx="${leak==="left"?FX:FX+FW}" cy="${y+FH*.15}" r="${FW*.7}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FF7A1A" stop-opacity=".4"/><stop offset="1" stop-color="#FF7A1A" stop-opacity="0"/></radialGradient></defs>`
+      +`<rect x="${FX}" y="${y}" width="${FW}" height="${FH}" fill="#1B1917" stroke="#000" stroke-width="12"/><rect x="${FX}" y="${y}" width="${FW}" height="${FH}" fill="url(#filmLeak)"/>`;
+    const quoteMark=await textLayer("“",{size:220,color:EDGE_TEXT,width:200,height:260,font:STYLE_FONTS.serifHeavy});
+    layers.push({input:quoteMark.data,left:FX+40,top:y+10});
     const quote=await fitText(content.headline,{sizes:[72,64,56],width:FW-120,maxHeight:320,color:SUB,font:STYLE_FONTS.brushSerif,align:"centre",spacing:14});
     const lines=await Promise.all(content.points.slice(0,4).map(point=>textLayer(point,{size:38,color:DIM,width:FW-140,height:120,font:STYLE_FONTS.serif,align:"centre",spacing:8})));
     const blockH=quote.info.height+60+lines.reduce((sum,line)=>sum+line.info.height+26,0);
@@ -56,13 +77,13 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
     const caption=await textLayer(`— ${content.keywords[0]??"홍어"}, 그날의 기록 —`,{size:30,color:DIM,width:FW,height:50,font:STYLE_FONTS.serif,align:"centre"});
     layers.push({input:caption.data,left:Math.round((1080-caption.info.width)/2),top:y+20});
   }
-  if(shots.length){
-    // 자막: 제목은 흰 명조, 요점은 흐린 회색. 자막답게 가운데 정렬.
-    const subtitle=await fitText(content.headline,{sizes:content.cover?[60,54,48]:[46,42,38],width:FW-40,maxHeight:content.cover?200:130,color:SUB,font:STYLE_FONTS.brushSerif,align:"centre",spacing:10});
+  if(shots.length&&!content.cover){
+    // 자막: 제목은 흰 명조, 요점은 밝은 회색. 자막답게 가운데 정렬.
+    const subtitle=await fitText(content.headline,{sizes:[52,46,42],width:FW-40,maxHeight:150,color:SUB,font:STYLE_FONTS.brushSerif,align:"centre",spacing:10});
     layers.push({input:subtitle.data,left:Math.round((1080-subtitle.info.width)/2),top:y});
     y+=subtitle.info.height+22;
     for(const point of content.points.slice(0,shots.length>1?2:3)){
-      const line=await textLayer(point,{size:32,color:DIM,width:FW-60,height:90,font:STYLE_FONTS.serif,align:"centre",spacing:6});
+      const line=await textLayer(point,{size:36,color:DIM,width:FW-60,height:100,font:STYLE_FONTS.serif,align:"centre",spacing:6});
       if(y+line.info.height>1350-80)break;
       layers.push({input:line.data,left:Math.round((1080-line.info.width)/2),top:y});
       y+=line.info.height+14;

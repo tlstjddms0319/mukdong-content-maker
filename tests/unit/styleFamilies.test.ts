@@ -41,20 +41,36 @@ describe("style families", () => {
     const base=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:5});
     const styles=new Set(Array.from({length:14},(_,seed)=>diversifyCarouselDesign(base,seed).design.style));
     expect(styles.size).toBeGreaterThan(3);
-    const chosen={...base,design:{...base.design,style:"newspaper" as const}};
-    for(let seed=0;seed<6;seed++)expect(diversifyCarouselDesign(chosen,seed).design.style).toBe("newspaper");
+    const chosen={...base,design:{...base.design,style:"hanji" as const}};
+    for(let seed=0;seed<6;seed++)expect(diversifyCarouselDesign(chosen,seed).design.style).toBe("hanji");
   });
 
   it("offers the families to the plan AI and lets the owner override", () => {
     expect(buildCarouselPlanPrompt({topic:"비 오는 날 홍어",slideCount:5})).toContain(styleCatalogText());
     const recommended={palette:"warm" as const,style:"webtoon" as const,theme:"classic" as const,titleFont:"pretendard" as const,bodyFont:"pretendard" as const};
     expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"auto",style:"auto"}).style).toBe("webtoon");
-    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"auto",style:"y2k"}).style).toBe("y2k");
+    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"auto",style:"neon"}).style).toBe("neon");
   });
 
   it("asks the image model for photos the family can process", () => {
     const brief={topic:"홍어회",count:1,aspectRatio:"4:5" as const,slideIndex:2,slideTotal:5 as const,styleAnchor:"따뜻한 색온도",slide};
     expect(buildImagePrompt({...brief,design:{...DEFAULT_DESIGN,style:"colorblock"}})).toContain(STYLES.colorblock.photoHint);
     expect(buildImagePrompt({...brief,design:DEFAULT_DESIGN})).not.toContain(STYLES.colorblock.photoHint);
+  });
+});
+
+describe("retired style families", () => {
+  it("reads drafts, month plans and links saved with the retired pixel and newspaper styles", async () => {
+    const { StoredStyleIdSchema, StyleIdSchema: Ids } = await import("@/features/images/styleCatalog");
+    expect(Ids.options).not.toContain("y2k");
+    expect(Ids.options).not.toContain("newspaper");
+    expect(StoredStyleIdSchema.parse("y2k")).toBe("neon");
+    expect(StoredStyleIdSchema.parse("newspaper")).toBe("hanji");
+    expect(StoredStyleIdSchema.parse("chalkboard")).toBe("chalkboard");
+    const { DraftSchema } = await import("@/features/drafts/schema");
+    const draft=DraftSchema.parse({id:"11111111-1111-4111-8111-111111111111",status:"ready",topic:"홍어",audience:"A",media_candidates:[],selected_media_id:null,copy:null,facts_to_verify:[],store_profile_version:"2026-09-10",created_at:"2026-09-10T00:00:00.000Z",updated_at:"2026-09-10T00:00:00.000Z",design_style:"newspaper"});
+    expect(draft.design_style).toBe("hanji");
+    const { MonthPlanItemSchema } = await import("@/features/topics/monthPlan");
+    expect(MonthPlanItemSchema.parse({id:"a",title:"홍어는 왜?",summary:"s",reason:"r",audience:"A",imageBrief:"i",season:"",date:"2026-11-03",style:"y2k"}).style).toBe("neon");
   });
 });

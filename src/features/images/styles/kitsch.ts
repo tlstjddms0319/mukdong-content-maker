@@ -58,12 +58,14 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
   // 요점: 노랑·하늘 상자에 ★, 굵은 고딕.
   const fills=["#FFFF3A","#7CF6FF","#FFFFFF"];
   const maxPoints=hasPhoto?3:4;
-  const pointSize=hasPhoto?36:46;
-  const boxes=await Promise.all(content.points.slice(0,maxPoints).map(point=>textLayer(`★ ${point}`,{size:pointSize,color:"#111111",width:W-60,height:pointSize*3.2,font:STYLE_FONTS.comic,spacing:6})));
+  // 글자 장은 요점이 주인공이라 54px로 크게, 사진 장도 38px 아래로는 내려가지 않는다.
+  const pointSize=hasPhoto?38:54;
+  const boxes=await Promise.all(content.points.slice(0,maxPoints).map(point=>textLayer(`★ ${point}`,{size:pointSize,color:"#111111",width:W-100,height:pointSize*3.2,font:STYLE_FONTS.comic,spacing:6})));
   const boxesH=boxes.reduce((sum,box)=>sum+box.info.height+28+16,0);
   let py=hasPhoto?Math.max(y,footerTop-boxesH-10):Math.max(y+20,Math.round((y+footerTop-boxesH)/2));
   for(const [i,box] of boxes.entries()){
-    const w=box.info.width+44,h=box.info.height+28,x=i%2?1080-M-w:M;
+    // 상자는 번갈아 80px씩만 들여 써서 지그재그 느낌은 살리되 읽는 흐름은 왼쪽에서 오른쪽으로 이어지게 한다.
+    const w=box.info.width+44,h=box.info.height+28,x=i%2?Math.min(1080-M-w,M+80):M;
     layers.push(svgLayer(`<rect x="${x+8}" y="${py+8}" width="${w}" height="${h}" fill="#111"/><rect x="${x}" y="${py}" width="${w}" height="${h}" fill="${fills[i%fills.length]}" stroke="#111" stroke-width="5"/>`),{input:box.data,left:x+22,top:py+14});
     py+=h+16;
   }

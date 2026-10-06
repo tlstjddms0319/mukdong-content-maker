@@ -21,13 +21,13 @@ describe("performance", () => {
   it("summarizes top posts and averages by style, audience and weekday", () => {
     const summary=summarizePerformance([
       post("1","김장날엔 왜 수육일까?",{likes:40,saves:10},{design_style:"webtoon",audience:"B",performance:{likes:40,comments:0,saves:10,shares:0,posted_on:"2026-11-03",recorded_at:at}}),
-      post("2","같은 회인데 왜 다를까?",{likes:20},{design_style:"newspaper",planned_publish_at:"2026-11-06T09:00:00.000Z"}),
+      post("2","같은 회인데 왜 다를까?",{likes:20},{design_style:"hanji",planned_publish_at:"2026-11-06T09:00:00.000Z"}),
       post("3","홍어는 왜 톡 쏠까?",{likes:10},{design_style:"webtoon"}),
       {id:"4",topic:"기록 없음",audience:"C"},
     ]);
     expect(summary.recorded).toBe(3);
     expect(summary.top.map(item=>item.topic)).toEqual(["김장날엔 왜 수육일까?","같은 회인데 왜 다를까?","홍어는 왜 톡 쏠까?"]);
-    expect(summary.byStyle).toEqual([{key:"webtoon",label:"웹툰·만화",count:2,average:40},{key:"newspaper",label:"신문·기사",count:1,average:20}]);
+    expect(summary.byStyle).toEqual([{key:"webtoon",label:"웹툰·만화",count:2,average:40},{key:"hanji",label:"한지·수묵",count:1,average:20}]);
     expect(summary.byAudience[0]).toMatchObject({key:"B",label:"약속 결정형",average:70});
     // 올린 날: 직접 적은 날(11/3 화) 또는 게시 희망일시의 한국 날짜(11/6 금).
     expect(summary.byWeekday.map(group=>group.label)).toEqual(["화요일","금요일"]);

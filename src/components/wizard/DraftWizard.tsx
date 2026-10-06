@@ -16,7 +16,7 @@ import type { CarouselSlideCount } from "@/features/images/carousel";
 import { useGenerationState } from "@/features/images/generationStore";
 import { clearWizardSession, readWizardSession, saveWizardSession } from "@/features/drafts/wizardSession";
 import { readJsonResponse } from "@/lib/http/readJson";
-import { STYLES, StyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
+import { STYLES, StoredStyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
 import { PLAN_DATE_PATTERN, PLAN_POST_TIME_KST } from "@/features/drafts/planLink";
 
 const DEFAULT_TOPICS:TopicSuggestion[] = fallbackTopics();
@@ -36,7 +36,7 @@ function rememberRound(round:number){try{localStorage.setItem(TOPIC_ROUND_KEY,St
 // 주소·세션에서 받은 게시일·계열 값을 확인해 기획 연결로 만든다. 날짜 형식이 틀리면 연결하지 않고, 모르는 계열은 버린다.
 function planLinkFrom(date:string|null|undefined,style:string|null|undefined):{date:string;style?:StyleId}|null {
   if(!date||!PLAN_DATE_PATTERN.test(date))return null;
-  const parsed=StyleIdSchema.safeParse(style);
+  const parsed=StoredStyleIdSchema.safeParse(style);
   return {date,...(parsed.success?{style:parsed.data}:{})};
 }
 

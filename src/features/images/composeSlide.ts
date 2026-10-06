@@ -41,8 +41,8 @@ async function composeFullscreen(inputs:Buffer[],slide:CarouselSlidePlan,index:n
     headlineTop=BOTTOM-headline.info.height;
     subTop=sub?headlineTop-22-sub.info.height:headlineTop;
     // 글자 블록이 차지하는 만큼 아래쪽 그라데이션을 넓힌다.
-    const shadeStart=Math.max(.38,(subTop-220)/1350);
-    layers.push(svgLayer(`<defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="${shadeStart.toFixed(2)}" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".88"/></linearGradient><linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".45"/><stop offset=".18" stop-color="#000" stop-opacity="0"/></linearGradient></defs><rect width="1080" height="1350" fill="url(#shade)"/><rect width="1080" height="1350" fill="url(#top)"/>`));
+    const shadeStart=Math.max(.5,(subTop-160)/1350);
+    layers.push(svgLayer(`<defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="${shadeStart.toFixed(2)}" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".78"/></linearGradient><linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".25"/><stop offset=".14" stop-color="#000" stop-opacity="0"/></linearGradient></defs><rect width="1080" height="1350" fill="url(#shade)"/><rect width="1080" height="1350" fill="url(#top)"/>`));
   }
   const left=(layer:{info:{width:number}})=>topLeft?MARGIN:Math.round((1080-layer.info.width)/2);
   layers.push(
@@ -521,7 +521,11 @@ async function composeQuote(inputs:Buffer[],slide:CarouselSlidePlan,index:number
   const quoteTop=Math.max(320,Math.round((1350-quote.info.height)/2)-80);
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:"#fffffff2",width:200,height:36,font:FONTS.semibold,shadow:true});
   const layers:OverlayOptions[]=[
-    svgLayer(`<rect width="1080" height="1350" fill="#000" fill-opacity=".18"/>`+cornerMarks({inset:40,length:54,color:palette.highlight,opacity:.65})),
+    // 사진 전체를 덮던 검은 막(.18)은 .10으로 옅게 남기고, 글자가 실제로 놓이는 두 곳에만 띠를 깐다.
+    // ① 따옴표(quoteTop−150)부터 인용구 끝까지: 위아래로 흐려지는 세로 그라데이션. ② 출처·부연 줄(1150~) 뒤: 아래로 짙어지는 띠.
+    // 그 사이(대개 음식이 있는 가운데 아래쪽)는 어둡게 누르지 않는다. 흰 사진에서도 따옴표·부연 줄이 3:1을 넘는 선에서 잡은 값.
+    svgLayer(`<defs><linearGradient id="qband" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".22" stop-color="#000" stop-opacity=".6"/><stop offset=".85" stop-color="#000" stop-opacity=".6"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient><linearGradient id="qfoot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".3" stop-color="#000" stop-opacity=".62"/><stop offset="1" stop-color="#000" stop-opacity=".72"/></linearGradient></defs>`
+      +`<rect width="1080" height="1350" fill="#000" fill-opacity=".10"/><rect x="0" y="${quoteTop-230}" width="1080" height="${quote.info.height+330}" fill="url(#qband)"/><rect x="0" y="1090" width="1080" height="260" fill="url(#qfoot)"/>`+cornerMarks({inset:40,length:54,color:palette.highlight,opacity:.65})),
     {input:mark.data,left:centred?540-Math.round(mark.info.width/2):MARGIN-8,top:quoteTop-150},
     {input:quote.data,left:centred?Math.round((1080-quote.info.width)/2):MARGIN,top:quoteTop},
     // 따옴표 옆과 인용구 끝에 작은 반짝이. 출처 줄 위의 짧은 강조선은 그대로 둔다.

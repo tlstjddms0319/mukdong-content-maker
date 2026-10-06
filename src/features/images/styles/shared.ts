@@ -23,6 +23,15 @@ export const STYLE_FONTS={
   sans:face("Pretendard-Regular.otf","Pretendard"),
   sansBold:face("Pretendard-Bold.otf","Pretendard Bold"),
   sansSemi:face("Pretendard-SemiBold.otf","Pretendard SemiBold"),
+  round:face("Jua-Regular.ttf","Jua"),                        // 네온 간판(둥근 글자)
+  brush:face("NanumBrushScript-Regular.ttf","Nanum Brush Script"), // 한지·수묵(붓글씨)
+  chalk:face("Gaegu-Bold.ttf","Gaegu Bold"),                  // 칠판(분필 손글씨)
+  marker:face("EastSeaDokdo-Regular.ttf","East Sea Dokdo"),   // 사진 위 낙서(마커 손글씨)
+  soft:face("GamjaFlower-Regular.ttf","Gamja Flower"),        // 수채화(둥근 손글씨)
+  dodum:face("GowunDodum-Regular.ttf","Gowun Dodum"),         // 수채화 요점(부드러운 고딕)
+  mono:face("NanumGothicCoding-Bold.ttf","NanumGothicCoding Bold"), // 모던 그리드·티켓(번호·꼬리표)
+  display:face("AbrilFatface-Regular.ttf","Abril Fatface"),   // 푸드 매거진 표지(제호, 영문 전용)
+  condensed:face("BebasNeue-Regular.ttf","Bebas Neue"),       // 티켓·라벨(좁은 영문 대문자, 영문 전용)
 } as const;
 
 // 장 하나를 스타일이 그리기 쉬운 모양으로 정리한다. 표지·사진 장·글자 장 가운데 어느 쪽인지 kind로 알려 준다.

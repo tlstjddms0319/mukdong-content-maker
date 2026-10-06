@@ -17,9 +17,12 @@ function openBook(cx:number,spineY:number,w:number):string {
   const left=`M${cx} ${spineY}L${cx-w} ${spineY-lift}L${cx-w-14} ${spineY+h-lift}L${cx} ${spineY+h}Z`;
   const right=`M${cx} ${spineY}L${cx+w} ${spineY-lift}L${cx+w+14} ${spineY+h-lift}L${cx} ${spineY+h}Z`;
   const edges=Array.from({length:4},(_,i)=>`M${cx-w-14+i*3} ${spineY+h-lift+8+i*5}L${cx} ${spineY+h+8+i*5}L${cx+w+14-i*3} ${spineY+h-lift+8+i*5}`).join("");
+  // 펼친 쪽에 옅은 글줄을 그어 책처럼 보이게 한다.
+  const text=Array.from({length:4},(_,i)=>`M${cx-w+40} ${spineY-lift+26+i*18}L${cx-40} ${spineY+26+i*18}M${cx+40} ${spineY+26+i*18}L${cx+w-40} ${spineY-lift+26+i*18}`).join("");
   return `<ellipse cx="${cx}" cy="${spineY+h+40}" rx="${w+60}" ry="40" fill="#000" opacity=".35"/>`
     +`<path d="${edges}" fill="none" stroke="${PAGE_EDGE}" stroke-width="4"/>`
     +`<path d="${left}" fill="${PAGE}" stroke="${PAGE_EDGE}" stroke-width="3"/><path d="${right}" fill="#F3EAD4" stroke="${PAGE_EDGE}" stroke-width="3"/>`
+    +`<path d="${text}" stroke="${PAGE_EDGE}" stroke-width="2" opacity=".7"/>`
     +`<path d="M${cx} ${spineY}V${spineY+h}" stroke="${PAGE_EDGE}" stroke-width="4"/>`;
 }
 const star=(x:number,y:number,r:number,fill:string)=>{
@@ -45,13 +48,14 @@ export const renderPopup:CardRenderer=async(inputs,slide,index,total)=>{
   const spineY=1350-230;
   const hasPhoto=inputs.length>0;
   // 요점은 두께 있는 종이 탭에. 사진 장은 제목 아래 작게, 글자 장은 화면 가운데 계단처럼 크게.
-  const tabs=await Promise.all(content.points.slice(0,hasPhoto?2:4).map(point=>textLayer(point,{size:hasPhoto?32:42,color:"#1A1A1A",width:hasPhoto?W-80:W-120,height:hasPhoto?100:150,font:STYLE_FONTS.comic,spacing:6})));
+  const tabs=await Promise.all(content.points.slice(0,hasPhoto?3:4).map(point=>textLayer(point,{size:hasPhoto?36:50,color:"#1A1A1A",width:hasPhoto?W-80:W-140,height:hasPhoto?120:170,font:STYLE_FONTS.comic,spacing:6})));
   const tabsH=tabs.reduce((sum,tab)=>sum+tab.info.height+30+(hasPhoto?14:26),0);
   if(!hasPhoto&&tabs.length)y=Math.max(y,Math.round((y+spineY-60-tabsH)/2));
   const tabLayers:OverlayOptions[]=[];
   for(const [i,tab] of tabs.entries()){
     const w=tab.info.width+60,h=tab.info.height+30;
-    const x=hasPhoto?Math.round((1080-w)/2):M+(i%2?60:0)+Math.round((W-60-w)/2);
+    // 글자 장은 탭을 계단처럼 오른쪽으로 조금씩 밀어 책에서 튀어나온 종이처럼 보이게 한다.
+    const x=hasPhoto?Math.round((1080-w)/2):Math.min(1080-M-w-12,M+i*44);
     const d=hasPhoto?8:12;
     deco+=`<path d="M${x} ${y+h}L${x+d} ${y+h+d}H${x+w+d}V${y+d}L${x+w} ${y}V${y+h}Z" fill="${scene.tabSide}"/><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${i%2?"#FFFFFF":scene.tab}" stroke="#111" stroke-width="3"/>`;
     tabLayers.push({input:tab.data,left:x+30,top:y+15});
