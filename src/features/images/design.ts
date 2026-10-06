@@ -86,11 +86,14 @@ export const DesignSpecSchema=z.object({
   theme:ThemeIdSchema.default("classic"),
   titleFont:TitleFontIdSchema.default("pretendard"),
   bodyFont:BodyFontIdSchema.default("pretendard"),
+  // 장식 세기(계획서 B11). calm이면 키치·팝업북·네온·칠판처럼 장식이 많은 계열이 햇살·반짝이·효과를 줄인 절제 변형으로 그린다.
+  // 잔칫상·기념일처럼 격식 있는 글에 시끄러운 장식이 붙지 않게 한다. 예전 구성안처럼 비어 있으면 loud(지금까지의 모양).
+  tone:z.enum(["loud","calm"]).default("loud"),
 });
 export type DesignSpec=z.output<typeof DesignSpecSchema>;
 // 그리기 함수는 글꼴이 빠진 예전 값도 받는다(빠진 글꼴은 기본값).
 export type DesignSpecInput=z.input<typeof DesignSpecSchema>;
-export const DEFAULT_DESIGN:DesignSpec={palette:"warm",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard"};
+export const DEFAULT_DESIGN:DesignSpec={palette:"warm",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud"};
 
 export const paletteOf=(design?:DesignSpecInput):Palette=>PALETTES[design?.palette??DEFAULT_DESIGN.palette].colors;
 

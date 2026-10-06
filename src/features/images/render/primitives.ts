@@ -38,12 +38,14 @@ export const DECOR_FONT:Font={...FONTS.bold};
 // ── 카드 한 장을 그리는 동안의 설정 ─────────────────────────────────────────────────────────
 // 글꼴·테마·변형 번호·색 조합. 서버는 여러 카드를 동시에 그릴 수 있으므로 모듈 변수 대신 AsyncLocalStorage에 담아,
 // 같은 비동기 흐름 안의 함수만 그 값을 보게 한다(요청끼리 글꼴이나 테마가 섞이지 않는다).
-export type RenderContext={typography:Typography;theme:ThemeId;variant:number;palette:Palette;brandHandle?:string};
+export type RenderContext={typography:Typography;theme:ThemeId;variant:number;palette:Palette;brandHandle?:string;tone?:"loud"|"calm"};
 const renderStore=new AsyncLocalStorage<RenderContext>();
 export const withRenderContext=<T,>(context:RenderContext,task:()=>Promise<T>)=>renderStore.run(context,task);
 export const currentTheme=():ThemeId=>renderStore.getStore()?.theme??"classic";
 // 레이아웃 변형 번호(0부터). 레이아웃마다 변형 수가 다르므로 쓰는 쪽에서 % 개수로 고른다.
 export const currentVariant=():number=>renderStore.getStore()?.variant??0;
+// 장식 세기(계획서 B11). "calm"이면 장식이 많은 계열(kitsch·popup·neon·chalkboard)이 절제 변형으로 그린다.
+export const currentTone=():"loud"|"calm"=>renderStore.getStore()?.tone??"loud";
 // 브랜드 키트: 바닥글의 가게 표시. 설정에 Instagram 계정이 있으면 "묵동홍어마을 · @계정"으로 모든 계열에 같은 모양으로 찍는다.
 export const brandHandle=():string=>{const handle=renderStore.getStore()?.brandHandle?.replace(/^@/,"").trim();return handle?`@${handle}`:"";};
 export const brandName=():string=>{

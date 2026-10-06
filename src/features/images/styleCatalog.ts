@@ -54,8 +54,45 @@ export const STYLES:Record<StyleId,{label:string;when:string;photoHint:string}>=
     photoHint:"Cinematic, moody scene with warm practical lights and natural shadows, like a still frame from a film."},
 };
 
+// 계열 친화도 표(계획서 B11). fits는 그 계열이 잘 어울리는 글의 낱말, avoid는 어울리지 않는 낱말이다.
+// AI 구성안 안내문에 피할 글을 함께 넣고, AI가 계열을 고르지 않았거나 기본 구성안일 때 서버가 이 표로 후보를 좁힌다
+// (잔칫상 글이 B급 키치로, 비 오는 날 감성 글이 컬러 블록으로 가지 않게).
+// 글(제목·요점·키워드)에 낱말이 그대로 들어 있는지만 본다. 형태소 분석을 하지 않으므로 짧은 어근으로 적는다.
+export const STYLE_FIT:Record<StyleId,{fits:string[];avoid:string[]}>={
+  template:{fits:[],avoid:[]},
+  colorblock:{fits:["신메뉴","이벤트","할인","알림","오픈","출시","한정"],avoid:["잔치","제사","명절","추모","감성","비 오는"]},
+  webtoon:{fits:["처음","후기","반응","도전","에피소드","친구","입문"],avoid:["잔치","제사","격식","기념일","프리미엄"]},
+  omakase:{fits:["숙성","산지","깊은 맛","정갈","코스","장인","고급"],avoid:["이벤트","할인","도전","웃긴"]},
+  typography:{fits:["식감","쫄깃","톡 쏘는","한 마디","강렬"],avoid:["안내","오시는 길","예약","순서"]},
+  kitsch:{fits:["도전","이벤트","웃긴","챌린지","레전드","대박"],avoid:["잔치","제사","명절","추모","기념일","어르신","격식","상견례"]},
+  diary:{fits:["후기","추억","기록","계절","단골","일상","방문"],avoid:["할인","이벤트","신메뉴"]},
+  infographic:{fits:["부위","단계","순서","차이","정리","비교","숙성"],avoid:["감성","분위기","비 오는"]},
+  popup:{fits:["신메뉴","공개","첫인상","출시","오픈"],avoid:["잔치","제사","추모","격식"]},
+  neon:{fits:["퇴근","한잔","저녁","밤","모임","회식"],avoid:["점심","아침","잔치","제사"]},
+  hanji:{fits:["전통","잔치","삼합","명절","제사","어르신","깊은","유래"],avoid:["이벤트","할인","챌린지","웃긴"]},
+  chalkboard:{fits:["먹는 법","오늘의","순서","메뉴","팁","안내"],avoid:["격식","프리미엄","기념일"]},
+  doodle:{fits:["여기","포인트","꿀팁","주목"],avoid:["격식","추모","제사"]},
+  label:{fits:["막걸리","전통주","오래된","방법","양조"],avoid:["챌린지","웃긴"]},
+  grid:{fits:["부위","단계","비교","정리","구성"],avoid:["감성","비 오는","추억"]},
+  gold:{fits:["연말","기념일","특별한","프리미엄","코스","상견례"],avoid:["할인","챌린지","웃긴","도전"]},
+  watercolor:{fits:["일상","계절","안부","봄","가을","따뜻한"],avoid:["도전","챌린지","강렬"]},
+  ticket:{fits:["방문","오시는 길","예약","초대","모임","안내"],avoid:["추모","제사"]},
+  editorial:{fits:["특집","베스트","시즌","정리","한 마디"],avoid:["제사","추모"]},
+  film:{fits:["비 오는","술 한잔","하루","감성","저녁","추억"],avoid:["할인","이벤트","신메뉴"]},
+};
+// 장식이 많아 절제 변형(design.tone="calm")을 가진 계열.
+export const RESTRAINABLE_STYLES=new Set<StyleId>(["kitsch","popup","neon","chalkboard"]);
+// 격식 있는 글의 낱말. 이런 글이면 tone을 calm으로 둔다.
+export const CALM_WORDS=["잔치","제사","명절","추모","기념일","어르신","상견례","돌잔치","환갑","칠순"];
+// 글에 들어 있는 fits 낱말 수 − avoid 낱말 수×2. 피할 낱말 하나가 어울리는 낱말 둘보다 무겁다.
+export function styleAffinity(id:StyleId,text:string):number {
+  const fit=STYLE_FIT[id];
+  const count=(words:string[])=>words.filter(word=>text.includes(word)).length;
+  return count(fit.fits)-count(fit.avoid)*2;
+}
+
 export function styleCatalogText():string {
-  const styles=StyleIdSchema.options.map(id=>`${id}(${STYLES[id].label}: ${STYLES[id].when})`).join(", ");
+  const styles=StyleIdSchema.options.map(id=>{const avoid=STYLE_FIT[id].avoid;return `${id}(${STYLES[id].label}: ${STYLES[id].when}${avoid.length?` / 피할 글: ${avoid.join("·")}`:""})`;}).join(", ");
   return `design.style은 게시물 전체의 디자인 방향으로 다음 중 하나: ${styles}. 지난 게시물과 다른 느낌이 나도록 주제에 맞는 계열을 고르세요. template이 아니면 각 slide의 layout은 사진 장 수(0~3장)만 정하는 데 쓰입니다.`;
 }
 
