@@ -1,7 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { svgLayer, textLayer, type CardRenderer, brandName, type Layer } from "../render/primitives";
 import { registerPhoto } from "../render/audit";
-import { STYLE_FONTS, blobCutout, contentOf, cutoutPhoto, fitText, hashtags, snap, stickerize } from "./shared";
+import { STYLE_FONTS, blobCutout, closingBlock, contentOf, cutoutPhoto, emphasisOf, fitText, hashtags, nextCue, snap, stickerize } from "./shared";
 
 // 대담한 컬러 블록: 장마다 화면 전체를 진한 단색으로 칠하고, 화면을 꽉 채우는 굵은 글자와 배경을 지운 음식(누끼)을
 // 스티커처럼 붙인다. 요점은 흰 알약 안에 넣는다. 광고 포스터처럼 한눈에 들어오는 것이 목표다.
@@ -10,21 +10,26 @@ import { STYLE_FONTS, blobCutout, contentOf, cutoutPhoto, fitText, hashtags, sna
 
 // 장마다 돌아가며 쓰는 바탕색과 그 위 글자색. 같은 게시물 안에서 장을 넘길 때마다 색이 바뀐다.
 // cool: 차가운 바탕이라 사진 색을 조금 데워야 하는 블록(아래 photoTone).
-type Block={bg:string;ink:string;pop:string;cool:boolean};
+// emph: 제목 핵심어 강조색. 바탕 대비 3:1 이상이면서 글자색(ink)과 밝기 쪽이 같은 색을 고른다 — 검은 글자 속 흰 강조처럼
+// 밝기가 반대면 제목 획 전체의 평균 대비가 무너진다(주황 위 검정+흰색 1.3:1). 그래서 검은 글자 블록은 진한 색(주황 위 코발트 3.3,
+// 노랑 위 진홍 4.1, 분홍 위 보라 4.5), 흰 글자 블록은 밝은 색(파랑·남색 위 노랑, 초록 위 노랑 3.3, 검정 위 주황 6.1).
+// 초록은 원래 #0FA968이었는데 흰 글자가 3.05:1로 겨우 넘어 강조 노랑(2.4:1)이 안 들어가 한 단계 진하게(#0A8F57, 흰 글자 4.1:1).
+type Block={bg:string;ink:string;pop:string;emph:string;cool:boolean};
 const BLOCKS:readonly Block[]=[
-  {bg:"#FF5A36",ink:"#111111",pop:"#FFFFFF",cool:false},
-  {bg:"#2E5BFF",ink:"#FFFFFF",pop:"#FFD23F",cool:true},
-  {bg:"#FFD23F",ink:"#111111",pop:"#FF5A36",cool:false},
-  {bg:"#0FA968",ink:"#FFFFFF",pop:"#FFD23F",cool:true},
-  {bg:"#FF6FB5",ink:"#111111",pop:"#FFFFFF",cool:false},
-  {bg:"#111111",ink:"#FFFFFF",pop:"#FF5A36",cool:false},
+  {bg:"#FF5A36",ink:"#111111",pop:"#FFFFFF",emph:"#0B2FB0",cool:false},
+  {bg:"#2E5BFF",ink:"#FFFFFF",pop:"#FFD23F",emph:"#FFD23F",cool:true},
+  {bg:"#FFD23F",ink:"#111111",pop:"#FF5A36",emph:"#C8102E",cool:false},
+  {bg:"#0A8F57",ink:"#FFFFFF",pop:"#FFD23F",emph:"#FFE600",cool:true},
+  {bg:"#FF6FB5",ink:"#111111",pop:"#FFFFFF",emph:"#3A1A9E",cool:false},
+  {bg:"#111111",ink:"#FFFFFF",pop:"#FF5A36",emph:"#FF5A36",cool:false},
 ];
 // 사진 장 안전색: 쨍한 파랑·핫핑크 바탕 옆에 놓이면 홍어의 분홍 살이 자주색·회색으로 보인다(동시 대비).
 // 사진이 올라가는 장에서는 파랑을 가라앉은 네이비로, 핫핑크를 크림으로 바꾼다. 코럴로 바꾸면 주황 블록과 겹쳐
 // 장을 넘길 때 색이 바뀌는 리듬이 죽으므로 크림을 쓴다. 글자만 있는 장은 원래 색을 그대로 써 다양함을 지킨다.
 const PHOTO_SAFE:Record<string,Block>={
-  "#2E5BFF":{bg:"#1C2B5A",ink:"#FFFFFF",pop:"#FFD23F",cool:true},
-  "#FF6FB5":{bg:"#FFF1DC",ink:"#111111",pop:"#FF5A36",cool:false},
+  "#2E5BFF":{bg:"#1C2B5A",ink:"#FFFFFF",pop:"#FFD23F",emph:"#FFD23F",cool:true},
+  // 크림 위 주황(#FF5A36)은 2.8:1이라 강조색만 한 단계 진한 주홍(4.1:1)으로.
+  "#FF6FB5":{bg:"#FFF1DC",ink:"#111111",pop:"#FF5A36",emph:"#D93A1A",cool:false},
 };
 // 표지는 첫인상이라 음식이 가장 맛있게 보이는 따뜻한 블록(주황·노랑·크림)만 돌려 쓴다.
 const COVER_BLOCKS:readonly Block[]=[BLOCKS[0],BLOCKS[2],PHOTO_SAFE["#FF6FB5"]];
@@ -63,6 +68,12 @@ export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
   const block=content.cover&&hasPhoto?COVER_BLOCKS[(slide.variant??0)%COVER_BLOCKS.length]:hasPhoto?PHOTO_SAFE[rolled.bg]??rolled:rolled;
   const M=64,W=1080-M*2,footerTop=1350-90;
   const layers:OverlayOptions[]=[];
+  // 마지막 장: 바닥글 위에 흰 "가게 명함 스티커"(검은 테두리·오프셋 그림자)를 붙인다. 그 높이만큼 아래 경계(bottom)를 올려
+  // 사진·알약이 명함 위에서 끝나게 한다. 칩(흰 글자)은 검은 알약 — 검은 블록이면 파랑 알약.
+  const closing=content.last?await closingBlock({width:W-80,color:"#111111",accent:block.bg==="#111111"?"#2E5BFF":"#111111",font:STYLE_FONTS.heavy}):null;
+  const CARD_PAD=22;
+  const cardH=closing?closing.height+CARD_PAD*2:0,cardTop=footerTop-12-cardH;
+  const bottom=closing?cardTop-24:footerTop;
   // 위쪽: 해시태그 띠와 아주 큰 제목. 사진이 있으면 제목 영역을 위 절반으로 줄인다.
   const tag=await textLayer(hashtags(content),{size:30,color:block.bg,width:900,height:50,font:STYLE_FONTS.sansBold});
   const tagW=tag.info.width+44;
@@ -70,15 +81,41 @@ export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
   const shots=inputs.slice(0,2);
   const titleTop=M+tag.info.height+50;
   // 사진 장은 제목을 위 3분의 1쯤으로 줄여 사진과 겹치지 않게 하고, 글자 장은 제목을 화면 절반까지 키운다.
-  const titleRoom=hasPhoto?(shots.length>1?340:400):560;
-  const title=await fitText(content.headline,{sizes:[150,130,112,96,84,72,64],width:W,maxHeight:titleRoom,color:block.ink,font:STYLE_FONTS.heavy,spacing:0});
+  // 마지막 장은 명함 몫만큼 제목 자리도 조금 줄인다(사진·알약만 줄이면 사진이 우표만 해진다).
+  let titleRoom=(hasPhoto?(shots.length>1?340:400):560)-(closing?100:0);
+  const TITLE_SIZES=[150,130,112,96,84,72,64];
+  // 표지 부제: 해시태그 띠와 같은 "검은(글자색) 알약"에 바탕색 글자로, 제목 바로 아래. 가장 작은 제목 크기로도
+  // 부제 몫을 뺀 자리에 제목이 안 들어가면 부제를 뺀다(제목을 몰래 줄이지 않는다).
+  let subline:{layer:Layer;h:number}|null=null;
+  if(content.subline){
+    const layer=await textLayer(content.subline,{size:34,color:block.bg,width:W-48,height:120,font:STYLE_FONTS.sansBold});
+    const h=layer.info.height+22+20;
+    const probe=await textLayer(content.headline,{size:TITLE_SIZES[TITLE_SIZES.length-1],color:block.ink,width:W,height:4000,font:STYLE_FONTS.heavy,spacing:0});
+    if(probe.info.height<=titleRoom-h){subline={layer,h};titleRoom-=h;}
+  }
+  const title=await fitText(content.headline,{sizes:TITLE_SIZES,width:W,maxHeight:titleRoom,color:block.ink,font:STYLE_FONTS.heavy,spacing:0,emphasis:emphasisOf(content,block.emph)});
+  const headH=title.info.height+(subline?.h??0);
+  const placeHead=(y:number)=>{
+    layers.push({input:title.data,left:M,top:y});
+    if(!subline)return;
+    const sy=y+title.info.height+20,{layer}=subline;
+    layers.push(svgLayer(`<rect x="${M}" y="${sy}" width="${layer.info.width+48}" height="${layer.info.height+22}" rx="${(layer.info.height+22)/2}" fill="${block.ink}"/>`),{input:layer.data,left:M+24,top:sy+11});
+  };
   // 요점은 흰(또는 강조색) 알약에 한 줄씩. 사진 한 장이면 왼쪽 아래 좁게, 아니면 제목 아래로 넓게.
   const pillW=shots.length===1?560:W;
-  // 글자 장은 요점이 주인공이라 알약 글자를 크게(48px) 쓴다.
-  const pillSize=hasPhoto?34:48;
-  const pills:Layer[]=[];
-  for(const point of content.points.slice(0,hasPhoto?3:4))pills.push(await textLayer(point,{size:pillSize,color:"#111111",width:pillW-56,height:pillSize*3.4,font:STYLE_FONTS.sansBold,spacing:6}));
-  const pillsHeight=pills.reduce((sum,pill)=>sum+pill.info.height+36+16,0);
+  // 글자 장은 요점이 주인공이라 알약 글자를 크게(48px) 쓴다. 마지막 장에서 명함 때문에 자리가 모자라면
+  // 요점 수를 줄이지 않고 글자 크기를 한 단계씩 줄인다(사진 장 30px, 글자 장 34px까지).
+  const pillSizes=hasPhoto?[34,32,30]:[48,44,40,36,34];
+  const makePills=async(size:number)=>{
+    const made:Layer[]=[];
+    for(const point of content.points.slice(0,hasPhoto?3:4))made.push(await textLayer(point,{size,color:"#111111",width:pillW-56,height:size*3.4,font:STYLE_FONTS.sansBold,spacing:6}));
+    return {made,height:made.reduce((sum,pill)=>sum+pill.info.height+36+16,0)};
+  };
+  // 알약 덩어리가 들어갈 높이: 글자 장은 제목 아래 전부, 사진 장은 제목 아래~아래 경계(사진 위에 겹쳐 얹는다).
+  const pillsRoom=hasPhoto?bottom-20-(titleTop+headH+30):bottom-(titleTop+headH+60);
+  let pillSet=await makePills(pillSizes[0]);
+  for(const size of pillSizes.slice(1)){if(pillSet.height<=pillsRoom)break;pillSet=await makePills(size);}
+  const pills=pillSet.made,pillsHeight=pillSet.height;
   // 알약은 사진(스티커) 위에 와야 글자가 가려지지 않으므로 따로 모았다가 사진 다음에 얹는다.
   const pillLayers:OverlayOptions[]=[];
   const placePills=(start:number,gap:number)=>{
@@ -90,59 +127,82 @@ export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
       cursor+=h+16+gap;
     }
   };
+  // 별 스티커 속 장 번호. 숫자 폭을 고정(tnum)해 1/5와 10/10의 자리가 흔들리지 않게 한다.
+  const counterAt=async(cx:number,cy:number,r:number)=>{
+    layers.push(svgLayer(burst(cx,cy,r,block.pop)));
+    const counter=await textLayer(`${index}/${total}`,{size:30,color:"#111111",width:120,height:44,font:STYLE_FONTS.heavy,align:"centre",features:"tnum"});
+    layers.push({input:counter.data,left:cx-Math.round(counter.info.width/2),top:cy-Math.round(counter.info.height/2)});
+  };
   let titleY=titleTop;
   if(shots.length>1){
     // 사진 두 장: 스티커 둘을 맨 아래에 나란히, 알약은 그 위에 넓게.
-    layers.push({input:title.data,left:M,top:titleY});
-    const titleBottom=titleY+title.info.height;
-    const room=footerTop-(titleBottom+40)-(pillsHeight?pillsHeight+30:0);
+    placeHead(titleY);
+    const titleBottom=titleY+headH;
+    const room=bottom-(titleBottom+40)-(pillsHeight?pillsHeight+30:0);
     // 스티커 둘이 가로 1080 안에 나란히 들어가는 최대(약 466)와 남는 높이(스티커 몫 100을 뺀) 중 작은 쪽.
-    const size=Math.max(300,Math.min(460,room-100));
+    // 마지막 장은 명함 자리 때문에 240까지 줄인다.
+    const size=Math.max(closing?240:300,Math.min(460,room-100));
     const tiles=await Promise.all(shots.map((shot,i)=>stickerTile(shot,size,block,index*7+i*13+(slide.variant??0))));
     const gap=24,rowW=tiles.reduce((sum,tile)=>sum+tile.info.width,0)+gap,rowH=Math.max(...tiles.map(tile=>tile.info.height));
-    const rowTop=footerTop-rowH;
+    const rowTop=bottom-rowH;
     let x=Math.round((1080-rowW)/2);
     for(const tile of tiles){layers.push({input:tile.data,left:x,top:rowTop+rowH-tile.info.height});x+=tile.info.width+gap;}
     placePills(Math.max(titleBottom+30,rowTop-pillsHeight-24),0);
     // 별 모양 스티커와 장 번호는 두 사진 사이 위쪽에.
-    layers.push(svgLayer(burst(540,rowTop+40,58,block.pop)));
-    const counter=await textLayer(`${index}/${total}`,{size:30,color:"#111111",width:120,height:44,font:STYLE_FONTS.heavy,align:"centre"});
-    layers.push({input:counter.data,left:540-Math.round(counter.info.width/2),top:rowTop+40-Math.round(counter.info.height/2)});
+    await counterAt(540,rowTop+40,58);
   }else if(hasPhoto){
-    layers.push({input:title.data,left:M,top:titleY});
-    const titleBottom=titleY+title.info.height;
-    // 사진은 오른쪽 아래에 크게. 제목 아래 남는 공간(채널명 줄 위까지)에 맞춰 크기를 정해 제목과 겹치지 않게 한다.
-    // 스티커 아래 끝은 채널명 줄 위 20px까지 허용하고, 스티커 몫(약 100)을 뺀 높이를 사진 크기로 쓴다.
-    const room=footerTop+20-(titleBottom+30)-100;
-    const size=Math.max(380,Math.min(pills.length?640:820,room));
+    placeHead(titleY);
+    const titleBottom=titleY+headH;
+    // 사진은 오른쪽 아래에 크게. 제목 아래 남는 공간(아래 경계 위까지)에 맞춰 크기를 정해 제목과 겹치지 않게 한다.
+    // 스티커 아래 끝은 아래 경계 위 20px까지 허용하고, 스티커 몫(약 100)을 뺀 높이를 사진 크기로 쓴다.
+    const room=bottom+20-(titleBottom+30)-100;
+    const size=Math.max(closing?260:380,Math.min(pills.length?640:820,room));
     const sticker=await stickerTile(shots[0],size,block,index*7+(slide.variant??0));
     // 누끼는 오른쪽 가장자리에 붙여 화면 밖으로 이어지는 느낌을, 블롭은 둥근 모양이라 여백을 조금 두고 띄운다.
     const left=sticker.cut?1080-sticker.info.width:1080-M+24-sticker.info.width;
-    const photoTop=Math.max(titleBottom+30,footerTop+(sticker.cut?0:20)-sticker.info.height);
+    const photoTop=Math.max(titleBottom+30,bottom+(sticker.cut?0:20)-sticker.info.height);
     const photoRight=left+sticker.info.width;
     layers.push({input:sticker.data,left,top:photoTop});
-    placePills(1350-110-pillsHeight,0);
+    placePills(bottom-20-pillsHeight,0);
     // 사진 오른쪽 위 모서리에 별 모양 스티커와 장 번호(제목 아래라 제목을 가리지 않는다).
-    const bx=Math.min(1080-M-30,photoRight-40),byy=photoTop+30;
-    layers.push(svgLayer(burst(bx,byy,58,block.pop)));
-    const counter=await textLayer(`${index}/${total}`,{size:30,color:"#111111",width:120,height:44,font:STYLE_FONTS.heavy,align:"centre"});
-    layers.push({input:counter.data,left:bx-Math.round(counter.info.width/2),top:byy-Math.round(counter.info.height/2)});
+    await counterAt(Math.min(1080-M-30,photoRight-40),photoTop+30,58);
   }else{
     // 글자 장: 제목과 알약 사이가 비지 않도록 남는 높이를 알약 사이 간격(최대 36px)과 위아래 여백으로 나눈다.
-    const slack=Math.max(0,footerTop-(titleTop+title.info.height+60+pillsHeight));
+    const slack=Math.max(0,bottom-(titleTop+headH+60+pillsHeight));
     const gap=pills.length>1?Math.min(36,Math.floor(slack/(pills.length+1))):0;
     titleY=titleTop+Math.round((slack-gap*(pills.length-1))/2);
-    layers.push({input:title.data,left:M,top:titleY});
-    placePills(titleY+title.info.height+60,gap);
+    placeHead(titleY);
+    placePills(titleY+headH+60,gap);
     // 사진이 없는 장도 별 모양 스티커에 장 번호를 단다(해시태그 띠 오른쪽).
-    const bx=1080-M-58,byy=M+Math.round((tag.info.height+20)/2);
-    layers.push(svgLayer(burst(bx,byy,56,block.pop)));
-    const counter=await textLayer(`${index}/${total}`,{size:30,color:"#111111",width:120,height:44,font:STYLE_FONTS.heavy,align:"centre"});
-    layers.push({input:counter.data,left:bx-Math.round(counter.info.width/2),top:byy-Math.round(counter.info.height/2)});
+    await counterAt(1080-M-58,M+Math.round((tag.info.height+20)/2),56);
   }
   layers.push(...pillLayers);
-  const brand=await fitText(brandName(),{sizes:[26,23,20],width:700,maxHeight:40,color:block.ink,font:STYLE_FONTS.sansSemi});
+  // 표지 예고 띠: 요점 알약과 같은 흰 알약(검은 테두리·오프셋 그림자)에 "이 뒤에 나오는 것"을. 바닥글 바로 위 왼쪽.
+  if(content.teaser){
+    const teaser=await textLayer(content.teaser,{size:27,color:"#111111",width:W-56,height:60,font:STYLE_FONTS.sansBold});
+    const h=teaser.info.height+24,w=teaser.info.width+48,y=footerTop-14-h;
+    layers.push(svgLayer(`<rect x="${M+5}" y="${y+5}" width="${w}" height="${h}" rx="${h/2}" fill="#000" fill-opacity=".85"/><rect x="${M}" y="${y}" width="${w}" height="${h}" rx="${h/2}" fill="#FFFFFF" stroke="#111" stroke-width="4"/>`),{input:teaser.data,left:M+24,top:y+12});
+  }
+  // 가게 명함 스티커: 흰 카드 가운데에 가게 이름(굵은 제목 글꼴)·계정·저장 칩.
+  if(closing){
+    // 카드 폭은 내용(가게 이름·계정·칩 중 가장 넓은 것)+좌우 60px — 화면 폭 그대로면 가운데만 차고 양옆이 텅 빈다.
+    const cardW=Math.min(W,Math.max(560,closing.wordmark.info.width,closing.handle?.info.width??0,closing.chip.info.width+52)+120),cardX=540-cardW/2;
+    layers.push(svgLayer(`<rect x="${cardX+8}" y="${cardTop+8}" width="${cardW}" height="${cardH}" rx="28" fill="#000" fill-opacity=".85"/><rect x="${cardX}" y="${cardTop}" width="${cardW}" height="${cardH}" rx="28" fill="#FFFFFF" stroke="#111" stroke-width="4"/>`));
+    let y=cardTop+CARD_PAD;
+    layers.push({input:closing.wordmark.data,left:540-Math.round(closing.wordmark.info.width/2),top:y});
+    y+=closing.wordmark.info.height;
+    if(closing.handle){layers.push({input:closing.handle.data,left:540-Math.round(closing.handle.info.width/2),top:y+8});y+=8+closing.handle.info.height;}
+    const chipX=540-Math.round(closing.chip.info.width/2),chipY=y+18+12;
+    layers.push(svgLayer(closing.chipSvg(chipX,chipY)),{input:closing.chip.data,left:chipX,top:chipY});
+  }
+  // 바닥글: 왼쪽 가게 이름, 본문 장이면 오른쪽에 "넘겨 보기 ›"를 해시태그 띠와 같은 글자색 알약에.
+  const cue=!content.cover&&!content.last?await nextCue(block.bg,26):null;
+  const brand=await fitText(brandName(),{sizes:[28,26],width:W-(cue?cue.width+70:0),maxHeight:44,color:block.ink,font:STYLE_FONTS.sansSemi});
   layers.push({input:brand.data,left:M,top:1350-70});
+  if(cue){
+    const x=1080-M-18-cue.width,y=1350-70+Math.round((brand.info.height-cue.height)/2);
+    layers.push(svgLayer(`<rect x="${x-18}" y="${y-8}" width="${cue.width+36}" height="${cue.height+16}" rx="${(cue.height+16)/2}" fill="${block.ink}"/>${cue.arrow(x,y)}`),{input:cue.label.data,left:x,top:y});
+  }
   return sharp({create:{width:1080,height:1350,channels:3,background:block.bg}}).composite(snap(layers)).jpeg({quality:92}).toBuffer();
 };
 

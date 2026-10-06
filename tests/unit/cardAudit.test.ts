@@ -86,9 +86,10 @@ describe("brand kit", () => {
       const plain=await composeSlideCard([photo],slide,2,5,"card",{palette:"warm",style},{brandHandle:""});
       const branded=await composeSlideCard([photo],slide,2,5,"card",{palette:"warm",style},{brandHandle:"@mukdong_hongeo"});
       // 계정이 들어간 바닥글 글자 상자가 하나 이상 더 넓어지고, 넘침·겹침은 없다.
+      // 계정을 따로 한 줄로 적는 계열(diary 등)은 글자 상자가 하나 늘 수 있다.
       const widest=(boxes:{width:number}[])=>boxes.reduce((max,box)=>Math.max(max,box.width),0);
       expect(branded.report.issues,style).toEqual([]);
-      expect(branded.report.boxes.length,style).toBe(plain.report.boxes.length);
+      expect(branded.report.boxes.length,style).toBeGreaterThanOrEqual(plain.report.boxes.length);
       expect(widest(branded.report.boxes),style).toBeGreaterThanOrEqual(widest(plain.report.boxes));
     }
   },120_000);

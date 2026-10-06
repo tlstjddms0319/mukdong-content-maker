@@ -20,6 +20,7 @@ vi.mock("@/lib/ai/openaiClient",()=>({
 vi.mock("@/features/settings/repository",()=>({readSettings}));
 
 const visitSlide={
+  subline:"",
   role:"visit" as const,
   headline:"오늘 한 상 어때요?",
   points:[],
@@ -32,7 +33,7 @@ const visitSlide={
 
 const carouselStyleAnchor="따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트";
 const visitSlideMetadata={slide:visitSlide,slideIndex:5,slideTotal:5,styleAnchor:carouselStyleAnchor};
-const coverSlide={...visitSlide,role:"cover" as const,headline:"비 오는 날 홍어 한 상",layout:"fullscreen" as const};
+const coverSlide={...visitSlide,role:"cover" as const,subline:"",headline:"비 오는 날 홍어 한 상",layout:"fullscreen" as const};
 
 describe("OpenAI image request", () => {
   it("uses the cooked preparation instead of a raw-slice directive for hongeo jeon",()=>{
@@ -395,7 +396,7 @@ describe("OpenAI image request", () => {
 
 describe("hongeo stays the hero", () => {
   it("tells the image model that the skate is largest and in front while pork and kimchi are sides", () => {
-    const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0}});
+    const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",subline:"",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0}});
     expect(prompt).toContain("주인공은 홍어");
     expect(prompt).toContain("hero of every scene");
     expect(prompt).toContain("수육이 홍어보다 크거나 앞에 오면 안 된다");

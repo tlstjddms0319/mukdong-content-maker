@@ -473,7 +473,7 @@ function newSlidePlan(input:NewSlide,after:CarouselPlan["slides"][number]|undefi
   const headline=input.headline.trim();
   const layout:CarouselPlan["slides"][number]["layout"]=input.source==="text"?"checklist":"frame";
   return {
-    role:"detail",headline,points:input.points.map(point=>point.trim()).filter(Boolean),
+    role:"detail",headline,subline:"",points:input.points.map(point=>point.trim()).filter(Boolean),
     // 이미지 AI로 만들 때 쓰는 장면 설명. 제목과 주제로 짓는다(12자 이상).
     visualPrompt:`${headline} — ${state.input.topic} 장면, 묵동홍어마을의 홍어 요리`.slice(0,600),
     textPosition:"bottom",layout,keywords:[],figure:"",
