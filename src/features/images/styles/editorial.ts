@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { brandName, svgLayer, textLayer, type CardRenderer, type Font, type Layer } from "../render/primitives";
+import { brandName, finishPhoto, svgLayer, textLayer, type CardRenderer, type Font, type Layer } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText, hashtags, rotated, snap, type StyleContent } from "./shared";
 import { seeded } from "./handDrawn";
 
@@ -79,13 +79,13 @@ function coverShade():string {
 
 // 사진은 각진 모서리에 가는 검은 테두리. 테두리는 사진 위에 얹는 svg 문자열로 돌려준다.
 const photoFrame=(x:number,y:number,w:number,h:number)=>`<rect x="${x+.5}" y="${y+.5}" width="${w-1}" height="${h-1}" fill="none" stroke="${INK}" stroke-width="1"/>`;
-const plainPhoto=(input:Buffer,w:number,h:number)=>sharp(input).rotate().resize(Math.round(w),Math.round(h),{fit:"cover",position:"attention"}).png().toBuffer();
+const plainPhoto=(input:Buffer,w:number,h:number)=>finishPhoto(input,w,h);
 
 // ── 표지 ──────────────────────────────────────────────────────────────────────────────
 async function renderCover(inputs:Buffer[],content:StyleContent,variant:number):Promise<Buffer> {
   const layers:OverlayOptions[]=[];
   const shot=inputs[0];
-  if(shot)layers.push({input:await sharp(shot).rotate().resize(1080,1350,{fit:"cover",position:"attention"}).modulate({brightness:1.03,saturation:1.06}).png().toBuffer(),left:0,top:0});
+  if(shot)layers.push({input:await sharp(await finishPhoto(shot,1080,1350)).modulate({brightness:1.03,saturation:1.06}).png().toBuffer(),left:0,top:0});
   let deco=coverShade();
   // 제호: 폭(여백 60 안쪽)을 가득 채우는 가장 큰 크기.
   const masthead=await fitLine("MUKDONG",{sizes:[200,196,192,188,184,180,176,172,168,164,160],maxWidth:COVER_W,font:STYLE_FONTS.display,color:"#FFFFFF"});

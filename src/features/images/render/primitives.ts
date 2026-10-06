@@ -276,11 +276,29 @@ export function photoOverlayLayer():OverlayOptions {
 }
 
 // ── 사진·캔버스 ─────────────────────────────────────────────────────────────────────────
-// 모서리를 둥글게 자른 사진 레이어. radius는 테마에 맞게 바뀌고(잡지·포스터는 각지게), 포스터는 굵은 테두리를 두른다.
-export async function croppedPhoto(input:Buffer,rawWidth:number,rawHeight:number,radius:number,options:{circle?:boolean}={}){
+// 사진을 카드에 들어갈 크기로 자르고, "그 크기에서" 선명하게 마무리한다(음식 결·윤기가 살아 보이게).
+//
+// 왜 여기서 하나: 보정(photoEnhance)은 1600px에서 끝나고 카드 칸은 300~1080px라, 큰 사진에서 건 선명화는 줄이면서 대부분
+// 사라진다. 그래서 줄인 "뒤"에 두 번 건다.
+//   1) 잔결 선명화 sigma .6: 홍어 결·깨·김 같은 가는 무늬. m1 .4(평평한 곳 약하게)·m2 1.2(경계 강하게)라 매끈한 접시는 거칠어지지 않는다.
+//   2) 큰 반경 언샤프 sigma 8, m1 0·m2 .3: 국소 대비(입체감). clahe는 1080×1350에서 1.6초라 대신 쓴다(약 200ms).
+// sharp는 한 파이프라인에 sharpen을 한 번만 기억하므로 raw 버퍼를 사이에 두고 두 번 돌린다(인코드 비용 없음).
+// finish:"none"은 흑백·흐림처럼 계열이 사진을 일부러 뭉개는 경우용이다.
+// 계열 파일은 이 뒤에 색(채도·온기)만 손대고 sharpen을 또 걸지 않는다(이중 선명화는 헤일로·JPEG 블록을 키운다).
+export type PhotoFinish="food"|"none";
+export async function finishPhoto(input:Buffer,rawWidth:number,rawHeight:number,options:{finish?:PhotoFinish;position?:string}={}):Promise<Buffer> {
   // 레이아웃 계산에서 소수가 섞여 와도(긴 문안일 때 높이의 절반 등) sharp가 받을 수 있게 정수로 맞춘다.
   const width=Math.max(1,Math.round(rawWidth)),height=Math.max(1,Math.round(rawHeight));
-  const photo=await sharp(input).rotate().resize(width,height,{fit:"cover",position:"attention"}).png().toBuffer();
+  const resized=sharp(input).rotate().resize(width,height,{fit:"cover",position:options.position??"attention"});
+  if((options.finish??"food")==="none")return resized.png().toBuffer();
+  const fine=await resized.removeAlpha().sharpen({sigma:.6,m1:.4,m2:1.2}).raw().toBuffer({resolveWithObject:true});
+  return sharp(fine.data,{raw:{width:fine.info.width,height:fine.info.height,channels:fine.info.channels}}).sharpen({sigma:8,m1:0,m2:.3}).png().toBuffer();
+}
+
+// 모서리를 둥글게 자른 사진 레이어. radius는 테마에 맞게 바뀌고(잡지·포스터는 각지게), 포스터는 굵은 테두리를 두른다.
+export async function croppedPhoto(input:Buffer,rawWidth:number,rawHeight:number,radius:number,options:{circle?:boolean;finish?:PhotoFinish}={}){
+  const width=Math.max(1,Math.round(rawWidth)),height=Math.max(1,Math.round(rawHeight));
+  const photo=await finishPhoto(input,width,height,{finish:options.finish});
   const store=renderStore.getStore();
   const r=options.circle?Math.min(width,height)/2:kit().photoRadius(radius);
   const stroke=store?kit().photoStroke(store.palette):null;

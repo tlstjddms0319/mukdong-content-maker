@@ -24,6 +24,8 @@ export const ImageBriefSchema = z.object({
   photos:z.array(z.string().regex(/^data:image\/(?:png|jpeg|webp);base64,/).max(8_000_000)).min(1).max(3).optional(),
   // photos를 그릴 때 사진 보정(밝기·색)을 할지. 사장님 사진은 기본 보정, AI 이미지 밑바탕으로 글자만 다시 그릴 때는 false.
   enhance:z.boolean().optional(),
+  // 사진 보정 방식: 사장님 사진 "real", AI가 만든 밑바탕 "ai", 보정 없음 "none". 없으면 enhance를 따른다(예전 요청 호환).
+  photoKind:z.enum(["real","ai","none"]).optional(),
   // 후보 여러 장을 만들 때 이 요청이 몇 번째 후보부터인지. 앞 제공자가 만든 장수를 이어서 구도를 배정하는 데 쓴다.
   candidateOffset:z.number().int().min(0).max(3).optional(),
   // 이 한 장만의 구도 지시. 후보마다 다른 각도·거리로 만들기 위해 서버가 채운다.

@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { brandName, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { brandName, finishPhoto, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText, snap } from "./shared";
 import { seeded, wobblyLine } from "./handDrawn";
 
@@ -32,7 +32,8 @@ async function seal(size:number,seed:number):Promise<{svg:(x:number,y:number)=>s
 // 가장자리가 한지에 스며드는 사진(흐린 사각 마스크를 알파로).
 async function inkPhoto(input:Buffer,width:number,height:number):Promise<Buffer> {
   const W=Math.round(width),H=Math.round(height);
-  const base=await sharp(input).rotate().resize(W,H,{fit:"cover",position:"attention"}).modulate({saturation:.86}).linear([1.03,1,.94],[4,2,-4]).removeAlpha().png().toBuffer();
+  // 종이 톤에 맞추되 홍어 분홍 살이 회색이 되지 않게: 채도 .86→.96, 파랑만 조금 눌러 크림빛(linear)을 남긴다.
+  const base=await sharp(await finishPhoto(input,W,H)).modulate({saturation:.96}).linear([1.02,.99,.93],[4,2,-2]).removeAlpha().png().toBuffer();
   const feather=Math.round(Math.min(W,H)*.07);
   const mask=await sharp(Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#000"/><rect x="${feather}" y="${feather}" width="${W-feather*2}" height="${H-feather*2}" rx="${feather}" fill="#fff"/></svg>`)).blur(feather*.8).extractChannel(0).toBuffer();
   return sharp(base).joinChannel(mask).png().toBuffer();
@@ -81,7 +82,7 @@ export const renderHanji:CardRenderer=async(inputs,slide,index,total)=>{
       const PW=W;
       if(content.cover)layers.push({input:await inkPhoto(shots[0],PW,PH),left:M,top:y});
       else{
-        layers.push({input:await sharp(shots[0]).rotate().resize(PW-24,PH-24,{fit:"cover",position:"attention"}).modulate({saturation:.88}).png().toBuffer(),left:M+12,top:y+12});
+        layers.push({input:await sharp(await finishPhoto(shots[0],PW-24,PH-24)).modulate({saturation:.96}).png().toBuffer(),left:M+12,top:y+12});
         deco+=`<rect x="${M}" y="${y}" width="${PW}" height="${PH}" fill="none" stroke="${INK}" stroke-width="3"/><rect x="${M+6}" y="${y+6}" width="${PW-12}" height="${PH-12}" fill="none" stroke="${INK}" stroke-width="1"/>`;
       }
     }else{

@@ -1,6 +1,7 @@
 // 모든 카드 레이아웃 × 모양 변형을 한 테마로 그려 한 장의 미리보기 시트로 모은다. AI 호출 없이 샘플 사진만 쓴다.
 // 실행: node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/render-template-gallery.mjs [theme] [palette] [titleFont] [bodyFont]
 // 결과: output/template-gallery/<theme>-<palette>.jpg
+// --photo=real|ai|none : 사진 보정 방식(기본 real = 사장님 사진과 같은 보정).
 import sharp from "sharp";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -8,7 +9,9 @@ import { composeSlideImage } from "../src/features/images/composeSlide.ts";
 import { CARD_LAYOUTS, CardLayoutSchema, LAYOUT_VARIANTS, PALETTES } from "../src/features/images/design.ts";
 import { THEMES } from "../src/features/images/themes.ts";
 
-const [theme="classic",palette="warm",titleFont="pretendard",bodyFont="pretendard"]=process.argv.slice(2);
+const photo=process.argv.find(arg=>arg.startsWith("--photo="))?.split("=")[1]??"real";
+if(!["real","ai","none"].includes(photo))throw new Error(`--photo는 real|ai|none 중 하나: ${photo}`);
+const [theme="classic",palette="warm",titleFont="pretendard",bodyFont="pretendard"]=process.argv.slice(2).filter(arg=>!arg.startsWith("--photo="));
 if(!THEMES[theme])throw new Error(`unknown theme: ${theme}. one of ${Object.keys(THEMES).join(", ")}`);
 if(!PALETTES[palette])throw new Error(`unknown palette: ${palette}`);
 
@@ -29,7 +32,7 @@ const tiles=[];
 for(const layout of CardLayoutSchema.options){
   for(let variant=0;variant<LAYOUT_VARIANTS[layout];variant++){
     const slide={...base,...copy,role:roleFor(layout),layout,variant};
-    const image=await composeSlideImage(photosFor(layout),slide,3,7,"card",{palette,theme,titleFont,bodyFont});
+    const image=await composeSlideImage(photosFor(layout),slide,3,7,"card",{palette,theme,titleFont,bodyFont},{photoKind:photo});
     const label=await sharp({text:{text:`<span foreground="#222">${CARD_LAYOUTS[layout].label.replace(/&/g,"&amp;")}${LAYOUT_VARIANTS[layout]>1?` · 변형 ${variant+1}`:""}</span>`,font:"Pretendard Bold 20",fontfile:"assets/fonts/Pretendard-Bold.otf",rgba:true}}).png().toBuffer();
     tiles.push({image:await sharp(image).resize(270,338).png().toBuffer(),label});
   }

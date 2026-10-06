@@ -2,14 +2,18 @@
 // 실행: node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/render-style-gallery.mjs [style ...]
 // 결과: output/style-gallery/<style>.jpg 와 전체 비교 output/style-gallery/all.jpg
 // --stress 를 붙이면 긴 제목·긴 요점 4개·사진 2장 같은 까다로운 장으로 그려 넘침·겹침을 찾는다(output/style-gallery-stress/).
+// --photo=real|ai|none|legacy : 사진 보정 방식(기본 real = 사장님 사진과 같은 보정). legacy는 1단계 이전 보정으로 그려 전후를 비교한다.
 import sharp from "sharp";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { composeSlideImage } from "../src/features/images/composeSlide.ts";
+import { enhancePhotoLegacy } from "../src/features/images/render/photoEnhance.ts";
 import { STYLES, StyleIdSchema } from "../src/features/images/styleCatalog.ts";
 
 const stress=process.argv.includes("--stress");
-const args=process.argv.slice(2).filter(arg=>arg!=="--stress");
+const photo=process.argv.find(arg=>arg.startsWith("--photo="))?.split("=")[1]??"real";
+if(!["real","ai","none","legacy"].includes(photo))throw new Error(`--photo는 real|ai|none|legacy 중 하나: ${photo}`);
+const args=process.argv.slice(2).filter(arg=>arg!=="--stress"&&!arg.startsWith("--photo="));
 const chosen=args.length?args:StyleIdSchema.options.filter(id=>id!=="template");
 const OUT=stress?"output/style-gallery-stress":"output/style-gallery";
 const sample=async name=>readFile(path.join("assets/design/samples",`${name}.jpg`));
@@ -35,7 +39,9 @@ for(const style of chosen){
   const tiles=[];
   for(const slide of stress?stressSlides:slides){
     const {inputs,index,...plan}=slide;
-    const image=await composeSlideImage(inputs,plan,index,5,"card",{palette:"warm",style});
+    // legacy는 예전 보정을 미리 적용한 사진을 보정 없이 넘긴다.
+    const prepared=photo==="legacy"?await Promise.all(inputs.map(enhancePhotoLegacy)):inputs;
+    const image=await composeSlideImage(prepared,plan,index,5,"card",{palette:"warm",style},{photoKind:photo==="legacy"?"none":photo});
     tiles.push(await sharp(image).resize(324,405).png().toBuffer());
   }
   const label=await sharp({text:{text:`<span foreground="#222">${STYLES[style].label.replace(/&/g,"&amp;")}</span>`,font:"Pretendard Bold 26",fontfile:"assets/fonts/Pretendard-Bold.otf",rgba:true}}).png().toBuffer();

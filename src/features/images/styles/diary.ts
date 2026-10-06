@@ -24,7 +24,7 @@ function tornPaper(x:number,y:number,w:number,h:number,seed:number):string {
 // 폴라로이드 한 장: 흰 틀(아래가 넓음)에 필름 사진, 아래 여백에 손글씨 메모.
 async function polaroid(input:Buffer,side:number,caption:string,leak:"left"|"right"):Promise<Buffer> {
   const pad=24,bottom=Math.round(side*.26);
-  const photo=await filmPhoto(input,side,side,leak);
+  const photo=await filmPhoto(input,side,side,leak,"diary");
   const note=await textLayer(caption,{size:Math.max(30,Math.round(side*.1)),color:PEN,width:side,height:bottom-10,font:STYLE_FONTS.hand,align:"centre"});
   const W=side+pad*2,H=side+pad+bottom;
   const shadow=Buffer.from(`<svg width="${W+20}" height="${H+20}" xmlns="http://www.w3.org/2000/svg"><defs><filter id="b"><feGaussianBlur stdDeviation="6"/></filter></defs><rect x="10" y="14" width="${W}" height="${H}" fill="#000" opacity=".28" filter="url(#b)"/><rect x="0" y="0" width="${W}" height="${H}" fill="#FFFEFA"/></svg>`);

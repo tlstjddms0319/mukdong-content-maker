@@ -1,6 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
-import { brandName, svg, svgLayer, textLayer, croppedPhoto, type CardRenderer, type Layer } from "../render/primitives";
+import { brandName, svg, svgLayer, textLayer, croppedPhoto, finishPhoto, type CardRenderer, type Layer } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText, snap } from "./shared";
 import { seeded } from "./handDrawn";
 
@@ -82,14 +82,15 @@ function medalOver(cx:number,cy:number,R:number,s:number):string {
     +`<circle cx="${cx}" cy="${cy}" r="${R+6.5*s}" fill="none" stroke="${GOLD}" stroke-width="${9*s}"/>`
     +`<circle cx="${cx}" cy="${cy}" r="${R+12*s}" fill="none" stroke="${FRAME}" stroke-width="1"/>`;
 }
-// 메달 속 사진: 원형으로 자르고 채도를 조금 낮춰 종이에 인쇄한 듯 따뜻하게.
-const medalPhoto=async(input:Buffer,R:number)=>sharp(await croppedPhoto(input,R*2,R*2,0,{circle:true})).modulate({saturation:.92}).png().toBuffer();
+// 메달 속 사진: 원형으로 자른다. 예전의 탈채도(.92)는 홍어 살을 탁하게 만들어 뺐다(종이 느낌은 테두리·질감이 맡는다).
+const medalPhoto=(input:Buffer,R:number)=>croppedPhoto(input,R*2,R*2,0,{circle:true});
 
 // 아치 창(위가 둥근 창) 사진: 직사각형 위에 반원을 얹은 마스크로 자른다.
 const archPath=(x:number,y:number,w:number,h:number)=>{const r=w/2;return `M${x} ${y+r}A${r} ${r} 0 0 1 ${x+w} ${y+r}V${y+h}H${x}Z`;};
 async function archPhoto(input:Buffer,width:number,height:number):Promise<Buffer> {
   const w=Math.round(width),h=Math.round(height);
-  const photo=await sharp(input).rotate().resize(w,h,{fit:"cover",position:"attention"}).modulate({saturation:.92}).linear([1.02,1,.96],[3,1,-3]).png().toBuffer();
+  // 탈채도 없이 온기만 살짝(파랑 −4%).
+  const photo=await sharp(await finishPhoto(input,w,h)).linear([1.02,1,.96],[3,1,-3]).png().toBuffer();
   return sharp(photo).composite([{input:svg(w,h,`<path d="${archPath(0,0,w,h)}" fill="#fff"/>`),blend:"dest-in"}]).png().toBuffer();
 }
 // 아치 창 테두리: 황금 굵은 선 + 바깥 가는 갈색 선(이중 테두리). 꼭대기 장식은 바로 위 제목 장식선의 마름모와 겹쳐 보여 두지 않는다.

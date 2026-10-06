@@ -357,14 +357,15 @@ export function slideTextProblem(edit:SlideTextEdit):string|null {
 }
 
 // 이 장의 밑바탕을 고른다. 다시 그릴 수 없으면(예: 저장된 초안에서 연 AI 카드) null.
-function textEditBase(current:GenerationState,index:number):{photos:string[];enhance:boolean}|null {
+// photoKind: 사장님 사진이면 "real"(전체 보정), AI가 만든 밑바탕이면 "ai"(처음 그릴 때와 같은 약한 보정).
+function textEditBase(current:GenerationState,index:number):{photos:string[];photoKind:"real"|"ai"|"none"}|null {
   const slide=current.plan?.slides[index];
   if(!slide||!current.slides[index])return null;
   const slots=current.photoAssignment[index];
-  if(slots?.length)return {photos:slots.map(i=>current.photos[i]?.preview).filter((preview):preview is string=>!!preview),enhance:true};
-  if(current.slideLayout==="card"&&photosNeeded(normalizeCardLayout(slide))===0)return {photos:[],enhance:false};
+  if(slots?.length)return {photos:slots.map(i=>current.photos[i]?.preview).filter((preview):preview is string=>!!preview),photoKind:"real"};
+  if(current.slideLayout==="card"&&photosNeeded(normalizeCardLayout(slide))===0)return {photos:[],photoKind:"none"};
   const bases=current.slides[index].bases;
-  return bases?.length?{photos:bases,enhance:false}:null;
+  return bases?.length?{photos:bases,photoKind:"ai"}:null;
 }
 export const canEditSlideText=(current:GenerationState,index:number)=>textEditBase(current,index)!==null;
 
@@ -378,7 +379,7 @@ export async function editSlideText(index:number,edit:SlideTextEdit){
   const token=++run;
   patch({phase:"slides",error:""});
   try{
-    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,enhance:base.enhance}:{})})});
+    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind}:{})})});
     const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"카드를 다시 그리지 못했어요.");

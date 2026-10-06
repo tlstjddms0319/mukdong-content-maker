@@ -1,16 +1,39 @@
 import sharp from "sharp";
 
-// 휴대폰으로 찍은 실제 사진을 카드에 넣기 전에 다듬는다. AI가 만든 사진은 이미 색이 정돈돼 있어 쓰지 않는다.
+// 사진을 카드에 넣기 전에 "맛있어 보이게" 다듬는다.
 //
-// 동작 순서
-// 1. EXIF 방향대로 세우고, 너무 큰 사진은 2048px로 줄인다(이후 계산을 가볍게).
-// 2. 색 균형: 채널 평균으로 노란·푸른 기운을 잰 뒤 절반만큼 되돌린다. 음식 사진은 원래 따뜻한 색이라
-//    완전히 회색으로 맞추면(gray world) 맛없어 보이므로 보정 폭을 채널마다 ±8%로 제한한다.
-// 3. 대비: 밝기 하위·상위 1%로 범위를 넓히되, 어두운 쪽은 최대 16단계만 내리고 밝은 쪽은 230 이상으로만 올린다.
-// 4. 밝기: 2·3을 적용한 뒤 다시 재서 평균 밝기가 어두우면(0.48 미만) 0.54 근처까지, 최대 1.4배만 올린다.
-// 5. 채도를 조금(+6%) 올리고 가볍게 선명하게 한다.
-const MAX_SIDE=2048,CAST_LIMIT=.08,CAST_STRENGTH=.5,DARK=.48,TARGET=.54,MAX_LIFT=1.4;
+// ── 왜 다시 썼나 ─────────────────────────────────────────────────────────────────────────
+// 예전 보정(enhancePhotoLegacy)은 채널 평균을 회색 쪽으로 절반 되돌리는 gray-world 방식이라, 원래 따뜻해야 할 음식 사진의
+// 온기를 깎았다(샘플 hands-makgeolli 평균 RGB 140/106/90 → 158/134/120, 파랑이 33% 올라 노을빛이 회색으로).
+// 또 sharp에는 톤 커브·"따뜻한 색만 채도 올리기" 연산이 없어서, 그런 보정은 아예 없었다.
+//
+// ── 새 보정(실제 사진 kind:"real") ──────────────────────────────────────────────────────
+// 사진을 1600px 이하 raw 픽셀로 한 번만 풀고(인코드·디코드 1회), 아래를 JS 루프로 처리한 뒤 JPEG으로 묶는다.
+// 1. 색 균형(온기 보존): 회색 평균 쪽으로 절반 되돌리되 ±8% 안에서만.
+//    - 빨강(R)은 절대 줄이지 않는다(홍어 분홍 살·노을빛 보호).
+//    - 파랑(B)은 사진이 푸를 때만 줄이고(이때는 절반이 아니라 3/4만큼, −12%까지: 푸른 기운이 음식을 가장 맛없어 보이게 한다),
+//      노랄 때 올리지 않는다(올리면 따뜻한 사진이 회색이 된다).
+//    - 사진이 따뜻하면(R 평균 > 회색) 초록(G)도 올리지 않는다(올리면 붉은 픽셀 채도가 깎인다).
+// 2. 대비: 밝기 하위·상위 1%로 범위를 넓히되 어두운 쪽은 최대 16단계만 내리고(가게 조명 사진이 새까매지지 않게),
+//    밝은 쪽은 230 이상에서만 끌어올린다. 단 상위 1%가 200도 안 되는(하이라이트가 아예 없는) 어두운 사진은
+//    흰 점을 max(상위 1% + 20, 170)까지 내려 범위를 넓힌다. 그러지 않으면 감마만으로는 밝기를 .33 위로 못 올린다.
+// 3. 밝기: 평균이 .48 미만이면 감마로 .52 근처까지 올린다(최대 감마 1.45). 곱셈(brightness)과 달리 밝은 곳은 덜 올라가
+//    흰 접시가 날아가지 않는다. 목표 감마는 히스토그램에서 이분 탐색으로 정확히 찾는다.
+// 4. 톤 커브: 약한 S자(중간 대비 +), 230 이상은 기울기 .7로 눌러(하이라이트 롤오프) 흰 접시·막걸리 결을 남긴다.
+//    결과 최대값이 약 247이라 상위 1% 밝기가 250을 넘지 않는다.
+// 5. 따뜻한 색 vibrance: 색상각 345°~60°(분홍·빨강·주황·노랑)만, 채도가 낮은 픽셀일수록 더 올린다
+//    k = 1 + .03 + .18 × 따뜻함 × (1 − 채도). 채도 .06 미만(흰 접시·막걸리·회색 그릇)은 손대지 않는다.
+//    2·3단계에서 많이 밝힌 사진(늘림 1.3배 초과 또는 감마 1.2 초과)은 어둠 속 센서 노이즈 색이 함께 커지므로 .10으로 줄인다.
+// 선명화는 여기서 하지 않는다. 카드 크기로 줄인 뒤 한 번 거는 것이 맞아서 primitives.ts finishPhoto가 맡는다.
+//
+// ── AI가 만든 사진(kind:"ai") ───────────────────────────────────────────────────────────
+// 색·밝기는 이미 정돈돼 있으므로 색 균형·대비·밝기는 건너뛰고 따뜻한 색 vibrance만 약하게(.10) 준다.
+const MAX_SIDE=1600,CAST_LIMIT=.08,CAST_STRENGTH=.5,DARK=.48,TARGET=.52,MAX_GAMMA=1.45;
+const VIBRANCE_REAL=.18,VIBRANCE_AI=.10,VIBRANCE_LIFTED=.10,VIBRANCE_GLOBAL_REAL=.03,NEUTRAL_SAT=.06;
+const BLUE_CAST_LIMIT=.12,BLUE_CAST_STRENGTH=.75,S_CURVE=.12,ROLL_START=230/255,ROLL_SLOPE=.7;
+const LEGACY_CAST_LIMIT=.08,LEGACY_CAST_STRENGTH=.5;
 
+export type PhotoKind="real"|"ai"|"none";
 export type PhotoStats={mean:[number,number,number];luminance:number};
 
 export async function photoStats(input:Buffer):Promise<PhotoStats> {
@@ -21,14 +44,108 @@ export async function photoStats(input:Buffer):Promise<PhotoStats> {
   return {mean,luminance};
 }
 
-export async function enhancePhoto(input:Buffer):Promise<Buffer> {
-  const base=await sharp(input).rotate().resize(MAX_SIDE,MAX_SIDE,{fit:"inside",withoutEnlargement:true}).removeAlpha().toBuffer();
+export async function enhancePhoto(input:Buffer,options:{kind?:Exclude<PhotoKind,"none">}={}):Promise<Buffer> {
+  const kind=options.kind??"real";
+  // toColourspace("srgb"): 흑백 사진도 RGB 3채널로 받아 아래 루프가 항상 3칸 단위로 돈다.
+  const {data,info}=await sharp(input).rotate().resize(MAX_SIDE,MAX_SIDE,{fit:"inside",withoutEnlargement:true}).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject:true});
+  if(info.channels!==3)return sharp(input).rotate().jpeg({quality:92}).toBuffer();
+  const lifted=kind==="real"?applyTone(data):false;
+  applyWarmVibrance(data,kind==="ai"?VIBRANCE_AI:lifted?VIBRANCE_LIFTED:VIBRANCE_REAL,kind==="real"?VIBRANCE_GLOBAL_REAL:0);
+  return sharp(data,{raw:{width:info.width,height:info.height,channels:3}}).jpeg({quality:92}).toBuffer();
+}
+
+// 1~4단계: 채널별 배율 → 대비 늘림 → 감마 밝히기 → S자·롤오프를 256칸 표(LUT) 3개로 미리 계산해 한 번에 적용한다.
+// 돌려주는 값: 많이 밝혔는지(true면 vibrance를 줄인다).
+function applyTone(data:Buffer):boolean {
+  // 통계는 4픽셀마다 하나만 본다(1600px 사진이면 약 48만 점, 평균·분위수에 충분하다).
+  const STEP=12;
+  let sumR=0,sumG=0,sumB=0,count=0;
+  for(let i=0;i<data.length;i+=STEP){sumR+=data[i];sumG+=data[i+1];sumB+=data[i+2];count++;}
+  const mean=[sumR/count,sumG/count,sumB/count];
+  const gray=(mean[0]+mean[1]+mean[2])/3||1;
+  const half=(value:number,limit=CAST_LIMIT,strength=CAST_STRENGTH)=>Math.min(1+limit,Math.max(1-limit,1+(gray/(value||1)-1)*strength));
+  const warm=mean[0]>gray;
+  const gains=[
+    Math.max(1,half(mean[0])),                       // R: 줄이지 않는다.
+    warm?Math.min(1,half(mean[1])):half(mean[1]),     // G: 따뜻한 사진이면 올리지 않는다.
+    mean[2]>gray?Math.min(1,half(mean[2],BLUE_CAST_LIMIT,BLUE_CAST_STRENGTH)):1, // B: 푸를 때만 내린다.
+  ];
+  // 배율을 적용한 뒤의 밝기 히스토그램으로 분위수와 평균을 잰다.
+  const hist=new Float64Array(256);
+  for(let i=0;i<data.length;i+=STEP){
+    const y=Math.min(255,data[i]*gains[0])*.2126+Math.min(255,data[i+1]*gains[1])*.7152+Math.min(255,data[i+2]*gains[2])*.0722;
+    hist[Math.min(255,Math.round(y))]++;
+  }
+  const at=(q:number)=>{let acc=0;const target=q*count;for(let v=0;v<256;v++){acc+=hist[v];if(acc>=target)return v;}return 255;};
+  const hi=at(.99);
+  const black=Math.min(at(.01),16),white=hi<200?Math.max(hi+20,170):Math.max(hi,230);
+  const scale=255/Math.max(1,white-black);
+  const stretched=(v:number)=>Math.min(1,Math.max(0,(v-black)*scale/255));
+  // 늘린 뒤의 평균 밝기가 어두우면, 히스토그램 위에서 평균이 TARGET이 되는 지수 p(=1/감마)를 찾는다.
+  const meanAfter=(p:number)=>{let acc=0;for(let v=0;v<256;v++)if(hist[v])acc+=hist[v]*Math.pow(stretched(v),p);return acc/count;};
+  let p=1;
+  if(meanAfter(1)<DARK){
+    let lo=1/MAX_GAMMA,hi=1;
+    for(let step=0;step<20;step++){const mid=(lo+hi)/2;if(meanAfter(mid)<TARGET)hi=mid;else lo=mid;}
+    p=Math.max(1/MAX_GAMMA,lo);
+  }
+  // 채널별 LUT: v → 배율 → 늘림 → 감마 → S자 → 롤오프.
+  const luts=gains.map(gain=>{
+    const lut=new Uint8Array(256);
+    for(let v=0;v<256;v++){
+      let x=Math.pow(stretched(Math.min(255,v*gain)),p);
+      const smooth=x*x*(3-2*x);
+      x+=S_CURVE*(smooth-x);
+      if(x>ROLL_START)x=ROLL_START+(x-ROLL_START)*ROLL_SLOPE;
+      lut[v]=Math.round(Math.min(1,Math.max(0,x))*255);
+    }
+    return lut;
+  });
+  for(let i=0;i<data.length;i+=3){data[i]=luts[0][data[i]];data[i+1]=luts[1][data[i+1]];data[i+2]=luts[2][data[i+2]];}
+  return scale>1.3||p<1/1.2;
+}
+
+// 5단계: 따뜻한 색만, 채도가 낮을수록 더 올린다. 밝기(Rec.709 휘도)를 축으로 색을 바깥으로 민다.
+function applyWarmVibrance(data:Buffer,amount:number,global:number):void {
+  for(let i=0;i<data.length;i+=3){
+    const r=data[i],g=data[i+1],b=data[i+2];
+    const max=Math.max(r,g,b),min=Math.min(r,g,b);
+    if(max===0)continue;
+    const sat=(max-min)/max;
+    if(sat<NEUTRAL_SAT)continue;
+    const warmth=warmWeight(hueOf(r,g,b,max,min));
+    const k=1+global+amount*warmth*(1-sat);
+    if(k===1)continue;
+    const y=r*.2126+g*.7152+b*.0722;
+    data[i]=clamp8(y+(r-y)*k);data[i+1]=clamp8(y+(g-y)*k);data[i+2]=clamp8(y+(b-y)*k);
+  }
+}
+
+// 색상각(0~360°). max·min을 이미 구했으므로 다시 계산하지 않는다.
+function hueOf(r:number,g:number,b:number,max:number,min:number):number {
+  const d=max-min;
+  if(d===0)return 0;
+  const h=max===r?((g-b)/d)%6:max===g?(b-r)/d+2:(r-g)/d+4;
+  return (h*60+360)%360;
+}
+// 따뜻함 가중치: 345°~60°는 1, 양쪽 25°에 걸쳐 0으로 줄어든다(320°·85° 밖은 0). 초록·파랑 배경은 그대로 둔다.
+function warmWeight(h:number):number {
+  if(h>=345||h<=60)return 1;
+  if(h>60&&h<85)return 1-(h-60)/25;
+  if(h>320&&h<345)return (h-320)/25;
+  return 0;
+}
+const clamp8=(v:number)=>v<0?0:v>255?255:Math.round(v);
+
+// 예전 보정. 1단계 전후 비교(갤러리 --photo=legacy)용으로만 남겨 둔다. 설정에 보정 끄기·예전 방식 선택이 생기면 정리한다.
+export async function enhancePhotoLegacy(input:Buffer):Promise<Buffer> {
+  const base=await sharp(input).rotate().resize(2048,2048,{fit:"inside",withoutEnlargement:true}).removeAlpha().toBuffer();
   const {mean}=await photoStats(base);
   const gray=(mean[0]+mean[1]+mean[2])/3||1;
   // 채널마다 회색 평균에 가까워지는 배율의 절반만 적용하고, 범위를 제한한다.
   const gains=mean.map(value=>{
     const full=gray/(value||1);
-    return Math.min(1+CAST_LIMIT,Math.max(1-CAST_LIMIT,1+(full-1)*CAST_STRENGTH));
+    return Math.min(1+LEGACY_CAST_LIMIT,Math.max(1-LEGACY_CAST_LIMIT,1+(full-1)*LEGACY_CAST_STRENGTH));
   });
   // 색 균형과 대비를 먼저 맞춘 뒤 밝기를 다시 재서, 그래도 어두우면 끌어올린다.
   const tinted=await sharp(base).linear(gains,[0,0,0]).toBuffer();
@@ -39,7 +156,7 @@ export async function enhancePhoto(input:Buffer):Promise<Buffer> {
   const scale=255/Math.max(1,white-black);
   const balanced=await sharp(tinted).linear(scale,-black*scale).toBuffer();
   const after=(await photoStats(balanced)).luminance;
-  const lift=after<DARK?Math.min(MAX_LIFT,TARGET/Math.max(after,.05)):1;
+  const lift=after<.48?Math.min(1.4,.54/Math.max(after,.05)):1;
   return sharp(balanced)
     .modulate({brightness:lift,saturation:1.06})
     .sharpen({sigma:.8})
