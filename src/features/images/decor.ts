@@ -110,6 +110,32 @@ export function softShadow(options:{x:number;y:number;width:number;height:number
     +`<g transform="rotate(${options.rotate??0} ${round(cx)} ${round(cy)})">${rect(0,`${id}a`,opacity*.72)}${rect(-lift,`${id}k`,Math.min(.9,opacity*1.15))}</g>`;
 }
 
+// 큰 그림자를 빠르게: softShadow(SVG 문자열)는 큰 카드(800px 이상)에서 흐림 필터 하나에 0.4~0.8초가 든다.
+// 그림자는 원래 흐릿하므로 1/4 해상도로 그린 뒤 키워도 차이가 보이지 않는다(약 70ms). 결과는 캐시해 같은 크기면 재사용한다.
+// SVG에 바로 resize를 걸면 sharp가 SVG를 목표 크기로 다시 그려 이득이 사라지므로, 작은 PNG로 먼저 굳힌 뒤 키운다.
+// 돌려주는 레이어는 그림자가 번질 여백(pad)까지 포함하되, 캔버스(기본 1080×1350) 밖으로 나가는 부분은 잘라 낸다.
+// sharp는 캔버스보다 큰 조각이나 캔버스 밖 좌표의 조각을 합성하지 못하고 오류를 내기 때문이다.
+export async function shadowLayer(options:{x:number;y:number;width:number;height:number;rx?:number;blur?:number;opacity?:number;rotate?:number;canvasWidth?:number;canvasHeight?:number}):Promise<OverlayOptions&{left:number;top:number}> {
+  const blur=options.blur??18,pad=Math.ceil(blur*4.5),scale=4;
+  const W=Math.round(options.width+pad*2),H=Math.round(options.height+pad*2);
+  const key=`shadow:${Math.round(options.width)}x${Math.round(options.height)}:${options.rx??16}:${blur}:${options.opacity??.22}:${options.rotate??0}`;
+  const input=await cachedLayer(key,async()=>{
+    const w=Math.ceil(W/scale),h=Math.ceil(H/scale);
+    // 작은 캔버스 안에서 같은 모양(좌표·흐림 모두 1/scale)을 그린다.
+    const body=softShadow({x:pad/scale,y:pad/scale,width:options.width/scale,height:options.height/scale,rx:(options.rx??16)/scale,blur:blur/scale,opacity:options.opacity,rotate:options.rotate});
+    const small=await sharp(Buffer.from(`<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`)).png().toBuffer();
+    return sharp(small).resize(W,H,{kernel:"cubic"}).png().toBuffer();
+  });
+  const left=Math.round(options.x-pad),top=Math.round(options.y-pad);
+  const canvasW=options.canvasWidth??1080,canvasH=options.canvasHeight??1350;
+  // 캔버스와 겹치는 부분만 남긴다. 완전히 밖이면 1×1 투명 조각.
+  const x0=Math.max(0,left),y0=Math.max(0,top),x1=Math.min(canvasW,left+W),y1=Math.min(canvasH,top+H);
+  if(x1<=x0||y1<=y0)return {input:{create:{width:1,height:1,channels:4,background:{r:0,g:0,b:0,alpha:0}}},left:0,top:0};
+  if(x0===left&&y0===top&&x1===left+W&&y1===top+H)return {input,left,top};
+  const clipped=await sharp(input).extract({left:x0-left,top:y0-top,width:x1-x0,height:y1-y0}).png().toBuffer();
+  return {input:clipped,left:x0,top:y0};
+}
+
 // 접촉 그림자: 물체(접시·마스코트·스티커)가 바닥에 닿은 자리에 깔리는 납작한 타원 그림자.
 // 물체 아래 가운데(cx, 바닥 y)에 두면 "떠 있는 오림"이 "놓인 물건"이 된다.
 export function contactShadow(options:{cx:number;cy:number;rx:number;ry?:number;opacity?:number;blur?:number}):string {
@@ -172,15 +198,20 @@ export async function textureLayer(name:TextureName,options:{opacity?:number;ble
   const left=Math.round(options.left??0),top=Math.round(options.top??0);
   try{await access(textureFile(name));}catch{return null;}
   const key=`texture:${name}:${width}x${height}:${opacity}:${options.tint??""}`;
-  const input=await cachedLayer(key,async()=>{
-    // 원본(1080×1350)을 자리 크기로 덮어 자르고, 알파를 opacity로 낮춘다. tint를 주면 회색 질감을 그 색으로 물들인다.
+  const blend=options.blend??"multiply";
+  const input=await cachedLayer(`${key}:${blend}`,async()=>{
+    // 원본(1080×1350)을 자리 크기로 덮어 자르고, tint를 주면 회색 질감을 그 색으로 물들인다.
+    // 세기(opacity)는 알파로 낮추지 않고 "아무 변화도 없는 색"과 미리 섞어 불투명하게 만든다.
+    // 반투명 PNG를 multiply로 얹으면 libvips 계산이 어긋나 질감 100%보다도 어둡게 나왔기 때문이다(한지 .3 → 평균 188, 기대 235).
+    // 변화 없는 색: multiply는 흰색(255), screen은 검정(0), soft-light·overlay는 회색(128).
     let image=sharp(textureFile(name)).resize(width,height,{fit:"cover"});
     if(options.tint)image=image.tint(options.tint);
-    const {data,info}=await image.ensureAlpha().raw().toBuffer({resolveWithObject:true});
-    for(let i=3;i<data.length;i+=4)data[i]=Math.round(data[i]*opacity);
-    return sharp(data,{raw:{width:info.width,height:info.height,channels:4}}).png().toBuffer();
+    const {data,info}=await image.removeAlpha().raw().toBuffer({resolveWithObject:true});
+    const neutral=blend==="screen"||blend==="lighten"?0:blend==="multiply"||blend==="darken"?255:128;
+    for(let i=0;i<data.length;i++)data[i]=Math.round(data[i]*opacity+neutral*(1-opacity));
+    return sharp(data,{raw:{width:info.width,height:info.height,channels:3}}).png().toBuffer();
   });
-  return {input,left,top,blend:options.blend??"multiply"};
+  return {input,left,top,blend};
 }
 
 // 종이 질감(필름 그레인). feTurbulence 잡음을 회색으로 바꿔 soft-light로 겹치면 밝기는 거의 그대로이고 결만 생긴다.

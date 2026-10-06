@@ -1,8 +1,9 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
-import { brandHandle, croppedPhoto, svgLayer, textLayer, type CardRenderer, type Font, type Layer, type TextEmphasis } from "../render/primitives";
+import { brandHandle, croppedPhoto, svg, svgLayer, textLayer, type CardRenderer, type Font, type Layer, type TextEmphasis } from "../render/primitives";
 import { MIN_STROKE, STYLE_FONTS, brandSeal, chooseTitleLayout, closingBlock, contentOf, emphasisOf, fitText, nextCue, snap } from "./shared";
 import { seeded } from "./handDrawn";
+import { cachedLayer, innerShadow, propLayer } from "../decor";
 
 // 티켓·승차권: 짙은 바탕 한가운데 세로로 긴 입장권 종이 한 장. 아래쪽 절취선(점선과 양옆 반원 홈)으로 본체와 스텁이 나뉜다.
 // 본체에는 "ADMIT ONE"(아래에 한글 "입장권 · 묵동홍어마을" 병기)·번호·제목·사진 창·요점, 스텁에는 가게 이름·장 번호·바코드. 옛날 극장표·기차표 느낌이라
@@ -26,32 +27,71 @@ const topRoundedRect=(x:number,y:number,w:number,h:number,r:number)=>`M${x} ${y+
 // 원 경로(절취선 양옆 홈을 클립에서 빼기 위한 부분 경로).
 const circlePath=(cx:number,cy:number,r:number)=>`M${cx-r} ${cy}a${r} ${r} 0 1 0 ${r*2} 0a${r} ${r} 0 1 0 ${-r*2} 0Z`;
 
-// 바탕: 단색 + 옅은 점 무늬 + 가장자리를 어둡게. 티켓 종이의 물결 무늬·그림자 필터도 여기서 정의한다.
-function backdrop(tone:string):string {
-  return `<defs><pattern id="tkDots" width="26" height="26" patternUnits="userSpaceOnUse"><circle cx="13" cy="13" r="2.2" fill="#fff" fill-opacity=".09"/></pattern>`
-    +`<pattern id="tkWave" width="72" height="9" patternUnits="userSpaceOnUse"><path d="M0 4.5Q18 0 36 4.5T72 4.5" fill="none" stroke="${EDGE}" stroke-opacity=".08" stroke-width="1"/></pattern>`
-    +`<radialGradient id="tkVig" cx="50%" cy="45%" r="75%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".45"/></radialGradient>`
-    +`<filter id="tkShadow" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="12"/></filter>`
-    // 종이 모양 클립: 둥근 사각형에서 절취선 양옆 반원을 뺀다(evenodd). 종이 채우기·무늬·테두리를 모두 이 클립 안에 그려
-    // 홈 자리에 바탕(점 무늬·어두운 가장자리)이 그대로 비치게 한다. 홈을 바탕색 원으로 덮으면 가장자리 음영과 어긋나 티가 난다.
-    +`<clipPath id="tkClip"><path d="${roundedRect(TX,TY,TW,TH,TR)}${circlePath(TX,PERF,22)}${circlePath(TX+TW,PERF,22)}" clip-rule="evenodd"/></clipPath></defs>`
-    +`<rect width="1080" height="1350" fill="${tone}"/><rect width="1080" height="1350" fill="url(#tkDots)"/><rect width="1080" height="1350" fill="url(#tkVig)"/>`;
-}
-// 티켓 종이: 그림자, 본체 종이, 조금 어두운 스텁 종이, 가는 물결 무늬(guilloche), 테두리 두 겹, 절취선.
-function paper():string {
+// 무늬·클립 정의: 바탕 점 무늬, 종이의 가는 물결 무늬(guilloche), 가장자리 어둡게, 종이 모양 클립.
+// 종이 모양 클립: 둥근 사각형에서 절취선 양옆 반원을 뺀다(evenodd). 종이 채우기·무늬·테두리를 모두 이 클립 안에 그려
+// 홈 자리에 바탕(점 무늬·어두운 가장자리)이 그대로 비치게 한다. 홈을 바탕색 원으로 덮으면 가장자리 음영과 어긋나 티가 난다.
+const DEFS=`<defs><pattern id="tkDots" width="26" height="26" patternUnits="userSpaceOnUse"><circle cx="13" cy="13" r="2.2" fill="#fff" fill-opacity=".09"/></pattern>`
+  +`<pattern id="tkWave" width="72" height="9" patternUnits="userSpaceOnUse"><path d="M0 4.5Q18 0 36 4.5T72 4.5" fill="none" stroke="${EDGE}" stroke-opacity=".08" stroke-width="1"/></pattern>`
+  +`<radialGradient id="tkVig" cx="50%" cy="45%" r="75%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".45"/></radialGradient>`
+  +`<clipPath id="tkClip"><path d="${roundedRect(TX,TY,TW,TH,TR)}${circlePath(TX,PERF,22)}${circlePath(TX+TW,PERF,22)}" clip-rule="evenodd"/></clipPath></defs>`;
+// 바탕: 단색 + 옅은 점 무늬 + 가장자리를 어둡게.
+const backdrop=(tone:string)=>`${DEFS}<rect width="1080" height="1350" fill="${tone}"/><rect width="1080" height="1350" fill="url(#tkDots)"/><rect width="1080" height="1350" fill="url(#tkVig)"/>`;
+// 티켓 종이: 본체 종이, 조금 어두운 스텁 종이, 가는 물결 무늬, 테두리 두 겹, 천공 절취선. (그림자는 ticketBase가 따로 깐다)
+function paper(tone:string):string {
   const outline=roundedRect(TX,TY,TW,TH,TR);
-  let s=`<path d="${outline}" transform="translate(0 18)" fill="#000" fill-opacity=".55" filter="url(#tkShadow)"/>`;
-  s+=`<g clip-path="url(#tkClip)">`;
+  let s=`${DEFS}<g clip-path="url(#tkClip)">`;
   s+=`<rect x="${TX}" y="${TY}" width="${TW}" height="${TH}" fill="${PAPER}"/><rect x="${TX}" y="${PERF}" width="${TW}" height="${STUB_H}" fill="${STUB}"/>`;
   s+=`<rect x="${TX}" y="${TY}" width="${TW}" height="${TH}" fill="url(#tkWave)"/>`;
   // 바깥 테두리는 클립에 반이 잘리므로 5px로 그려 2.5px(MIN_STROKE)이 보이게 한다. 홈 둘레도 같은 굵기로 이어진다.
   s+=`<path d="${outline}" fill="none" stroke="${EDGE}" stroke-width="5"/>`;
   for(const cx of [TX,TX+TW])s+=`<circle cx="${cx}" cy="${PERF}" r="22" fill="none" stroke="${EDGE}" stroke-width="5"/>`;
   s+=`<path d="${roundedRect(TX+9,TY+9,TW-18,TH-18,TR-8)}" fill="none" stroke="${EDGE}" stroke-opacity=".35" stroke-width="${MIN_STROKE}"/>`;
-  // 절취선: 홈 사이를 잇는 점선.
-  s+=`<path d="M${TX+30} ${PERF}H${TX+TW-30}" stroke="${EDGE}" stroke-opacity=".6" stroke-width="${MIN_STROKE}" stroke-dasharray="12 10"/>`;
+  // 천공 절취선: 홈 사이에 작은 구멍(바탕색 원)을 14px 간격으로 뚫는다. 구멍 위쪽 가장자리에 아주 옅은 그늘을 줘
+  // 종이 두께만큼 파인 것처럼 보이게 한다(점선 한 줄보다 "뜯는 자리"로 읽힌다).
+  const holes:string[]=[],shades:string[]=[];
+  for(let x=TX+40;x<=TX+TW-40;x+=14){holes.push(circlePath(x,PERF,3.4));shades.push(`M${x-3.4} ${PERF}a3.4 3.4 0 0 1 6.8 0`);}
+  s+=`<path d="${holes.join("")}" fill="${tone}"/><path d="${shades.join("")}" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="1.2"/>`;
   return s+`</g>`;
 }
+// 흐린 그림자 SVG 조각을 1/4 해상도로 그려 제자리 크기로 키운 레이어. 큰 흐림 필터는 librsvg에서 수백 ms가 들지만
+// 흐린 그림은 저해상도로 그려 키워도 똑같이 부드럽다(1/16 픽셀). clip을 주면 키운 뒤 원래 해상도로 창 모양을 또렷하게 자른다.
+// SVG를 먼저 작은 PNG로 굳힌 뒤 키운다: SVG 입력에 바로 resize를 걸면 sharp가 SVG를 목표 크기로 다시 그려 이득이 사라진다.
+async function lowResLayer(body:string,x:number,y:number,w:number,h:number,clip?:string):Promise<OverlayOptions> {
+  const X=Math.floor(x),Y=Math.floor(y),Wd=Math.ceil(w),Hd=Math.ceil(h);
+  const small=await sharp(Buffer.from(`<svg width="${Math.ceil(Wd/4)}" height="${Math.ceil(Hd/4)}" viewBox="${X} ${Y} ${Wd} ${Hd}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`)).png({compressionLevel:1}).toBuffer();
+  let image=sharp(small).resize(Wd,Hd,{fit:"fill"});
+  if(clip)image=image.composite([{input:Buffer.from(`<svg width="${Wd}" height="${Hd}" viewBox="${X} ${Y} ${Wd} ${Hd}" xmlns="http://www.w3.org/2000/svg"><path d="${clip}" fill="#fff"/></svg>`),blend:"dest-in"}]);
+  return {input:await image.png({compressionLevel:1}).toBuffer(),left:X,top:Y};
+}
+// 사진 창 안쪽 그림자(공용 innerShadow)를 저해상도로: 공용 조각의 clip-path는 떼고, 자르기는 lowResLayer가 원래 해상도로 한다.
+const windowShadow=(x:number,y:number,w:number,h:number,r:number)=>{
+  const shape=roundedRect(x,y,w,h,r);
+  return lowResLayer(innerShadow({x,y,width:w,height:h,path:shape,blur:10,opacity:.38}).replace(/ clip-path="url\(#[^)]*\)"/,""),x,y,w,h,shape);
+};
+// 바탕 + 티켓 그림자 + 종이(테두리·절취선까지)는 장 내용과 무관하고 바탕색(tone)에만 달라지므로, 색마다 한 번 구워 전역 캐시에 둔다.
+// 예전에는 카드마다 큰 흐림 필터(종이 그림자)를 포함한 SVG 전체를 다시 그렸다.
+function ticketBase(tone:string):Promise<Buffer> {
+  return cachedLayer(`ticket:base:v1:${tone}`,async()=>{
+    const pad=60,outline=roundedRect(TX,TY,TW,TH,TR);
+    const shadow=await lowResLayer(`<filter id="tkShadow" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="12"/></filter><path d="${outline}" transform="translate(0 18)" fill="#000" fill-opacity=".55" filter="url(#tkShadow)"/>`,TX-pad,TY+18-pad,TW+pad*2,Math.min(1350-(TY+18-pad),TH+pad*2));
+    const back=await sharp(svg(1080,1350,backdrop(tone))).png().toBuffer();
+    return sharp(back).composite([shadow,{input:svg(1080,1350,paper(tone)),left:0,top:0}]).png({compressionLevel:1}).toBuffer();
+  });
+}
+// 낙관 인주 질감: 도장 자리에만 잡음 얼룩을 multiply로 얹어 인주가 고르게 묻지 않은 느낌(진한 덩이·옅은 결)을 낸다.
+// 도장(브랜드 낙관) 자체는 공용 그림이라 건드리지 않고 위에 별도 레이어로. 글자(흰색)는 이 레이어보다 위에 올라가 영향이 없다.
+// 얼룩은 가장 진한 곳도 원래 색의 80% 정도까지만(과하지 않게).
+async function sealInk(cx:number,cy:number,r:number,seed:number,angle=-8):Promise<OverlayOptions> {
+  const size=Math.round(r*1.8),box=Math.ceil(size*1.15),x=Math.round(cx-box/2),y=Math.round(cy-box/2),c=box/2,half=size/2;
+  const body=`<filter id="ink" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="3" seed="${seed}"/>`
+    +`<feColorMatrix type="matrix" values="0 0 0 0 .23  0 0 0 0 .04  0 0 0 0 .02  -1.1 0 0 0 .9"/><feComponentTransfer><feFuncA type="linear" slope=".5"/></feComponentTransfer></filter>`
+    +`<clipPath id="sealClip"><rect x="${r1(c-half+2)}" y="${r1(c-half+2)}" width="${size-4}" height="${size-4}" rx="${Math.round(size*.08)}" transform="rotate(${angle} ${c} ${c})"/></clipPath>`
+    +`<g clip-path="url(#sealClip)"><rect width="${box}" height="${box}" fill="#3A0A04" filter="url(#ink)"/></g>`;
+  // 흰색 바탕 위 짙은 적갈 얼룩(알파) → 불투명 그림으로 펼쳐 multiply(반투명 그림의 multiply는 libvips에서 어긋난다).
+  const flat=await sharp({create:{width:box,height:box,channels:3,background:"#ffffff"}}).composite([{input:svg(box,box,body),left:0,top:0}]).png().toBuffer();
+  return {input:flat,left:x,top:y,blend:"multiply"};
+}
+const r1=(value:number)=>Math.round(value*10)/10;
 // 제목 아래 굵은 줄 + 가는 줄(극장표의 구획선). 높이 14.
 const rules=(x:number,y:number,w:number)=>`<rect x="${x}" y="${y}" width="${w}" height="6" fill="${INK}"/><rect x="${x}" y="${y+11}" width="${w}" height="3" fill="${INK}"/>`;
 // 사진 창: 뒤에 옅은 그림자, 흰 종이 띠(8px)와 가는 검은 테두리. 사진은 안쪽에 8px 들여 얹는다.
@@ -72,10 +112,10 @@ function barcode(x:number,y:number,w:number,h:number,rand:()=>number):string {
 }
 // 도장: 예전 빨간 원형 "묵동" 도장 대신 모든 계열이 같이 쓰는 가게 낙관(brandSeal "묵동/홍어")을 같은 자리에 찍는다.
 // (cx,cy)는 예전 원의 가운데, r은 그 반지름. 낙관 한 변은 지름의 .9배라 원 자리와 비슷한 크기로 보인다.
-async function seal(cx:number,cy:number,r:number,seed:number):Promise<{svg:string;text:OverlayOptions}> {
+async function seal(cx:number,cy:number,r:number,seed:number):Promise<{svg:string;text:OverlayOptions;ink:OverlayOptions}> {
   const size=Math.round(r*1.8),x=Math.round(cx-size/2),y=Math.round(cy-size/2);
-  const mark=await brandSeal(size,seed,{on:"light",rotate:-8});
-  return {svg:mark.svg(x,y),text:{input:mark.text.data,left:x+Math.round((size-mark.text.info.width)/2),top:y+Math.round((size-mark.text.info.height)/2)}};
+  const [mark,ink]=await Promise.all([brandSeal(size,seed,{on:"light",rotate:-8}),sealInk(cx,cy,r,seed)]);
+  return {svg:mark.svg(x,y),ink,text:{input:mark.text.data,left:x+Math.round((size-mark.text.info.width)/2),top:y+Math.round((size-mark.text.info.height)/2)}};
 }
 // 제목 크기 고르기: 들어가는 가장 큰 크기를 쓰되, 한 단계 작은 크기로 줄이면 줄 수가 하나 줄 때("드세요"만 다음 줄로
 // 떨어지는 경우)는 작은 쪽을 쓴다. 크기 한 단계 차이는 높이 1.1배쯤이고 줄이 하나 늘면 1.3배를 넘으므로 그 비율로 가른다.
@@ -110,10 +150,11 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
   const no=`No. ${String(index).padStart(3,"0")}`;
   // 제목 핵심어: 도장과 같은 빨강(종이 위 4.5:1 이상).
   const emphasis=emphasisOf(content,RED);
-  let deco=backdrop(tone)+paper();     // 모든 것의 아래(바탕·종이·창틀·줄)
+  let deco="";                          // 바탕·종이(캐시된 ticketBase) 위, 사진 아래(창틀·줄)
   let over="";                          // 사진 위에 얹는 장식(검은 띠·도장)
   const photos:OverlayOptions[]=[];     // 사진 레이어
   const layers:OverlayOptions[]=[];     // 글자 레이어(맨 위)
+  const inks:OverlayOptions[]=[];       // 낙관 인주 얼룩(도장 위 multiply, 글자 아래)
   let watermark:OverlayOptions|null=null;
   // 마지막 장 명함: 본체 아래쪽(절취선 위)에 두고, 그 높이만큼 본체 글자 칸을 미리 줄인다.
   const closing=content.last?await closingBlock({width:CW,color:INK,accent:RED,font:STYLE_FONTS.heavy}):null;
@@ -141,7 +182,8 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
     const textH=title.info.height+(useSub?subH:0);
     // 제목이 들어가고 남는 높이는 모두 사진에 준다(상한 860). 남은 몇 px는 제목 위아래로 나눈다.
     const PH=Math.round(Math.min(MAX_PH,BASE_PH+Math.max(0,baseAreaH-textH-8)));
-    photos.push({input:await croppedPhoto(shots[0],PW,PH,16),left:PX,top:PY});
+    // 사진 창 안쪽 그림자: 사진이 종이에 뚫린 창 너머에 있는 것처럼(사진 위에만, 검은 띠·글자보다 아래).
+    photos.push({input:await croppedPhoto(shots[0],PW,PH,16),left:PX,top:PY},await windowShadow(PX,PY,PW,PH,16));
     over+=`<path d="${topRoundedRect(PX,PY,PW,BAND,16)}" fill="${BAND_COLOR}" fill-opacity=".9"/><rect x="${PX+1}" y="${PY+1}" width="${PW-2}" height="${PH-2}" rx="15" fill="none" stroke="${EDGE}" stroke-width="${MIN_STROKE}"/>`;
     const areaTop=PY+PH+GAP,areaH=BODY_BOTTOM-areaTop;
     const top=areaTop+Math.max(0,(areaH-textH)/2);
@@ -149,7 +191,7 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
     if(useSub&&sub)layers.push({input:sub.data,left:CX,top:top+title.info.height+14});
     // 낙관: 사진 오른쪽 아래 모서리 안쪽(검표 도장을 사진에 찍은 듯). 음식은 대개 가운데라 모서리는 가리지 않는다.
     const mark=await seal(PX+PW-STAMP_R-22,PY+PH-STAMP_R-22,STAMP_R,index*7+1);
-    over+=mark.svg;layers.push(mark.text);
+    over+=mark.svg;inks.push(mark.ink);layers.push(mark.text);
   }else{
     // ── 본문 머리글: 왼쪽 ADMIT ONE(좁은 영문 대문자)과 그 아래 한글 "입장권 · 묵동홍어마을", 오른쪽 고정폭 번호. ──
     const admit=await textLayer("ADMIT ONE",{size:46,color:INK,width:500,height:80,font:STYLE_FONTS.condensed,spacing:0});
@@ -182,19 +224,19 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
         for(const [i,shot] of shots.entries()){
           const x=CX+i*(PW+gap);
           deco+=photoWindow(x,y,PW,PH);
-          photos.push({input:await croppedPhoto(shot,PW-16,PH-16,6),left:x+8,top:y+8});
+          photos.push({input:await croppedPhoto(shot,PW-16,PH-16,6),left:x+8,top:y+8},await windowShadow(x+8,y+8,PW-16,PH-16,6));
           layers.push({input:tags[i].data,left:x+(PW-tags[i].info.width)/2,top:y+PH+10});
         }
         // 두 창 사이에 작은 낙관을 걸쳐 찍어 "짝 장"임을 보여 준다.
         const mark=await seal(CX+CW/2,y+PH/2,48,index*7+1);
-        over+=mark.svg;layers.push(mark.text);
+        over+=mark.svg;inks.push(mark.ink);layers.push(mark.text);
       }else{
         deco+=photoWindow(CX,y,CW,PH);
-        photos.push({input:await croppedPhoto(shots[0],CW-16,PH-16,6),left:CX+8,top:y+8});
+        photos.push({input:await croppedPhoto(shots[0],CW-16,PH-16,6),left:CX+8,top:y+8},await windowShadow(CX+8,y+8,CW-16,PH-16,6));
         // 창 모서리에 기울어진 낙관. 장마다 오른쪽 위·왼쪽 아래를 번갈아 찍는다.
         const topRight=(index+variant)%2===0;
         const mark=await seal(topRight?CX+CW-44:CX+44,topRight?y+44:y+PH-44,STAMP_R,index*7+1);
-        over+=mark.svg;layers.push(mark.text);
+        over+=mark.svg;inks.push(mark.ink);layers.push(mark.text);
       }
       y+=PH+tagH+30;
       // 요점: 남는 공간은 요점 사이와 위에 고루 나눠 아래가 비지 않게 한다.
@@ -299,6 +341,13 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
   if(handle)layers.push({input:handle.data,left:CX,top:leftTop+brand.info.height+4});
   if(tag)layers.push({input:tag.data,left:CX,top:leftTop+brand.info.height+handleH+8+pageNo.info.height+14});
   deco+=barcode(bx,by,BW,BH,rand);
+  // 스텁 가운데 빈자리(왼쪽 글자 칸과 바코드 사이)가 넉넉할 때만 막걸리 소품을 얹는다. 그림이 없으면 아무것도 하지 않고,
+  // 자리를 미리 비워 두지도 않는다(글자·바코드 배치는 소품과 무관).
+  const room=bx-(CX+leftW);
+  if(room>=150){
+    const prop=await propLayer("makgeolli",{width:Math.min(110,room-60),maxHeight:rowH,left:Math.round((CX+leftW+bx)/2),top:Math.round(rowTop+rowH/2),anchor:"center",rotate:-6});
+    if(prop)photos.push(prop);
+  }
   // 바코드가 좁아졌을 때도 글자가 왼쪽 칸(계정)으로 넘어가지 않게 바코드 가운데가 아니라 오른쪽 끝(CR)에 맞춘다.
   if(code)layers.push({input:code.data,left:Math.min(bx+(BW-code.info.width)/2,CR-code.info.width),top:by+BH+10+10});
   if(cue){
@@ -312,6 +361,6 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
     deco+=bullet(CX,ty+teaser.info.height/2);
     layers.push({input:teaser.data,left:CX+30,top:ty});
   }
-  const stack:OverlayOptions[]=[svgLayer(deco),...(watermark?[watermark]:[]),...photos,...(over?[svgLayer(over)]:[]),...layers];
+  const stack:OverlayOptions[]=[{input:await ticketBase(tone),left:0,top:0},svgLayer(deco),...(watermark?[watermark]:[]),...photos,...(over?[svgLayer(over)]:[]),...inks,...layers];
   return sharp({create:{width:1080,height:1350,channels:3,background:tone}}).composite(snap(stack)).jpeg({quality:92}).toBuffer();
 };

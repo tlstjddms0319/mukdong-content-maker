@@ -1,6 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { brandHandle, croppedPhoto, finishPhoto, softShadow, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
+import { brandHandle, croppedPhoto, finishPhoto, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
 import { registerPhoto } from "../render/audit";
+import { shadowLayer } from "../decor";
 import { MIN_STROKE, STYLE_FONTS, closingBlock, contentOf, emphasisOf, fitText, nextCue, snap, type StyleContent } from "./shared";
 
 // 오마카세·하이엔드 미니멀: 따뜻한 베이지(또는 흰) 바탕에 여백을 크게 두고, 가운데에 정갈한 사진 한 장.
@@ -99,6 +100,34 @@ async function bleedCover(shots:Buffer[],content:StyleContent,index:number):Prom
   return sharp({create:{width:1080,height:1350,channels:3,background:surface.bg}}).composite(snap(layers)).jpeg({quality:94}).toBuffer();
 }
 
+// 번짐 여백까지 더한 그림자 조각은 두 장 매트처럼 넓으면 캔버스(1080)보다 커져 sharp가 합성을 거부한다.
+// 캔버스 밖으로 나간 부분을 잘라 내고 남은 조각만 돌려준다(잘린 쪽은 화면 밖이라 보이지 않는다).
+async function insideCanvas(layer:OverlayOptions&{left:number;top:number}):Promise<OverlayOptions> {
+  const meta=await sharp(layer.input as Buffer).metadata();
+  const left=Math.max(0,layer.left),top=Math.max(0,layer.top);
+  const width=Math.min(1080,layer.left+meta.width!)-left,height=Math.min(1350,layer.top+meta.height!)-top;
+  if(left===layer.left&&top===layer.top&&width===meta.width&&height===meta.height)return layer;
+  const input=await sharp(layer.input as Buffer).extract({left:left-layer.left,top:top-layer.top,width,height}).png().toBuffer();
+  return {...layer,input,left,top};
+}
+
+// 액자 매트: 바탕보다 한 톤 밝은(어두운 바탕은 한 톤 밝은 먹색) 판. 밝은 바탕은 두 겹 그림자로 판이 바탕 위에 놓인 두께를 내고,
+// (밝은 바탕의 그림자는 호출부에서 shadowLayer로 따로 깐다.) 어두운 바탕은 그림자가 보이지 않으므로 판 가장자리에 위쪽이 밝은 가는 림라이트(조명이 판 모서리에 걸린 빛)를 둔다.
+// divider: 사진 두 장 사이 가운데 x(구분선). 매트 안 위아래 15%를 비운 가는 세로선.
+const MAT=26;
+// 사진 덩어리 높이 = 사진 + 매트 위아래 + 매트와 제목 사이 44.
+const PHOTO_BLOCK=MAT*2+44;
+const dark=(surface:Surface)=>surface===SURFACES[2];
+function matte(surface:Surface,x:number,y:number,w:number,h:number,divider:number|null):string {
+  const fill=dark(surface)?"#2A2724":surface.bg==="#F4EFE6"?"#FBF8F2":"#FFFFFF";
+  let out=dark(surface)
+    ?`<defs><linearGradient id="omRim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF1DC" stop-opacity=".42"/><stop offset=".5" stop-color="#FFF1DC" stop-opacity=".12"/><stop offset="1" stop-color="#FFF1DC" stop-opacity=".06"/></linearGradient></defs>`
+      +`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/><rect x="${x+1}" y="${y+1}" width="${w-2}" height="${h-2}" fill="none" stroke="url(#omRim)" stroke-width="2"/>`
+    :`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/>`;
+  if(divider!==null)out+=`<path d="M${divider} ${Math.round(y+h*.15)}V${Math.round(y+h*.85)}" stroke="${surface.line}" stroke-width="${MIN_STROKE}"/>`;
+  return out;
+}
+
 export const renderOmakase:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   // 작은 액자 표지는 네 번에 한 번(variant%4===3)만 남겨 변주로 쓴다.
@@ -106,7 +135,7 @@ export const renderOmakase:CardRenderer=async(inputs,slide,index,total)=>{
   // 표지와 마지막 장은 어두운 바탕으로 무게를 준다.
   const surface=content.cover||content.last?SURFACES[2]:SURFACES[(slide.variant??0)%2];
   const layers:OverlayOptions[]=[];
-  let lines="";
+  let lines="",matteEdges="";
   const handle=brandHandle();
   // 마지막 장은 아래 명함이 가게 이름·계정을 맡으므로 위 눈썹·세로선과 쪽 번호 아래 계정을 뺀다(같은 이름 두 번 금지, 사진 자리 확보).
   const folioHandle=content.last?"":handle;
@@ -141,19 +170,24 @@ export const renderOmakase:CardRenderer=async(inputs,slide,index,total)=>{
   const pointsH=pointLayers.reduce((sum,layer)=>sum+layer.info.height+22,0);
   // 제목이 길어 덩어리가 범위를 넘으면 사진 높이를 줄여 맞춘다(최소 420, 명함이 있는 마지막 장은 300까지).
   const textH=headline.info.height+(subline?20+subline.info.height:0)+(pointLayers.length?40+40+pointsH:0);
-  if(shots.length)PH=Math.max(card?300:420,Math.min(PH,contentBottom-contentTop-textH-70));
-  const blockH=(shots.length?PH+70:0)+textH;
+  if(shots.length)PH=Math.max(card?300:420,Math.min(PH,contentBottom-contentTop-textH-PHOTO_BLOCK));
+  const blockH=(shots.length?PH+PHOTO_BLOCK:0)+textH;
   let y=contentTop+Math.max(0,Math.round((contentBottom-contentTop-blockH)/2));
   if(shots.length){
-    // 사진은 얇은 테두리와 아주 옅은 그림자. 두 장이면 가운데 간격 40.
-    const gap=40,rowW=shots.length*PW+(shots.length-1)*gap;
+    // 사진은 액자 매트(마운트 보드) 안에 넣는다. 두 장이면 매트 하나에 나란히(간격 72) 넣고 가운데에 가는 구분선 —
+    // 따로 떨어진 두 액자보다 "한 상의 두 접시"로 묶여 보인다. 매트 아래 그림자는 두 겹(shadowLayer).
+    const gap=72,rowW=shots.length*PW+(shots.length-1)*gap,x0=Math.round((1080-rowW)/2);
+    const top=y+MAT;
+    // 밝은 바탕의 매트 그림자(두 겹)는 공용 shadowLayer로(1/4 해상도로 그려 키운다 — 큰 SVG 흐림은 장당 0.4초 넘게 든다).
+    if(!dark(surface))layers.push(await insideCanvas(await shadowLayer({x:x0-MAT,y:y+10,width:rowW+MAT*2,height:PH+MAT*2,rx:2,blur:20,opacity:.16})));
+    layers.push(svgLayer(matte(surface,x0-MAT,y,rowW+MAT*2,PH+MAT*2,shots.length>1?x0+PW+gap/2:null)));
     for(const [i,shot] of shots.entries()){
-      const x=Math.round((1080-rowW)/2)+i*(PW+gap);
-      layers.push(svgLayer(softShadow({x,y:y+12,width:PW,height:PH,rx:2,blur:24,opacity:.12})));
-      layers.push({input:await warmed(await croppedPhoto(shot,PW,PH,0)),left:x,top:y});
-      lines+=`<rect x="${x-14}" y="${y-14}" width="${PW+28}" height="${PH+28}" fill="none" stroke="${surface.line}" stroke-width="${MIN_STROKE}"/>`;
+      const x=x0+i*(PW+gap);
+      layers.push({input:await warmed(await croppedPhoto(shot,PW,PH,0)),left:x,top});
+      // 매트 창의 얇은 경계선(매트를 비스듬히 잘라 낸 단면). 사진 바로 바깥에 붙인다.
+      matteEdges+=`<rect x="${x-1}" y="${top-1}" width="${PW+2}" height="${PH+2}" fill="none" stroke="${surface.line}" stroke-opacity=".9" stroke-width="${MIN_STROKE}"/>`;
     }
-    y+=PH+70;
+    y+=PH+PHOTO_BLOCK;
   }
   layers.push({input:headline.data,left:Math.round((1080-headline.info.width)/2),top:y});
   y+=headline.info.height;
@@ -202,5 +236,7 @@ export const renderOmakase:CardRenderer=async(inputs,slide,index,total)=>{
     lines+=cue.arrow(cx,cy);
   }
   layers.unshift(svgLayer(lines));
+  // 매트 창 경계선은 사진 바로 바깥 위(사진·매트보다 위, 글자와는 겹치지 않는 자리).
+  if(matteEdges)layers.push(svgLayer(matteEdges));
   return sharp({create:{width:1080,height:1350,channels:3,background:surface.bg}}).composite(snap(layers)).jpeg({quality:94}).toBuffer();
 };

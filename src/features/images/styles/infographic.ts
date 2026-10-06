@@ -1,6 +1,8 @@
 import sharp, { type OverlayOptions } from "sharp";
+import { access } from "node:fs/promises";
 import { STORE_NAME } from "../slideLayout";
 import { croppedPhoto, mascotLayer, svgLayer, textLayer, type CardRenderer, type Layer, brandName } from "../render/primitives";
+import { mascotFile, propLayer, softShadow, type MascotPose, type PropName } from "../decor";
 import { MIN_STROKE, STYLE_FONTS, closingBlock, contentOf, emphasisOf, fitText, nextCue, rotated, snap } from "./shared";
 
 // 인포그래픽·도감: 모눈종이 바탕에 "홍어 도감 · 03" 표제, 둥근 사진에서 점선 지시선을 뽑아 부위·특징 설명을 단다.
@@ -8,12 +10,22 @@ import { MIN_STROKE, STYLE_FONTS, closingBlock, contentOf, emphasisOf, fitText, 
 // 구석에 마스코트를 작게 넣어 도감 속 귀여운 일러스트 역할을 맡긴다.
 const PAPER="#F6F5EE",GRID="#CFE0D8",GRID_MAJOR="#A9C9BC",INK="#22313F",ACCENT="#C8401A",SOFT="#FFF3C4";
 
+// 모눈: 30px 잔선 + 5칸(150px)마다 굵은 선. 잔선이 굵은 선과 거의 같은 농도면 바탕이 촘촘한 철망처럼 보여 글자·사진이 묻힌다.
+// 잔선은 옅게(.6) 깔아 "종이 결" 정도로만, 굵은 선이 칸 구획을 맡게 한다.
 function graphPaper():string {
   let d="",D="";
   for(let x=0;x<=1080;x+=30){if(x%150===0)D+=`M${x} 0V1350`;else d+=`M${x} 0V1350`;}
   for(let y=0;y<=1350;y+=30){if(y%150===0)D+=`M0 ${y}H1080`;else d+=`M0 ${y}H1080`;}
-  return `<path d="${d}" stroke="${GRID}" stroke-width="1"/><path d="${D}" stroke="${GRID_MAJOR}" stroke-width="1.6"/>`;
+  return `<path d="${d}" stroke="${GRID}" stroke-opacity=".6" stroke-width="1"/><path d="${D}" stroke="${GRID_MAJOR}" stroke-opacity=".85" stroke-width="1.8"/>`;
 }
+// 포즈 그림 파일이 있을 때만 그 포즈를 쓴다(없으면 mascotLayer가 hello로 바꾸는데, 본문 장의 "설명하는" 느낌이 사라진다).
+const poseReady=new Map<MascotPose,Promise<boolean>>();
+async function poseOr(wanted:MascotPose,fallback:MascotPose):Promise<MascotPose> {
+  if(!poseReady.has(wanted))poseReady.set(wanted,access(mascotFile(wanted)).then(()=>true,()=>false));
+  return await poseReady.get(wanted)!?wanted:fallback;
+}
+// 지시선 설명마다 붙일 수 있는 소품 아이콘(자산이 있을 때만). 순서대로 1·2·3번 설명.
+const LABEL_PROPS:PropName[]=["chopsticks","makgeolli","kimchi"];
 // 첫 크기부터 그려 보고 높이 합이 room 안에 드는 첫 크기의 레이어들. 다 넘치면 가장 작은 크기.
 // 명함이 자리를 차지하는 마지막 장에서 요점 수를 줄이지 않고 글자를 한 단계 줄이는 데 쓴다.
 async function stackAt(values:string[],sizes:number[],room:number,gap:number,draw:(value:string,size:number)=>Promise<Layer>):Promise<Layer[]> {
@@ -37,6 +49,8 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
   const M=64,W=1080-M*2;
   const layers:OverlayOptions[]=[];
   let deco=graphPaper();
+  // 사진 위에 와야 하는 표시(지시선 시작점의 빨간 점·지시선·원 둘레 배지·도장). deco는 사진 아래에 깔리므로 따로 모아 사진 다음에 얹는다.
+  let over="";
   const texts:Array<{value:string;cx:number;cy:number;size:number;color?:string;rotate?:number}>=[];
   // 표제: 왼쪽 위 도감 번호 꼬리표("홍어 도감 · 03", 장 번호만), 그 아래 제목.
   const tag=await textLayer(`홍어 도감  ·  ${String(index).padStart(2,"0")}`,{size:30,color:"#FFFFFF",width:600,height:50,font:STYLE_FONTS.comic,features:"tnum"});
@@ -85,7 +99,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
     if(content.cover){
       // "관찰 기록" 도장은 원 밖, 원을 감싼 네모의 왼쪽 위 빈 모서리에 둔다(-12° 기울이면 오른쪽 아래 모서리가 원에서 멀어진다).
       const sw=210,sh=64,sx=M+sw/2,sy=cy-R-12+sh/2+4;
-      deco+=`<g transform="rotate(-12 ${sx} ${sy})"><rect x="${sx-sw/2}" y="${sy-sh/2}" width="${sw}" height="${sh}" rx="8" fill="${PAPER}" fill-opacity=".85" stroke="${ACCENT}" stroke-width="5"/></g>`;
+      over+=`<g transform="rotate(-12 ${sx} ${sy})"><rect x="${sx-sw/2}" y="${sy-sh/2}" width="${sw}" height="${sh}" rx="8" fill="${PAPER}" fill-opacity=".85" stroke="${ACCENT}" stroke-width="5"/></g>`;
       texts.push({value:"관찰 기록",cx:sx,cy:sy,size:32,color:ACCENT,rotate:-12});
     }else{
       const LX=cx+R+60,LW=1080-M-LX+20;
@@ -101,11 +115,20 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
         stackY+=label.info.height+36;
         const a=-Math.PI/3+(i*(Math.PI*2/3))/Math.max(1,labels.length-1||1);
         const ex=Math.round(cx+Math.cos(labels.length>1?a:0)*R*.75),ey=Math.round(cy+Math.sin(labels.length>1?a:0)*R*.75);
-        deco+=`<circle cx="${ex}" cy="${ey}" r="9" fill="${ACCENT}" stroke="#fff" stroke-width="3"/><path d="M${ex} ${ey}L${LX-50} ${ly+label.info.height/2}H${LX-14}" fill="none" stroke="${INK}" stroke-width="2.5" stroke-dasharray="6 6"/>`;
+        // 지시선은 원 안 음식 위의 한 점에서 시작해 번호 배지 테두리(반지름 20)에서 멈춘다(배지 위로 지나가면 번호가 묻힌다).
+        // 흰 바탕선을 먼저 깔아 어두운 사진 위에서도 점선이 보이게.
+        const leader=`M${ex} ${ey}L${LX-50} ${ly+label.info.height/2}H${LX-34}`;
+        over+=`<path d="${leader}" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="6" stroke-linecap="round"/><path d="${leader}" fill="none" stroke="${INK}" stroke-width="2.5" stroke-dasharray="6 6"/><circle cx="${ex}" cy="${ey}" r="9" fill="${ACCENT}" stroke="#fff" stroke-width="3"/>`;
         const b=badge(LX-14,ly+label.info.height/2,20,String(i+1));
         deco+=b.svg;texts.push({value:b.label,cx:b.cx,cy:b.cy,size:24,color:"#fff"});
         deco+=`<rect x="${LX+14}" y="${ly-10}" width="${label.info.width+28}" height="${label.info.height+20}" rx="10" fill="${SOFT}" stroke="${INK}" stroke-width="${MIN_STROKE}"/>`;
         layers.push({input:label.data,left:LX+28,top:ly});
+        // 소품 아이콘은 설명 상자 오른쪽에 남는 자리가 있을 때만(자리를 만들려고 설명 폭을 줄이지 않는다).
+        const propX=LX+14+label.info.width+28+12,propW=Math.min(72,1080-M+20-propX);
+        if(propW>=56){
+          const prop=await propLayer(LABEL_PROPS[i%LABEL_PROPS.length],{width:propW,maxHeight:label.info.height+20,left:propX,top:ly-10});
+          if(prop)layers.push(prop);
+        }
       }
     }
   }else if(inputs.length>=2){
@@ -121,7 +144,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
         // 배지는 원 둘레의 비어 있는 위쪽 모서리(A는 왼쪽 위, B는 오른쪽 위)에 둬 겹친 부분을 가리지 않게.
         const bx=cx+(i?1:-1)*Math.round(R*.72),by=cy-Math.round(R*.72);
         const b=badge(bx,by,40,i?"B":"A",i?"#3A86FF":ACCENT);
-        deco+=b.svg;texts.push({value:b.label,cx:b.cx,cy:b.cy,size:42,color:"#fff"});
+        over+=b.svg;texts.push({value:b.label,cx:b.cx,cy:b.cy,size:42,color:"#fff"});
       }
     }else{
       // A·B 비교 도감: 두 원형 사진과 아래 특징 목록. 목록 높이를 먼저 재고 원 반지름을 남는 높이에서 역산한다(215 → 최소 150).
@@ -134,7 +157,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
         deco+=`<circle cx="${cx}" cy="${cy}" r="${R+10}" fill="#fff" stroke="${INK}" stroke-width="4"/>`;
         layers.push({input:await croppedPhoto(shot,R*2,R*2,0,{circle:true,zoom:1.2}),left:cx-R,top:cy-R});
         const b=badge(cx-R+20,cy-R+20,34,i?"B":"A",i?"#3A86FF":ACCENT);
-        deco+=b.svg;texts.push({value:b.label,cx:b.cx,cy:b.cy,size:36,color:"#fff"});
+        over+=b.svg;texts.push({value:b.label,cx:b.cx,cy:b.cy,size:36,color:"#fff"});
       }
       deco+=dashedArrow(540-60,y+R+10,540+60,y+R+10);
       y+=R*2+70;
@@ -170,7 +193,9 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
   if(teaser&&teaserTag){
     const labelW=34+teaserTag.info.width+24+20+teaser.info.width+24;
     const lx=pairCover?1080-M-labelW:M;
-    deco+=`<rect x="${lx}" y="${labelTop}" width="${labelW}" height="${labelH}" rx="8" fill="#fff" stroke="${INK}" stroke-width="3"/>`
+    // 얇은 그림자: 종이 위에 놓인 표본 라벨 한 장(그림자가 진하면 모눈 위에서 떠 보인다).
+    deco+=softShadow({x:lx,y:labelTop+4,width:labelW,height:labelH,rx:8,blur:4,opacity:.24})
+      +`<rect x="${lx}" y="${labelTop}" width="${labelW}" height="${labelH}" rx="8" fill="#fff" stroke="${INK}" stroke-width="3"/>`
       +`<circle cx="${lx+17}" cy="${labelTop+labelH/2}" r="6" fill="${PAPER}" stroke="${INK}" stroke-width="${MIN_STROKE}"/>`
       +`<rect x="${lx+34}" y="${labelTop+6}" width="${teaserTag.info.width+24}" height="${labelH-12}" rx="4" fill="${INK}"/>`;
     layers.push({input:teaserTag.data,left:lx+46,top:labelTop+Math.round((labelH-teaserTag.info.height)/2)});
@@ -204,7 +229,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
   }
   // 오른쪽 아래 작은 마스코트(도감 삽화). 마지막 장은 명함 카드 안의 마스코트가 대신한다.
   // 표지 비교(원 두 개)는 B 원이 오른쪽 아래를 차지하므로 비어 있는 왼쪽 아래로 옮긴다(바닥글 글자 위, 구분선 위에 세운다).
-  const mascot=card?null:await mascotLayer({width:150,pose:content.cover?"hello":"tip",left:pairCover?M-10:1080-M+10,top:pairCover?footerTop+6:footerTop+40,anchor:pairCover?"bottom-left":"bottom-right",maxHeight:200});
+  const mascot=card?null:await mascotLayer({width:150,pose:content.cover?"hello":await poseOr("point","tip"),left:pairCover?M-10:1080-M+10,top:pairCover?footerTop+6:footerTop+40,anchor:pairCover?"bottom-left":"bottom-right",maxHeight:200});
   const showMascot=!!mascot&&(inputs.length!==1||content.cover);
   if(mascot&&showMascot)layers.push(mascot);
   deco+=`<path d="M${M} ${footerTop+14}H${1080-M}" stroke="${INK}" stroke-width="${MIN_STROKE}"/>`;
@@ -219,6 +244,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
     layers.push({input:cue.label.data,left:cueX,top:cueY});
     deco+=cue.arrow(cueX,cueY);
   }
+  if(over)layers.push(svgLayer(over));
   // 원 안·배지 위 글자는 가운데 정렬해서 마지막에 얹는다.
   for(const text of texts){
     let layer=await textLayer(text.value,{size:text.size,color:text.color??INK,width:300,height:text.size*2,font:STYLE_FONTS.heavy,align:"centre"});

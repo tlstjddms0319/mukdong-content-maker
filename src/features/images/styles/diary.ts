@@ -2,7 +2,8 @@ import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
 import { brandHandle, grainLayer, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
 import { registerPhoto } from "../render/audit";
-import { washiTape } from "../decor";
+import { cachedLayer, textureLayer, washiTape } from "../decor";
+import { seeded } from "./handDrawn";
 import { HANDWRITING_MIN_SIZE, MIN_STROKE, STYLE_FONTS, closingBlock, contentOf, emphasisOf, filmPhoto, fitText, nextCue, rotated, snap } from "./shared";
 
 // 빈티지 다이어리·스크랩북: 크라프트지 바탕 위에 아래쪽이 찢어진 줄 노트를 붙이고, 필름 색감 폴라로이드를 마스킹 테이프로 고정한다.
@@ -16,10 +17,66 @@ function sticker(cx:number,cy:number,r:number,fill:string):string {
   return `<polygon points="${points}" fill="${fill}" stroke="#fff" stroke-width="5" stroke-linejoin="round" transform="rotate(14 ${cx} ${cy})"/>`;
 }
 
-// 아래 가장자리가 들쭉날쭉한 종이(찢어진 노트) 모양.
+// 아래 가장자리가 들쭉날쭉한 종이(찢어진 노트) 모양. 손으로 찢은 자리는 톱니 간격도 깊이도 제각각이라
+// 일정한 톱니(같은 폭·같은 높이의 반복)는 기계로 자른 티가 난다. seed로 간격 10~34px, 깊이 2~22px를 흔들고,
+// 가끔 깊게 파인 자리(섬유가 길게 뜯긴 곳)를 섞는다. 같은 장은 늘 같은 모양(seeded).
+// 링 구멍은 종이에 뚫린 진짜 구멍으로(evenodd) 비워 아래 크라프트 질감이 그대로 비친다. 바탕색 원으로 칠하면
+// 질감 위에 납작한 단색 점이 떠 보인다.
+const HOLE_R=11;
+const holeCentres=(x:number,y:number)=>Array.from({length:9},(_,i)=>[x+70+i*112,y+34] as const);
 function tornPaper(x:number,y:number,w:number,h:number,seed:number):string {
-  const teeth=Array.from({length:28},(_,i)=>{const px=x+w-(w*(i+1))/28,dy=((i*7+seed*3)%5)*5;return `L${Math.round(px)} ${y+h-dy}`;}).join("");
-  return `<path d="M${x} ${y}H${x+w}V${y+h}${teeth}Z" fill="${PAPER}"/>`;
+  const rand=seeded(seed*131+17);
+  let edge="",px=x+w;
+  while(px>x){
+    px=Math.max(x,px-(10+rand()*24));
+    // 깊이는 예전 톱니 범위(최대 20px) 안에서만 흔든다. 더 깊으면 오른쪽 아래 서명·넘겨 보기가 크라프트 위로 빠진다.
+    const deep=rand()<.12;
+    const dy=Math.round(2+rand()*(deep?18:11));
+    edge+=`L${Math.round(px)} ${y+h-dy}`;
+  }
+  const holes=holeCentres(x,y).map(([cx,cy])=>`M${cx-HOLE_R} ${cy}a${HOLE_R} ${HOLE_R} 0 1 0 ${HOLE_R*2} 0a${HOLE_R} ${HOLE_R} 0 1 0 ${-HOLE_R*2} 0Z`).join("");
+  // 구멍 위쪽 안 가장자리에 얇은 그늘(종이 두께). 구멍이 단순한 원 무늬가 아니라 뚫린 자리로 읽힌다.
+  const rims=holeCentres(x,y).map(([cx,cy])=>`<path d="M${cx-HOLE_R+2} ${cy-2}A${HOLE_R-2} ${HOLE_R-2} 0 0 1 ${cx+HOLE_R-2} ${cy-2}" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="3"/>`).join("");
+  return `<path d="M${x} ${y}H${x+w}V${y+h}${edge}Z${holes}" fill="${PAPER}" fill-rule="evenodd"/>${rims}`;
+}
+
+// ── 그림자(libvips 흐림) ─────────────────────────────────────────────────────────────
+// decor의 softShadow·innerShadow와 같은 모양(두 겹 그림자, 창 안쪽 그림자)을 SVG 필터 대신 sharp의 blur로 만든다.
+// librsvg의 feGaussianBlur는 큰 면적에서 느려(폴라로이드 두 겹 그림자 약 0.6초, 노트 종이 그림자 1.3초) 카드 한 장 2.5초
+// 예산을 넘기므로, 흐림 없는 도형만 SVG로 그리고 흐림은 libvips(수십 ms)에 맡긴다.
+const blank=(width:number,height:number)=>sharp({create:{width,height,channels:4,background:{r:0,g:0,b:0,alpha:0}}});
+const blurredRect=async(W:number,H:number,x:number,y:number,w:number,h:number,alpha:number,sigma:number)=>
+  sharp(await sharp(Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#000" fill-opacity="${alpha.toFixed(3)}"/></svg>`)).png().toBuffer()).blur(sigma).png().toBuffer();
+// 두 겹 그림자: 넓고 옅은 주변광(흐림 1.5×blur) + 물체 바로 밑의 짧고 진한 주광(흐림 .33×blur, 위로 .45×blur 되돌림).
+// 비율은 decor softShadow와 같다. 캔버스 W×H 위 (x,y,w,h) 자리의 그림자 PNG.
+async function twoLayerShadow(W:number,H:number,x:number,y:number,w:number,h:number,blur:number,opacity:number):Promise<Buffer> {
+  const lift=Math.round(blur*.45);
+  const [ambient,key]=await Promise.all([blurredRect(W,H,x,y,w,h,opacity*.72,blur*1.5),blurredRect(W,H,x,y-lift,w,h,Math.min(.9,opacity*1.15),Math.max(2,blur*.33))]);
+  return blank(W,H).composite([{input:ambient,left:0,top:0},{input:key,left:0,top:0}]).png().toBuffer();
+}
+// 사각 창의 안쪽 그림자(w×h 조각): 창 바깥을 덮는 링을 아래로 dy 밀어 흐린 뒤 창 자리만 잘라 낸다.
+async function insetShadow(w:number,h:number,blur:number,opacity:number,dy:number):Promise<Buffer> {
+  const p=Math.ceil(blur*3)+Math.abs(dy),W=w+p*2,H=h+p*2;
+  const ring=Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><path d="M0 0H${W}V${H}H0ZM${p} ${p+dy}V${p+dy+h}H${p+w}V${p+dy}Z" fill-rule="evenodd" fill="#000" fill-opacity="${opacity}"/></svg>`);
+  const blurred=await sharp(await sharp(ring).png().toBuffer()).blur(blur).png().toBuffer();
+  return sharp(blurred).extract({left:p,top:p,width:w,height:h}).png().toBuffer();
+}
+
+// 크라프트 바탕 한 장(바탕색 + 크라프트 질감 + 노트 종이 그림자 두 겹). 노트 크기·자리는 모든 장이 같으므로
+// 한 번만 구워 cachedLayer로 다시 쓴다(큰 흐림 필터를 장마다 돌리지 않게). 질감 파일이 없으면 바탕색 + 그림자만.
+async function kraftBase(x:number,y:number,w:number,h:number):Promise<OverlayOptions> {
+  const input=await cachedLayer(`diary:kraft:${x},${y},${w},${h}`,async()=>{
+    const kraft=await textureLayer("kraft",{opacity:.7});
+    // 질감 세기 .7: 크라프트 결이 또렷이 보이되 얼룩이 글자 대비를 흔들 만큼 진하지는 않은 선.
+    // 찢긴 아래 끝은 장마다 다르므로 그림자는 톱니가 시작하기 전(아래 24px 안쪽)까지만 깐다.
+    // 넓은 주변광은 아래로 조금 밀고, 짧은 주광은 종이 바로 밑에 붙는다(softShadow가 두 겹으로 나눈다).
+    const shadow=await twoLayerShadow(1080,1350,x,y+8,w,h-24,12,.34);
+    const parts:OverlayOptions[]=kraft?[kraft,{input:shadow,left:0,top:0}]:[{input:shadow,left:0,top:0}];
+    // 질감을 곱하면 평균이 10% 남짓 어두워지므로 바탕을 그만큼 밝게(#D8B88A) 깔아 평균 색을 예전 크라프트에 맞춘다.
+    // 노트 아래 크라프트 위에 앉는 계정·넘겨 보기 글자(26px)의 대비가 예전과 같게 유지된다.
+    return sharp({create:{width:1080,height:1350,channels:3,background:kraft?"#D8B88A":KRAFT}}).composite(parts).png().toBuffer();
+  });
+  return {input,left:0,top:0};
 }
 
 
@@ -32,8 +89,12 @@ async function polaroid(input:Buffer,w:number,h:number,options:{leak:"left"|"rig
   const pad=POL_PAD,bottom=polaroidBottom(h,options.strip);
   const photo=await filmPhoto(input,w,h,options.leak,"diary");
   const W=w+pad*2,H=h+pad+bottom;
-  const shadow=Buffer.from(`<svg width="${W+POL_SHADOW}" height="${H+POL_SHADOW}" xmlns="http://www.w3.org/2000/svg"><defs><filter id="b"><feGaussianBlur stdDeviation="6"/></filter></defs><rect x="10" y="14" width="${W}" height="${H}" fill="#000" opacity=".28" filter="url(#b)"/><rect x="0" y="0" width="${W}" height="${H}" fill="#FFFEFA"/></svg>`);
-  const parts:OverlayOptions[]=[{input:shadow,left:0,top:0},{input:photo,left:pad,top:pad}];
+  // 그림자는 두 겹(softShadow): 오른쪽 아래로 넓게 번지는 주변광 + 틀 바로 밑의 짧고 진한 주광. 틀 왼쪽·위는
+  // 캔버스 끝이라 그림자가 보이지 않으므로 오른쪽 아래로 밀어 둔다(여백 POL_SHADOW 안에서 거의 다 사라지는 번짐).
+  // 사진 칸 안쪽에는 얕은 안쪽 그림자를 얹어 사진이 흰 틀 "안에 끼워진" 두께를 낸다.
+  const [shadow,inset]=await Promise.all([twoLayerShadow(W+POL_SHADOW,H+POL_SHADOW,6,12,W,H,7,.3),insetShadow(w,h,5,.28,2)]);
+  const card=Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><rect width="${W}" height="${H}" fill="#FFFEFA"/></svg>`);
+  const parts:OverlayOptions[]=[{input:shadow,left:0,top:0},{input:card,left:0,top:0},{input:photo,left:pad,top:pad},{input:inset,left:pad,top:pad}];
   // 여백 글씨도 손글씨 최소 크기(HANDWRITING_MIN_SIZE) 이상으로 써서 폰에서 읽히게 한다.
   if(options.caption&&!options.strip){
     const note=await textLayer(options.caption,{size:HANDWRITING_MIN_SIZE,color:PEN,width:w,height:bottom-8,font:STYLE_FONTS.hand,align:"centre"});
@@ -94,6 +155,10 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   const v=index-1+(slide.variant??0);
   const layers:OverlayOptions[]=[];
+  // 사진 위에 붙는 마스킹 테이프(폴라로이드 레이어 다음에 깐다). 바탕 장식(deco)에 넣으면 사진 밑으로 들어가 버린다.
+  let tapes="",tapeAt=-1;
+  // 마지막 장 명함 카드의 그림자(바탕 장식보다 먼저, 노트 종이 위에 깐다).
+  let cardShadow:OverlayOptions|null=null,cardBoard="";
   // 노트 한 장: 위 여백 50, 좌우 46, 아래는 찢어진 가장자리.
   const NX=46,NY=50,NW=1080-NX*2,NH=1350-NY-60;
   let deco=tornPaper(NX,NY,NW,NH,v);
@@ -102,8 +167,6 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
   const LINE_GAP=content.last&&!content.cover?68:80,RULE0=NY+150;
   for(let ly=RULE0;ly<NY+NH-40;ly+=LINE_GAP)deco+=`<path d="M${NX} ${ly}H${NX+NW}" stroke="${RULE}" stroke-width="${MIN_STROKE}" opacity=".6"/>`;
   deco+=`<path d="M${NX+110} ${NY}V${NY+NH-20}" stroke="${MARGIN_LINE}" stroke-width="2.5"/>`;
-  // 링 구멍(위쪽 펀치 자국).
-  for(let i=0;i<9;i++)deco+=`<circle cx="${NX+70+i*112}" cy="${NY+34}" r="11" fill="${KRAFT}"/>`;
   // 날짜 대신 장 번호를 일기 머리말로("Day 01" 같은 영문 장식 대신 한글 쪽수).
   const dayLabel=await textLayer(`${String(index).padStart(2,"0")}쪽  ·  ${content.keywords.map(word=>`#${word}`).join(" ")||STORE_NAME}`,{size:HANDWRITING_MIN_SIZE,color:RED_PEN,width:800,height:70,font:STYLE_FONTS.hand,features:"tnum"});
   layers.push({input:dayLabel.data,left:NX+130,top:NY+74});
@@ -157,7 +220,8 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
     const pol=await tiltedPolaroid(inputs[0],PW,PH,{leak:v%2?"left":"right",sign:signText,handle:handleLayer},deg);
     const pl=Math.round((1080-pol.info.width)/2);
     layers.push({input:pol.data,left:pl,top});
-    deco+=washiTape({x:540-110,y:top-12,width:220,height:54,angle:-6,color:TAPES[v%TAPES.length],opacity:.85});
+    tapeAt=layers.length;
+    tapes+=washiTape({x:540-110,y:top-12,width:220,height:54,angle:-6,color:TAPES[v%TAPES.length],opacity:.85});
     // 폴라로이드 왼쪽 아래 모서리에 걸친 둥근 가게 도장(빨간 펜, 점선 링). 오른쪽 아래 서명과 겹치지 않는 자리.
     const sx=pl+70,sy=top+pol.info.height-POL_SHADOW-72;
     const stampDeco=`<g transform="rotate(-14 ${sx} ${sy})" opacity=".85"><circle cx="${sx}" cy="${sy}" r="64" fill="${PAPER}" stroke="${RED_PEN}" stroke-width="4"/><circle cx="${sx}" cy="${sy}" r="54" fill="none" stroke="${RED_PEN}" stroke-width="${MIN_STROKE}" stroke-dasharray="6 5"/></g>`;
@@ -193,7 +257,8 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
         const top=Math.round(polTop+Math.max(0,(lastLine-polTop-pol.info.height)/2));
         const left=Math.round((1080-pol.info.width)/2);
         layers.push({input:pol.data,left,top});
-        deco+=washiTape({x:540-100,y:top-12,width:200,height:50,angle:-6,color:TAPES[v%TAPES.length],opacity:.85});
+        tapeAt=layers.length;
+        tapes+=washiTape({x:540-100,y:top-12,width:200,height:50,angle:-6,color:TAPES[v%TAPES.length],opacity:.85});
       }else{
         // 요점 줄 수에 따라 사진 목표 크기(1·2·3줄 → 460·400·340, 두 장이면 340·290).
         const target=shots.length>1?(points.length>2?290:340):([460,460,400,340][points.length]);
@@ -233,7 +298,8 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
           const left=shots.length>1?(i?1080-NX-pol.info.width+16:NX-6):Math.round(540-pol.info.width/2+(strip?0:v%2?-50:50));
           const top=blockTop+(i?stagger:0);
           layers.push({input:pol.data,left,top});
-          deco+=washiTape({x:left+pol.info.width/2-80,y:top-12,width:160,height:46,angle:i?8:-7,color:TAPES[(v+i)%TAPES.length],opacity:.85});
+          tapeAt=layers.length;
+          tapes+=washiTape({x:left+pol.info.width/2-80,y:top-12,width:160,height:46,angle:i?8:-7,color:TAPES[(v+i)%TAPES.length],opacity:.85});
         }
       }
     }else{
@@ -262,8 +328,10 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
   if(closing){
     // 흰 명함 카드: 위 가장자리 양 끝을 마스킹 테이프로 고정하고, 왼쪽에 빨간 펜 별 스티커를 붙인다.
     const cw=640,cx=Math.round(540-cw/2);
-    deco+=`<rect x="${cx+8}" y="${cardTop+10}" width="${cw}" height="${cardH}" fill="#000" opacity=".12"/><rect x="${cx}" y="${cardTop}" width="${cw}" height="${cardH}" fill="#FFFEFA" stroke="${RULE}" stroke-width="${MIN_STROKE}"/>`
-      +washiTape({x:cx-34,y:cardTop-14,width:120,height:40,angle:-24,color:TAPES[(v+3)%TAPES.length],opacity:.85})
+    cardShadow={input:await twoLayerShadow(cw+80,cardH+80,44,48,cw,cardH,8,.2),left:cx-40,top:cardTop-40};
+    cardBoard=`<rect x="${cx}" y="${cardTop}" width="${cw}" height="${cardH}" fill="#FFFEFA" stroke="${RULE}" stroke-width="${MIN_STROKE}"/>`;
+    // 명함 판·테이프·스티커·저장 칩 바탕은 deco가 아니라 cardBoard에 모아 그림자 위에 따로 깐다(아래 합성 순서 참고).
+    cardBoard+=washiTape({x:cx-34,y:cardTop-14,width:120,height:40,angle:-24,color:TAPES[(v+3)%TAPES.length],opacity:.85})
       +washiTape({x:cx+cw-86,y:cardTop-14,width:120,height:40,angle:24,color:TAPES[(v+1)%TAPES.length],opacity:.85})
       +sticker(cx+cw-20,cardTop+cardH-16,24,["#FCE38A","#F4B6C2","#B9E3C6"][(v+1)%3]);
     let cy=cardTop+CARD_PAD;
@@ -272,7 +340,7 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
     if(closing.handle){cy+=8;layers.push({input:closing.handle.data,left:Math.round(540-closing.handle.info.width/2),top:cy});cy+=closing.handle.info.height;}
     cy+=18+12;
     const chipLeft=Math.round(540-closing.chip.info.width/2);
-    deco+=closing.chipSvg(chipLeft,cy);
+    cardBoard+=closing.chipSvg(chipLeft,cy);
     layers.push({input:closing.chip.data,left:chipLeft,top:cy});
   }else if(!(content.cover&&hasPhoto)){
     // 오른쪽 아래 빨간 펜 서명과 쪽수(표지는 폴라로이드 여백에 쓴다).
@@ -289,7 +357,11 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
     // 계정: 넘겨 보기 왼쪽(없으면 오른쪽 끝) 같은 줄.
     if(handleLayer)layers.push({input:handleLayer.data,left:1080-NX-40-(content.cover?0:150)-handleLayer.info.width,top:1350-82+20});
   }
-  layers.unshift(svgLayer(deco));
+  // 테이프는 폴라로이드 위. 도장(표지)보다 먼저 깔려도 둘은 자리가 겹치지 않는다.
+  if(tapes)layers.splice(tapeAt,0,svgLayer(tapes));
+  // 명함 그림자는 노트 종이(deco) 위·명함 판 아래여야 하므로 순서는 deco → 그림자 → 명함 판(테이프·칩 바탕 포함) → 글자.
+  const cardOver=cardShadow?[cardShadow,svgLayer(cardBoard)]:[];
+  layers.unshift(await kraftBase(NX,NY,NW,NH),svgLayer(deco),...cardOver);
   layers.push(await grainLayer({opacity:.28}));
   return sharp({create:{width:1080,height:1350,channels:3,background:KRAFT}}).composite(snap(layers)).jpeg({quality:92}).toBuffer();
 };

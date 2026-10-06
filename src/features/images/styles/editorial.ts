@@ -1,4 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
+import { textureLayer } from "../decor";
 import { brandName, finishPhoto, svgLayer, textLayer, type CardRenderer, type Font, type Layer, type TextEmphasis } from "../render/primitives";
 import { registerPhoto } from "../render/audit";
 import { MIN_STROKE, STYLE_FONTS, chooseTitleLayout, closingBlock, contentOf, emphasisOf, fitText, hashtags, nextCue, rotated, snap, type StyleContent } from "./shared";
@@ -71,12 +72,28 @@ function barcode(x:number,y:number,w:number,h:number,rand:()=>number):string {
 }
 
 // 표지 위 어두운 그라데이션. 위는 제호·호수가 밝은 사진에서도 읽히게, 아래는 제목·바코드 자리.
-function coverShade():string {
+// 아래 그라데이션은 제목 자리(titleTop: 제목 위 흰 줄 바로 아래)에 맞춰 좁힌다: titleTop−120에서 0으로 시작해 titleTop에서 .72,
+// 맨 아래 .9. 예전처럼 화면 아래 42%를 고정 비율로 덮으면 제목이 짧을 때 음식 사진 가운데까지 어두워지고, 제목이 길면
+// 첫 줄이 옅은 자리에 걸렸다. 제목 기준이면 사진은 제목 바로 위까지 밝게 남고 제목은 늘 진한 자리 위에 앉는다(흰 사진 3:1).
+function coverShade(titleTop:number):string {
   // 위 그라데이션은 제호(y 46~185)와 호수(y ~210~235)가 밝은 사진에서도 4:1 넘게 읽히는 선에서 가장 옅게 잡았다.
-  // 아래는 제목(그림자 있음)보다 바코드 밑 작은 가게 이름(26px)이 기준이라 맨 아래를 가장 진하게 둔다.
+  const start=Math.max(0,titleTop-120),knee=Math.min(.95,(titleTop-start)/(1350-start));
   return `<defs><linearGradient id="ed-top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".8"/><stop offset=".26" stop-color="#000" stop-opacity=".46"/><stop offset=".5" stop-color="#000" stop-opacity="0"/></linearGradient>`
-    +`<linearGradient id="ed-bottom" x1="0" y1="0" x2="0" y2="1"><stop offset=".58" stop-color="#000" stop-opacity="0"/><stop offset=".72" stop-color="#000" stop-opacity=".45"/><stop offset="1" stop-color="#000" stop-opacity=".85"/></linearGradient></defs>`
-    +`<rect width="1080" height="1350" fill="url(#ed-top)"/><rect width="1080" height="1350" fill="url(#ed-bottom)"/>`;
+    +`<linearGradient id="ed-bottom" gradientUnits="userSpaceOnUse" x1="0" y1="${start}" x2="0" y2="1350"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="${knee.toFixed(3)}" stop-color="#000" stop-opacity=".72"/><stop offset="1" stop-color="#000" stop-opacity=".9"/></linearGradient></defs>`
+    +`<rect width="1080" height="1350" fill="url(#ed-top)"/><rect y="${start}" width="1080" height="${1350-start}" fill="url(#ed-bottom)"/>`;
+}
+
+// 내지 종이 결: 리넨 질감을 아주 옅게(세기 .26) multiply. 흰 종이가 화면처럼 납작해 보이지 않고 인쇄 종이 느낌만 난다.
+// 사진보다 먼저 깔아 사진은 깨끗하게 둔다. 파일이 없으면 null → 흰 종이 그대로.
+const paperGrain=()=>textureLayer("linen",{opacity:.26});
+// 내지 사진 안쪽 가장자리를 아주 얕게 어둡게(안쪽 그림자). 검은 테두리 안으로 사진이 한 겹 들어가 보여 납작함이 덜하다.
+// decor innerShadow(SVG 흐림)는 큰 사진(952×760)에서 약 0.25초라, 같은 모양을 libvips 흐림으로 만든다: 창 바깥을 덮는 링을
+// 아래로 dy 밀어 흐린 뒤 창 자리만 잘라 사진 위에 얹는다(수십 ms).
+async function photoInset(x:number,y:number,w:number,h:number,blur=10,opacity=.22,dy=3):Promise<OverlayOptions> {
+  const p=Math.ceil(blur*3)+dy,W=w+p*2,H=h+p*2;
+  const ring=Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><path d="M0 0H${W}V${H}H0ZM${p} ${p+dy}V${p+dy+h}H${p+w}V${p+dy}Z" fill-rule="evenodd" fill="#000" fill-opacity="${opacity}"/></svg>`);
+  const blurred=await sharp(await sharp(ring).png().toBuffer()).blur(blur).png().toBuffer();
+  return {input:await sharp(blurred).extract({left:p,top:p,width:w,height:h}).png().toBuffer(),left:x,top:y};
 }
 
 // 사진은 각진 모서리에 가는 검은 테두리. 테두리는 사진 위에 얹는 svg 문자열로 돌려준다.
@@ -94,7 +111,7 @@ async function renderCover(inputs:Buffer[],content:StyleContent,variant:number):
     registerPhoto(photo);
     layers.push({input:photo,left:0,top:0});
   }
-  let deco=coverShade();
+  let deco="";
   // 제호: 폭(여백 60 안쪽)을 가득 채우는 가장 큰 크기.
   const masthead=await fitLine("MUKDONG",{sizes:[200,196,192,188,184,180,176,172,168,164,160],maxWidth:COVER_W,font:STYLE_FONTS.display,color:"#FFFFFF"});
   let y=46;
@@ -136,7 +153,8 @@ async function renderCover(inputs:Buffer[],content:StyleContent,variant:number):
   layers.push({input:title.data,left:COVER_M-10,top:titleTop-10});
   if(sub)layers.push({input:sub.data,left:COVER_M-10,top:titleTop+title.info.height-20});
   deco+=`<path d="M${COVER_M} ${titleTop-30}H${1080-COVER_M}" stroke="#fff" stroke-opacity=".9" stroke-width="${MIN_STROKE}"/>`;
-  // 그라데이션·칩·바코드는 사진 위, 글자 아래.
+  // 그라데이션·칩·바코드는 사진 위, 글자 아래. 아래 그라데이션은 제목 자리가 정해진 뒤에 만든다(맨 앞에 깔아 칩·바코드보다 아래).
+  deco=coverShade(titleTop-30)+deco;
   layers.splice(shot?1:0,0,svgLayer(deco));
   return sharp({create:{width:1080,height:1350,channels:3,background:"#141414"}}).composite(snap(layers)).jpeg({quality:92}).toBuffer();
 }
@@ -230,12 +248,13 @@ async function renderPhotoPage(inputs:Buffer[],content:StyleContent):Promise<Buf
   // 거대한 쪽 번호는 사진의 왼쪽 아래 모서리에 걸쳐 두어 아래쪽 절반만 사진 밖으로 비친다.
   const ghost=await ghostNumber(content.index);
   const parts:OverlayOptions[]=[{input:ghost.data,left:M-28,top:photoBottom-Math.round(ghost.info.height*.55)}];
-  parts.push({input:await plainPhoto(inputs[0],W,photoH),left:M,top:photoTop});
+  parts.push({input:await plainPhoto(inputs[0],W,photoH),left:M,top:photoTop},await photoInset(M,photoTop,W,photoH));
   let deco=chromeDeco+photoFrame(M,photoTop,W,photoH);
   const placed=placeBody(layers,body,photoBottom+gapTitle,pointGap);
   deco+=placed.deco;
   if(closing)deco+=placeClosing(layers,closing,placed.bottom+CLOSING_GAP);
-  return sharp({create:{width:1080,height:1350,channels:3,background:PAPER}}).composite(snap([...parts,svgLayer(deco),...layers])).jpeg({quality:92}).toBuffer();
+  const grain=await paperGrain();
+  return sharp({create:{width:1080,height:1350,channels:3,background:PAPER}}).composite(snap([...(grain?[grain]:[]),...parts,svgLayer(deco),...layers])).jpeg({quality:92}).toBuffer();
 }
 
 // ── 사진 2장 장: 좌우 2단, 각 사진 아래 고정폭 캡션 ───────────────────────────────────────────
@@ -258,14 +277,15 @@ async function renderPhotosPage(inputs:Buffer[],content:StyleContent):Promise<Bu
   let deco=chromeDeco;
   for(const [i,shot] of inputs.slice(0,2).entries()){
     const x=M+i*(PW+GAP);
-    parts.push({input:await plainPhoto(shot,PW,photoH),left:x,top:photoTop});
+    parts.push({input:await plainPhoto(shot,PW,photoH),left:x,top:photoTop},await photoInset(x,photoTop,PW,photoH));
     deco+=photoFrame(x,photoTop,PW,photoH);
     layers.push({input:captions[i].data,left:x,top:photoBottom+14});
   }
   const placed=placeBody(layers,fitted.body,photoBottom+captionH+fitted.gapTitle+Math.round((fitted.photoH-photoH)/2),fitted.pointGap);
   deco+=placed.deco;
   if(closing)deco+=placeClosing(layers,closing,placed.bottom+CLOSING_GAP);
-  return sharp({create:{width:1080,height:1350,channels:3,background:PAPER}}).composite(snap([...parts,svgLayer(deco),...layers])).jpeg({quality:92}).toBuffer();
+  const grain=await paperGrain();
+  return sharp({create:{width:1080,height:1350,channels:3,background:PAPER}}).composite(snap([...(grain?[grain]:[]),...parts,svgLayer(deco),...layers])).jpeg({quality:92}).toBuffer();
 }
 
 // ── 글자만 있는 장: 인용(pull quote) 페이지 ─────────────────────────────────────────────────
@@ -312,7 +332,8 @@ async function renderTextPage(content:StyleContent):Promise<Buffer> {
   const spineText=await eyebrow("묵동홍어마을  ·  홍어 이야기",28,GREY,900);
   const spine=await rotated(spineText.data,90);
   layers.push({input:spine.data,left:1080-44-Math.round(spine.info.width/2),top:Math.round((CONTENT_TOP+CONTENT_BOTTOM-spine.info.height)/2)});
-  return sharp({create:{width:1080,height:1350,channels:3,background:PAPER}}).composite(snap([svgLayer(deco),...layers])).jpeg({quality:92}).toBuffer();
+  const grain=await paperGrain();
+  return sharp({create:{width:1080,height:1350,channels:3,background:PAPER}}).composite(snap([...(grain?[grain]:[]),svgLayer(deco),...layers])).jpeg({quality:92}).toBuffer();
 }
 
 export const renderEditorial:CardRenderer=async(inputs,slide,index,total)=>{

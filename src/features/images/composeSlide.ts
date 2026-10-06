@@ -6,13 +6,18 @@ import type { CarouselSlidePlan } from "./carousel";
 import { DEFAULT_SLIDE_LAYOUT, STORE_NAME, slideEyebrow, type SlideLayout } from "./slideLayout";
 import { type CardLayout, type DesignSpecInput, type Palette, inkOn, mutedOn, normalizeCardLayout, paletteOf, photosNeeded, readableOn } from "./design";
 import { resolveSlideFonts, typographyOf } from "./typography";
-import { CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, brandName, canvas, cleanPoints, cornerMarks, croppedPhoto, currentVariant, finishPhoto, dotGrid, grainLayer, mascotLayer, photoOverlayLayer, pointLayers, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, withRenderContext } from "./render/primitives";
-import { BODY_TITLE, COVER_TITLE, EXTRA_RENDERERS, POINT, closingPlan, counterLayer, cueAt, footerPlan, isCover, isLast, slideTitle, sublineLayer, teaserLayer } from "./render/extraLayouts";
+import { CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, brandName, cleanPoints, cornerMarks, croppedPhoto, currentVariant, finishPhoto, dotGrid, grainLayer, mascotLayer, photoOverlayLayer, pointLayers, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, withRenderContext } from "./render/primitives";
+import { BODY_TITLE, COVER_TITLE, EXTRA_RENDERERS, POINT, closingPlan, counterLayer, cueAt, footerPlan, isCover, isLast, cardShadow, mascotContact, photoWell, slideTitle, sublineLayer, teaserLayer, texturedCanvas } from "./render/extraLayouts";
+import { ROLE_POSES, type MascotPose } from "./decor";
 import { STYLE_RENDERERS } from "./styles";
 import { MIN_STROKE } from "./styles/shared";
 
 // 공용 그리기 도구는 render/primitives.ts에 있다. 테스트와 다른 화면이 쓰던 이름은 여기서도 그대로 내보낸다.
 export { FONTS, balanceHeadline, renderSlideHeadline, renderSlidePoints } from "./render/primitives";
+
+// 장 역할에 맞는 마스코트 포즈(decor의 ROLE_POSES). 표에 없는 역할은 레이아웃이 원래 쓰던 포즈로 둔다.
+// 포즈 파일이 아직 없으면 mascotLayer가 hello로 대신 그린다.
+const poseFor=(slide:CarouselSlidePlan,fallback:MascotPose):MascotPose=>ROLE_POSES[slide.role]??fallback;
 
 // 1. 감성 풀스크린: 사진이 화면을 채우고, 위 오른쪽에 작은 채널명, 아래 가운데에 작은 부제와 굵은 흰 제목.
 // 장식: 네 귀퉁이 크롭 마크, 제목 옆 작은 반짝이, 필름 그레인.
@@ -121,13 +126,18 @@ async function composeFrame(inputs:Buffer[],slide:CarouselSlidePlan,index:number
   const matted=currentVariant()%2===1;
   const MAT=26;
   const layers:OverlayOptions[]=matted?[
-    svgLayer(softShadow({x:frameLeft-MAT,y:FRAME_TOP-MAT+14,width:FRAME_WIDTH+MAT*2,height:frameHeight+MAT*2,rx:4,blur:22,opacity:.45})+`<rect x="${frameLeft-MAT}" y="${FRAME_TOP-MAT}" width="${FRAME_WIDTH+MAT*2}" height="${frameHeight+MAT*2}" rx="4" fill="#fffdf8"/>`),
+    await cardShadow({x:frameLeft-MAT,y:FRAME_TOP-MAT+14,width:FRAME_WIDTH+MAT*2,height:frameHeight+MAT*2,rx:4,blur:22,opacity:.45}),
+    svgLayer(`<rect x="${frameLeft-MAT}" y="${FRAME_TOP-MAT}" width="${FRAME_WIDTH+MAT*2}" height="${frameHeight+MAT*2}" rx="4" fill="#fffdf8"/>`),
     {input:await croppedPhoto(inputs[0],FRAME_WIDTH,frameHeight,0),left:frameLeft,top:FRAME_TOP},
+    // 매트 안쪽 창 가장자리에 얕은 안쪽 그림자: 사진이 매트 "뒤로" 들어가 액자처럼 보인다.
+    svgLayer(photoWell(frameLeft,FRAME_TOP,FRAME_WIDTH,frameHeight,{opacity:.3})),
     svgLayer(washiTape({x:540-110,y:FRAME_TOP-MAT-22,width:220,color:palette.highlight,angle:-3,opacity:.85})),
   ]:[
-    svgLayer(softShadow({x:frameLeft-10,y:FRAME_TOP-2,width:FRAME_WIDTH+20,height:frameHeight+20,rx:2,blur:22,opacity:.45})),
+    await cardShadow({x:frameLeft-10,y:FRAME_TOP-2,width:FRAME_WIDTH+20,height:frameHeight+20,rx:2,blur:22,opacity:.45}),
     {input:await croppedPhoto(inputs[0],FRAME_WIDTH,frameHeight,0),left:frameLeft,top:FRAME_TOP},
-    svgLayer(`<rect x="${frameLeft-10}" y="${FRAME_TOP-10}" width="${FRAME_WIDTH+20}" height="${frameHeight+20}" fill="none" stroke="${white}" stroke-width="4"/>`
+    // 흰 선 액자 안쪽에도 얕은 안쪽 그림자(흐린 배경 위에 뜬 창이 아니라 틀에 끼운 사진이 되게). 선·테이프는 그 위에.
+    svgLayer(photoWell(frameLeft,FRAME_TOP,FRAME_WIDTH,frameHeight)
+      +`<rect x="${frameLeft-10}" y="${FRAME_TOP-10}" width="${FRAME_WIDTH+20}" height="${frameHeight+20}" fill="none" stroke="${white}" stroke-width="4"/>`
       +washiTape({x:frameLeft-70,y:FRAME_TOP-14,width:200,color:palette.highlight,angle:-14,opacity:.82})
       +washiTape({x:frameLeft+FRAME_WIDTH-130,y:FRAME_TOP+frameHeight-30,width:200,color:palette.highlight,angle:10,opacity:.82})),
   ];
@@ -184,7 +194,7 @@ async function composeIllustration(inputs:Buffer[],slide:CarouselSlidePlan,index
   const layers:OverlayOptions[]=[
     // 배경 장식은 카드 뒤에. 오른쪽 위 밝은 덩어리, 왼쪽 아래 옅은 강조색 덩어리, 오른쪽 아래 점 무늬.
     svgLayer(blob({cx:940,cy:150,r:230,color:palette.highlight,opacity:.42,seed:3})+blob({cx:120,cy:1180,r:190,color:palette.accent,opacity:.12,seed:9})+dotGrid({x:760,y:1010,width:280,height:250,color:palette.ink,opacity:.22})),
-    svgLayer(softShadow({x:Math.round(cx-CARD_W/2)+6,y:Math.round(cy-CARD_H/2)+22,width:CARD_W,height:CARD_H,rx:14,blur:20,opacity:.2,rotate:TILT})),
+    await cardShadow({x:Math.round(cx-CARD_W/2)+6,y:Math.round(cy-CARD_H/2)+22,width:CARD_W,height:CARD_H,rx:14,blur:20,opacity:.2,rotate:TILT}),
     {input:tilted.data,left:cardLeft,top:cardTop},
     svgLayer(washiTape({x:cardLeft+2,y:cardTop+6,width:210,color:palette.highlight,angle:-12,opacity:.8})),
   ];
@@ -192,8 +202,9 @@ async function composeIllustration(inputs:Buffer[],slide:CarouselSlidePlan,index
   // 높이를 제한해, 본문 글줄을 가리지 않는다. 카드가 길어 공간이 모자라면 줄이고, 너무 좁으면 생략한다.
   const cardBottom=cardTop+tilted.info.height;
   const MASCOT_FOOT=1284,TEXT_SAFE_TOP=cardBottom-Math.round(PAD*.6);
-  const mascot=await mascotLayer({width:200,pose:"hello",left:MARGIN-26,top:MASCOT_FOOT,anchor:"bottom-left",maxHeight:MASCOT_FOOT-TEXT_SAFE_TOP});
-  if(mascot)layers.push(mascot);
+  const mascot=await mascotLayer({width:200,pose:poseFor(slide,"hello"),left:MARGIN-26,top:MASCOT_FOOT,anchor:"bottom-left",maxHeight:MASCOT_FOOT-TEXT_SAFE_TOP});
+  // 발 밑 접촉 그림자를 먼저 깔고 마스코트를 올린다(바닥에 선 캐릭터).
+  if(mascot)layers.push(svgLayer(mascotContact(mascot)),mascot);
   if(bubbleText){
     // 노란 말풍선은 마스코트 바로 오른쪽에 붙여, 마스코트가 하는 말처럼 보이게 한다. 꼬리는 왼쪽(마스코트 쪽)으로 뻗고
     // 마스코트 얼굴 높이를 가리킨다. 마스코트가 생략된 카드에서는 꼬리 없는 알약 모양으로 오른쪽 아래에 둔다.
@@ -218,7 +229,7 @@ async function composeIllustration(inputs:Buffer[],slide:CarouselSlidePlan,index
   const foot=await footerPlan(slide,index,total,{ink:palette.ink,muted:palette.ink,left:MARGIN+(mascot?180:0),width:CONTENT-(mascot?180:0),top:1290});
   layers.push(...foot.layers);
   layers.push(await grainLayer());
-  return canvas(palette.soft,layers);
+  return texturedCanvas(palette.soft,layers);
 }
 
 // 4. 사진 콜라주: 밝은 바탕에 큰 제목과 설명, 사진 격자, 남은 요점, 태그 알약.
@@ -263,7 +274,7 @@ async function composeCollage(inputs:Buffer[],slide:CarouselSlidePlan,index:numb
   }else{
     cells.push([MARGIN,gridTop,CONTENT,gridHeight]);
   }
-  layers.push(svgLayer(cells.map(([x,y,w,h])=>softShadow({x,y:y+10,width:w,height:h,rx:18,blur:14,opacity:.16})).join("")));
+  layers.push(...await Promise.all(cells.map(([x,y,w,h])=>cardShadow({x,y:y+10,width:w,height:h,rx:18,blur:14,opacity:.2}))));
   for(const [i,[x,y,w,h]] of cells.entries())layers.push({input:await croppedPhoto(photos[i],w,h,18),left:x,top:y});
   // 첫 사진의 왼쪽 위 모서리에 마스킹 테이프, 마지막 사진 근처에 작은 반짝이.
   const lastCell=cells[cells.length-1];
@@ -287,7 +298,7 @@ async function composeCollage(inputs:Buffer[],slide:CarouselSlidePlan,index:numb
   // 채널명과 장 번호는 다른 카드와 같은 모양(왼쪽 채널명, 오른쪽 "4 / 10")으로 맞춘다.
   layers.push(svgLayer(`<path d="M${MARGIN} ${RULE_Y}H${1080-MARGIN}" stroke="${palette.ink}" stroke-opacity=".2" stroke-width="${MIN_STROKE}"/>`),...foot.layers);
   layers.push(await grainLayer());
-  return canvas(palette.paper,layers);
+  return texturedCanvas(palette.paper,layers);
 }
 
 // 5. 브라우저 프레임: 파스텔 배경 위 검은 테두리 브라우저 창. 안에 굵은 제목, 번호 목록, 아래 돋보기 검색창 캡슐. 사진은 쓰지 않는다.
@@ -325,9 +336,9 @@ async function composeBrowser(slide:CarouselSlidePlan,index:number,total:number,
   const capW=Math.min(WIN_W-PAD*2,search.info.width+150),capX=WIN_LEFT+PAD;
   // 마스코트가 창의 왼쪽 아래 모서리에 걸터앉는다. 채널명은 마스코트 오른쪽으로 비킨다.
   // 검색창 캡슐 아래로만 올라오게 높이를 제한한다(캡슐 글자를 가리지 않게).
-  const mascot=await mascotLayer({width:150,pose:"curious",left:MARGIN-12,top:WIN_TOP+WIN_H+88,anchor:"bottom-left",maxHeight:WIN_TOP+WIN_H+88-(capY+capH+12)});
+  const mascot=await mascotLayer({width:150,pose:poseFor(slide,"curious"),left:MARGIN-12,top:WIN_TOP+WIN_H+88,anchor:"bottom-left",maxHeight:WIN_TOP+WIN_H+88-(capY+capH+12)});
   const foot=await footerPlan(slide,index,total,{ink:palette.ink,muted:palette.ink,left:MARGIN+(mascot?150:0),width:CONTENT-(mascot?150:0),top:WIN_TOP+WIN_H+44});
-  return canvas(palette.soft,[
+  return texturedCanvas(palette.soft,[
     // 창 뒤 배경 장식: 오른쪽 위 밝은 덩어리, 왼쪽 아래 옅은 강조색 덩어리, 창 모서리 밖 반짝이.
     svgLayer(blob({cx:960,cy:130,r:210,color:palette.highlight,opacity:.5,seed:5})+blob({cx:110,cy:1230,r:170,color:palette.accent,opacity:.12,seed:11})
       +sparkles([[WIN_LEFT+WIN_W+16,WIN_TOP-14,20],[WIN_LEFT+WIN_W+40,WIN_TOP+34,11],[WIN_LEFT-22,WIN_TOP+WIN_H-60,14]],palette.accent)),
@@ -341,7 +352,7 @@ async function composeBrowser(slide:CarouselSlidePlan,index:number,total:number,
     ...points.layers,
     {input:search.data,left:capX+78,top:capY+Math.round((capH-search.info.height)/2)},
     ...(closing?closing.place(WIN_LEFT+WIN_W/2,capY-24-closing.height):[]),
-    ...(mascot?[mascot]:[]),
+    ...(mascot?[svgLayer(mascotContact(mascot,.2)),mascot]:[]),
     ...foot.layers,
     await grainLayer(),
   ]);
@@ -381,7 +392,7 @@ async function composeStat(slide:CarouselSlidePlan,index:number,total:number,pal
   if(note){layers.push({input:note.data,left:Math.round((1080-note.info.width)/2),top:cursor+36});cursor+=36+note.info.height;}
   if(closing)layers.push(...closing.place(540,cursor+40));
   layers.push(await grainLayer({opacity:.22}));
-  return canvas(bg,layers);
+  return texturedCanvas(bg,layers);
 }
 
 // 7. A vs B: 화면을 좌우로 나눠 각각 사진, 이름, 체크 목록을 두고 가운데 VS 원. 아래에 제목.
@@ -442,7 +453,7 @@ async function composeVersus(inputs:Buffer[],slide:CarouselSlidePlan,index:numbe
   if(closing)layers.push(svgLayer(`<rect x="0" y="${FOOT_LIMIT}" width="1080" height="${1350-FOOT_LIMIT}" fill="${left}"/>`),...closing.place(540,FOOT_LIMIT+10));
   layers.push(...foot.layers);
   layers.push(await grainLayer());
-  return canvas(left,layers);
+  return texturedCanvas(left,layers);
 }
 
 // 8. 단계 가이드: 왼쪽 위 "먹는 법" 원형 스티커, 큰 제목, 가운데 사진, 아래 흰 둥근 상자 안 설명.
@@ -473,7 +484,8 @@ async function composeStep(inputs:Buffer[],slide:CarouselSlidePlan,index:number,
     // STEP 스티커는 점선 고리로 한 번 더 두르고, 옆에 반짝이. 사진과 설명 상자 뒤에는 번진 그림자.
     svgLayer(ring({cx:stickerX,cy:stickerY,r:R+14,color:palette.accent,strokeWidth:3,dashed:true,opacity:.5})+sparkles([[stickerX+R+30,stickerY-R-4,14],[stickerX-R-18,stickerY+R+10,10]],palette.accent)
       +`<circle cx="${stickerX+4}" cy="${stickerY+6}" r="${R}" fill="#000" fill-opacity=".12"/><circle cx="${stickerX}" cy="${stickerY}" r="${R}" fill="#ffffff" stroke="${palette.accent}" stroke-width="6"/>`
-      +softShadow({x:MARGIN,y:photoTop+12,width:CONTENT,height:PHOTO_H,rx:24,blur:16,opacity:.18})),
+),
+    await cardShadow({x:MARGIN,y:photoTop+12,width:CONTENT,height:PHOTO_H,rx:24,blur:16,opacity:.18}),
     {input:howTo.data,left:stickerX-Math.round(howTo.info.width/2),top:stickerY-Math.round(howTo.info.height/2)},
     {input:headline.data,left:MARGIN+R*2+36,top:84+Math.max(0,Math.round((R*2-headline.info.height)/2))},
     {input:await croppedPhoto(inputs[0],CONTENT,PHOTO_H,24),left:MARGIN,top:photoTop},
@@ -486,7 +498,7 @@ async function composeStep(inputs:Buffer[],slide:CarouselSlidePlan,index:number,
   if(closing)layers.push(...closing.place(540,bottom+18));
   layers.push(...foot.layers);
   layers.push(await grainLayer());
-  return canvas(palette.soft,layers);
+  return texturedCanvas(palette.soft,layers);
 }
 
 // 9. Q&A 말풍선: 연회색 바탕에 위 왼쪽 어두운 질문 말풍선, 아래 오른쪽 강조색 답변 말풍선, 그 아래 형광펜 팁.
@@ -504,7 +516,7 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
   // 마지막 장은 오른쪽 아래가 가게 명함 자리라 마스코트를 쉬게 한다.
   const closing=isLast(slide,index,total)?await closingPlan({color:bgInk,accent:palette.accent}):null;
   const foot=await footerPlan(slide,index,total,{ink:bgInk,muted:bgMuted,top:1284});
-  const mascot=closing?null:await mascotLayer({width:MASCOT_W,pose:"tip",left:1080-MARGIN+18,top:1266,anchor:"bottom-right"});
+  const mascot=closing?null:await mascotLayer({width:MASCOT_W,pose:poseFor(slide,"tip"),left:1080-MARGIN+18,top:1266,anchor:"bottom-right"});
   const LIMIT=1262-foot.extra-(closing?closing.height+40:0);
   // 질문·답변이 짧으면 화면 위아래가 비므로, 큰 글자부터 그려 보고 블록이 1000px 안에 들어가는 가장 큰 배율을 쓴다.
   // 변형 0: 질문·답변 말풍선(기존). 변형 1: 큰 "Q." 머리글과 질문 글, 왼쪽에 강조색 막대가 있는 흰 답변 카드.
@@ -564,11 +576,12 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
     layers.push({input:label.data,left:MARGIN+20,top:tipY+8},{input:text.data,left:MARGIN+100,top:tipY});
   }
   // 마스코트는 답변 말풍선과 겹치지 않을 때만 올린다.
-  if(mascot&&aY+aH+16<=1266-Math.round(MASCOT_W*598/640))layers.push(mascot);
+  // 그려진 실제 높이(mascot.top)로 판단한다: 포즈마다 그림 비율이 달라 고정 비율로 재면 머리가 말풍선을 덮을 수 있다.
+  if(mascot&&aY+aH+16<=mascot.top)layers.push(svgLayer(mascotContact(mascot,.2)),mascot);
   if(closing)layers.push(...closing.place(540,LIMIT+10));
   layers.push(...foot.layers);
   layers.push(await grainLayer());
-  return canvas(bg,layers);
+  return texturedCanvas(bg,layers);
 }
 
 // 10. 인용구: 톤을 낮춘 사진 위에 큰 따옴표, 흰 인용구, 아래 구분선과 출처 줄.
@@ -625,7 +638,7 @@ async function composeQuote(inputs:Buffer[],slide:CarouselSlidePlan,index:number
   if(tail)layers.push({input:tail.data,left:centred&&!cue?Math.round((1080-tail.info.width)/2):MARGIN,top:SRC_Y+source.info.height+12});
   if(cue){const placed=cue.place(1080-MARGIN-cue.width,1350-64);layers.push(svgLayer(placed.svg),placed.layer);}
   if(closing)layers.push(...closing.place(MARGIN+textW/2,closingTop));
-  if(mascot)layers.push(mascot);
+  if(mascot)layers.push(svgLayer(mascotContact(mascot,.3)),mascot);
   layers.push(photoOverlayLayer(),await grainLayer({opacity:.12}));
   return sharp(background).composite(layers).jpeg({quality:90}).toBuffer();
 }

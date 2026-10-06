@@ -1,4 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
+import { textureLayer } from "../decor";
 import { brandName, finishPhoto, grainLayer, svg, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
 import { registerPhoto } from "../render/audit";
 import { STORE_NAME } from "../slideLayout";
@@ -44,12 +45,17 @@ function soften(id:string,blur:number,box:Box):string {
 }
 // 큰 수채 얼룩: 번지게 흐린 채움 타원 + 안쪽의 옅은 물 고임 + 같은 모양의 가는 진한 선(물감 가장자리가 마르며 진해지는 느낌)을
 // 한 묶음으로 두고 묶음 전체를 한 번만 일그러뜨린다(변위가 가장 비싼 계산이라 얼룩마다 한 번). 세 도형이 똑같이 일그러져 겹친다.
+// 수채 고리(가장자리 농담): 물감은 마르면서 안료가 가장자리로 밀려 테두리가 진하고 안쪽이 옅어진다. 채움을 반경 그라데이션으로
+// 두어 가운데는 옅은 fill, 바깥 15%는 진한 edge 색으로 모이게 한다(타원 상자 기준이라 모양을 그대로 따라간다).
+// 필터를 더 걸지 않고 채움만 바꾸므로 비용이 늘지 않는다.
 function blot(cx:number,cy:number,rx:number,ry:number,p:Pastel,seed:number,rotate=0,opacity=.8):string {
   const id=`wcBlot${seed}`,box={x:cx-rx,y:cy-ry,w:rx*2,h:ry*2};
   return warp(id,seed,{scale:84,freq:.011,blur:7,box})+soften(`${id}f`,7,box)+soften(`${id}e`,2.4,box)
+    +`<radialGradient id="${id}g" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${p.fill}" stop-opacity=".55"/><stop offset=".6" stop-color="${p.fill}" stop-opacity=".8"/>`
+    +`<stop offset=".86" stop-color="${p.fill}" stop-opacity="1"/><stop offset=".96" stop-color="${p.edge}" stop-opacity=".85"/><stop offset="1" stop-color="${p.edge}" stop-opacity=".6"/></radialGradient>`
     +`<g transform="rotate(${rotate} ${r1(cx)} ${r1(cy)})" filter="url(#${id})">`
-    +`<ellipse cx="${r1(cx)}" cy="${r1(cy)}" rx="${r1(rx)}" ry="${r1(ry)}" fill="${p.fill}" opacity="${opacity}" filter="url(#${id}f)"/>`
-    +`<ellipse cx="${r1(cx+rx*.1)}" cy="${r1(cy-ry*.12)}" rx="${r1(rx*.55)}" ry="${r1(ry*.5)}" fill="#FFFFFF" opacity=".3" filter="url(#${id}f)"/>`
+    +`<ellipse cx="${r1(cx)}" cy="${r1(cy)}" rx="${r1(rx)}" ry="${r1(ry)}" fill="url(#${id}g)" opacity="${opacity}" filter="url(#${id}f)"/>`
+    +`<ellipse cx="${r1(cx+rx*.1)}" cy="${r1(cy-ry*.12)}" rx="${r1(rx*.45)}" ry="${r1(ry*.4)}" fill="#FFFFFF" opacity=".22" filter="url(#${id}f)"/>`
     +`<ellipse cx="${r1(cx)}" cy="${r1(cy)}" rx="${r1(rx)}" ry="${r1(ry)}" fill="none" stroke="${p.edge}" stroke-width="10" opacity=".7" filter="url(#${id}e)"/></g>`;
 }
 // 제목 뒤 거친 붓 띠: 사각형 가장자리를 잘게 일그러뜨려 마른 붓 자국처럼. 아래쪽에 진한 선을 얹어 물감이 고인 느낌.
@@ -104,6 +110,53 @@ async function paintLayer(wet:string,strokes:string):Promise<OverlayOptions> {
   return {input:paint,left:0,top:0};
 }
 
+// 사진 장의 얼룩 색: 사진 주조색의 보색 쪽 파스텔 두 개(가까운 순). 홍어처럼 분홍·주황 사진이면 민트·하늘이 골라져
+// 사진과 물감이 같은 색으로 뭉개지지 않고 서로 받쳐 준다. 주조색은 32px로 줄인 사진의 dominant(가장 많은 색 칸).
+const PASTEL_HUES:Array<[Pastel,number]>=[[PASTEL.pink,350],[PASTEL.mint,145],[PASTEL.sky,210],[PASTEL.butter,45],[PASTEL.lilac,270]];
+async function complementPastels(photo:Buffer):Promise<[Pastel,Pastel]> {
+  const {dominant:{r,g,b}}=await sharp(photo).resize(32,32,{fit:"cover"}).stats();
+  const max=Math.max(r,g,b),min=Math.min(r,g,b);
+  // 무채색(회색·흰 접시)에 가까우면 보색이 의미가 없으므로 따뜻한 버터·장밋빛 대신 차분한 하늘·라일락.
+  if(max-min<18)return [PASTEL.sky,PASTEL.lilac];
+  const d=max-min;
+  const hue=(max===r?((g-b)/d+6)%6:max===g?(b-r)/d+2:(r-g)/d+4)*60;
+  const target=(hue+180)%360,dist=(h:number)=>Math.min(Math.abs(h-target),360-Math.abs(h-target));
+  const sorted=[...PASTEL_HUES].sort((a,b)=>dist(a[1])-dist(b[1]));
+  return [sorted[0][0],sorted[1][0]];
+}
+
+// 얼룩을 사진에서 떼어 놓기: 사진 밑에 깔린 얼룩은 대부분 가려지고, 보이는 가장자리만 사진 테두리에 붙어 지저분해진다.
+// 얼룩(회전한 타원의 바깥 상자 + 변위로 번지는 폭)이 사진 상자에 80px보다 가까우면, 사진 반대쪽(위·아래·왼쪽·오른쪽 중
+// 가장 적게 움직이는 쪽)으로 민다. 미는 거리의 절반까지는 얼룩을 납작하게 줄여 받아 화면 밖으로 너무 나가지 않게 한다.
+type BlotSpec={cx:number;cy:number;rx:number;ry:number;p:Pastel;seed:number;rotate:number;opacity?:number};
+const BLOT_CLEAR=80,BLOT_SPREAD=24;
+function clearOfPhoto(spec:BlotSpec,photo:Box|null):BlotSpec {
+  if(!photo)return spec;
+  const a=rad(spec.rotate);
+  const half=(rx:number,ry:number)=>({hx:Math.hypot(rx*Math.cos(a),ry*Math.sin(a))+BLOT_SPREAD,hy:Math.hypot(rx*Math.sin(a),ry*Math.cos(a))+BLOT_SPREAD});
+  const {hx,hy}=half(spec.rx,spec.ry);
+  // 이미 한 축으로 80px 넘게 떨어져 있으면 그대로.
+  const gapX=Math.max(photo.x-(spec.cx+hx),spec.cx-hx-(photo.x+photo.w));
+  const gapY=Math.max(photo.y-(spec.cy+hy),spec.cy-hy-(photo.y+photo.h));
+  if(gapX>=BLOT_CLEAR||gapY>=BLOT_CLEAR)return spec;
+  const moves=[
+    {axis:"y",dir:-1,need:spec.cy+hy-(photo.y-BLOT_CLEAR)},
+    {axis:"y",dir:1,need:photo.y+photo.h+BLOT_CLEAR-(spec.cy-hy)},
+    {axis:"x",dir:-1,need:spec.cx+hx-(photo.x-BLOT_CLEAR)},
+    {axis:"x",dir:1,need:photo.x+photo.w+BLOT_CLEAR-(spec.cx-hx)},
+  ].sort((m,n)=>m.need-n.need);
+  const move=moves[0];
+  // 미는 축의 반지름을 최대 35%까지 줄여 필요한 거리의 일부를 받는다. 줄어든 만큼 중심은 덜 움직인다.
+  const radius=move.axis==="y"?spec.ry:spec.rx;
+  const shrink=Math.min(radius*.35,move.need/2);
+  const next={...spec};
+  if(move.axis==="y"){next.ry=spec.ry-shrink;next.cy=spec.cy+move.dir*(move.need-shrink);}
+  else{next.rx=spec.rx-shrink;next.cx=spec.cx+move.dir*(move.need-shrink);}
+  return next;
+}
+const rad=(deg:number)=>deg*Math.PI/180;
+const blotOf=(spec:BlotSpec)=>blot(spec.cx,spec.cy,spec.rx,spec.ry,spec.p,spec.seed,spec.rotate,spec.opacity);
+
 // ── 작은 장식 ──────────────────────────────────────────────────────────────────────
 // 물감 점·튄 점이 쓰는 작은 흐림 필터(사진 위 SVG에서 쓴다).
 const DOT_FILTERS=`<filter id="wcDot" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2"/></filter>`
@@ -137,13 +190,42 @@ const flower=(x:number,y:number,size:number,p:Pastel,center:Pastel)=>{
 const heart=(x:number,y:number,size:number,p:Pastel)=>
   `<path d="M8 14C2 9 0 6 0 4C0 1 2.5 0 4.5 0C6.2 0 7.4 1 8 2.2C8.6 1 9.8 0 11.5 0C13.5 0 16 1 16 4C16 6 14 9 8 14Z" fill="${p.edge}" opacity=".9" transform="translate(${r1(x-size/2)} ${r1(y-size/2)}) scale(${r1(size/16)})"/>`;
 
-// 가장자리가 종이에 스며드는 사진: 둥근 모서리 사각형 마스크를 흐려서 알파로 쓴다(페더).
-// 자르기·선명화는 공용 finishPhoto로 하고(모든 계열 같은 사진 손질), 여기서는 채도를 아주 조금 낮추고 밝게 해 파스텔 바탕과
-// 어울리게 한 뒤 페더 마스크만 씌운다. 그렇게 새로 생긴 버퍼가 캔버스에 놓이므로 사진으로 등록한다(검수의 사진 면적).
-async function softPhoto(input:Buffer,width:number,height:number,radius:number,feather:number):Promise<Buffer> {
+// 붓 자국 마스크: 사진을 넓은 붓으로 종이에 "칠한" 것처럼 가장자리를 마른 붓결로 끝낸다.
+// 안쪽 판은 흔든 사각형(roughRect), 그 둘레 페더 폭 안에 변을 따라 길고 가는 흰 붓질(굵기·길이·진하기 제각각)을 겹친다.
+// 붓질 끝이 들쭉날쭉 삐져나와 둥근 사각형 페더보다 손맛이 나고, 변위 필터(feDisplacementMap) 없이 선만 그려 싸다.
+// 붓질은 페더 폭(zone) 안에만 둬서 사진이 놓이는 자리·크기는 예전과 같다.
+function brushMask(PW:number,PH:number,zone:number,radius:number,rand:()=>number):string {
+  // 안쪽 판은 페더 폭의 70% 지점까지 채워 붓질이 판과 겹치며 시작하게 한다(판과 붓질 사이 틈이 줄무늬로 보이지 않게).
+  const solid=Math.round(zone*.7);
+  const inner=roughRect(solid,solid,PW-solid*2,PH-solid*2,rand,Math.max(2,zone*.2),22);
+  let strokes="";
+  // 변 하나를 따라 여섯 줄의 띠로 붓질을 놓는다. 안쪽 띠일수록 붓질이 많고 굵고 진하며, 바깥으로 갈수록 드물고 가늘어져
+  // 마른 붓이 종이에서 떨어지며 끊기는 모양이 된다. 붓질 길이·시작점·굵기는 seed로 흔든다.
+  const along=(horizontal:boolean,inside:number,outward:number,length:number)=>{
+    for(let band=0;band<6;band++){
+      const t=band/6,n=Math.max(1,Math.round(length/70*(1-t*.85)));
+      for(let i=0;i<n;i++){
+        const start=rand()*length*.92,len=Math.min(length-start,40+rand()*200*(1-t*.6));
+        const off=inside+outward*zone*(t+rand()/6),w=r1((3+rand()*6)*(1-t*.5)),op=r1((.75+rand()*.25)*(1-t*.55));
+        strokes+=horizontal
+          ?`<path d="M${r1(start)} ${r1(off)}H${r1(start+len)}" stroke="#fff" stroke-width="${w}" stroke-opacity="${op}" stroke-linecap="round"/>`
+          :`<path d="M${r1(off)} ${r1(start)}V${r1(start+len)}" stroke="#fff" stroke-width="${w}" stroke-opacity="${op}" stroke-linecap="round"/>`;
+      }
+    }
+  };
+  along(true,solid,-1,PW);along(true,PH-solid,1,PW);along(false,solid,-1,PH);along(false,PW-solid,1,PH);
+  // 네 귀퉁이는 붓질이 겹쳐 뾰족하게 남지 않도록 radius만큼 둥글게 잘라 둔다.
+  return `<svg width="${PW}" height="${PH}" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="c"><rect width="${PW}" height="${PH}" rx="${radius}"/></clipPath></defs>`
+    +`<rect width="100%" height="100%" fill="#000"/><g clip-path="url(#c)"><path d="${inner}" fill="#fff"/>${strokes}</g></svg>`;
+}
+
+// 가장자리가 붓 자국으로 끝나는 사진. 자르기·선명화는 공용 finishPhoto로 하고(모든 계열 같은 사진 손질), 여기서는 채도를 아주 조금
+// 낮추고 밝게 해 파스텔 바탕과 어울리게 한 뒤 붓 자국 마스크만 씌운다. 새로 생긴 버퍼가 캔버스에 놓이므로 사진으로 등록한다.
+async function softPhoto(input:Buffer,width:number,height:number,radius:number,feather:number,seed:number):Promise<Buffer> {
   const PW=Math.round(width),PH=Math.round(height);
   const base=await sharp(await finishPhoto(input,PW,PH)).modulate({saturation:.94,brightness:1.03}).removeAlpha().png().toBuffer();
-  const mask=await sharp(Buffer.from(`<svg width="${PW}" height="${PH}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#000"/><rect x="${feather}" y="${feather}" width="${PW-feather*2}" height="${PH-feather*2}" rx="${radius}" fill="#fff"/></svg>`)).blur(feather*.6).extractChannel(0).toBuffer();
+  // 붓질 폭은 예전 페더의 2.6배(붓결이 보일 만큼), 흐림은 약하게(붓 끝 계단과 가는 틈만 지운다).
+  const mask=await sharp(Buffer.from(brushMask(PW,PH,Math.round(feather*2.6),radius,seeded(seed)))).blur(2.2).extractChannel(0).toBuffer();
   const photo=await sharp(base).joinChannel(mask).png().toBuffer();
   registerPhoto(photo);
   return photo;
@@ -157,8 +239,12 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
   const [A,B]=COMBOS[v%COMBOS.length];
   // 겹치는 순서: 얼룩(wet)·띠와 붓 사각형(under) → 종이 알갱이 → 사진(photos) → 테이프·점·잎(over) → 글자(texts).
   const photos:OverlayOptions[]=[],texts:OverlayOptions[]=[];
-  let wet="",under="",over="";
+  let under="",over="";
   const shots=inputs.slice(0,2);
+  // 얼룩은 사진 자리가 정해진 뒤에 그린다(사진에서 떼어 놓아야 하므로). 사진 장은 얼룩 색을 사진의 보색 쪽으로.
+  const blots:BlotSpec[]=[];
+  let photoBox:Box|null=null;
+  const [WA,WB]=shots.length?await complementPastels(shots[0]):[A,B];
   const soft=STYLE_FONTS.soft,dodum=STYLE_FONTS.dodum;
 
   if(content.cover&&shots.length){
@@ -167,8 +253,8 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     const title=await fitText(content.headline,{sizes:[100,90,80,72],width:900,maxHeight:330,color:INK,font:soft,align:"centre",spacing:8,emphasis:emphasisOf(content,ROSE)});
     const tx=Math.round((1080-title.info.width)/2),ty=110;
     // 얼룩 둘: 제목 뒤 왼쪽 위로 치우친 큰 얼룩, 오른쪽 아래 구석.
-    wet+=blot(tx+title.info.width*.3,ty+title.info.height*.55,Math.max(300,title.info.width*.42),Math.max(150,title.info.height*.75),A,seed+1,-9);
-    wet+=blot(1010,1150,300,210,B,seed+2,14,.7);
+    blots.push({cx:tx+title.info.width*.3,cy:ty+title.info.height*.55,rx:Math.max(300,title.info.width*.42),ry:Math.max(150,title.info.height*.75),p:WA,seed:seed+1,rotate:-9});
+    blots.push({cx:1010,cy:1150,rx:300,ry:210,p:WB,seed:seed+2,rotate:14,opacity:.7});
     under+=brushBand(tx-22,ty-6,title.info.width+44,title.info.height+14,B,seed+3,-1.2);
     texts.push({input:title.data,left:tx,top:ty});
     let y=ty+title.info.height+46;
@@ -183,8 +269,9 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     const PH=Math.round(Math.max(420,Math.min(760,room)));
     const extra=Math.max(0,room-PH);
     const px=(1080-PW)/2,py=y+Math.round(extra*.45);
+    photoBox={x:px,y:py,w:PW,h:PH};
     under+=brushRect(px-20,py+18,PW+18,PH-6,A,seed+4,rand,-1.6);
-    photos.push({input:await softPhoto(shots[0],PW,PH,36,16),left:px,top:py});
+    photos.push({input:await softPhoto(shots[0],PW,PH,36,16,seed+5),left:px,top:py});
     over+=tape(px-26,py-12,150,42,-26,B)+tape(px+PW-120,py+PH-28,150,42,-26,B);
     // 사진 아래 줄: 예고 글이 있으면 그 글 양옆에 잎사귀, 없으면 잎·꽃·잎 장식과 작은 물감 점.
     const ly=py+PH+Math.round((FOOTER_TOP+10-(py+PH))/2);
@@ -227,10 +314,10 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     const pointsH=sumPoints();
     // 얼룩: 제목 뒤(글자 장은 더 크게), 그리고 장마다 다른 구석에 하나.
     const tw=Math.min(title.info.width,W);
-    wet+=text
-      ?blot(M+tw*.42,ty+title.info.height*.5,Math.max(320,tw*.5),Math.max(170,title.info.height*.8+40),A,seed+1,-7)
-      :blot(M+tw*.78,ty+title.info.height*.35,300,170,A,seed+1,-12,.72);
-    wet+=v%2?blot(70,1210,260,180,B,seed+2,12,.66):blot(1010,text?980:1190,250,180,B,seed+2,-10,.66);
+    blots.push(text
+      ?{cx:M+tw*.42,cy:ty+title.info.height*.5,rx:Math.max(320,tw*.5),ry:Math.max(170,title.info.height*.8+40),p:WA,seed:seed+1,rotate:-7}
+      :{cx:M+tw*.78,cy:ty+title.info.height*.35,rx:300,ry:170,p:WA,seed:seed+1,rotate:-12,opacity:.72});
+    blots.push(v%2?{cx:70,cy:1210,rx:260,ry:180,p:WB,seed:seed+2,rotate:12,opacity:.66}:{cx:1010,cy:text?980:1190,rx:250,ry:180,p:WB,seed:seed+2,rotate:-10,opacity:.66});
     under+=brushBand(M-18,ty-6,tw+36,title.info.height+12,B,seed+3,-.8);
     texts.push({input:title.data,left:M,top:ty});
     let y=ty+title.info.height+titleGap;
@@ -240,10 +327,11 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
       const PH=Math.round(Math.max(300,Math.min(shots.length>1?560:700,room)));
       const extra=Math.max(0,room-PH);
       const py=y+Math.round(extra/2);
+      photoBox={x:M,y:py,w:W,h:PH};
       if(shots.length===1){
         // 사진 1장: 뒤에 어긋난 붓 사각형, 모서리 두 곳에 종이 테이프.
         under+=brushRect(M-16,py+18,W+14,PH-8,A,seed+4,rand,-1.5);
-        photos.push({input:await softPhoto(shots[0],W,PH,30,12),left:M,top:py});
+        photos.push({input:await softPhoto(shots[0],W,PH,30,12,seed+5),left:M,top:py});
         over+=tape(M-24,py-10,140,38,-26,B)+tape(M+W-114,py+PH-26,140,38,-26,B);
       }else{
         // 사진 2장(비교·짝): 좌우로 ±3도 기울여 붙이고 각각 뒤에 붓 사각형, 사이에 물감 점 세 개.
@@ -251,7 +339,7 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
         for(const [i,shot] of shots.entries()){
           const cx=M+PW/2+i*(PW+gapX),cy=py+PH/2,angle=i?3:-3;
           under+=brushRect(cx-PW/2+(i?10:-12),cy-PH/2+14,PW+10,PH-4,i?B:A,seed+4+i,rand,angle-1);
-          const photo=await rotated(await softPhoto(shot,PW,PH,26,10),angle);
+          const photo=await rotated(await softPhoto(shot,PW,PH,26,10,seed+5+i),angle);
           // 기울이면 버퍼가 새로 생기므로 놓는 버퍼를 다시 등록한다(네 귀퉁이 빈 삼각형 몇 칸만 더 잡힌다).
           registerPhoto(photo.data);
           photos.push({input:photo.data,left:cx-photo.info.width/2,top:cy-photo.info.height/2});
@@ -298,6 +386,11 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
   texts.push({input:footer.data,left:fx,top:fy});
   over+=heart(fx-34,fy+footer.info.height/2,22,A)+leaf(fx+footer.info.width+16,fy+footer.info.height/2+2,34,-18,B);
   // 종이 알갱이는 물감 위·사진 아래에 soft-light로 아주 옅게(글자·사진은 깨끗하게 둔다).
-  const layers:OverlayOptions[]=[await paintLayer(wet,under),await grainLayer({opacity:.12}),...photos,svgLayer(DOT_FILTERS+over),...texts];
+  const wet=blots.map(spec=>blotOf(clearOfPhoto(spec,photoBox))).join("");
+  // 리넨 결이 있으면 그것이 종이 결을 맡고, 알갱이는 더 옅게(겹치면 지저분하다). 없으면 예전 알갱이 그대로.
+  // 리넨 종이 결(세기 .28, multiply): 물감 위·사진 아래. 물감에도 종이 결이 비쳐 마른 수채 느낌이 난다. 파일이 없으면 null.
+  const linen=await textureLayer("linen",{opacity:.28});
+  const paper=linen?[linen,await grainLayer({opacity:.06})]:[await grainLayer({opacity:.12})];
+  const layers:OverlayOptions[]=[await paintLayer(wet,under),...paper,...photos,svgLayer(DOT_FILTERS+over),...texts];
   return sharp({create:{width:1080,height:1350,channels:3,background:PAPER}}).composite(snap(layers)).jpeg({quality:92}).toBuffer();
 };

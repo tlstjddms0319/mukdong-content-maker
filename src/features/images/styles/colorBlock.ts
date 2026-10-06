@@ -1,7 +1,8 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { svgLayer, textLayer, type CardRenderer, brandName, type Layer } from "../render/primitives";
 import { registerPhoto } from "../render/audit";
-import { STYLE_FONTS, blobCutout, closingBlock, contentOf, cutoutPhoto, emphasisOf, fitText, hashtags, nextCue, snap, stickerize } from "./shared";
+import { contactShadow, softShadow } from "../decor";
+import { STYLE_FONTS, blobCutout, closingBlock, contentOf, cutoutPhoto, emphasisOf, fitText, hashtags, nextCue, snap } from "./shared";
 
 // 대담한 컬러 블록: 장마다 화면 전체를 진한 단색으로 칠하고, 화면을 꽉 채우는 굵은 글자와 배경을 지운 음식(누끼)을
 // 스티커처럼 붙인다. 요점은 흰 알약 안에 넣는다. 광고 포스터처럼 한눈에 들어오는 것이 목표다.
@@ -47,18 +48,56 @@ async function photoTone(cut:{data:Buffer;width:number;height:number},cool:boole
   return {data:await sharp(out,{raw:{width,height,channels:4}}).png().toBuffer(),width,height};
 }
 
-// 사진 한 장을 스티커 한 장으로: 누끼가 되면 흰 테두리 누끼 스티커, 안 되면 손으로 오린 듯한 블롭 스티커.
-// 둘 다 팝아트식 검은 오프셋 그림자(컬러 블록의 문법)에 바닥 접촉 그림자를 더해 화면에 붙어 있는 느낌을 준다.
+// 키라인 스티커: 흰 테두리(16) 바깥에 검은 키라인(3px)을 한 줄 더 두른다. 진한 단색 바탕(특히 노랑·크림) 위에서
+// 흰 테두리만 있으면 윤곽이 바탕에 녹아 스티커가 아니라 "구멍"처럼 보였다. 팝아트 인쇄물의 검은 외곽선 문법.
+// 그림자는 두 겹: 컬러 블록 문법의 검은 오프셋 그림자 + 바닥에 닿는 자리의 납작한 타원 접촉 그림자(contactShadow).
+// 접촉 그림자는 실루엣을 눌러 만든 모양이 아니라 타원이다 — 접시 바깥 바닥에 떨어지는 그림자는 접시 모양을 따르지 않는다.
+// 실루엣 만들기는 shared의 stickerize와 같다(흐림 → 버퍼로 끊고 → threshold). 키라인은 흰 실루엣을 한 번 더 살짝 흐려 3px쯤 부풀린다.
+async function keylineSticker(cutout:{data:Buffer;width:number;height:number},offset:number):Promise<Layer> {
+  const border=16,KEY=3,CONTACT=24,pad=border*2+offset+KEY;
+  const W=cutout.width+pad*2,H=cutout.height+pad*2;
+  const padded=await sharp(cutout.data).extend({top:pad,bottom:pad,left:pad,right:pad,background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer();
+  const white=await sharp(await sharp(padded).extractChannel(3).blur(border*.6).toBuffer()).threshold(8).toBuffer();
+  // 흐림 σ 2.1 뒤 문턱 20이면 흰 테두리 바깥으로 약 3px 부푼다(σ .45배였을 때는 1px 남짓이라 키라인이 안 보였다).
+  const key=await sharp(await sharp(white).blur(KEY*.7).toBuffer()).threshold(20).extractChannel(0).raw().toBuffer({resolveWithObject:true});
+  const keyAlpha=await sharp(key.data,{raw:{width:key.info.width,height:key.info.height,channels:1}}).png().toBuffer();
+  const silhouette=(color:string,alpha:Buffer)=>sharp({create:{width:W,height:H,channels:3,background:color}}).joinChannel(alpha).png().toBuffer();
+  // 접촉 그림자 자리: 키라인 실루엣의 맨 아랫줄과, 아래 12% 높이에서 잉크가 있는 가로 범위.
+  let bottom=0;
+  for(let y=H-1;y>=0&&!bottom;y--)for(let x=0;x<W;x+=2)if(key.data[y*W+x]>0){bottom=y;break;}
+  let minX=W,maxX=0;
+  const from=Math.max(0,Math.round(bottom-cutout.height*.12));
+  for(let y=from;y<=bottom;y++)for(let x=0;x<W;x+=2)if(key.data[y*W+x]>0){minX=Math.min(minX,x);maxX=Math.max(maxX,x);}
+  const layers:OverlayOptions[]=[];
+  if(maxX>minX){
+    const rx=Math.round((maxX-minX)/2*1.04),ry=Math.max(8,Math.round(rx*.1));
+    layers.push({input:Buffer.from(`<svg width="${W+offset}" height="${H+offset+CONTACT}" xmlns="http://www.w3.org/2000/svg">${contactShadow({cx:(minX+maxX)/2,cy:bottom+Math.round(ry*.4),rx,ry,opacity:.38})}</svg>`),left:0,top:0});
+  }
+  layers.push(
+    {input:await silhouette("#111111",keyAlpha),left:offset,top:offset},
+    {input:await silhouette("#111111",keyAlpha),left:0,top:0},
+    {input:await silhouette("#ffffff",white),left:0,top:0},
+    {input:padded,left:0,top:0},
+  );
+  return sharp({create:{width:W+offset,height:H+offset+CONTACT,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).composite(layers).png().toBuffer({resolveWithObject:true});
+}
+
+// 사진 한 장을 스티커 한 장으로: 누끼가 되면 키라인 누끼 스티커, 안 되면 손으로 오린 듯한 블롭 스티커(seed로 모양 고정).
 // 블롭은 테두리가 둥글어 그림자가 무거워 보이기 쉬워 오프셋을 10으로 줄인다.
-// 스티커 높이는 대략 size+100(테두리 16×2·그림자·접촉 그림자 몫)이라 놓는 쪽에서 그만큼 빼고 size를 정한다.
+// 스티커 높이는 대략 size+100(테두리 16×2·키라인·그림자·접촉 그림자 몫)이라 놓는 쪽에서 그만큼 빼고 size를 정한다.
 // 부품 대부분이 사진이므로 완성된 스티커 버퍼를 사진으로 등록한다(자동 검수의 사진 면적).
 async function stickerTile(input:Buffer,size:number,block:Block,seed:number):Promise<Layer&{cut:boolean}> {
   const cut=await cutoutPhoto(input,size);
   const shape=cut??await blobCutout(input,size,seed);
-  const sticker=await stickerize(await photoTone(shape,block.cool),{border:16,shadow:"#111111",shadowOffset:cut?16:10,contact:true});
+  const sticker=await keylineSticker(await photoTone(shape,block.cool),cut?16:10);
   registerPhoto(sticker.data);
   return {...sticker,cut:Boolean(cut)};
 }
+// 알약·카드 그림자 두 겹: 아래에 넓고 옅게 번지는 주변광(softShadow), 위에 컬러 블록 문법의 딱딱한 검은 오프셋.
+// 오프셋만 있으면 종이 오림이 바탕에 "인쇄된" 것처럼 납작하고, 옅은 번짐이 한 겹 더 있으면 바탕 위에 얹힌 두께가 생긴다.
+const popShadow=(x:number,y:number,w:number,h:number,rx:number,offset:number)=>
+  softShadow({x:x+offset,y:y+offset+6,width:w,height:h,rx,blur:10,opacity:.18})
+  +`<rect x="${x+offset}" y="${y+offset}" width="${w}" height="${h}" rx="${rx}" fill="#000" fill-opacity=".85"/>`;
 
 export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
@@ -68,6 +107,8 @@ export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
   const block=content.cover&&hasPhoto?COVER_BLOCKS[(slide.variant??0)%COVER_BLOCKS.length]:hasPhoto?PHOTO_SAFE[rolled.bg]??rolled:rolled;
   const M=64,W=1080-M*2,footerTop=1350-90;
   const layers:OverlayOptions[]=[];
+  // 블록 바탕 결(리넨·종이 그레인)은 넣지 않는다: 리넨 multiply .14를 시험해 보니 JPEG 재압축 뒤 결의 흔들림은 표준편차 0.2 수준으로
+  // 눈에 안 보이고, 바탕색만 12% 어두워져(주황 #FF5A36 → 약 #DF4E2F) 블록 색의 쨍함이 죽었다.
   // 마지막 장: 바닥글 위에 흰 "가게 명함 스티커"(검은 테두리·오프셋 그림자)를 붙인다. 그 높이만큼 아래 경계(bottom)를 올려
   // 사진·알약이 명함 위에서 끝나게 한다. 칩(흰 글자)은 검은 알약 — 검은 블록이면 파랑 알약.
   const closing=content.last?await closingBlock({width:W-80,color:"#111111",accent:block.bg==="#111111"?"#2E5BFF":"#111111",font:STYLE_FONTS.heavy}):null;
@@ -123,7 +164,7 @@ export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
     for(const [i,pill] of pills.entries()){
       const h=pill.info.height+36,w=pill.info.width+56;
       const fill=i%2===0?"#FFFFFF":block.pop;
-      pillLayers.push(svgLayer(`<rect x="${M+6}" y="${cursor+6}" width="${w}" height="${h}" rx="${h/2}" fill="#000" fill-opacity=".85"/><rect x="${M}" y="${cursor}" width="${w}" height="${h}" rx="${h/2}" fill="${fill}" stroke="#111" stroke-width="4"/>`),{input:pill.data,left:M+28,top:cursor+18});
+      pillLayers.push(svgLayer(`${popShadow(M,cursor,w,h,h/2,6)}<rect x="${M}" y="${cursor}" width="${w}" height="${h}" rx="${h/2}" fill="${fill}" stroke="#111" stroke-width="4"/>`),{input:pill.data,left:M+28,top:cursor+18});
       cursor+=h+16+gap;
     }
   };
@@ -181,13 +222,13 @@ export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
   if(content.teaser){
     const teaser=await textLayer(content.teaser,{size:27,color:"#111111",width:W-56,height:60,font:STYLE_FONTS.sansBold});
     const h=teaser.info.height+24,w=teaser.info.width+48,y=footerTop-14-h;
-    layers.push(svgLayer(`<rect x="${M+5}" y="${y+5}" width="${w}" height="${h}" rx="${h/2}" fill="#000" fill-opacity=".85"/><rect x="${M}" y="${y}" width="${w}" height="${h}" rx="${h/2}" fill="#FFFFFF" stroke="#111" stroke-width="4"/>`),{input:teaser.data,left:M+24,top:y+12});
+    layers.push(svgLayer(`${popShadow(M,y,w,h,h/2,5)}<rect x="${M}" y="${y}" width="${w}" height="${h}" rx="${h/2}" fill="#FFFFFF" stroke="#111" stroke-width="4"/>`),{input:teaser.data,left:M+24,top:y+12});
   }
   // 가게 명함 스티커: 흰 카드 가운데에 가게 이름(굵은 제목 글꼴)·계정·저장 칩.
   if(closing){
     // 카드 폭은 내용(가게 이름·계정·칩 중 가장 넓은 것)+좌우 60px — 화면 폭 그대로면 가운데만 차고 양옆이 텅 빈다.
     const cardW=Math.min(W,Math.max(560,closing.wordmark.info.width,closing.handle?.info.width??0,closing.chip.info.width+52)+120),cardX=540-cardW/2;
-    layers.push(svgLayer(`<rect x="${cardX+8}" y="${cardTop+8}" width="${cardW}" height="${cardH}" rx="28" fill="#000" fill-opacity=".85"/><rect x="${cardX}" y="${cardTop}" width="${cardW}" height="${cardH}" rx="28" fill="#FFFFFF" stroke="#111" stroke-width="4"/>`));
+    layers.push(svgLayer(`${popShadow(cardX,cardTop,cardW,cardH,28,8)}<rect x="${cardX}" y="${cardTop}" width="${cardW}" height="${cardH}" rx="28" fill="#FFFFFF" stroke="#111" stroke-width="4"/>`));
     let y=cardTop+CARD_PAD;
     layers.push({input:closing.wordmark.data,left:540-Math.round(closing.wordmark.info.width/2),top:y});
     y+=closing.wordmark.info.height;

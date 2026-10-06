@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { TEXTURES, cachedLayer, contactShadow, innerShadow, layerCacheStats, propLayer, softShadow, textureLayer } from "@/features/images/decor";
+import { TEXTURES, cachedLayer, contactShadow, innerShadow, layerCacheStats, propLayer, shadowLayer, softShadow, textureLayer } from "@/features/images/decor";
 import { CALM_WORDS, StyleIdSchema, styleAffinity } from "@/features/images/styleCatalog";
 import { pickFittingStyle } from "@/features/images/variety";
 
@@ -67,5 +67,32 @@ describe("계열 친화도(B11)", () => {
   });
   it("lists formal words for the calm tone", () => {
     expect(CALM_WORDS).toContain("제사");
+  });
+});
+
+describe("빠른 그림자 레이어", () => {
+  it("draws a big shadow at low resolution and places it with its blur margin", async () => {
+    const started=performance.now();
+    const layer=await shadowLayer({x:100,y:120,width:860,height:840,blur:22,opacity:.3});
+    expect(performance.now()-started).toBeLessThan(400);
+    const meta=await sharp(layer.input as Buffer).metadata();
+    expect(layer.left).toBeLessThan(100);
+    expect(meta.width).toBeGreaterThan(860);
+    // 가운데는 진하고 가장자리 여백은 거의 투명하다.
+    const {data,info}=await sharp(layer.input as Buffer).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+    const alpha=(x:number,y:number)=>data[(y*info.width+x)*4+3];
+    expect(alpha(Math.floor(info.width/2),Math.floor(info.height/2))).toBeGreaterThan(alpha(2,2));
+  });
+});
+
+describe("빠른 그림자 레이어의 캔버스 자르기", () => {
+  it("clips a shadow that would spill past the canvas so sharp can composite it", async () => {
+    const layer=await shadowLayer({x:-20,y:1200,width:1120,height:200,blur:22,opacity:.3});
+    const meta=await sharp(layer.input as Buffer).metadata();
+    expect(layer.left).toBeGreaterThanOrEqual(0);
+    expect(layer.top).toBeGreaterThanOrEqual(0);
+    expect(layer.left+(meta.width??0)).toBeLessThanOrEqual(1080);
+    expect(layer.top+(meta.height??0)).toBeLessThanOrEqual(1350);
+    await expect(sharp({create:{width:1080,height:1350,channels:3,background:"#fff"}}).composite([layer]).png().toBuffer()).resolves.toBeInstanceOf(Buffer);
   });
 });
