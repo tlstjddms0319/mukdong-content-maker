@@ -30,7 +30,7 @@ export const renderDoodle:CardRenderer=async(inputs,slide,index,total)=>{
   if(hasPhoto){
     // 사진 가득 + 아래쪽 글자가 읽히도록 어둡게.
     layers.push({input:await croppedPhoto(inputs[0],1080,1350,0),left:0,top:0});
-    deco+=`<defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".35"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".82"/></linearGradient></defs><rect width="1080" height="1350" fill="url(#fade)"/>`;
+    deco+=`<defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".2"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".82"/></linearGradient></defs><rect width="1080" height="1350" fill="url(#fade)"/>`;
   }else{
     deco+=`<defs><pattern id="dots" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="2" fill="#D9D3C4"/></pattern></defs><rect width="1080" height="1350" fill="url(#dots)"/>`;
   }

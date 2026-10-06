@@ -51,7 +51,7 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
         const title=await fitShadowText(content.headline,[88,78,70,62],FW-100,360);
         const titleTop=y+FH-title.info.height-50;
         // 어둡게 하는 띠는 사진 위에 와야 하므로 바닥 장식(deco)이 아니라 사진 다음 레이어로 넣는다.
-        layers.push(svgLayer(`<defs><linearGradient id="filmFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".45" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity=".92"/></linearGradient></defs><rect x="${FX}" y="${titleTop-240}" width="${FW}" height="${y+FH-(titleTop-240)}" fill="url(#filmFade)"/>`));
+        layers.push(svgLayer(`<defs><linearGradient id="filmFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".45" stop-color="#000" stop-opacity=".45"/><stop offset="1" stop-color="#000" stop-opacity=".80"/></linearGradient></defs><rect x="${FX}" y="${titleTop-140}" width="${FW}" height="${y+FH-(titleTop-140)}" fill="url(#filmFade)"/>`));
         layers.push({input:title.data,left:Math.round((1080-title.info.width)/2),top:titleTop});
       }
       y+=FH+24;

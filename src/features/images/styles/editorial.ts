@@ -73,7 +73,7 @@ function coverShade():string {
   // 위 그라데이션은 제호(y 46~185)와 호수(y ~210~235)가 밝은 사진에서도 4:1 넘게 읽히는 선에서 가장 옅게 잡았다.
   // 아래는 제목(그림자 있음)보다 바코드 밑 작은 가게 이름(26px)이 기준이라 맨 아래를 가장 진하게 둔다.
   return `<defs><linearGradient id="ed-top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".8"/><stop offset=".26" stop-color="#000" stop-opacity=".46"/><stop offset=".5" stop-color="#000" stop-opacity="0"/></linearGradient>`
-    +`<linearGradient id="ed-bottom" x1="0" y1="0" x2="0" y2="1"><stop offset=".46" stop-color="#000" stop-opacity="0"/><stop offset=".64" stop-color="#000" stop-opacity=".42"/><stop offset=".84" stop-color="#000" stop-opacity=".8"/><stop offset="1" stop-color="#000" stop-opacity=".9"/></linearGradient></defs>`
+    +`<linearGradient id="ed-bottom" x1="0" y1="0" x2="0" y2="1"><stop offset=".58" stop-color="#000" stop-opacity="0"/><stop offset=".72" stop-color="#000" stop-opacity=".45"/><stop offset="1" stop-color="#000" stop-opacity=".85"/></linearGradient></defs>`
     +`<rect width="1080" height="1350" fill="url(#ed-top)"/><rect width="1080" height="1350" fill="url(#ed-bottom)"/>`;
 }
 
