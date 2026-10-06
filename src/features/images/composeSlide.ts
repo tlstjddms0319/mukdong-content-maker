@@ -1,5 +1,5 @@
 import { enhancePhoto, type PhotoKind } from "./render/photoEnhance";
-import { auditRender, describeIssue, type AuditReport } from "./render/audit";
+import { registerPhoto, auditRender, describeIssue, type AuditReport } from "./render/audit";
 import sharp, { type OverlayOptions } from "sharp";
 import { access } from "node:fs/promises";
 import type { CarouselSlidePlan } from "./carousel";
@@ -511,6 +511,8 @@ async function composeQuote(inputs:Buffer[],slide:CarouselSlidePlan,index:number
   // 예전에는 채도 .3·밝기 .55로 사진 전체를 회색에 가깝게 눌렀다. 글자 뒤 띠(아래 qband·qfoot)가 읽힘을 맡으므로
   // 사진은 채도 .6·밝기 .72까지만 낮춰 음식 색이 남게 한다.
   const background=await sharp(await finishPhoto(inputs[0],1080,1350)).modulate({saturation:.6,brightness:.72}).png().toBuffer();
+  // 채도·밝기를 낮춰 새 버퍼가 되므로 사진으로 다시 등록한다(검수의 사진 면적).
+  registerPhoto(background);
   const mark=await textLayer("“",{size:220,color:palette.highlight,width:300,height:240,font:DECOR_FONT,spacing:0});
   // 인용구는 표지로도 쓰이므로 쉼표 같은 의미 단위에서 두 줄로 나눠 "…막걸리 한 / 잔"처럼 한 글자만 남는 줄을 막는다.
   // 변형 0: 왼쪽 정렬(기존). 변형 1: 가운데 정렬, 따옴표와 강조선도 가운데.

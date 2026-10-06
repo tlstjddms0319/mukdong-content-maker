@@ -63,7 +63,8 @@ export const hashtags=(content:StyleContent)=>content.keywords.length?content.ke
 //    줄 수가 같으므로 높이도 같다(배치가 바뀌지 않는다). 탐색은 여러 줄 제목에서만 해서 제목당 +30~80ms.
 // 3) 의미 단위 우선: 두 줄 제목에 쉼표·물음표·느낌표·마침표 뒤 띄어쓰기가 가운데쯤(25~75%)에 있고 그 자리에서 나눈
 //    두 줄이 각각 한 줄에 들어가면, 폭 조정 대신 그 자리에 줄바꿈을 넣는다("비 오는 날엔 홍어 한 / 점, 막걸리 한 잔" 대신
-//    "비 오는 날엔 홍어 한 점, / 막걸리 한 잔"). 그래서 부르는 쪽은 value가 아니라 돌려받은 text를 그려야 한다.
+//    "비 오는 날엔 홍어 한 점, / 막걸리 한 잔"). 그 크기에서 안 들어가면 두 단계 작은 크기까지 시도한다.
+//    그래서 부르는 쪽은 value가 아니라 돌려받은 text·size를 그려야 한다.
 // 4) 측정 메모: 균형을 잡고도 r < .35면 "외톨이 줄"(orphan)로 검수에 남긴다(한 낱말이 폭보다 긴 경우 등).
 // 손글씨 글꼴(나눔손글씨 붓·개구·감자꽃·동해독도 등)은 획이 가늘고 불규칙해 폰에서 작으면 읽히지 않는다.
 // 손글씨는 이 크기 이상의 제목·짧은 라벨에만 쓰고, 요점처럼 여러 줄 읽는 글은 고딕·돋움 계열로 쓴다(계획서 B12).
@@ -85,8 +86,16 @@ export async function chooseTitleLayout(value:string,options:TitleMeasure):Promi
   const balanced=await balanceWidth(value,{size,width:options.width,font:options.font,align:options.align,spacing:spacingOf(options,size),height});
   if(balanced.lines===2){
     const split=punctuationSplit(value);
-    // 나눈 두 줄이 각각 한 줄에 들어가면 높이가 원래 두 줄 높이와 같다(±2px).
-    if(split&&Math.abs((await measure(size,options.width,4000,split)).info.height-height)<=2)return {text:split,size,width:options.width,lines:2,lastLineRatio:1,fits};
+    // 나눈 두 줄이 각각 한 줄에 들어가면 높이가 "두 줄 높이"(한 줄 높이×2 + 줄 간격)와 같다
+    // (줄마다 획 높이가 달라 글자 크기의 30%까지 허용, 한 줄이 늘면 그보다 훨씬 크다).
+    // 지금 크기에서 쉼표 앞 절반이 한 줄에 안 들어가면 두 단계 작은 크기까지 시도한다: "홍어 한 / 점," 같은 끊김보다
+    // 글자가 한 단계 작은 편이 읽기 좋다.
+    const start=options.sizes.indexOf(size);
+    for(const candidate of split?options.sizes.slice(Math.max(0,start),Math.max(0,start)+3):[]){
+      const two=2*(await measure(candidate,options.width,4000,"홍")).info.height+spacingOf(options,candidate);
+      const h=(await measure(candidate,options.width,4000,split!)).info.height;
+      if(Math.abs(h-two)<=Math.max(2,candidate*.3)&&h<=options.maxHeight)return {text:split!,size:candidate,width:options.width,lines:2,lastLineRatio:1,fits};
+    }
   }
   if(balanced.lines>=2&&balanced.lastLineRatio<ORPHAN)noteAudit({kind:"orphan",text:value.slice(0,24),ratio:Math.round(balanced.lastLineRatio*100)/100});
   return {text:value,size,width:balanced.width,lines:balanced.lines,lastLineRatio:balanced.lastLineRatio,fits};
@@ -109,13 +118,15 @@ export async function balanceWidth(value:string,options:{size:number;width:numbe
   const full=options.height??await measure(W);
   // 줄 수: 한 줄 높이(h1, "홍" 한 글자)와 줄 간격(spacing)으로 H = n·h1 + (n−1)·spacing 을 푼다.
   const h1=await measure(W,"홍");
-  const lines=Math.max(1,Math.round((full+options.spacing)/(h1+options.spacing)));
+  const countLines=(height:number)=>Math.max(1,Math.round((height+options.spacing)/(h1+options.spacing)));
+  const lines=countLines(full);
   // 줄바꿈 문자가 든 글(요점 목록 등)은 문단이 여럿이라 위 공식이 맞지 않는다. 폭은 그대로 둔다.
   if(lines<2||value.includes("\n"))return {width:W,lines,lastLineRatio:1};
   let lo=Math.round(W*.4),hi=W;
   for(let step=0;step<6;step++){
     const mid=Math.round((lo+hi)/2);
-    if(Math.abs(await measure(mid)-full)<=2)hi=mid;else lo=mid;
+    // 높이 차(±2px)가 아니라 줄 수로 비교한다. 손글씨처럼 줄마다 획 높이가 다른 글꼴은 줄 수가 같아도 높이가 몇 px 달라진다.
+    if(countLines(await measure(mid))===lines)hi=mid;else lo=mid;
   }
   const ratio=Math.max(0,Math.min(1,lines*hi/W-(lines-1)));
   if(ratio>=BALANCE_BELOW)return {width:W,lines,lastLineRatio:ratio};
