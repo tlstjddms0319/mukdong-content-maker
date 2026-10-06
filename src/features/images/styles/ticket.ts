@@ -1,7 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
 import { brandName, croppedPhoto, svgLayer, textLayer, type CardRenderer, type Font, type Layer } from "../render/primitives";
-import { STYLE_FONTS, contentOf, fitText, rotated, snap } from "./shared";
+import { STYLE_FONTS, balanceWidth, contentOf, fitText, rotated, snap } from "./shared";
 import { seeded } from "./handDrawn";
 
 // 티켓·승차권: 짙은 바탕 한가운데 세로로 긴 입장권 종이 한 장. 아래쪽 절취선(점선과 양옆 반원 홈)으로 본체와 스텁이 나뉜다.
@@ -84,15 +84,20 @@ async function stampText(cx:number,cy:number,r:number):Promise<OverlayOptions> {
 // 제목 크기 고르기: 들어가는 가장 큰 크기를 쓰되, 한 단계 작은 크기로 줄이면 줄 수가 하나 줄 때("드세요"만 다음 줄로
 // 떨어지는 경우)는 작은 쪽을 쓴다. 크기 한 단계 차이는 높이 1.1배쯤이고 줄이 하나 늘면 1.3배를 넘으므로 그 비율로 가른다.
 // 가장 작은 크기로도 넘치면 null(호출한 쪽이 요점을 줄이거나 fitText의 축소로 넘어간다).
+// 크기를 고른 뒤에는 모든 계열 공용 규칙(balanceWidth)으로 줄 길이를 고르게 맞춰 다시 그린다.
 async function fitTitle(value:string,sizes:number[],width:number,maxHeight:number,font:Font,color:string,spacing:number):Promise<Layer|null> {
+  const balanced=async(layer:Layer,size:number)=>{
+    const fit=await balanceWidth(value,{size,width,font,spacing,height:layer.info.height});
+    return fit.width<width?textLayer(value,{size,color,width:fit.width,height:4000,font,spacing}):layer;
+  };
   for(const [i,size] of sizes.entries()){
     const layer=await textLayer(value,{size,color,width,height:4000,font,spacing});
     if(layer.info.height>maxHeight)continue;
     if(i+1<sizes.length){
       const smaller=await textLayer(value,{size:sizes[i+1],color,width,height:4000,font,spacing});
-      if(layer.info.height>smaller.info.height*1.3)return smaller;
+      if(layer.info.height>smaller.info.height*1.3)return balanced(smaller,sizes[i+1]);
     }
-    return layer;
+    return balanced(layer,size);
   }
   return null;
 }
@@ -112,30 +117,24 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
   let watermark:OverlayOptions|null=null;
 
   if(content.cover){
-    // ── 표지: 본체 위쪽 절반 가까이를 사진이 채우고, 사진 위 검은 띠에 흰 ADMIT ONE·번호. 아래에 큰 제목과 빨간 도장. ──
-    const PX=TX+16,PW=TW-32,PY=TY+16,BASE_PH=440;
+    // ── 표지: 본체 위쪽 대부분을 사진이 채우고, 사진 위 검은 띠에 흰 ADMIT ONE·번호. 아래에 큰 제목. ──
+    // 키워드 줄은 스텁(절취선 아래)으로 옮기고, 빨간 도장은 사진 오른쪽 아래 모서리에 찍어 제목 아래 줄을 없앤다 → 그만큼 사진이 커진다.
+    const PX=TX+16,PW=TW-32,PY=TY+16,BASE_PH=600,MAX_PH=860,GAP=36;
     const admit=await textLayer("ADMIT ONE",{size:46,color:"#FFFFFF",width:500,height:80,font:STYLE_FONTS.condensed,spacing:0});
     const num=await textLayer(no,{size:30,color:"#FFFFFF",width:300,height:60,font:STYLE_FONTS.mono,spacing:0});
     layers.push({input:admit.data,left:PX+26,top:PY+(72-admit.info.height)/2},{input:num.data,left:PX+PW-26-num.info.width,top:PY+(72-num.info.height)/2});
-    // 제목 칸: 사진(기본 440px) 아래부터 절취선 위까지. 키워드 줄(도장 포함 130px)을 뺀 높이 안에서 가장 큰 제목 크기를 고른다.
-    const baseAreaH=BODY_BOTTOM-(PY+BASE_PH+36);
-    const title=await fitTitle(content.headline,[100,90,80,72],CW,baseAreaH-150,STYLE_FONTS.heavy,INK,10)??await fitText(content.headline,{sizes:[72],width:CW,maxHeight:baseAreaH-150,color:INK,font:STYLE_FONTS.heavy,spacing:10});
-    // 제목이 좁으면(짧은 제목) 도장을 제목 오른쪽 옆에, 넓으면 제목 아래 키워드 줄의 오른쪽 끝에 둔다(글자와 겹치지 않게).
-    const beside=title.info.width<=CW-150;
-    const keywords=content.keywords.length?content.keywords.map(word=>`#${word}`).join("  "):STORE_NAME;
-    const tag=await fitText(keywords,{sizes:[30,27],width:CW-170,maxHeight:44,color:TEXT,font:STYLE_FONTS.mono});
-    const rowH=beside?tag.info.height:Math.max(STAMP_R*2+10,tag.info.height);
-    const blockH=title.info.height+28+rowH;
-    // 제목이 짧아 아래가 남으면 그만큼(최대 200px) 사진을 키우고, 그래도 남는 높이는 제목 덩어리 위아래로 나눈다.
-    const PH=BASE_PH+Math.max(0,Math.min(200,baseAreaH-blockH-60));
+    // 제목 칸: 사진(기본 600px) 아래부터 절취선 위까지. 그 높이 안에서 가장 큰 제목 크기를 고른다(maxHeight는 이 칸 전체).
+    const baseAreaH=BODY_BOTTOM-(PY+BASE_PH+GAP);
+    const title=await fitTitle(content.headline,[100,90,80,72,68],CW,baseAreaH,STYLE_FONTS.heavy,INK,10)??await fitText(content.headline,{sizes:[68],width:CW,maxHeight:baseAreaH,color:INK,font:STYLE_FONTS.heavy,spacing:10});
+    // 제목이 들어가고 남는 높이는 모두 사진에 준다(상한 860). 남은 몇 px는 제목 위아래로 나눈다.
+    const PH=Math.round(Math.min(MAX_PH,BASE_PH+Math.max(0,baseAreaH-title.info.height-8)));
     photos.push({input:await croppedPhoto(shots[0],PW,PH,16),left:PX,top:PY});
     over+=`<path d="${topRoundedRect(PX,PY,PW,72,16)}" fill="${BAND}" fill-opacity=".9"/><rect x="${PX+1}" y="${PY+1}" width="${PW-2}" height="${PH-2}" rx="15" fill="none" stroke="${EDGE}" stroke-width="2"/>`;
-    const areaTop=PY+PH+36,areaH=BODY_BOTTOM-areaTop;
-    const top=areaTop+Math.max(0,(areaH-blockH)/2);
+    const areaTop=PY+PH+GAP,areaH=BODY_BOTTOM-areaTop;
+    const top=areaTop+Math.max(0,(areaH-title.info.height)/2);
     layers.push({input:title.data,left:CX,top});
-    const rowY=top+title.info.height+28;
-    layers.push({input:tag.data,left:CX,top:rowY+(rowH-tag.info.height)/2});
-    const scx=CR-STAMP_R-6,scy=beside?top+title.info.height/2:rowY+rowH/2;
+    // 도장: 사진 오른쪽 아래 모서리 안쪽(검표 도장을 사진에 찍은 듯). 음식은 대개 가운데라 모서리는 가리지 않는다.
+    const scx=PX+PW-STAMP_R-22,scy=PY+PH-STAMP_R-22;
     over+=stampSvg(scx,scy,STAMP_R,index*7+1);
     layers.push(await stampText(scx,scy,STAMP_R));
   }else{
@@ -237,8 +236,18 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
   // ── 스텁(절취선 아래): 왼쪽 가게 이름 + 장 번호, 오른쪽 바코드 + 글자 코드. 각각 스텁 높이 가운데에. ──
   const brand=await fitText(brandName(),{sizes:[30,28,26],width:430,maxHeight:72,color:INK,font:STYLE_FONTS.sansBold});
   const pageNo=await textLayer(`${index} / ${total}`,{size:32,color:TEXT,width:300,height:50,font:STYLE_FONTS.mono,spacing:0});
-  const leftH=brand.info.height+8+pageNo.info.height,leftTop=PERF+(STUB_H-leftH)/2;
+  // 표지 키워드(#홍어 #막걸리)는 스텁 왼쪽, 장 번호 아래에 둔다. 바코드 왼쪽 칸(430px)에 한 줄로 안 들어가면 뒤 키워드부터 뺀다.
+  let tag:Layer|null=null;
+  if(content.cover){
+    const words=content.keywords.length?content.keywords.map(word=>`#${word}`):[`#${STORE_NAME}`];
+    for(let n=words.length;n>0&&!tag;n--){
+      const candidate=await textLayer(words.slice(0,n).join("  "),{size:28,color:TEXT,width:2000,height:50,font:STYLE_FONTS.mono,spacing:0});
+      if(candidate.info.width<=430)tag=candidate;
+    }
+  }
+  const leftH=brand.info.height+8+pageNo.info.height+(tag?14+tag.info.height:0),leftTop=PERF+(STUB_H-leftH)/2;
   layers.push({input:brand.data,left:CX,top:leftTop},{input:pageNo.data,left:CX,top:leftTop+brand.info.height+8});
+  if(tag)layers.push({input:tag.data,left:CX,top:leftTop+brand.info.height+8+pageNo.info.height+14});
   const BW=360,BH=70,bx=CR-BW;
   const code=await textLayer(`MUKDONG ${index}${total}`,{size:26,color:TEXT,width:BW,height:40,font:STYLE_FONTS.mono,align:"centre",spacing:0});
   const rightH=BH+10+10+code.info.height,by=PERF+(STUB_H-rightH)/2;

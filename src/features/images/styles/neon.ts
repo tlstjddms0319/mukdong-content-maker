@@ -1,5 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { brandName, croppedPhoto, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { registerPhoto } from "../render/audit";
 import { STYLE_FONTS, contentOf, fitText, snap } from "./shared";
 import { glowText, handStar, neonStroke, seeded } from "./handDrawn";
 
@@ -59,13 +60,18 @@ export const renderNeon:CardRenderer=async(inputs,slide,index,total)=>{
   y+=titleH+(shots.length?44:70);
   if(shots.length){
     // 사진: 네온 테두리를 두른 액자. 두 장이면 나란히.
+    // 사진이 주인공이므로 제목과 요점 사이 남는 높이를 사진이 다 쓴다(예전엔 760에서 멈춰 사진 아래 빈 띠가 생겼다).
+    // 한 장은 폭도 860을 꽉 채운다. 두 장(각 430)은 너무 길쭉하면 어색하므로 세로를 폭의 1.6배까지만 키우고 남는 만큼 가운데로 내린다.
     const room=footerTop-y-(pointsH?pointsH+40:0)-30;
-    const PH=Math.round(Math.max(300,Math.min(760,room)));
-    const PW=shots.length>1?430:Math.min(860,Math.round(PH*1.3));
+    const PW=shots.length>1?430:860;
+    const PH=Math.round(Math.max(300,shots.length>1?Math.min(PW*1.6,room):room));
+    y+=Math.max(0,Math.round((room-PH)/2));
     const gap=40,rowW=shots.length*PW+(shots.length-1)*gap;
     for(const [i,shot] of shots.entries()){
       const x=Math.round((1080-rowW)/2)+i*(PW+gap);
       const photo=await sharp(await croppedPhoto(shot,PW,PH,22)).modulate({brightness:.95,saturation:1.08}).png().toBuffer();
+      // 색을 다시 만져 새 버퍼가 되었으므로 캔버스에 놓는 이 버퍼를 사진으로 등록한다(검수의 사진 면적).
+      registerPhoto(photo);
       layers.push({input:photo,left:x,top:y});
       deco+=neonStroke(roundedRect(x-10,y-10,PW+20,PH+20,30),i?theme.accent:theme.glow,5);
     }

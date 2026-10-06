@@ -1,6 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { grainLayer, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
-import { STYLE_FONTS, contentOf, filmPhoto, fitText , snap } from "./shared";
+import { registerPhoto } from "../render/audit";
+import { STYLE_FONTS, chooseTitleLayout, contentOf, filmPhoto, fitText , snap } from "./shared";
 
 // 감성 필름: 검은 필름 띠 양옆에 톱니 구멍과 주황 가장자리 글자("MUKDONG 400", 프레임 번호)를 넣고,
 // 가운데 프레임에 따뜻하게 바랜 필름 사진(빛샘·비네트)을 놓는다. 글은 영화 자막처럼 사진 아래 가운데에 흰 명조로.
@@ -13,13 +14,18 @@ function filmStrip():string {
   return holes+`<path d="M70 0V1350M${1080-70} 0V1350" stroke="#2A2724" stroke-width="2"/>`;
 }
 
-// 사진 위 자막용: 들어가는 가장 큰 크기를 고르되 글자 둘레에 그림자를 깐다(fitText는 그림자 옵션이 없다).
+// 사진 위 자막용: 들어가는 가장 큰 크기와 균형 줄바꿈 폭은 공용 규칙(chooseTitleLayout)으로 고르고, 글자 둘레에 그림자를 깐다
+// (fitText는 그림자 옵션이 없다). 그림자 여백(사방 10px)은 높이 계산에서 뺀다.
 async function fitShadowText(value:string,sizes:number[],width:number,maxHeight:number){
-  for(const size of sizes){
-    const layer=await textLayer(value,{size,color:SUB,width,height:4000,font:STYLE_FONTS.brushSerif,align:"centre",spacing:12,shadow:true});
-    if(layer.info.height<=maxHeight)return layer;
-  }
-  return textLayer(value,{size:sizes[sizes.length-1],color:SUB,width,height:maxHeight,font:STYLE_FONTS.brushSerif,align:"centre",spacing:12,shadow:true});
+  const layout=await chooseTitleLayout(value,{sizes,width,maxHeight:maxHeight-20,font:STYLE_FONTS.brushSerif,align:"centre",spacing:12});
+  return textLayer(layout.text,{size:layout.size,color:SUB,width:layout.width,height:layout.fits?4000:maxHeight-20,font:STYLE_FONTS.brushSerif,align:"centre",spacing:12,shadow:true});
+}
+
+// 필름 사진은 finishPhoto 뒤에 색·빛샘을 다시 입혀 새 버퍼가 되므로, 캔버스에 놓는 최종 버퍼를 사진으로 등록한다(검수의 사진 면적).
+async function framePhoto(...args:Parameters<typeof filmPhoto>):Promise<Buffer> {
+  const photo=await filmPhoto(...args);
+  registerPhoto(photo);
+  return photo;
 }
 
 export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
@@ -40,7 +46,7 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
     const totalH=1350-90-y-textRoom;
     const FH=shots.length>1?Math.round((totalH-24)/2):Math.min(content.cover?1100:760,totalH);
     for(const [i,shot] of shots.entries()){
-      layers.push({input:await filmPhoto(shot,FW,FH,i?(leak==="left"?"right":"left"):leak,content.cover?"strong":"light"),left:FX,top:y});
+      layers.push({input:await framePhoto(shot,FW,FH,i?(leak==="left"?"right":"left"):leak,content.cover?"strong":"light"),left:FX,top:y});
       deco+=`<rect x="${FX-6}" y="${y-6}" width="${FW+12}" height="${FH+12}" fill="none" stroke="#000" stroke-width="12"/>`;
       // 옛 카메라 날짜 도장 자리에 장 번호.
       const stamp=await textLayer(`'${frame}  ${i?"B":"A"}`,{size:40,color:"#FF9A3C",width:300,height:60,font:STYLE_FONTS.pixelBold});

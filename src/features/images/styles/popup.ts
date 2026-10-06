@@ -1,6 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { croppedPhoto, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
-import { STYLE_FONTS, contentOf, cutoutPhoto, extrudedText, stickerize , snap } from "./shared";
+import { svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
+import { registerPhoto } from "../render/audit";
+import { STYLE_FONTS, blobCutout, contentOf, cutoutPhoto, extrudedText, stickerize , snap } from "./shared";
 
 // 3D 모션·팝업북: 진한 바탕 한가운데 스포트라이트, 아래쪽에 펼친 책을 놓고 그 위로 음식(누끼)이 튀어나오게 한다.
 // 제목은 옆면이 두꺼운 입체 글자, 요점은 두께가 있는 종이 탭에 적는다. 주변에 별·반짝이·연기 뭉게를 흩뿌려 움직임을 준다.
@@ -8,6 +9,13 @@ const SCENES=[
   {bg:"#1C1A4A",glow:"#5B54D6",side:"#FF5A8A",tab:"#FFD84D",tabSide:"#C99A00"},
   {bg:"#3B0F2E",glow:"#C2367A",side:"#FFB300",tab:"#7CF0D0",tabSide:"#2E9C80"},
   {bg:"#0E3438",glow:"#21A39A",side:"#FF6B3D",tab:"#FFE7A3",tabSide:"#C9A24A"},
+] as const;
+// 사진이 있는 장의 장면. 남색·청록 바탕은 홍어의 분홍 살을 차갑게(자주·회색으로) 보이게 하므로
+// 흑자주·흑록처럼 붉은 기가 도는 아주 어두운 바탕에 호박색·살구색 글로우를 쓴다. 글자만 있는 장은 위 SCENES 그대로.
+const PHOTO_SCENES=[
+  {bg:"#2A1620",glow:"#B4543A",side:"#FF5A8A",tab:"#FFD84D",tabSide:"#C99A00"},
+  {bg:"#1F2A24",glow:"#A8743A",side:"#FFB300",tab:"#7CF0D0",tabSide:"#2E9C80"},
+  {bg:"#2A1620",glow:"#C27A3A",side:"#FF6B3D",tab:"#FFE7A3",tabSide:"#C9A24A"},
 ] as const;
 const PAGE="#FFF8E8",PAGE_EDGE="#D9CBB0";
 
@@ -35,7 +43,8 @@ const spark=(x:number,y:number,r:number,color:string)=>`<path d="M${x} ${y-r}L${
 
 export const renderPopup:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
-  const scene=SCENES[(index-1+(slide.variant??0))%SCENES.length];
+  const turn=index-1+(slide.variant??0);
+  const scene=inputs.length?PHOTO_SCENES[turn%PHOTO_SCENES.length]:SCENES[turn%SCENES.length];
   const M=64,W=1080-M*2;
   const layers:OverlayOptions[]=[];
   let deco=`<defs><radialGradient id="spot" cx="50%" cy="58%" r="60%"><stop offset="0" stop-color="${scene.glow}" stop-opacity=".9"/><stop offset="1" stop-color="${scene.bg}" stop-opacity="0"/></radialGradient></defs><rect width="1080" height="1350" fill="url(#spot)"/>`;
@@ -62,24 +71,27 @@ export const renderPopup:CardRenderer=async(inputs,slide,index,total)=>{
     y+=h+(hasPhoto?14:26);
   }
   deco+=openBook(540,spineY,hasPhoto?420:380);
-  // 책 위로 튀어나오는 음식: 누끼가 되면 흰 테두리 스티커, 안 되면 두꺼운 흰 테두리 원형 사진. 두 장이면 좌우로 하나씩.
+  // 책 위로 튀어나오는 음식: 누끼가 되면 흰 테두리 스티커, 안 되면 손으로 오린 듯한 블롭 스티커. 두 장이면 좌우로 하나씩.
+  // 스티커 바닥은 책 접힘선(spineY~spineY+110) 위에 닿게 두고 접촉 그림자를 깔아 책에서 솟아 나온 것처럼 보이게 한다.
+  // 스티커 뒤에는 노란 후광(screen 합성 .3)을 깔아 음식이 어두운 바탕에서 앞으로 튀어나와 보이게 한다.
   const popped:OverlayOptions[]=[];
+  const halos:OverlayOptions[]=[];
   if(hasPhoto){
     const shots=inputs.slice(0,2);
-    const room=spineY+40-(y+20);
-    const size=Math.max(300,Math.min(shots.length>1?440:700,room));
+    // 스티커 몫(테두리·그림자·접촉 그림자 약 100px)을 뺀 남는 높이가 사진 크기다.
+    const room=spineY+70-(y+10)-100;
+    const size=Math.max(280,Math.min(shots.length>1?400:780,room));
     for(const [i,shot] of shots.entries()){
-      const cx=shots.length>1?(i?760:320):540;
+      const cx=shots.length>1?(i?770:310):540;
       const cut=await cutoutPhoto(shot,size);
-      if(cut){
-        const sticker=await stickerize(cut,{border:12,shadow:"#000000",shadowOffset:22});
-        popped.push({input:sticker.data,left:Math.round(cx-sticker.info.width/2),top:Math.max(y+10,spineY+50-sticker.info.height)});
-      }else{
-        const D=size-40,top=Math.max(y+20,spineY+30-D);
-        deco+=`<rect x="${cx-10}" y="${top+D-10}" width="20" height="${spineY+60-(top+D-10)}" fill="${PAGE_EDGE}"/>`;
-        deco+=`<circle cx="${cx+16}" cy="${top+D/2+20}" r="${D/2+14}" fill="#000" opacity=".4"/><circle cx="${cx}" cy="${top+D/2}" r="${D/2+14}" fill="#fff" stroke="#111" stroke-width="4"/>`;
-        popped.push({input:await croppedPhoto(shot,D,D,0,{circle:true}),left:Math.round(cx-D/2),top:Math.round(top)});
-      }
+      const shape=cut??await blobCutout(shot,size,index*11+i*17+(slide.variant??0));
+      const sticker=await stickerize(shape,{border:12,shadow:"#000000",shadowOffset:cut?22:14,contact:true});
+      registerPhoto(sticker.data);
+      const left=Math.round(cx-sticker.info.width/2),top=Math.max(y+10,spineY+70-sticker.info.height);
+      popped.push({input:sticker.data,left,top});
+      // 후광 반경은 스티커의 긴 변 이상으로 잡아 가장자리까지 은은하게 퍼지게 한다.
+      const R=Math.max(sticker.info.width,sticker.info.height),hx=left+sticker.info.width/2,hy=top+sticker.info.height/2;
+      halos.push({...svgLayer(`<defs><radialGradient id="halo${i}" cx="${hx}" cy="${hy}" r="${R}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFD84D" stop-opacity=".3"/><stop offset=".55" stop-color="#FFD84D" stop-opacity=".14"/><stop offset="1" stop-color="#FFD84D" stop-opacity="0"/></radialGradient></defs><circle cx="${hx}" cy="${hy}" r="${R}" fill="url(#halo${i})"/>`),blend:"screen"});
     }
   }
   // 반짝이·별·연기.
@@ -88,6 +100,6 @@ export const renderPopup:CardRenderer=async(inputs,slide,index,total)=>{
   front+=puff(70,spineY+40,34)+puff(890,spineY+60,30);
   const brand=await textLayer(`${brandName()}  ·  ${index} / ${total}`,{size:28,color:"#FFFFFF",width:800,height:44,font:STYLE_FONTS.sansSemi,align:"centre"});
   return sharp({create:{width:1080,height:1350,channels:3,background:scene.bg}})
-    .composite(snap([svgLayer(deco),...tabLayers,...popped,...layers,svgLayer(front),{input:brand.data,left:Math.round((1080-brand.info.width)/2),top:1350-70}]))
+    .composite(snap([svgLayer(deco),...halos,...tabLayers,...popped,...layers,svgLayer(front),{input:brand.data,left:Math.round((1080-brand.info.width)/2),top:1350-70}]))
     .jpeg({quality:92}).toBuffer();
 };

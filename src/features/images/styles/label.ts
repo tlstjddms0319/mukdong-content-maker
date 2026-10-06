@@ -1,5 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
+import { registerPhoto } from "../render/audit";
 import { brandName, svg, svgLayer, textLayer, croppedPhoto, finishPhoto, type CardRenderer, type Layer } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText, snap } from "./shared";
 import { seeded } from "./handDrawn";
@@ -83,7 +84,8 @@ function medalOver(cx:number,cy:number,R:number,s:number):string {
     +`<circle cx="${cx}" cy="${cy}" r="${R+12*s}" fill="none" stroke="${FRAME}" stroke-width="1"/>`;
 }
 // 메달 속 사진: 원형으로 자른다. 예전의 탈채도(.92)는 홍어 살을 탁하게 만들어 뺐다(종이 느낌은 테두리·질감이 맡는다).
-const medalPhoto=(input:Buffer,R:number)=>croppedPhoto(input,R*2,R*2,0,{circle:true});
+// 큰 원 안에 접시 전체가 들어가면 음식이 작아 보이므로 zoom으로 조금 당겨(접사) 자른다. croppedPhoto 결과는 자동으로 검수에 등록된다.
+const medalPhoto=(input:Buffer,R:number,zoom=1)=>croppedPhoto(input,R*2,R*2,0,{circle:true,zoom});
 
 // 아치 창(위가 둥근 창) 사진: 직사각형 위에 반원을 얹은 마스크로 자른다.
 const archPath=(x:number,y:number,w:number,h:number)=>{const r=w/2;return `M${x} ${y+r}A${r} ${r} 0 0 1 ${x+w} ${y+r}V${y+h}H${x}Z`;};
@@ -91,7 +93,10 @@ async function archPhoto(input:Buffer,width:number,height:number):Promise<Buffer
   const w=Math.round(width),h=Math.round(height);
   // 탈채도 없이 온기만 살짝(파랑 −4%).
   const photo=await sharp(await finishPhoto(input,w,h)).linear([1.02,1,.96],[3,1,-3]).png().toBuffer();
-  return sharp(photo).composite([{input:svg(w,h,`<path d="${archPath(0,0,w,h)}" fill="#fff"/>`),blend:"dest-in"}]).png().toBuffer();
+  const shaped=await sharp(photo).composite([{input:svg(w,h,`<path d="${archPath(0,0,w,h)}" fill="#fff"/>`),blend:"dest-in"}]).png().toBuffer();
+  // 마스크를 씌운 새 버퍼는 자동 등록되지 않으므로 직접 등록한다(검수의 사진 면적 측정).
+  registerPhoto(shaped);
+  return shaped;
 }
 // 아치 창 테두리: 황금 굵은 선 + 바깥 가는 갈색 선(이중 테두리). 꼭대기 장식은 바로 위 제목 장식선의 마름모와 겹쳐 보여 두지 않는다.
 function archFrame(x:number,y:number,w:number,h:number):{under:string;over:string} {
@@ -126,26 +131,33 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
   const avail=CONTENT_BOTTOM-y0;
 
   if(content.kind==="cover"){
-    // ── 표지: ✦ → 큰 원형 메달 사진 → 큰 제목 → 장식선 → 키워드 줄 ──
-    const title=await fitText(content.headline,{sizes:[96,86,76,68],width:888,maxHeight:320,color:INK,font:STYLE_FONTS.serifHeavy,align:"centre",spacing:10});
+    // ── 표지: 큰 원형 메달 사진 → 큰 제목 → 장식선 → ✦ 키워드 ✦ 줄 ──
+    // 사진을 주인공으로: 메달 위 별 장식은 키워드 줄 양옆으로 옮기고, 메달 링은 조금 얇게(s=.75) 해 지름을 키운다.
+    // 제목 상한은 84px(96이면 두 줄 제목이 메달 자리를 먹는다). 제목 maxHeight는 그대로 둬 긴 제목이 몰래 줄지 않게 한다.
+    const title=await fitText(content.headline,{sizes:[84,76,68],width:888,maxHeight:320,color:INK,font:STYLE_FONTS.serifHeavy,align:"centre",spacing:10});
     const keywords=content.keywords.length?content.keywords.join("  ·  "):"묵동  ·  홍어  ·  막걸리";
-    const kw=await textLayer(keywords,{size:30,color:EYEBROW,width:760,height:50,font:STYLE_FONTS.serif,align:"centre"});
-    // 메달 반지름은 제목 높이에 맞춰 정한다: 긴 제목이면 메달을 줄여 자리를 내고, 짧으면 메달을 키워 화면을 채운다.
-    const fixed=28+18+84+44+title.info.height+22+14+26+kw.info.height;
-    const R=Math.max(170,Math.min(285,Math.floor((avail-fixed)/2)));
-    let y=y0+Math.max(0,Math.floor((avail-fixed-R*2)/2));
-    deco+=star(540,y+14,18,GOLD)+star(540,y+14,6,RIBBON);
-    y+=28+18;
-    const cy=y+42+R;
-    deco+=medalUnder(540,cy,R,1);
-    layers.push({input:await medalPhoto(shots[0],R),left:540-R,top:cy-R});
-    over+=medalOver(540,cy,R,1);
-    y=cy+R+42+44;
+    const kw=await textLayer(keywords,{size:30,color:EYEBROW,width:720,height:50,font:STYLE_FONTS.serif,align:"centre"});
+    // 표지는 눈썹 글자 바로 아래(10px)부터 쓴다: 메달 꼭대기는 가운데 한 점만 닿으므로 좁아도 답답하지 않다.
+    const top=y0-20,room=CONTENT_BOTTOM-top;
+    const s=.75,ring=Math.round(42*s);
+    const afterMedal=16,ruleGap=16,afterRule=24;
+    // 메달 반지름은 "남는 높이"에서 역산한다: 링 두께·제목·장식선·키워드 줄을 뺀 나머지가 지름. 상한 330(지름 660).
+    const fixed=ring*2+afterMedal+title.info.height+ruleGap+14+afterRule+kw.info.height;
+    const R=Math.max(170,Math.min(330,Math.floor((room-fixed)/2)));
+    let y=top+Math.max(0,Math.floor((room-fixed-R*2)/2));
+    const cy=y+ring+R;
+    deco+=medalUnder(540,cy,R,s);
+    layers.push({input:await medalPhoto(shots[0],R,1.2),left:540-R,top:cy-R});
+    over+=medalOver(540,cy,R,s);
+    y=cy+R+ring+afterMedal;
     layers.push({input:title.data,left:540-title.info.width/2,top:y});
-    y+=title.info.height+22;
+    y+=title.info.height+ruleGap;
     deco+=titleRule(540,y+4,Math.min(720,title.info.width+80));
-    y+=14+26;
+    y+=14+afterRule;
     layers.push({input:kw.data,left:540-kw.info.width/2,top:y});
+    // ✦ 키워드 ✦: 예전에 메달 위에 있던 별을 키워드 줄 양옆에 단다.
+    const ky=y+kw.info.height/2;
+    for(const sx of [540-kw.info.width/2-30,540+kw.info.width/2+30])deco+=star(sx,ky,13,GOLD)+star(sx,ky,4.5,RIBBON);
   }else{
     // ── 본문 장 공통: 제목 + 장식선 ──
     const textOnly=content.kind==="text";
@@ -164,8 +176,9 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
       let points=await Promise.all(content.points.slice(0,4).map(point=>pointText(point,40,W-indent,"left")));
       const roomFor=(list:Layer[])=>avail-titleBlock-(list.length?stackHeight(list,gap)+34:0);
       if(roomFor(points)<300&&points.length>3)points=points.slice(0,3);
-      const PH=Math.max(300,Math.min(700,roomFor(points)));
-      const PW=Math.max(400,Math.min(620,Math.round(PH)));
+      // 아치 창은 4:5 세로형(폭=높이×.8)에 가깝게: 창이 화면을 위아래로 채운다. 요점이 길어 창이 낮아지면 폭 480은 지켜 음식이 작아지지 않게.
+      const PH=Math.max(300,Math.min(760,roomFor(points)));
+      const PW=Math.max(480,Math.min(640,Math.round(PH*.8)));
       const block=titleBlock+PH+(points.length?stackHeight(points,gap)+34:0);
       let y=placeTitle(y0+Math.max(0,Math.floor((avail-block)/2)));
       const x=540-PW/2;

@@ -1,6 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { brandName, finishPhoto, svgLayer, textLayer, type CardRenderer, type Font, type Layer } from "../render/primitives";
-import { STYLE_FONTS, contentOf, fitText, hashtags, rotated, snap, type StyleContent } from "./shared";
+import { registerPhoto } from "../render/audit";
+import { STYLE_FONTS, chooseTitleLayout, contentOf, fitText, hashtags, rotated, snap, type StyleContent } from "./shared";
 import { seeded } from "./handDrawn";
 
 // 푸드 매거진 표지·내지: 사진이 주인공이고 글자는 크고 정갈하게.
@@ -32,14 +33,11 @@ async function fitLine(value:string,options:{sizes:number[];maxWidth:number;font
   }
   return last!;
 }
-// 그림자를 깐 글자를 들어가는 가장 큰 크기로(표지 제목). fitText와 같되 shadow를 켠다. 돌려주는 레이어는 그림자 여백(10px)을 사방에 더 가진다.
+// 그림자를 깐 글자를 들어가는 가장 큰 크기로(표지 제목). 크기와 균형 줄바꿈 폭은 fitText와 같은 공용 규칙(chooseTitleLayout)으로
+// 고르고 shadow만 켠다. 돌려주는 레이어는 그림자 여백(10px)을 사방에 더 가진다.
 async function fitShadowed(value:string,options:{sizes:number[];width:number;maxHeight:number;color:string;font:Font;spacing:number}):Promise<Layer> {
-  let last:Layer|null=null;
-  for(const size of options.sizes){
-    last=await textLayer(value,{size,color:options.color,width:options.width,height:4000,font:options.font,spacing:options.spacing,shadow:true});
-    if(last.info.height-20<=options.maxHeight)return last;
-  }
-  return textLayer(value,{size:options.sizes[options.sizes.length-1],color:options.color,width:options.width,height:options.maxHeight,font:options.font,spacing:options.spacing,shadow:true});
+  const layout=await chooseTitleLayout(value,{sizes:options.sizes,width:options.width,maxHeight:options.maxHeight,font:options.font,spacing:options.spacing});
+  return textLayer(layout.text,{size:layout.size,color:options.color,width:layout.width,height:layout.fits?4000:options.maxHeight,font:options.font,spacing:options.spacing,shadow:true});
 }
 
 // 사진 뒤로 비치는 거대한 쪽 번호. 아주 옅은 회색이라 읽는 글자가 아니라 종이 무늬에 가깝다.
@@ -85,7 +83,12 @@ const plainPhoto=(input:Buffer,w:number,h:number)=>finishPhoto(input,w,h);
 async function renderCover(inputs:Buffer[],content:StyleContent,variant:number):Promise<Buffer> {
   const layers:OverlayOptions[]=[];
   const shot=inputs[0];
-  if(shot)layers.push({input:await sharp(await finishPhoto(shot,1080,1350)).modulate({brightness:1.03,saturation:1.06}).png().toBuffer(),left:0,top:0});
+  if(shot){
+    // 색을 살짝 다시 만져 새 버퍼가 되므로, 캔버스에 놓는 이 버퍼를 사진으로 등록한다(검수의 사진 면적).
+    const photo=await sharp(await finishPhoto(shot,1080,1350)).modulate({brightness:1.03,saturation:1.06}).png().toBuffer();
+    registerPhoto(photo);
+    layers.push({input:photo,left:0,top:0});
+  }
   let deco=coverShade();
   // 제호: 폭(여백 60 안쪽)을 가득 채우는 가장 큰 크기.
   const masthead=await fitLine("MUKDONG",{sizes:[200,196,192,188,184,180,176,172,168,164,160],maxWidth:COVER_W,font:STYLE_FONTS.display,color:"#FFFFFF"});

@@ -16,13 +16,46 @@ const PAD=26;                 // 칸 안쪽 여백(선 가장자리에서 글자
 const TAG_H=58,FOOT_H=64;     // 맨 위 꼬리표 줄·바닥글 줄의 높이(선 중심 사이)
 const NUM_W=100;              // 요점 행 왼쪽 번호 칸 너비
 const ROW_PAD=16;             // 요점 행 위아래 여백
-const MIN_PHOTO=280;          // 사진 칸 최소 높이. 요점이 길어 이보다 작아지면 요점 수를 줄인다.
+const MIN_PHOTO=500;          // 사진 장의 사진 칸 최소 높이. 요점이 길어 이보다 작아지면 뒤 요점부터 1개까지 뺀다(음식이 주인공).
+// 표지 사진 칸의 최소 높이: 캔버스 넓이의 45% 이상을 사진이 차지하게 한다(폭 X1-X0 기준으로 역산).
+const MIN_COVER_PHOTO=Math.ceil(1080*1350*.45/(X1-X0));
+// 표지 머리 줄(장 번호·브랜드 마크) 높이 후보. 제목이 길어 사진 45%를 지키기 어려우면 제목 글자보다 머리 줄을 먼저 줄인다.
+const COVER_HEADS=[250,210,170];
+const COVER_TITLE_SIZES=[112,100,88,80];
 
 // 두 선 중심 사이의 거리. 안쪽 내용 높이에 위아래 여백과 선 두께를 더한 값이다.
 const cell=(contentHeight:number,pad=PAD)=>contentHeight+pad*2+T;
 const rect=(x:number,y:number,w:number,h:number,fill:string)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/>`;
 // 칸을 가득 채우는 사진. 선 중심에서 선 중심까지 덮게 잘라 두고 선을 그 위에 얹으므로 사진과 선 사이에 틈이 생기지 않는다.
 const photoCell=(input:Buffer,x0:number,y0:number,x1:number,y1:number):Promise<Buffer>=>finishPhoto(input,x1-x0,y1-y0);
+
+// 표지 머리 줄 높이와 제목 크기 고르기. 사진 칸(MIN_COVER_PHOTO)을 먼저 떼고 남는 높이가 제목 칸이다.
+// 머리 줄이 큰 것부터 보며 제목이 88px 이상으로 들어가면 그 조합을, 끝까지 안 되면 80px로 들어가는 가장 큰 머리 줄을 쓴다.
+// 남는 높이(최대 약 260px)가 80px 네 줄보다 낮으므로 제목은 저절로 3줄 이하가 된다.
+// 측정은 높이 4000의 글자 레이어로만 한다(fitText를 여러 번 부르면 외톨이 메모가 중복으로 남는다).
+async function coverLayout(headline:string,width:number,yTag:number,yFoot:number):Promise<{headH:number;size:number;maxHeight:number}> {
+  const heights=new Map<number,number>();
+  const heightAt=async(size:number)=>{
+    if(!heights.has(size))heights.set(size,(await textLayer(headline,{size,color:INK,width,height:4000,font:STYLE_FONTS.gothicBlack,spacing:6})).info.height);
+    return heights.get(size)!;
+  };
+  const smallest=COVER_TITLE_SIZES[COVER_TITLE_SIZES.length-1];
+  let fallback:{headH:number;size:number;maxHeight:number}|null=null;
+  for(const headH of COVER_HEADS){
+    const maxHeight=yFoot-MIN_COVER_PHOTO-(yTag+headH)-T-PAD*2;
+    for(const size of COVER_TITLE_SIZES){
+      if(await heightAt(size)>maxHeight)continue;
+      if(size>=88)return {headH,size,maxHeight};
+      // 80px로만 들어가면 일단 기억해 두고(머리 줄이 큰 쪽을 우선), 더 작은 머리 줄에서 88px 이상이 되는지 본다.
+      fallback??={headH,size,maxHeight};
+      break;
+    }
+  }
+  if(fallback)return fallback;
+  // 아주 긴 제목: 80px로도 안 들어가면 그림째 줄이는 대신 사진 칸을 조금 양보한다(몰래 축소 금지).
+  const headH=COVER_HEADS[COVER_HEADS.length-1];
+  return {headH,size:smallest,maxHeight:await heightAt(smallest)};
+}
 
 export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
@@ -50,13 +83,16 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
   put(tag,left,(Y0+yTag-tag.info.height)/2);
 
   // ── 머리 줄: 왼쪽 큰 장 번호 칸 + 오른쪽 빨간 정사각 브랜드 마크 칸(한 변 = 줄 높이) ──
-  const headH=content.cover?250:200;
+  // 표지: 사진 45%를 지키면서 제목이 들어가는 가장 큰 머리 줄과 제목 크기를 고른다(아래 coverLayout).
+  const coverPick=content.cover?await coverLayout(content.headline,innerW,yTag,Y1-FOOT_H):null;
+  const headH=coverPick?coverPick.headH:200;
   const yHead=yTag+headH,xMark=X1-headH;
   hline(yHead);vline(xMark,yTag,yHead);
   under+=rect(xMark,yTag,X1-xMark,headH,RED);
-  const number=await fitText(String(index).padStart(2,"0"),{sizes:content.cover?[200,180]:[170,160],width:600,maxHeight:headH-T-PAD,color:INK,font:STYLE_FONTS.gothicBlack,spacing:0});
+  const number=await fitText(String(index).padStart(2,"0"),{sizes:content.cover?[200,180,160,150,140,130]:[170,160],width:600,maxHeight:headH-T-PAD,color:INK,font:STYLE_FONTS.gothicBlack,spacing:0});
   put(number,left-Math.round(number.info.width*.03),(yTag+yHead-number.info.height)/2);
-  const mark=await textLayer("묵동",{size:content.cover?88:70,color:PAPER,width:headH,height:headH,font:STYLE_FONTS.heavy,align:"centre",spacing:0});
+  // 마크 글자는 칸 한 변에 비례(250→88, 200→70)해 머리 줄이 줄어도 칸 안에 들어간다.
+  const mark=await textLayer("묵동",{size:Math.round(headH*.35),color:PAPER,width:headH,height:headH,font:STYLE_FONTS.heavy,align:"centre",spacing:0});
   centre(mark,xMark,yTag,X1,yHead);
   // 번호 칸의 남는 자리(오른쪽 아래)에는 전체 장 수만큼 작은 네모를 늘어놓고 지금 장만 빨갛게 채운다.
   // 글자 없이 선과 빨간 네모만으로 "몇 번째 장"인지 보여 주는 진행 표시다.
@@ -71,7 +107,9 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
   // (요점이 없는 글자 장만 아래에서 칸을 키우므로 선과 글자는 장 종류를 정한 뒤 그린다.)
   // 요점 없는 글자 장은 제목이 유일한 내용이라 표지만큼 크게 쓴다.
   const titleOnly=content.kind==="text"&&!content.points.length;
-  const title=await fitText(content.headline,{sizes:content.cover||titleOnly?[112,100,88,78]:[72,64,58],width:innerW,maxHeight:content.cover?470:titleOnly?560:250,color:INK,font:STYLE_FONTS.gothicBlack,spacing:6});
+  const title=coverPick
+    ?await fitText(content.headline,{sizes:COVER_TITLE_SIZES.filter(size=>size<=coverPick.size),width:innerW,maxHeight:coverPick.maxHeight,color:INK,font:STYLE_FONTS.gothicBlack,spacing:6})
+    :await fitText(content.headline,{sizes:titleOnly?[112,100,88,78]:[72,64,58],width:innerW,maxHeight:titleOnly?560:250,color:INK,font:STYLE_FONTS.gothicBlack,spacing:6});
   let yTitle=yHead+cell(title.info.height),titleTop=yHead+T/2+PAD;
 
   // ── 바닥글 칸: 고정폭 가게 이름 왼쪽, 장 번호 오른쪽, 오른쪽 끝에 작은 빨간 정사각 칸 ──
@@ -108,7 +146,7 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
     }
   }else{
     // 사진 장: 제목 아래 사진 칸, 그 아래 요점 행(왼쪽 좁은 번호 칸 + 오른쪽 글). 행 높이는 글 높이에 맞추고
-    // 사진이 남은 높이를 모두 가진다. 요점이 길면 글자를 먼저 한 단계 줄이고, 그래도 사진이 MIN_PHOTO보다 작아지면 뒤 요점부터 뺀다.
+    // 사진이 남은 높이를 모두 가진다. 요점이 길면 글자를 먼저 한 단계 줄이고, 그래도 사진이 MIN_PHOTO보다 작아지면 뒤 요점부터 1개까지 뺀다.
     const textW=X1-X0-NUM_W-T-PAD*2;
     let points=content.points.slice(0,4);
     const measure=(sizes:number[])=>Promise.all(points.map(point=>fitText(point,{sizes,width:textW,maxHeight:140,color:INK,font:STYLE_FONTS.sansSemi,spacing:6})));
@@ -116,7 +154,7 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
     const fits=(list:Layer[])=>yFoot-rowsHeight(list)-yTitle>=MIN_PHOTO+T;
     let rows=await measure([48,46,44]);
     if(!fits(rows))rows=await measure([44,42,40]);
-    while(points.length>2&&!fits(rows)){points=points.slice(0,-1);rows=rows.slice(0,-1);}
+    while(points.length>1&&!fits(rows)){points=points.slice(0,-1);rows=rows.slice(0,-1);}
     const yRows=rows.length?yFoot-rowsHeight(rows):yFoot;
     if(rows.length)hline(yRows);
     if(shots.length>=2){

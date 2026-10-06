@@ -1,5 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { brandName, finishPhoto, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { registerPhoto } from "../render/audit";
 import { STYLE_FONTS, contentOf, fitText, snap } from "./shared";
 import { seeded, wobblyLine } from "./handDrawn";
 
@@ -36,7 +37,10 @@ async function inkPhoto(input:Buffer,width:number,height:number):Promise<Buffer>
   const base=await sharp(await finishPhoto(input,W,H)).modulate({saturation:.96}).linear([1.02,.99,.93],[4,2,-2]).removeAlpha().png().toBuffer();
   const feather=Math.round(Math.min(W,H)*.07);
   const mask=await sharp(Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#000"/><rect x="${feather}" y="${feather}" width="${W-feather*2}" height="${H-feather*2}" rx="${feather}" fill="#fff"/></svg>`)).blur(feather*.8).extractChannel(0).toBuffer();
-  return sharp(base).joinChannel(mask).png().toBuffer();
+  const inked=await sharp(base).joinChannel(mask).png().toBuffer();
+  // 보정·흐린 가장자리를 입힌 새 버퍼는 자동 등록되지 않으므로 직접 등록한다(검수의 사진 면적 측정).
+  registerPhoto(inked);
+  return inked;
 }
 
 export const renderHanji:CardRenderer=async(inputs,slide,index,total)=>{
@@ -64,31 +68,42 @@ export const renderHanji:CardRenderer=async(inputs,slide,index,total)=>{
   deco+=inkWash(titleX-30,y-10,title.info.width+60,title.info.height+20,index*7+3);
   layers.push({input:title.data,left:titleX,top:y});
   y+=title.info.height+30;
-  // 낙관: 표지는 제목 오른쪽 아래, 본문은 제목 줄 끝.
-  const stamp=await seal(content.cover?128:96,index*13+5);
-  const stampX=content.cover?1080-M-128:1080-M-96,stampY=content.cover?y-20:58;
-  deco+=stamp.svg(stampX,stampY);
-  layers.push({input:stamp.text.data,left:stampX+Math.round(((content.cover?128:96)-stamp.text.info.width)/2),top:stampY+Math.round(((content.cover?128:96)-stamp.text.info.height)/2)});
-  if(content.cover)y+=120;
-  else{deco+=`<path d="${wobblyLine(M,y,M+220,y+2,seeded(index),2,5)}" stroke="${SEAL}" stroke-width="3" fill="none" opacity=".8"/>`;y+=34;}
+  // 낙관: 본문은 제목 줄 끝. 표지는 사진 오른쪽 위 모서리에 걸쳐 찍는다(그림에 낙관을 찍듯).
+  // 예전엔 제목 아래 도장 자리로 120px를 비워 제목과 사진 사이에 빈 띠가 생겼다 → 그 자리를 사진이 쓴다.
+  const stampSize=content.cover?128:96;
+  const stamp=await seal(stampSize,index*13+5);
+  const stampLayers=(x:number,y:number):OverlayOptions[]=>[svgLayer(stamp.svg(x,y)),{input:stamp.text.data,left:x+Math.round((stampSize-stamp.text.info.width)/2),top:y+Math.round((stampSize-stamp.text.info.height)/2)}];
+  let coverStamp:OverlayOptions[]=[];
+  if(content.cover)y+=10;
+  else{
+    layers.push(...stampLayers(1080-M-96,58));
+    deco+=`<path d="${wobblyLine(M,y,M+220,y+2,seeded(index),2,5)}" stroke="${SEAL}" stroke-width="3" fill="none" opacity=".8"/>`;y+=34;
+  }
   const points=content.points.slice(0,shots.length?3:4);
   const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:shots.length?40:46,color:SOFT,width:W-70,height:150,font:STYLE_FONTS.serif,spacing:10})));
   const numerals=await Promise.all(points.map((_,i)=>textLayer(NUMERALS[i],{size:44,color:SEAL,width:60,height:60,font:STYLE_FONTS.brush})));
   const pointsH=pointLayers.reduce((sum,layer)=>sum+Math.max(layer.info.height,48)+26,0);
   if(shots.length){
     const room=footerTop-y-(pointsH?pointsH+30:0)-20;
-    const PH=Math.round(Math.max(300,Math.min(content.cover?680:740,room)));
+    // 사진 높이는 남는 높이에서 정한다(표지 상한 820: 예전 680 상한은 아래에 빈 띠를 남겼다).
+    const PH=Math.round(Math.max(300,Math.min(content.cover?820:740,room)));
     if(content.cover||shots.length===1){
       const PW=W;
-      if(content.cover)layers.push({input:await inkPhoto(shots[0],PW,PH),left:M,top:y});
-      else{
-        layers.push({input:await sharp(await finishPhoto(shots[0],PW-24,PH-24)).modulate({saturation:.96}).png().toBuffer(),left:M+12,top:y+12});
+      if(content.cover){
+        layers.push({input:await inkPhoto(shots[0],PW,PH),left:M,top:y});
+        // 낙관은 흐린 가장자리 안쪽, 사진 오른쪽 위에 조금 기울여(seal 안에서 -3도) 얹는다.
+        coverStamp=stampLayers(1080-M-stampSize-18,y+22);
+      }else{
+        const framed=await sharp(await finishPhoto(shots[0],PW-24,PH-24)).modulate({saturation:.96}).png().toBuffer();
+        registerPhoto(framed);
+        layers.push({input:framed,left:M+12,top:y+12});
         deco+=`<rect x="${M}" y="${y}" width="${PW}" height="${PH}" fill="none" stroke="${INK}" stroke-width="3"/><rect x="${M+6}" y="${y+6}" width="${PW-12}" height="${PH-12}" fill="none" stroke="${INK}" stroke-width="1"/>`;
       }
     }else{
       const PW=Math.round((W-30)/2);
       for(const [i,shot] of shots.entries())layers.push({input:await inkPhoto(shot,PW,PH),left:M+i*(PW+30),top:y});
     }
+    layers.push(...coverStamp);
     y+=PH+36;
   }
   // 사진 장은 사진 바로 아래에, 글자 장은 남은 칸 가운데보다 조금 위에.

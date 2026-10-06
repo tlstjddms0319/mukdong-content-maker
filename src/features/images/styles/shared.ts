@@ -61,18 +61,21 @@ export const hashtags=(content:StyleContent)=>content.keywords.length?content.ke
 //    여기서 마지막 줄 비율 r ≈ n·Wmin/W − (n−1)을 얻는다. r < .6이면(마지막 줄이 짧으면) 폭을 Wmin+2%로 좁혀
 //    "홍어 한 점은 씹을수록 진한 / 감칠맛" 같은 줄을 "홍어 한 점은 씹을수록 / 진한 감칠맛이 올라와요"처럼 고르게 만든다.
 //    줄 수가 같으므로 높이도 같다(배치가 바뀌지 않는다). 탐색은 여러 줄 제목에서만 해서 제목당 +30~80ms.
-// 3) 측정 메모: 균형을 잡고도 r < .35면 "외톨이 줄"(orphan)로 검수에 남긴다(한 낱말이 폭보다 긴 경우 등).
+// 3) 의미 단위 우선: 두 줄 제목에 쉼표·물음표·느낌표·마침표 뒤 띄어쓰기가 가운데쯤(25~75%)에 있고 그 자리에서 나눈
+//    두 줄이 각각 한 줄에 들어가면, 폭 조정 대신 그 자리에 줄바꿈을 넣는다("비 오는 날엔 홍어 한 / 점, 막걸리 한 잔" 대신
+//    "비 오는 날엔 홍어 한 점, / 막걸리 한 잔"). 그래서 부르는 쪽은 value가 아니라 돌려받은 text를 그려야 한다.
+// 4) 측정 메모: 균형을 잡고도 r < .35면 "외톨이 줄"(orphan)로 검수에 남긴다(한 낱말이 폭보다 긴 경우 등).
 // 손글씨 글꼴(나눔손글씨 붓·개구·감자꽃·동해독도 등)은 획이 가늘고 불규칙해 폰에서 작으면 읽히지 않는다.
 // 손글씨는 이 크기 이상의 제목·짧은 라벨에만 쓰고, 요점처럼 여러 줄 읽는 글은 고딕·돋움 계열로 쓴다(계획서 B12).
 export const HANDWRITING_MIN_SIZE=46;
 
-export type TitleLayout={size:number;width:number;lines:number;lastLineRatio:number;fits:boolean};
+export type TitleLayout={text:string;size:number;width:number;lines:number;lastLineRatio:number;fits:boolean};
 type TitleMeasure={sizes:number[];width:number;maxHeight:number;font:Font;align?:"left"|"centre";spacing?:number|((size:number)=>number)};
 const spacingOf=(options:TitleMeasure,size:number)=>typeof options.spacing==="function"?options.spacing(size):options.spacing??Math.round(size*.12);
 const ORPHAN=.35,BALANCE_BELOW=.6;
 
 export async function chooseTitleLayout(value:string,options:TitleMeasure):Promise<TitleLayout> {
-  const measure=(size:number,width:number,height=4000)=>textLayer(value,{size,color:"#000000",width,height,font:options.font,align:options.align,spacing:spacingOf(options,size)});
+  const measure=(size:number,width:number,height=4000,text=value)=>textLayer(text,{size,color:"#000000",width,height,font:options.font,align:options.align,spacing:spacingOf(options,size)});
   let size=options.sizes[options.sizes.length-1],height=0,fits=false;
   for(const candidate of options.sizes){
     size=candidate;
@@ -80,8 +83,23 @@ export async function chooseTitleLayout(value:string,options:TitleMeasure):Promi
     if(height<=options.maxHeight){fits=true;break;}
   }
   const balanced=await balanceWidth(value,{size,width:options.width,font:options.font,align:options.align,spacing:spacingOf(options,size),height});
+  if(balanced.lines===2){
+    const split=punctuationSplit(value);
+    // 나눈 두 줄이 각각 한 줄에 들어가면 높이가 원래 두 줄 높이와 같다(±2px).
+    if(split&&Math.abs((await measure(size,options.width,4000,split)).info.height-height)<=2)return {text:split,size,width:options.width,lines:2,lastLineRatio:1,fits};
+  }
   if(balanced.lines>=2&&balanced.lastLineRatio<ORPHAN)noteAudit({kind:"orphan",text:value.slice(0,24),ratio:Math.round(balanced.lastLineRatio*100)/100});
-  return {size,width:balanced.width,lines:balanced.lines,lastLineRatio:balanced.lastLineRatio,fits};
+  return {text:value,size,width:balanced.width,lines:balanced.lines,lastLineRatio:balanced.lastLineRatio,fits};
+}
+
+// 문장부호(, . ? ! …) 바로 뒤 띄어쓰기 중 가운데에 가장 가까운 자리(전체의 25~75% 안)에서 두 줄로 나눈다. 없으면 null.
+function punctuationSplit(value:string):string|null {
+  if(value.includes("\n"))return null;
+  const title=value.replace(/\s+/g," ").trim();
+  const spots=[...title.matchAll(/ /g)].map(match=>match.index!).filter(at=>/[,，.?!…]/.test(title[at-1])&&at>=title.length*.25&&at<=title.length*.75);
+  if(!spots.length)return null;
+  const at=spots.sort((a,b)=>Math.abs(a-title.length/2)-Math.abs(b-title.length/2))[0];
+  return `${title.slice(0,at)}\n${title.slice(at+1)}`;
 }
 
 // 크기가 정해진 글자의 균형 폭. height를 이미 재 두었으면 넘겨서 한 번 덜 그린다.
@@ -119,7 +137,7 @@ export async function fitText(value:string,options:{sizes:number[];width:number;
   }
   const layout=await chooseTitleLayout(value,{...options,spacing});
   // 가장 작은 크기로도 넘치면 높이에 맞춰 줄인다(검수에 shrink 메모가 남는다).
-  return textLayer(value,{size:layout.size,color:options.color,width:layout.width,height:layout.fits?4000:options.maxHeight,font:options.font,align:options.align,spacing:layout.fits?spacing(layout.size):options.spacing});
+  return textLayer(layout.text,{size:layout.size,color:options.color,width:layout.width,height:layout.fits?4000:options.maxHeight,font:options.font,align:options.align,spacing:layout.fits?spacing(layout.size):options.spacing});
 }
 
 // 외곽선 글자(만화 제목·키치 글자). 같은 글자를 외곽선 색으로 8방향으로 밀어 찍고 그 위에 본래 색을 얹는다.
@@ -156,11 +174,13 @@ export async function cutoutPhoto(input:Buffer,maxSide:number):Promise<{data:Buf
   for(let y=0;y<H;y++)for(const x of [0,W-1]){const i=at(x,y);r+=data[i];g+=data[i+1];b+=data[i+2];n++;}
   r/=n;g/=n;b/=n;
   // 가장자리 색이 들쭉날쭉하면(식탁 위 반찬 그릇, 어두운 나무결처럼) 배경이 단색이 아니므로 누끼를 포기한다.
-  // 가장자리 픽셀이 평균색에서 평균적으로 얼마나 떨어졌는지 보고 기준(30)을 넘으면 null.
+  // 가장자리 픽셀이 평균색에서 평균적으로 얼마나 떨어졌는지 보고 기준(40)을 넘으면 null.
+  // 기준이 30이던 때는 사진 보정(대비·vibrance) 뒤 단색 스튜디오 사진이 30.7로 넘어 누끼가 실패했다.
+  // 샘플 실측: 단색 배경 19~31, 식탁·손 사진 94 이상이라 40이면 둘 사이에 여유가 크다.
   let spread=0;
   for(let x=0;x<W;x++)for(const y of [0,H-1]){const i=at(x,y);spread+=Math.hypot(data[i]-r,data[i+1]-g,data[i+2]-b);}
   for(let y=0;y<H;y++)for(const x of [0,W-1]){const i=at(x,y);spread+=Math.hypot(data[i]-r,data[i+1]-g,data[i+2]-b);}
-  if(spread/n>30)return null;
+  if(spread/n>40)return null;
   // 배경이 고를수록 기준을 좁힌다. 밝은 회색 배경 위 흰 접시처럼 배경과 비슷한 물체를 함께 지우지 않도록.
   const limit=Math.max(18,Math.min(46,(spread/n)*2+12));
   const fromMean=(i:number)=>Math.hypot(data[i]-r,data[i+1]-g,data[i+2]-b);
@@ -248,7 +268,10 @@ export async function stickerize(cutout:{data:Buffer;width:number;height:number}
   const pad=border*2+offset;
   const W=cutout.width+pad*2,H=cutout.height+pad*2;
   const padded=await sharp(cutout.data).extend({top:pad,bottom:pad,left:pad,right:pad,background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer();
-  const alpha=await sharp(padded).extractChannel(3).blur(border*.6).threshold(8).toBuffer();
+  // blur와 threshold를 한 파이프라인에 두면 sharp가 threshold를 먼저 적용해 실루엣이 흐릿하게 번진다(흰 테두리가 글로우처럼,
+  // 딱딱한 그림자가 흐린 그림자처럼 보임). 흐린 결과를 버퍼로 한 번 끊은 뒤 threshold를 건다.
+  const blurred=await sharp(padded).extractChannel(3).blur(border*.6).toBuffer();
+  const alpha=await sharp(blurred).threshold(8).toBuffer();
   const silhouette=(color:string)=>sharp({create:{width:W,height:H,channels:3,background:color}}).joinChannel(alpha).png().toBuffer();
   const layers:OverlayOptions[]=[];
   const CONTACT=options.contact?24:0;
@@ -292,7 +315,7 @@ export async function blobCutout(input:Buffer,size:number,seed:number):Promise<{
 export async function fitOutlined(value:string,options:Omit<Parameters<typeof outlinedText>[1],"size">&{sizes:number[];maxHeight:number}):Promise<Layer> {
   const extra=options.strokeWidth*2+(options.shadow?Math.round(options.strokeWidth*1.6):0);
   const layout=await chooseTitleLayout(value,{sizes:options.sizes,width:options.width,maxHeight:options.maxHeight-extra,font:options.font,align:options.align,spacing:size=>options.spacing??Math.round(size*.1)});
-  return outlinedText(value,{...options,size:layout.size,width:layout.width});
+  return outlinedText(layout.text,{...options,size:layout.size,width:layout.width});
 }
 
 // 입체(돌출) 글자. 같은 글자를 진한 색으로 오른쪽 아래로 1px씩 depth번 겹쳐 찍어 두께를 만들고, 맨 위에 본래 색을 얹는다.
