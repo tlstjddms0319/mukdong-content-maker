@@ -70,7 +70,8 @@ async function composeFrame(inputs:Buffer[],slide:CarouselSlidePlan,index:number
   const lines=cleanPoints(slide.points).slice(0,3);
   const sub=lines.length?await textLayer(lines.join("\n"),{size:BODY,color:"#ffffffe0",width:CONTENT,height:230,font:FONTS.regular,align:"centre",spacing:10,shadow:true}):null;
   const textHeight=headline.info.height+(sub?18+sub.info.height:0);
-  const FRAME_TOP=150,FRAME_WIDTH=760;
+  // 사진 창 폭 760→900: 표지가 아닌 장에서도 사진이 화면의 절반 가까이를 차지하게(음식이 주인공).
+  const FRAME_TOP=150,FRAME_WIDTH=900;
   const frameHeight=Math.max(560,Math.min(860,1290-48-textHeight-44-FRAME_TOP));
   const frameLeft=Math.round((1080-FRAME_WIDTH)/2);
   const textTop=FRAME_TOP+frameHeight+44;

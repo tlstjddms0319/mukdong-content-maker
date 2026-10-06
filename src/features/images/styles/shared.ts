@@ -2,6 +2,8 @@ import sharp, { type OverlayOptions } from "sharp";
 import path from "node:path";
 import { STORE_NAME } from "../slideLayout";
 import type { CarouselSlidePlan } from "../carousel";
+import { noteAudit } from "../render/audit";
+import { seeded } from "./handDrawn";
 import { cleanPoints, finishPhoto, textLayer, type Font, type Layer } from "../render/primitives";
 
 // 스타일 계열(styles/*.ts)이 함께 쓰는 도구. 계열마다 고유한 글꼴·색을 쓰므로 여기의 글꼴은 사용자가 고른 제목·본문 글꼴로
@@ -48,15 +50,76 @@ export function contentOf(slide:CarouselSlidePlan,inputs:Buffer[],index:number,t
 }
 export const hashtags=(content:StyleContent)=>content.keywords.length?content.keywords.map(word=>`#${word}`).join(" "):STORE_NAME;
 
-// 들어가는 가장 큰 글자 크기를 고른다. sizes를 큰 것부터 그려 보고 maxHeight 안에 들어가는 첫 크기를 쓴다.
-export async function fitText(value:string,options:{sizes:number[];width:number;maxHeight:number;color:string;font:Font;align?:"left"|"centre";spacing?:number}):Promise<Layer> {
-  let last:Layer|null=null;
-  for(const size of options.sizes){
-    last=await textLayer(value,{size,color:options.color,width:options.width,height:4000,font:options.font,align:options.align,spacing:options.spacing??Math.round(size*.12)});
-    if(last.info.height<=options.maxHeight)return last;
+// ── 제목 배치(크기 + 균형 줄바꿈) ─────────────────────────────────────────────────────────
+// 모든 계열의 제목이 같은 규칙을 쓰도록 "어떤 크기·어떤 폭으로 그릴지"만 정하는 함수. 그리기는 부르는 쪽이 한다
+// (일반 글자 fitText, 금박 foilText, 외곽선 fitOutlined, 티켓 fitTitle). 같은 글꼴·크기·폭이면 줄바꿈이 같으므로
+// 측정은 항상 평범한 textLayer로 한다.
+//
+// 1) 크기: sizes를 큰 것부터 그려 보고 maxHeight 안에 들어가는 첫 크기. 하나도 안 들어가면 가장 작은 크기(fits=false).
+// 2) 균형 줄바꿈: 2줄 이상이면 "줄 수가 그대로인 가장 좁은 폭(Wmin)"을 이분 탐색으로 찾는다(폭 40%까지, 6번).
+//    탐욕 줄바꿈은 앞 줄을 꽉 채우고 남은 것을 마지막 줄에 두므로, 글자 총길이 L ≈ (n−1)·W + r·W 이고 Wmin ≈ L/n 이다.
+//    여기서 마지막 줄 비율 r ≈ n·Wmin/W − (n−1)을 얻는다. r < .6이면(마지막 줄이 짧으면) 폭을 Wmin+2%로 좁혀
+//    "홍어 한 점은 씹을수록 진한 / 감칠맛" 같은 줄을 "홍어 한 점은 씹을수록 / 진한 감칠맛이 올라와요"처럼 고르게 만든다.
+//    줄 수가 같으므로 높이도 같다(배치가 바뀌지 않는다). 탐색은 여러 줄 제목에서만 해서 제목당 +30~80ms.
+// 3) 측정 메모: 균형을 잡고도 r < .35면 "외톨이 줄"(orphan)로 검수에 남긴다(한 낱말이 폭보다 긴 경우 등).
+// 손글씨 글꼴(나눔손글씨 붓·개구·감자꽃·동해독도 등)은 획이 가늘고 불규칙해 폰에서 작으면 읽히지 않는다.
+// 손글씨는 이 크기 이상의 제목·짧은 라벨에만 쓰고, 요점처럼 여러 줄 읽는 글은 고딕·돋움 계열로 쓴다(계획서 B12).
+export const HANDWRITING_MIN_SIZE=46;
+
+export type TitleLayout={size:number;width:number;lines:number;lastLineRatio:number;fits:boolean};
+type TitleMeasure={sizes:number[];width:number;maxHeight:number;font:Font;align?:"left"|"centre";spacing?:number|((size:number)=>number)};
+const spacingOf=(options:TitleMeasure,size:number)=>typeof options.spacing==="function"?options.spacing(size):options.spacing??Math.round(size*.12);
+const ORPHAN=.35,BALANCE_BELOW=.6;
+
+export async function chooseTitleLayout(value:string,options:TitleMeasure):Promise<TitleLayout> {
+  const measure=(size:number,width:number,height=4000)=>textLayer(value,{size,color:"#000000",width,height,font:options.font,align:options.align,spacing:spacingOf(options,size)});
+  let size=options.sizes[options.sizes.length-1],height=0,fits=false;
+  for(const candidate of options.sizes){
+    size=candidate;
+    height=(await measure(size,options.width)).info.height;
+    if(height<=options.maxHeight){fits=true;break;}
   }
-  // 가장 작은 크기로도 넘치면 높이에 맞춰 줄인다.
-  return textLayer(value,{size:options.sizes[options.sizes.length-1],color:options.color,width:options.width,height:options.maxHeight,font:options.font,align:options.align,spacing:options.spacing});
+  const balanced=await balanceWidth(value,{size,width:options.width,font:options.font,align:options.align,spacing:spacingOf(options,size),height});
+  if(balanced.lines>=2&&balanced.lastLineRatio<ORPHAN)noteAudit({kind:"orphan",text:value.slice(0,24),ratio:Math.round(balanced.lastLineRatio*100)/100});
+  return {size,width:balanced.width,lines:balanced.lines,lastLineRatio:balanced.lastLineRatio,fits};
+}
+
+// 크기가 정해진 글자의 균형 폭. height를 이미 재 두었으면 넘겨서 한 번 덜 그린다.
+export async function balanceWidth(value:string,options:{size:number;width:number;font:Font;align?:"left"|"centre";spacing:number;height?:number}):Promise<{width:number;lines:number;lastLineRatio:number}> {
+  const measure=(width:number,text=value)=>textLayer(text,{size:options.size,color:"#000000",width,height:4000,font:options.font,align:options.align,spacing:options.spacing}).then(layer=>layer.info.height);
+  const W=Math.round(options.width);
+  const full=options.height??await measure(W);
+  // 줄 수: 한 줄 높이(h1, "홍" 한 글자)와 줄 간격(spacing)으로 H = n·h1 + (n−1)·spacing 을 푼다.
+  const h1=await measure(W,"홍");
+  const lines=Math.max(1,Math.round((full+options.spacing)/(h1+options.spacing)));
+  // 줄바꿈 문자가 든 글(요점 목록 등)은 문단이 여럿이라 위 공식이 맞지 않는다. 폭은 그대로 둔다.
+  if(lines<2||value.includes("\n"))return {width:W,lines,lastLineRatio:1};
+  let lo=Math.round(W*.4),hi=W;
+  for(let step=0;step<6;step++){
+    const mid=Math.round((lo+hi)/2);
+    if(Math.abs(await measure(mid)-full)<=2)hi=mid;else lo=mid;
+  }
+  const ratio=Math.max(0,Math.min(1,lines*hi/W-(lines-1)));
+  if(ratio>=BALANCE_BELOW)return {width:W,lines,lastLineRatio:ratio};
+  const width=Math.min(W,Math.round(hi*1.02));
+  return {width,lines,lastLineRatio:Math.max(0,Math.min(1,lines*hi/width-(lines-1)))};
+}
+
+// 들어가는 가장 큰 글자 크기를 고르고(chooseTitleLayout), 여러 줄이면 줄 길이를 고르게 맞춰 그린다.
+// balance:false는 요점 목록처럼 왼쪽 정렬 폭을 맞춰야 하는 글자용(크기만 고른다).
+export async function fitText(value:string,options:{sizes:number[];width:number;maxHeight:number;color:string;font:Font;align?:"left"|"centre";spacing?:number;balance?:boolean}):Promise<Layer> {
+  const spacing=(size:number)=>options.spacing??Math.round(size*.12);
+  if(options.balance===false){
+    let last:Layer|null=null;
+    for(const size of options.sizes){
+      last=await textLayer(value,{size,color:options.color,width:options.width,height:4000,font:options.font,align:options.align,spacing:spacing(size)});
+      if(last.info.height<=options.maxHeight)return last;
+    }
+    return textLayer(value,{size:options.sizes[options.sizes.length-1],color:options.color,width:options.width,height:options.maxHeight,font:options.font,align:options.align,spacing:options.spacing});
+  }
+  const layout=await chooseTitleLayout(value,{...options,spacing});
+  // 가장 작은 크기로도 넘치면 높이에 맞춰 줄인다(검수에 shrink 메모가 남는다).
+  return textLayer(value,{size:layout.size,color:options.color,width:layout.width,height:layout.fits?4000:options.maxHeight,font:options.font,align:options.align,spacing:layout.fits?spacing(layout.size):options.spacing});
 }
 
 // 외곽선 글자(만화 제목·키치 글자). 같은 글자를 외곽선 색으로 8방향으로 밀어 찍고 그 위에 본래 색을 얹는다.
@@ -160,34 +223,76 @@ export async function cutoutPhoto(input:Buffer,maxSide:number):Promise<{data:Buf
   // 픽셀 배열에서 직접 합친다.)
   const alpha=await sharp(Buffer.from(Array.from({length:W*H},(_,p)=>data[p*4+3])),{raw:{width:W,height:H,channels:1}}).blur(1.2).extractChannel(0).raw().toBuffer();
   for(let p=0;p<W*H;p++)data[p*4+3]=alpha[p];
+  // 헤일로 제거(디컨태미네이션): 반투명 가장자리 픽셀에는 배경색이 섞여 있어 색 바탕 위에 올리면 회색·흰 테두리가 보인다.
+  // 섞인 비율(1−알파)만큼 배경 평균색을 빼고 알파로 나눠 원래 음식 색을 되살린다. 아주 옅은 픽셀(알파<24)은 지운다.
+  for(let p=0;p<W*H;p++){
+    const a=data[p*4+3];
+    if(a===255||a===0)continue;
+    if(a<24){data[p*4+3]=0;continue;}
+    const t=a/255,i=p*4;
+    data[i]=Math.max(0,Math.min(255,Math.round((data[i]-(1-t)*r)/t)));
+    data[i+1]=Math.max(0,Math.min(255,Math.round((data[i+1]-(1-t)*g)/t)));
+    data[i+2]=Math.max(0,Math.min(255,Math.round((data[i+2]-(1-t)*b)/t)));
+  }
   const smooth=await sharp(data,{raw:{width:W,height:H,channels:4}}).png().toBuffer();
   const trimmed=await sharp(smooth).trim({threshold:1}).png().toBuffer({resolveWithObject:true});
   return {data:trimmed.data,width:trimmed.info.width,height:trimmed.info.height};
 }
 
-// 누끼 둘레에 흰 스티커 테두리를 두르고(알파를 번지게 해 키운 흰 실루엣), 아래에 진한 그림자를 깐다.
-export async function stickerize(cutout:{data:Buffer;width:number;height:number},options:{border?:number;shadow?:string;shadowOffset?:number}={}):Promise<Layer> {
-  const border=options.border??14,offset=options.shadowOffset??14;
+// 누끼 둘레에 흰 스티커 테두리를 두르고(알파를 번지게 해 키운 흰 실루엣), 아래에 그림자를 깐다.
+//   shadow+shadowOffset : 팝아트식 딱딱한 그림자(같은 실루엣을 진한 색으로 오른쪽 아래에). 컬러 블록·팝업북의 문법.
+//   contact             : 바닥에 "붙어 있는" 느낌의 부드러운 접촉 그림자. 실루엣 알파를 세로로 .3배 눌러 아래쪽에 깔고
+//                         blur 10·불투명 .35로 번지게 한다(공중에 뜬 스티커처럼 보이지 않게). 딱딱한 그림자와 함께 써도 된다.
+export async function stickerize(cutout:{data:Buffer;width:number;height:number},options:{border?:number;shadow?:string;shadowOffset?:number;contact?:boolean}={}):Promise<Layer> {
+  const border=options.border??14,offset=options.shadow?options.shadowOffset??14:0;
   const pad=border*2+offset;
   const W=cutout.width+pad*2,H=cutout.height+pad*2;
   const padded=await sharp(cutout.data).extend({top:pad,bottom:pad,left:pad,right:pad,background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer();
   const alpha=await sharp(padded).extractChannel(3).blur(border*.6).threshold(8).toBuffer();
   const silhouette=(color:string)=>sharp({create:{width:W,height:H,channels:3,background:color}}).joinChannel(alpha).png().toBuffer();
   const layers:OverlayOptions[]=[];
+  const CONTACT=options.contact?24:0;
+  if(options.contact){
+    // 실루엣 아래 1/3 높이로 눌러 납작한 그림자를 만들고 바닥(실루엣 아랫단) 쪽에 둔다.
+    const squashed=await sharp(await silhouette("#000000")).resize(W,Math.max(1,Math.round(H*.3)),{fit:"fill"}).blur(10).ensureAlpha().linear([1,1,1,.35],[0,0,0,0]).png().toBuffer();
+    layers.push({input:squashed,left:0,top:Math.round(H*.7)+CONTACT-pad});
+  }
   if(options.shadow)layers.push({input:await silhouette(options.shadow),left:offset,top:offset});
   layers.push({input:await silhouette("#ffffff"),left:0,top:0},{input:padded,left:0,top:0});
-  return sharp({create:{width:W+offset,height:H+offset,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).composite(layers).png().toBuffer({resolveWithObject:true});
+  return sharp({create:{width:W+offset,height:H+offset+CONTACT,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).composite(layers).png().toBuffer({resolveWithObject:true});
 }
 
-
-// 들어가는 가장 큰 크기의 외곽선 글자. fitText와 같이 큰 크기부터 그려 보고 높이가 맞는 첫 크기를 쓴다.
-export async function fitOutlined(value:string,options:Omit<Parameters<typeof outlinedText>[1],"size">&{sizes:number[];maxHeight:number}):Promise<Layer> {
-  let last:Layer|null=null;
-  for(const size of options.sizes){
-    last=await outlinedText(value,{...options,size});
-    if(last.info.height<=options.maxHeight)return last;
+// 누끼가 실패했을 때(식탁 위 여러 그릇처럼 배경이 단색이 아닐 때) 쓰는 대체 모양: 사진을 1.15배 가깝게 잘라
+// 손으로 오린 듯한 둥근 블롭(가장자리가 조금씩 불룩한 원)으로 오린다. 검은 원보다 "오려 붙인 스티커"에 가깝게 보인다.
+// seed가 같으면 모양도 같다(같은 입력 → 같은 그림). 결과는 stickerize에 그대로 넘길 수 있다.
+export async function blobCutout(input:Buffer,size:number,seed:number):Promise<{data:Buffer;width:number;height:number}> {
+  const S=Math.round(size);
+  const photo=await finishPhoto(input,S,S,{zoom:1.15});
+  const rand=seeded(seed);
+  const N=10,cx=S/2,cy=S/2,base=S*.46;
+  const radii=Array.from({length:N},()=>base*(.9+rand()*.1));
+  const point=(i:number)=>{const a=(i/N)*Math.PI*2-Math.PI/2,rr=radii[i%N];return [cx+Math.cos(a)*rr,cy+Math.sin(a)*rr];};
+  // 꼭짓점 사이를 2차 베지어로 이어 매끈한 블롭을 만든다(각 변의 가운데를 지나도록).
+  let d="";
+  for(let i=0;i<N;i++){
+    const [x0,y0]=point(i),[x1,y1]=point(i+1);
+    const mx=(x0+x1)/2,my=(y0+y1)/2;
+    d+=i===0?`M${mx.toFixed(1)} ${my.toFixed(1)}`:"";
+    const [x2,y2]=point(i+2);
+    d+=`Q${x1.toFixed(1)} ${y1.toFixed(1)} ${((x1+x2)/2).toFixed(1)} ${((y1+y2)/2).toFixed(1)}`;
   }
-  return last!;
+  const mask=Buffer.from(`<svg width="${S}" height="${S}" xmlns="http://www.w3.org/2000/svg"><path d="${d}Z" fill="#fff"/></svg>`);
+  const shaped=await sharp(photo).ensureAlpha().composite([{input:mask,blend:"dest-in"}]).png().toBuffer();
+  const trimmed=await sharp(shaped).trim({threshold:1}).png().toBuffer({resolveWithObject:true});
+  return {data:trimmed.data,width:trimmed.info.width,height:trimmed.info.height};
+}
+
+// 들어가는 가장 큰 크기의 외곽선 글자. 크기·균형 폭은 chooseTitleLayout으로 정하고(외곽선 두께만큼 높이 여유를 뺀다)
+// 그 크기·폭으로 외곽선을 한 번만 그린다.
+export async function fitOutlined(value:string,options:Omit<Parameters<typeof outlinedText>[1],"size">&{sizes:number[];maxHeight:number}):Promise<Layer> {
+  const extra=options.strokeWidth*2+(options.shadow?Math.round(options.strokeWidth*1.6):0);
+  const layout=await chooseTitleLayout(value,{sizes:options.sizes,width:options.width,maxHeight:options.maxHeight-extra,font:options.font,align:options.align,spacing:size=>options.spacing??Math.round(size*.1)});
+  return outlinedText(value,{...options,size:layout.size,width:layout.width});
 }
 
 // 입체(돌출) 글자. 같은 글자를 진한 색으로 오른쪽 아래로 1px씩 depth번 겹쳐 찍어 두께를 만들고, 맨 위에 본래 색을 얹는다.

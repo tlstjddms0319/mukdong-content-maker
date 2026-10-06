@@ -10,6 +10,12 @@ import sharp, { type OverlayOptions } from "sharp";
 //
 // 기록 방법: textLayer가 만든 PNG 버퍼를 WeakMap에 등록하고(registerText), sharp의 composite 호출을
 // 가로채(이 검수 컨텍스트 안에서만) 어떤 버퍼가 어느 좌표에 놓였는지 모은다. 검수 밖에서는 아무 일도 하지 않는다.
+//
+// 문제(issues)와 따로 "측정값(metrics)"도 모은다. 재시도 판단에는 쓰지 않고 검수 스크립트가 집계만 한다.
+//   photoArea : 캔버스에 바로 놓인 사진(registerPhoto로 등록된 버퍼)이 차지하는 비율(0~1). 사진을 다른 부품
+//               (폴라로이드·스티커) 안에 넣고 그 부품을 놓는 계열은 부품을 등록해야 잡힌다.
+//   shrinks   : 글자가 주어진 높이에 안 들어가 그림째 줄어든("몰래 축소") 횟수. 0이 목표다.
+//   orphans   : 여러 줄 제목의 마지막 줄이 폭의 35%도 안 되는(한 낱말만 덩그러니) 경우의 수. 0이 목표다.
 
 export const CANVAS={width:1080,height:1350} as const;
 // 인스타그램 프로필 격자는 4:5 게시물을 가운데 3:4로 보여 준다 → 좌우 각 약 34px가 잘린다.
@@ -18,12 +24,18 @@ export const GRID_SAFE_X=Math.ceil((CANVAS.width-CANVAS.height*3/4)/2);
 // mask/maskOffset: 그림자를 붙인 글자는 원래 글자(그림자 없는) 버퍼와 그 위치를 따로 넘겨, 대비를 잴 때 획만 "글자"로 본다.
 type TextInfo={width:number;height:number;color:string;size:number;mask?:Buffer;maskOffset?:number};
 type CompositeCall={canvas:{width?:number;height?:number;buffer?:Buffer};layers:OverlayOptions[]};
-type AuditStore={calls:CompositeCall[]};
+export type AuditNote={kind:"shrink";text:string;from:number;to:number}|{kind:"orphan";text:string;ratio:number};
+type AuditStore={calls:CompositeCall[];notes:AuditNote[]};
 
 const texts=new WeakMap<Buffer,TextInfo>();
+const photos=new WeakSet<Buffer>();
 const auditStore=new AsyncLocalStorage<AuditStore>();
 
 export function registerText(buffer:Buffer,info:TextInfo){texts.set(buffer,info);}
+// 사진 레이어(finishPhoto·croppedPhoto 결과)를 등록한다. 사진 면적 측정에만 쓴다.
+export function registerPhoto(buffer:Buffer){photos.add(buffer);}
+// 그리는 중에 생긴 측정 메모(몰래 축소·외톨이 줄). 검수 컨텍스트 밖이면 버린다.
+export function noteAudit(note:AuditNote){auditStore.getStore()?.notes.push(note);}
 
 // sharp의 composite를 한 번만 감싼다. 검수 컨텍스트가 없으면 원래 동작 그대로다.
 type SharpInternals={options:{input?:{buffer?:Buffer;createWidth?:number;createHeight?:number};width?:number;height?:number}};
@@ -47,14 +59,21 @@ export type AuditIssue=
   |{kind:"overlap";a:TextBox;b:TextBox;ratio:number}
   |{kind:"contrast";box:TextBox;ratio:number}
   |{kind:"gridSafe";box:TextBox};
-export type AuditReport={issues:AuditIssue[];boxes:TextBox[]};
+export type AuditMetrics={photoArea:number;shrinks:number;orphans:number};
+export type AuditReport={issues:AuditIssue[];boxes:TextBox[];metrics:AuditMetrics;notes:AuditNote[]};
 
 // 그리기 함수를 검수 컨텍스트 안에서 실행하고 결과 이미지와 함께 검수 결과를 돌려준다.
 // contrast:false면 대비 검사(가장 무거운 부분)를 건너뛴다. 실제 앱에서 카드를 그릴 때는 넘침·겹침만 빠르게 본다.
 export async function auditRender(render:()=>Promise<Buffer>,options:{cover?:boolean;contrast?:boolean}={}):Promise<{image:Buffer;report:AuditReport}> {
-  const store:AuditStore={calls:[]};
+  const store:AuditStore={calls:[],notes:[]};
   const image=await auditStore.run(store,render);
-  return {image,report:await analyze(image,store.calls,options)};
+  const {issues,boxes}=await analyze(image,store.calls,options);
+  const metrics:AuditMetrics={
+    photoArea:await photoAreaOf(store.calls),
+    shrinks:store.notes.filter(note=>note.kind==="shrink").length,
+    orphans:store.notes.filter(note=>note.kind==="orphan").length,
+  };
+  return {image,report:{issues,boxes,metrics,notes:store.notes}};
 }
 
 async function canvasSize(call:CompositeCall){
@@ -63,7 +82,27 @@ async function canvasSize(call:CompositeCall){
   return {width:0,height:0};
 }
 
-async function analyze(image:Buffer,calls:CompositeCall[],options:{cover?:boolean;contrast?:boolean}):Promise<AuditReport> {
+// 캔버스(1080×1350)에 바로 놓인 사진 상자의 합집합 넓이 비율. 사진 자체가 캔버스 밑바탕이면(풀스크린) 1.
+// 합집합은 24px 격자로 근사한다(겹친 사진을 두 번 세지 않게).
+async function photoAreaOf(calls:CompositeCall[]):Promise<number> {
+  const CELL=24,COLS=Math.ceil(CANVAS.width/CELL),ROWS=Math.ceil(CANVAS.height/CELL);
+  const covered=new Uint8Array(COLS*ROWS);
+  for(const call of calls){
+    const size=await canvasSize(call);
+    if(size.width!==CANVAS.width||size.height!==CANVAS.height)continue;
+    if(call.canvas.buffer&&photos.has(call.canvas.buffer))return 1;
+    for(const layer of call.layers){
+      if(!Buffer.isBuffer(layer.input)||!photos.has(layer.input))continue;
+      const meta=await sharp(layer.input).metadata();
+      const x0=Math.max(0,Math.round(layer.left??0)),y0=Math.max(0,Math.round(layer.top??0));
+      const x1=Math.min(CANVAS.width,x0+(meta.width??0)),y1=Math.min(CANVAS.height,y0+(meta.height??0));
+      for(let cy=Math.floor(y0/CELL);cy<Math.ceil(y1/CELL);cy++)for(let cx=Math.floor(x0/CELL);cx<Math.ceil(x1/CELL);cx++)covered[cy*COLS+cx]=1;
+    }
+  }
+  return Math.round(covered.reduce((sum,v)=>sum+v,0)/(COLS*ROWS)*100)/100;
+}
+
+async function analyze(image:Buffer,calls:CompositeCall[],options:{cover?:boolean;contrast?:boolean}):Promise<{issues:AuditIssue[];boxes:TextBox[]}> {
   // 최종 캔버스(1080×1350) 위에 바로 놓인 글자만 본다. 외곽선 글자·폴라로이드 같은 작은 부품 안쪽은 제외.
   const boxes:TextBox[]=[];
   for(const call of calls){

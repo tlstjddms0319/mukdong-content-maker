@@ -36,10 +36,17 @@ for(const style of StyleIdSchema.options.filter(id=>!only||id===only)){
   }
 }
 const counts={};let failed=0;
+// 측정값(문제는 아님): 몰래 축소·외톨이 줄 건수, 표지 사진 면적(계열·레이아웃별 최소값).
+const measured={shrinks:{},orphans:{},coverArea:{}};
 for(const c of cases){
   const slide={...base,...c.copy,role:c.role,layout:c.layout,variant:c.variant,points:c.role==="cover"?[]:c.copy.points};
   const index=c.role==="cover"?1:2;
   const {report}=await composeSlideCard(c.photos.slice(0,Math.max(1,photosNeeded(c.layout))),slide,index,5,"card",{palette:"warm",style:c.style},{contrast:true,brandHandle});
+  const key=`${c.style}/${c.style==="template"?c.layout:"*"}`;
+  if(report.metrics.shrinks)measured.shrinks[key]=(measured.shrinks[key]??0)+report.metrics.shrinks;
+  if(report.metrics.orphans)measured.orphans[key]=(measured.orphans[key]??0)+report.metrics.orphans;
+  if(c.role==="cover"&&c.copyName==="normal")measured.coverArea[key]=Math.min(measured.coverArea[key]??1,report.metrics.photoArea);
+  if(verbose&&(report.metrics.shrinks||report.metrics.orphans))console.log(`${c.style} ${c.layout}#${c.variant} ${c.role} ${c.copyName} ${c.photoName}: 측정`,report.notes.map(n=>n.kind==="shrink"?`축소 "${n.text}" ${n.from}→${n.to}px`:`외톨이 줄 "${n.text}" ${n.ratio}`).join(" | "));
   if(report.issues.length){
     failed++;
     for(const issue of report.issues){const key=`${c.style}/${c.style==="template"?c.layout:"*"} ${issue.kind}`;counts[key]=(counts[key]??0)+1;}
@@ -48,3 +55,11 @@ for(const c of cases){
 }
 console.log(`검수 ${cases.length}건 중 문제 ${failed}건`);
 for(const [key,count] of Object.entries(counts).sort((a,b)=>b[1]-a[1]))console.log(`  ${key}: ${count}`);
+const sum=table=>Object.values(table).reduce((a,b)=>a+b,0);
+console.log(`몰래 축소 ${sum(measured.shrinks)}건, 외톨이 줄 ${sum(measured.orphans)}건`);
+for(const [key,count] of Object.entries(measured.shrinks).sort((a,b)=>b[1]-a[1]))console.log(`  축소 ${key}: ${count}`);
+for(const [key,count] of Object.entries(measured.orphans).sort((a,b)=>b[1]-a[1]))console.log(`  외톨이 ${key}: ${count}`);
+if(process.argv.includes("--area")){
+  console.log("표지 사진 면적(보통 문안, 최소값):");
+  for(const [key,area] of Object.entries(measured.coverArea).sort((a,b)=>a[1]-b[1]))console.log(`  ${key}: ${Math.round(area*100)}%`);
+}
