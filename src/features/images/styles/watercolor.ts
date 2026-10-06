@@ -1,7 +1,8 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { brandName, finishPhoto, grainLayer, svg, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { brandName, finishPhoto, grainLayer, svg, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
 import { registerPhoto } from "../render/audit";
-import { STYLE_FONTS, contentOf, fitText, rotated, snap } from "./shared";
+import { STORE_NAME } from "../slideLayout";
+import { MIN_STROKE, STYLE_FONTS, closingBlock, contentOf, emphasisOf, fitText, nextCue, rotated, snap } from "./shared";
 import { seeded } from "./handDrawn";
 
 // 수채화(파스텔 물감 번짐): 흰 종이 위에 큰 파스텔 얼룩을 두세 개 깔고, 둥근 손글씨 제목 뒤에 거친 붓 띠를 긋는다.
@@ -9,6 +10,8 @@ import { seeded } from "./handDrawn";
 // 종이 테이프로 붙인다. 요점 앞에는 작은 물감 점, 글자만 있는 장은 아래에 튄 물감. 카페 엽서처럼 밝고 부드러운 안부 글용.
 // 파스텔은 옅어서 글자 대비가 떨어지기 쉬우므로 글자는 모두 진회색(INK)이고, 얼룩·띠는 글자 뒤에 와도 4:1 넘게 옅게 깐다.
 const PAPER="#FCFBF7",INK="#3B3A36";
+// 제목 핵심어·넘겨 보기·저장 칩에 쓰는 진한 장밋빛. 파스텔 붓 띠(가장 진한 분홍 띠) 위에서도 3.9:1, 종이 위 5.7:1.
+const ROSE="#A8405A";
 type Pastel={fill:string;edge:string};
 // fill은 물감이 번진 안쪽, edge는 마르면서 가장자리에 모인 조금 진한 색.
 const PASTEL={
@@ -108,7 +111,7 @@ const DOT_FILTERS=`<filter id="wcDot" x="-80%" y="-80%" width="260%" height="260
 // 종이 테이프: 반투명 파스텔 사각형을 기울여 붙인다. 사진 위에 얹으면 사진이 살짝 비친다.
 const tape=(x:number,y:number,w:number,h:number,angle:number,p:Pastel)=>
   `<g transform="rotate(${angle} ${r1(x+w/2)} ${r1(y+h/2)})"><rect x="${r1(x)}" y="${r1(y)}" width="${w}" height="${h}" fill="${p.fill}" opacity=".74"/>`
-  +`<rect x="${r1(x)}" y="${r1(y)}" width="${w}" height="${h}" fill="none" stroke="${p.edge}" stroke-width="1.5" opacity=".4"/>`
+  +`<rect x="${r1(x)}" y="${r1(y)}" width="${w}" height="${h}" fill="none" stroke="${p.edge}" stroke-width="${MIN_STROKE}" opacity=".4"/>`
   +`<path d="M${r1(x+8)} ${r1(y+h*.35)}H${r1(x+w-8)}" stroke="#FFFFFF" stroke-width="3" opacity=".35"/></g>`;
 // 요점 글머리: 흐린 큰 원 위에 조금 어긋난 진한 작은 원(물감 점 두 겹).
 const dot=(cx:number,cy:number,p:Pastel,scale=1)=>
@@ -161,15 +164,21 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
   if(content.cover&&shots.length){
     // ── 표지: 큰 손글씨 제목 → 큰 페더 사진 → 잎사귀·꽃 장식 → 가게 이름 ──
     // 글자는 인스타 격자에서 잘리는 좌우 34px 안쪽에 두지 않는다(폭 900, 가운데).
-    const title=await fitText(content.headline,{sizes:[100,90,80,72],width:900,maxHeight:330,color:INK,font:soft,align:"centre",spacing:8});
+    const title=await fitText(content.headline,{sizes:[100,90,80,72],width:900,maxHeight:330,color:INK,font:soft,align:"centre",spacing:8,emphasis:emphasisOf(content,ROSE)});
     const tx=Math.round((1080-title.info.width)/2),ty=110;
     // 얼룩 둘: 제목 뒤 왼쪽 위로 치우친 큰 얼룩, 오른쪽 아래 구석.
     wet+=blot(tx+title.info.width*.3,ty+title.info.height*.55,Math.max(300,title.info.width*.42),Math.max(150,title.info.height*.75),A,seed+1,-9);
     wet+=blot(1010,1150,300,210,B,seed+2,14,.7);
     under+=brushBand(tx-22,ty-6,title.info.width+44,title.info.height+14,B,seed+3,-1.2);
     texts.push({input:title.data,left:tx,top:ty});
-    const y=ty+title.info.height+46;
-    // 사진: 폭 880, 높이 최대 760. 아래 장식 자리(84)를 빼고 남으면 사진을 남는 공간 가운데로 내린다.
+    let y=ty+title.info.height+46;
+    // 부제: 붓 띠 바로 아래 고운돋움 한 줄(손글씨는 46px 이상에만 쓴다).
+    if(content.subline){
+      const sub=await textLayer(content.subline,{size:34,color:INK,width:900,height:110,font:dodum,align:"centre"});
+      texts.push({input:sub.data,left:Math.round((1080-sub.info.width)/2),top:y-18});
+      y+=sub.info.height+12;
+    }
+    // 사진: 폭 880, 높이 최대 760. 아래 장식·예고 줄 자리(84)를 빼고 남으면 사진을 남는 공간 가운데로 내린다.
     const PW=880,room=FOOTER_TOP-y-84;
     const PH=Math.round(Math.max(420,Math.min(760,room)));
     const extra=Math.max(0,room-PH);
@@ -177,29 +186,43 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     under+=brushRect(px-20,py+18,PW+18,PH-6,A,seed+4,rand,-1.6);
     photos.push({input:await softPhoto(shots[0],PW,PH,36,16),left:px,top:py});
     over+=tape(px-26,py-12,150,42,-26,B)+tape(px+PW-120,py+PH-28,150,42,-26,B);
-    // 사진 아래 잎·꽃·잎 장식, 그 사이 작은 물감 점.
+    // 사진 아래 줄: 예고 글이 있으면 그 글 양옆에 잎사귀, 없으면 잎·꽃·잎 장식과 작은 물감 점.
     const ly=py+PH+Math.round((FOOTER_TOP+10-(py+PH))/2);
-    over+=leaf(540-150,ly+4,74,-22,A)+flower(540,ly,56,B,A)+leaf(540+70,ly-10,74,18,A)+dot(540-210,ly+8,B,.6)+dot(540+176,ly-2,B,.6);
+    const teaser=content.teaser?await textLayer(content.teaser,{size:27,color:INK,width:760,height:60,font:dodum}):null;
+    if(teaser){
+      const half=teaser.info.width/2;
+      texts.push({input:teaser.data,left:Math.round(540-half),top:Math.round(ly-teaser.info.height/2)});
+      over+=leaf(540-half-74,ly+4,58,-18,A)+leaf(540+half+16,ly-6,58,18,A)+dot(540-half-96,ly+6,B,.5)+dot(540+half+92,ly-2,B,.5);
+    }else over+=leaf(540-150,ly+4,74,-22,A)+flower(540,ly,56,B,A)+leaf(540+70,ly-10,74,18,A)+dot(540-210,ly+8,B,.6)+dot(540+176,ly-2,B,.6);
   }else{
     // ── 본문: 장 번호 → 제목(붓 띠) → 사진(1장·2장) → 요점 ──
     const text=!shots.length;
-    const tag=await textLayer(`${index} / ${total}`,{size:28,color:INK,width:220,height:44,font:soft});
+    // 장 번호: 손글씨 최소 크기(46)보다 작으므로 고운돋움, 숫자 폭 고정.
+    const tag=await textLayer(`${index} / ${total}`,{size:26,color:INK,width:220,height:44,font:dodum,features:"tnum"});
     texts.push({input:tag.data,left:M+2,top:50});
-    const title=await fitText(content.headline,{sizes:text?[92,84,76,68,60]:[68,62,56],width:W,maxHeight:text?360:220,color:INK,font:soft,spacing:6});
-    // 요점: 사진 장 42px, 글자 장 48px. 글머리 자리(56px)를 비운다.
+    const title=await fitText(content.headline,{sizes:text?[92,84,76,68,60]:[68,62,56],width:W,maxHeight:text?360:220,color:INK,font:soft,spacing:6,emphasis:emphasisOf(content,ROSE)});
+    // 마지막 장 가게 명함은 요점 아래에 두므로 그 높이(+간격)를 먼저 예약한다.
+    const closing=content.last?await closingBlock({width:W,color:INK,accent:ROSE,font:dodum}):null;
+    const reserve=closing?closing.height+40:0;
+    // 요점: 사진 장 42px, 글자 장 48px. 글머리 자리(56px)를 비운다. 명함 때문에 자리가 모자라면 요점을 빼지 않고
+    // 글자를 한 단계(38·42px) 줄인다.
     const points=content.points.slice(0,4);
-    const pointSize=text?48:42,indent=56;
+    const indent=56;
+    let pointSize=text?48:42;
     let gap=text?28:16;
-    const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:pointSize,color:INK,width:W-indent,height:600,font:dodum,spacing:Math.round(pointSize*.2)})));
+    const pointsAt=(size:number)=>Promise.all(points.map(point=>textLayer(point,{size,color:INK,width:W-indent,height:600,font:dodum,spacing:Math.round(size*.2)})));
+    let pointLayers:Layer[]=await pointsAt(pointSize);
     const sumPoints=()=>pointLayers.reduce((sum,layer)=>sum+layer.info.height+gap,0);
+    const spareOf=()=>FOOTER_TOP-112-title.info.height-(text?52:34)-sumPoints()-reserve-(text?70:300+36);
+    if(closing&&spareOf()<0){pointSize=text?42:38;pointLayers=await pointsAt(pointSize);}
     // 글자 장은 제목·요점·튄 물감 덩어리를 세로 가운데에(장 번호 아래부터 바닥글 위까지).
     // 요점이 짧아 많이 남으면 남는 높이의 절반까지 요점 사이 간격을 키워(최대 +44) 덩어리가 작게 뭉치지 않게 한다.
     let ty=112;
     const titleGap=text?52:34;
     if(text){
-      const spare=FOOTER_TOP-112-(title.info.height+titleGap+sumPoints()+70);
+      const spare=FOOTER_TOP-112-(title.info.height+titleGap+sumPoints()+70+reserve);
       if(pointLayers.length>1&&spare>0)gap+=Math.min(44,Math.floor(spare*.5/(pointLayers.length-1)));
-      ty=Math.max(112,Math.round((112+FOOTER_TOP-(title.info.height+titleGap+sumPoints()+70))/2));
+      ty=Math.max(112,Math.round((112+FOOTER_TOP-(title.info.height+titleGap+sumPoints()+70+reserve))/2));
     }
     const pointsH=sumPoints();
     // 얼룩: 제목 뒤(글자 장은 더 크게), 그리고 장마다 다른 구석에 하나.
@@ -213,7 +236,7 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     let y=ty+title.info.height+titleGap;
     if(shots.length){
       // 남는 높이에서 요점 자리를 뺀 만큼 사진 높이로. 요점이 길면(4개×2줄) 사진이 300까지 줄어든다.
-      const room=FOOTER_TOP-y-(pointsH?pointsH+36:0)-12;
+      const room=FOOTER_TOP-y-(pointsH?pointsH+36:0)-12-reserve;
       const PH=Math.round(Math.max(300,Math.min(shots.length>1?560:700,room)));
       const extra=Math.max(0,room-PH);
       const py=y+Math.round(extra/2);
@@ -245,12 +268,33 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
       texts.push({input:layer.data,left:M+indent,top:py});
       py+=layer.info.height+gap;
     }
-    // 글자 장: 요점 아래에 튄 물감(오른쪽으로 치우쳐).
-    if(text&&pointLayers.length)over+=splatter(M+W*.62,py+30,230,26,[A,B],rand,8);
+    if(closing){
+      // 마지막 장 명함: 요점 아래 남는 자리 가운데, 저장 칩은 장밋빛 알약.
+      const top=Math.max(py+16,Math.round(py+(FOOTER_TOP-py-closing.height)/2)-8);
+      texts.push({input:closing.wordmark.data,left:Math.round(540-closing.wordmark.info.width/2),top});
+      let cy=top+closing.wordmark.info.height;
+      if(closing.handle){cy+=8;texts.push({input:closing.handle.data,left:Math.round(540-closing.handle.info.width/2),top:cy});cy+=closing.handle.info.height;}
+      cy+=30;
+      const cx=Math.round(540-closing.chip.info.width/2);
+      over+=closing.chipSvg(cx,cy);
+      texts.push({input:closing.chip.data,left:cx,top:cy});
+    }else if(text&&pointLayers.length){
+      // 글자 장: 요점 아래에 튄 물감(오른쪽으로 치우쳐).
+      over+=splatter(M+W*.62,py+30,230,26,[A,B],rand,8);
+    }
   }
-  // 바닥글: 가게 이름(둥근 손글씨) 양옆에 작은 하트·잎.
-  const footer=await fitText(brandName(),{sizes:content.cover?[34,30,26]:[28,26],width:760,maxHeight:52,color:INK,font:soft,align:"centre"});
-  const fx=Math.round((1080-footer.info.width)/2),fy=FOOTER_TOP+(content.cover?12:16);
+  // 바닥글: 가게 이름 양옆에 작은 하트·잎. 손글씨 최소 크기보다 작아 고운돋움 26px로 쓴다.
+  // 마지막 장은 명함에 계정이 있으므로 이름만. 가운데 장은 오른쪽 아래에 "넘겨 보기"를 두고, 긴 계정과 부딪히면 바닥글 묶음을 왼쪽으로 민다.
+  const footer=await textLayer(content.last?STORE_NAME:brandName(),{size:26,color:INK,width:900,height:44,font:dodum});
+  let fx=Math.round((1080-footer.info.width)/2);
+  const fy=FOOTER_TOP+(content.cover?14:16);
+  if(!content.cover&&!content.last){
+    const cue=await nextCue(ROSE,26);
+    const cx=1080-M-cue.width,cy=fy+Math.round((footer.info.height-cue.height)/2);
+    if(fx+footer.info.width+60>cx-20)fx=Math.max(M+34,cx-20-60-footer.info.width);
+    texts.push({input:cue.label.data,left:cx,top:cy});
+    over+=cue.arrow(cx,cy);
+  }
   texts.push({input:footer.data,left:fx,top:fy});
   over+=heart(fx-34,fy+footer.info.height/2,22,A)+leaf(fx+footer.info.width+16,fy+footer.info.height/2+2,34,-18,B);
   // 종이 알갱이는 물감 위·사진 아래에 soft-light로 아주 옅게(글자·사진은 깨끗하게 둔다).
