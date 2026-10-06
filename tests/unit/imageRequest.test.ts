@@ -360,7 +360,8 @@ describe("OpenAI image request", () => {
     }));
     const body=await response.json();
     const actual=Buffer.from(String(body.images[0]).split(",")[1],"base64");
-    const expected=await composeSlideImage(source,visitSlide,5,5);
+    // AI가 만든 밑바탕은 라우트에서 약한 보정(photoKind "ai")을 거친다.
+    const expected=await composeSlideImage(source,visitSlide,5,5,undefined,undefined,{photoKind:"ai"});
 
     expect(actual.equals(expected)).toBe(true);
   }, 15_000);

@@ -40,7 +40,7 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
     const totalH=1350-90-y-textRoom;
     const FH=shots.length>1?Math.round((totalH-24)/2):Math.min(content.cover?1100:760,totalH);
     for(const [i,shot] of shots.entries()){
-      layers.push({input:await filmPhoto(shot,FW,FH,i?(leak==="left"?"right":"left"):leak),left:FX,top:y});
+      layers.push({input:await filmPhoto(shot,FW,FH,i?(leak==="left"?"right":"left"):leak,content.cover?"strong":"light"),left:FX,top:y});
       deco+=`<rect x="${FX-6}" y="${y-6}" width="${FW+12}" height="${FH+12}" fill="none" stroke="#000" stroke-width="12"/>`;
       // 옛 카메라 날짜 도장 자리에 장 번호.
       const stamp=await textLayer(`'${frame}  ${i?"B":"A"}`,{size:40,color:"#FF9A3C",width:300,height:60,font:STYLE_FONTS.pixelBold});

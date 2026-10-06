@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { brandName, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
+import { brandName, finishPhoto, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
 import { registerText } from "../render/audit";
 import { STYLE_FONTS, contentOf, fitText, rotated, snap } from "./shared";
 import { handArrow, handStar, seeded, squiggle, wobblyLine } from "./handDrawn";
@@ -40,7 +40,7 @@ function curl(cx:number,cy:number,r:number,flipX:number,flipY:number):string {
 // 자석으로 붙인 사진: 흰 테두리 + 기울기 + 위쪽 둥근 자석.
 async function pinnedPhoto(input:Buffer,width:number,height:number,angle:number,magnet:string):Promise<{data:Buffer;info:{width:number;height:number}}> {
   const W=Math.round(width),H=Math.round(height),B=16;
-  const photo=await sharp(input).rotate().resize(W,H,{fit:"cover",position:"attention"}).png().toBuffer();
+  const photo=await finishPhoto(input,W,H);
   const framed=await sharp({create:{width:W+B*2,height:H+B*2+30,channels:4,background:"#FBFAF6"}})
     .composite([{input:photo,left:B,top:B},{input:Buffer.from(`<svg width="${W+B*2}" height="${H+B*2+30}" xmlns="http://www.w3.org/2000/svg"><circle cx="${(W+B*2)/2}" cy="14" r="20" fill="${magnet}"/><circle cx="${(W+B*2)/2-6}" cy="8" r="6" fill="#fff" opacity=".6"/></svg>`),left:0,top:0}]).png().toBuffer();
   return rotated(framed,angle);

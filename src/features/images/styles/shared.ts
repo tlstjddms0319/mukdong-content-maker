@@ -2,7 +2,7 @@ import sharp, { type OverlayOptions } from "sharp";
 import path from "node:path";
 import { STORE_NAME } from "../slideLayout";
 import type { CarouselSlidePlan } from "../carousel";
-import { cleanPoints, textLayer, type Font, type Layer } from "../render/primitives";
+import { cleanPoints, finishPhoto, textLayer, type Font, type Layer } from "../render/primitives";
 
 // 스타일 계열(styles/*.ts)이 함께 쓰는 도구. 계열마다 고유한 글꼴·색을 쓰므로 여기의 글꼴은 사용자가 고른 제목·본문 글꼴로
 // 바뀌지 않는다(render/primitives의 FONTS 역할 객체가 아니라서 resolveFont가 그대로 둔다).
@@ -179,10 +179,6 @@ export async function stickerize(cutout:{data:Buffer;width:number;height:number}
   return sharp({create:{width:W+offset,height:H+offset,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).composite(layers).png().toBuffer({resolveWithObject:true});
 }
 
-// 흑백·대비 강화(신문), 강한 흐림·어둡게(타이포그래피) 같은 사진 보정.
-export const grayscalePhoto=(input:Buffer,width:number,height:number)=>sharp(input).rotate().resize(Math.round(width),Math.round(height),{fit:"cover",position:"attention"}).grayscale().linear(1.25,-24).png().toBuffer();
-// 도트(픽셀) 사진: 작게 줄였다가 가장 가까운 픽셀로 다시 키운다.
-export const pixelPhoto=(input:Buffer,width:number,height:number,cell=8)=>sharp(input).rotate().resize(Math.round(width/cell),Math.round(height/cell),{fit:"cover",position:"attention"}).resize(width,height,{kernel:"nearest"}).png().toBuffer();
 
 // 들어가는 가장 큰 크기의 외곽선 글자. fitText와 같이 큰 크기부터 그려 보고 높이가 맞는 첫 크기를 쓴다.
 export async function fitOutlined(value:string,options:Omit<Parameters<typeof outlinedText>[1],"size">&{sizes:number[];maxHeight:number}):Promise<Layer> {
@@ -208,12 +204,22 @@ export async function extrudedText(value:string,options:{sizes:number[];maxHeigh
 // 레이어를 투명 배경으로 기울인다(폴라로이드·키치 사진·스티커).
 export const rotated=async(input:Buffer,degrees:number):Promise<Layer>=>sharp(input).rotate(degrees,{background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer({resolveWithObject:true});
 
-// 필름 사진 느낌: 채도를 조금 낮추고 채널별 곱셈으로 따뜻하게 만든 뒤(tint는 단색 사진이 되므로 쓰지 않는다), 가장자리를 어둡게(비네트) 하고 한쪽에 주황빛 빛샘을 얹는다.
-export async function filmPhoto(input:Buffer,width:number,height:number,leak:"left"|"right"="right"):Promise<Buffer> {
+// 필름 사진 느낌: 채널별 곱셈으로 따뜻하게(tint는 단색 사진이 되므로 쓰지 않는다), 가장자리를 어둡게(비네트), 한쪽에 빛샘.
+// 예전 값(채도 .88·파랑 .88·비네트 .45·주황 빛샘 .55)은 홍어 살을 탁한 주황으로 바꿔 놓아(studio-hongeo 189/163/173 →
+// 193/131/108) 강도별 프리셋으로 나눴다. 빛샘 색도 진한 주황(#FF7A1A)에서 살구빛(#FFB04A)으로 바꿨다.
+//   strong: 필름 표지(분위기가 주인공)  light: 필름 본문 장  diary: 다이어리 폴라로이드(사진이 작아 색을 거의 그대로)
+const FILM_PRESETS={
+  strong:{saturation:.95,gain:[1.04,1,.92],offset:[10,6,2],vignette:.32,leak:.4},
+  light:{saturation:.97,gain:[1.02,.98,.94],offset:[12,8,5],vignette:.26,leak:.3},
+  diary:{saturation:1.02,gain:[1.02,1,.96],offset:[6,4,2],vignette:.22,leak:.22},
+} as const;
+export type FilmPreset=keyof typeof FILM_PRESETS;
+export async function filmPhoto(input:Buffer,width:number,height:number,leak:"left"|"right"="right",preset:FilmPreset="strong"):Promise<Buffer> {
   width=Math.round(width);height=Math.round(height);
-  const base=await sharp(input).rotate().resize(width,height,{fit:"cover",position:"attention"}).modulate({saturation:.88,brightness:1.03}).linear([1.06,1.0,.88],[8,4,-2]).png().toBuffer();
+  const look=FILM_PRESETS[preset];
+  const base=await sharp(await finishPhoto(input,width,height)).modulate({saturation:look.saturation}).linear([...look.gain],[...look.offset]).png().toBuffer();
   const lx=leak==="right"?width:0;
-  const overlay=Buffer.from(`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="v" cx="50%" cy="50%" r="72%"><stop offset="60%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".45"/></radialGradient><radialGradient id="l" cx="${lx}" cy="${height*.2}" r="${width*.6}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FF7A1A" stop-opacity=".55"/><stop offset="1" stop-color="#FF7A1A" stop-opacity="0"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#v)"/><rect width="100%" height="100%" fill="url(#l)"/></svg>`);
+  const overlay=Buffer.from(`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="v" cx="50%" cy="50%" r="72%"><stop offset="60%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="${look.vignette}"/></radialGradient><radialGradient id="l" cx="${lx}" cy="${height*.2}" r="${width*.6}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFB04A" stop-opacity="${look.leak}"/><stop offset="1" stop-color="#FFB04A" stop-opacity="0"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#v)"/><rect width="100%" height="100%" fill="url(#l)"/></svg>`);
   return sharp(base).composite([{input:overlay,left:0,top:0}]).png().toBuffer();
 }
 

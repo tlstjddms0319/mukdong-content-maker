@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { brandName, svg, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
+import { brandName, finishPhoto, svg, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText, snap } from "./shared";
 import { seeded } from "./handDrawn";
 
@@ -63,11 +63,12 @@ const thinRule=(y:number,half=170)=>`<path d="M${540-half} ${y}H${540-14}M${540+
 // ── 사진 ────────────────────────────────────────────────────────────────────────────
 // 아치 창 경로(위가 반원, 아래는 각진 사각). 사진 마스크와 둘레 금 링에 함께 쓴다.
 const archPath=(x:number,y:number,w:number,h:number)=>{const r=w/2;return `M${r1(x)} ${r1(y+r)}A${r1(r)} ${r1(r)} 0 0 1 ${r1(x+w)} ${r1(y+r)}V${r1(y+h)}H${r1(x)}Z`;};
-// 사진 보정: 채도를 살짝 낮추고 가장자리를 어둡게(비네트) 해 검은 바탕에 잠기듯 보이게 한다.
+// 사진 보정: 촛불 아래처럼 채도를 조금 올리고(.92→1.04, 밝기는 그대로) 가장자리를 옅게 어둡게(비네트 .42→.3) 해
+// 검은 바탕에 잠기면서도 음식은 또렷하게 보이게 한다.
 async function photo(input:Buffer,width:number,height:number):Promise<Buffer> {
   const Wp=Math.round(width),Hp=Math.round(height);
-  const base=await sharp(input).rotate().resize(Wp,Hp,{fit:"cover",position:"attention"}).modulate({saturation:.92,brightness:.97}).ensureAlpha().png().toBuffer();
-  const shade=svg(Wp,Hp,`<defs><radialGradient id="goldShade" cx="50%" cy="50%" r="70%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".42"/></radialGradient></defs><rect width="${Wp}" height="${Hp}" fill="url(#goldShade)"/>`);
+  const base=await sharp(await finishPhoto(input,Wp,Hp)).modulate({saturation:1.04}).ensureAlpha().png().toBuffer();
+  const shade=svg(Wp,Hp,`<defs><radialGradient id="goldShade" cx="50%" cy="50%" r="70%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".3"/></radialGradient></defs><rect width="${Wp}" height="${Hp}" fill="url(#goldShade)"/>`);
   return sharp(base).composite([{input:shade,left:0,top:0}]).png().toBuffer();
 }
 // 아치 창 사진: 보정한 사진에 아치 마스크를 dest-in으로 얹어 창 모양만 남긴다.

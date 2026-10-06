@@ -34,7 +34,7 @@ describe("slide text editing", () => {
     const before=result.current.slides[0];
     await act(async()=>{await editSlideText(0,{headline:"  고친 표지 제목  ",points:[]});});
     const last=bodies.at(-1)!;
-    expect(last).toMatchObject({slideIndex:1,photos:[photo],enhance:true,slide:{headline:"고친 표지 제목"}});
+    expect(last).toMatchObject({slideIndex:1,photos:[photo],photoKind:"real",slide:{headline:"고친 표지 제목"}});
     expect(result.current.plan!.slides[0].headline).toBe("고친 표지 제목");
     expect(result.current.slides[0]).toMatchObject({preview:card(n),source:before.source,role:before.role});
     expect(result.current.slides[0].id).not.toBe(before.id);

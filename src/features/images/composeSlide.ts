@@ -1,4 +1,4 @@
-import { enhancePhoto } from "./render/photoEnhance";
+import { enhancePhoto, type PhotoKind } from "./render/photoEnhance";
 import { auditRender, describeIssue, type AuditReport } from "./render/audit";
 import sharp, { type OverlayOptions } from "sharp";
 import { access } from "node:fs/promises";
@@ -6,7 +6,7 @@ import type { CarouselSlidePlan } from "./carousel";
 import { DEFAULT_SLIDE_LAYOUT, STORE_NAME, slideEyebrow, type SlideLayout } from "./slideLayout";
 import { type CardLayout, type DesignSpecInput, type Palette, inkOn, mutedOn, normalizeCardLayout, paletteOf, photosNeeded, readableOn } from "./design";
 import { resolveSlideFonts, typographyOf } from "./typography";
-import { BODY, CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, brandName, canvas, cleanPoints, cornerMarks, croppedPhoto, currentVariant, dotGrid, grainLayer, mascotLayer, photoOverlayLayer, pointLayers, renderSlideHeadline, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, withRenderContext } from "./render/primitives";
+import { BODY, CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, brandName, canvas, cleanPoints, cornerMarks, croppedPhoto, currentVariant, finishPhoto, dotGrid, grainLayer, mascotLayer, photoOverlayLayer, pointLayers, renderSlideHeadline, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, withRenderContext } from "./render/primitives";
 import { EXTRA_RENDERERS } from "./render/extraLayouts";
 import { STYLE_RENDERERS } from "./styles";
 
@@ -57,8 +57,9 @@ async function composeFullscreen(inputs:Buffer[],slide:CarouselSlidePlan,index:n
   layers.push(svgLayer(topLeft
     ?sparkles([[Math.min(1040,headlineLeft+headline.info.width+34),headlineTop+20,16]],palette.highlight,.95)
     :sparkles([[Math.max(40,headlineLeft-38),subTop-30,16],[Math.min(1040,headlineLeft+headline.info.width+34),headlineTop+headline.info.height-10,11]],palette.highlight,.95)));
-  layers.push(photoOverlayLayer(),await grainLayer({opacity:.2}));
-  return sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover",position:"attention"}).composite(layers).jpeg({quality:90}).toBuffer();
+  // 사진이 화면을 채우는 장은 그레인을 옅게(.2→.1): soft-light 알갱이가 음식 결의 미세 대비를 깎는다.
+  layers.push(photoOverlayLayer(),await grainLayer({opacity:.1}));
+  return sharp(await finishPhoto(inputs[0],1080,1350)).composite(layers).jpeg({quality:90}).toBuffer();
 }
 
 // 2. 대조 프레임: 같은 사진을 흐리고 어둡게 깔고, 가운데 얇은 흰 테두리 프레임 안에 선명한 장면. 아래에 흰 제목과 설명.
@@ -73,7 +74,8 @@ async function composeFrame(inputs:Buffer[],slide:CarouselSlidePlan,index:number
   const frameHeight=Math.max(560,Math.min(860,1290-48-textHeight-44-FRAME_TOP));
   const frameLeft=Math.round((1080-FRAME_WIDTH)/2);
   const textTop=FRAME_TOP+frameHeight+44;
-  const background=await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover",position:"attention"}).blur(26).modulate({brightness:.62,saturation:.85}).png().toBuffer();
+  const background=await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover",position:"attention"}).blur(26).modulate({brightness:.62}).png().toBuffer();
+  // 흐린 배경도 음식 색이 보이게 탈채도(.85)는 뺐다. 밝기(.62)는 그대로 둔다: 밝은 사진에서 아래 흰 글자 대비가 이 값에 걸려 있다.
   const counter=await textLayer(`${index} / ${total}`,{size:META,color:"#fffffff2",width:200,height:36,font:FONTS.semibold,shadow:true});
   const brand=await textLayer(brandName(),{size:META,color:"#fffffff2",width:400,height:36,font:FONTS.semibold,shadow:true});
   // 변형 0: 사진 바깥에 얇은 흰 선(기존). 변형 1: 사진 둘레에 두꺼운 흰 매트를 두른 액자, 위 가운데 테이프 한 장.
@@ -96,7 +98,7 @@ async function composeFrame(inputs:Buffer[],slide:CarouselSlidePlan,index:number
     {input:counter.data,left:1080-MARGIN-counter.info.width,top:1296},
   );
   if(sub)layers.push({input:sub.data,left:Math.round((1080-sub.info.width)/2),top:textTop+(matted?MAT-10:0)+headline.info.height+18});
-  layers.push(photoOverlayLayer(),await grainLayer({opacity:.18}));
+  layers.push(photoOverlayLayer(),await grainLayer({opacity:.12}));
   return sharp(background).composite(layers).jpeg({quality:90}).toBuffer();
 }
 
@@ -505,7 +507,9 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
 // 10. 인용구: 톤을 낮춘 사진 위에 큰 따옴표, 흰 인용구, 아래 구분선과 출처 줄.
 async function composeQuote(inputs:Buffer[],slide:CarouselSlidePlan,index:number,total:number,palette:Palette):Promise<Buffer> {
   const white="#ffffff";
-  const background=await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover",position:"attention"}).modulate({saturation:.3,brightness:.55}).png().toBuffer();
+  // 예전에는 채도 .3·밝기 .55로 사진 전체를 회색에 가깝게 눌렀다. 글자 뒤 띠(아래 qband·qfoot)가 읽힘을 맡으므로
+  // 사진은 채도 .6·밝기 .72까지만 낮춰 음식 색이 남게 한다.
+  const background=await sharp(await finishPhoto(inputs[0],1080,1350)).modulate({saturation:.6,brightness:.72}).png().toBuffer();
   const mark=await textLayer("“",{size:220,color:palette.highlight,width:300,height:240,font:DECOR_FONT,spacing:0});
   // 인용구는 표지로도 쓰이므로 쉼표 같은 의미 단위에서 두 줄로 나눠 "…막걸리 한 / 잔"처럼 한 글자만 남는 줄을 막는다.
   // 변형 0: 왼쪽 정렬(기존). 변형 1: 가운데 정렬, 따옴표와 강조선도 가운데.
@@ -536,7 +540,7 @@ async function composeQuote(inputs:Buffer[],slide:CarouselSlidePlan,index:number
   ];
   if(sub)layers.push({input:sub.data,left:centred?Math.round((1080-sub.info.width)/2):MARGIN,top:1176+source.info.height+12});
   if(mascot)layers.push(mascot);
-  layers.push(photoOverlayLayer(),await grainLayer({opacity:.22}));
+  layers.push(photoOverlayLayer(),await grainLayer({opacity:.12}));
   return sharp(background).composite(layers).jpeg({quality:90}).toBuffer();
 }
 
@@ -556,16 +560,23 @@ const CARD_RENDERERS:Record<CardLayout,(inputs:Buffer[],slide:CarouselSlidePlan,
 };
 
 // 사진 한 장 또는 여러 장(콜라주)을 받아 한 장의 카드로 만든다. 브라우저형은 사진 없이 그린다.
-// options.enhance: 사장님이 찍은 실제 사진이면 카드에 넣기 전에 색·밝기·대비를 자동 보정한다(render/photoEnhance.ts).
-export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:{enhance?:boolean;brandHandle?:string}={}):Promise<Buffer> {
+// options.photoKind: 사진 보정 방식(render/photoEnhance.ts).
+//   "real" 사장님이 찍은 사진 → 온기 보존 색균형·대비·밝기·따뜻한 색 vibrance 전부
+//   "ai"   이미지 AI가 만든 사진 → 따뜻한 색 vibrance만 약하게(색·밝기는 이미 정돈돼 있음)
+//   "none" 보정 없음(기본값. 검수 스크립트·테스트가 같은 입력으로 같은 그림을 보게)
+// options.enhance는 예전 호출과의 호환용이다(true → "real").
+export type CardOptions={photoKind?:PhotoKind;enhance?:boolean;brandHandle?:string};
+const photoKindOf=(options:CardOptions):PhotoKind=>options.photoKind??(options.enhance?"real":"none");
+export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions={}):Promise<Buffer> {
   return (await composeSlideCard(input,slide,index,total,layout,design,options)).image;
 }
 
 // 카드와 자동 검수 결과를 함께 돌려준다. options.contrast를 켜면 글자 대비까지 잰다(검수 스크립트·테스트용).
-export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:{enhance?:boolean;contrast?:boolean;brandHandle?:string}={}):Promise<{image:Buffer;report:AuditReport}> {
+export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions&{contrast?:boolean}={}):Promise<{image:Buffer;report:AuditReport}> {
   await access(FONTS.bold.file);
   const raw=Array.isArray(input)?input:[input];
-  const inputs=options.enhance?await Promise.all(raw.map(enhancePhoto)):raw;
+  const kind=photoKindOf(options);
+  const inputs=kind==="none"?raw:await Promise.all(raw.map(photo=>enhancePhoto(photo,{kind})));
   const card:CardLayout=layout==="overlay"?"fullscreen":normalizeCardLayout(slide);
   if(photosNeeded(card)>0&&!inputs.length)throw new Error("slide image required");
   const fonts=resolveSlideFonts(design,slide);

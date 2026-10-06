@@ -1,6 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
-import { brandName, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
+import { brandName, finishPhoto, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
 import { STYLE_FONTS, contentOf, fitText, snap } from "./shared";
 
 // 모던 그리드(스위스 포스터·바우하우스): 흰 바탕을 굵은 검은 선으로 칸을 나누고 모든 요소를 칸에 꼭 맞춘다.
@@ -22,7 +22,7 @@ const MIN_PHOTO=280;          // 사진 칸 최소 높이. 요점이 길어 이�
 const cell=(contentHeight:number,pad=PAD)=>contentHeight+pad*2+T;
 const rect=(x:number,y:number,w:number,h:number,fill:string)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/>`;
 // 칸을 가득 채우는 사진. 선 중심에서 선 중심까지 덮게 잘라 두고 선을 그 위에 얹으므로 사진과 선 사이에 틈이 생기지 않는다.
-const photoCell=(input:Buffer,x0:number,y0:number,x1:number,y1:number):Promise<Buffer>=>sharp(input).rotate().resize(x1-x0,y1-y0,{fit:"cover",position:"attention"}).png().toBuffer();
+const photoCell=(input:Buffer,x0:number,y0:number,x1:number,y1:number):Promise<Buffer>=>finishPhoto(input,x1-x0,y1-y0);
 
 export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
