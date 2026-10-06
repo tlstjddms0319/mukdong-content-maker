@@ -1,5 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { brandName, grainLayer, svg, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { brandName, finishPhoto, grainLayer, svg, svgLayer, textLayer, type CardRenderer } from "../render/primitives";
+import { registerPhoto } from "../render/audit";
 import { STYLE_FONTS, contentOf, fitText, rotated, snap } from "./shared";
 import { seeded } from "./handDrawn";
 
@@ -134,12 +135,15 @@ const heart=(x:number,y:number,size:number,p:Pastel)=>
   `<path d="M8 14C2 9 0 6 0 4C0 1 2.5 0 4.5 0C6.2 0 7.4 1 8 2.2C8.6 1 9.8 0 11.5 0C13.5 0 16 1 16 4C16 6 14 9 8 14Z" fill="${p.edge}" opacity=".9" transform="translate(${r1(x-size/2)} ${r1(y-size/2)}) scale(${r1(size/16)})"/>`;
 
 // 가장자리가 종이에 스며드는 사진: 둥근 모서리 사각형 마스크를 흐려서 알파로 쓴다(페더).
-// 채도를 아주 조금 낮추고 밝게 해 파스텔 바탕과 어울리게 한다.
+// 자르기·선명화는 공용 finishPhoto로 하고(모든 계열 같은 사진 손질), 여기서는 채도를 아주 조금 낮추고 밝게 해 파스텔 바탕과
+// 어울리게 한 뒤 페더 마스크만 씌운다. 그렇게 새로 생긴 버퍼가 캔버스에 놓이므로 사진으로 등록한다(검수의 사진 면적).
 async function softPhoto(input:Buffer,width:number,height:number,radius:number,feather:number):Promise<Buffer> {
   const PW=Math.round(width),PH=Math.round(height);
-  const base=await sharp(input).rotate().resize(PW,PH,{fit:"cover",position:"attention"}).modulate({saturation:.94,brightness:1.03}).removeAlpha().png().toBuffer();
+  const base=await sharp(await finishPhoto(input,PW,PH)).modulate({saturation:.94,brightness:1.03}).removeAlpha().png().toBuffer();
   const mask=await sharp(Buffer.from(`<svg width="${PW}" height="${PH}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#000"/><rect x="${feather}" y="${feather}" width="${PW-feather*2}" height="${PH-feather*2}" rx="${radius}" fill="#fff"/></svg>`)).blur(feather*.6).extractChannel(0).toBuffer();
-  return sharp(base).joinChannel(mask).png().toBuffer();
+  const photo=await sharp(base).joinChannel(mask).png().toBuffer();
+  registerPhoto(photo);
+  return photo;
 }
 
 export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
@@ -225,6 +229,8 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
           const cx=M+PW/2+i*(PW+gapX),cy=py+PH/2,angle=i?3:-3;
           under+=brushRect(cx-PW/2+(i?10:-12),cy-PH/2+14,PW+10,PH-4,i?B:A,seed+4+i,rand,angle-1);
           const photo=await rotated(await softPhoto(shot,PW,PH,26,10),angle);
+          // 기울이면 버퍼가 새로 생기므로 놓는 버퍼를 다시 등록한다(네 귀퉁이 빈 삼각형 몇 칸만 더 잡힌다).
+          registerPhoto(photo.data);
           photos.push({input:photo.data,left:cx-photo.info.width/2,top:cy-photo.info.height/2});
           over+=tape(cx-70,cy-PH/2-14,140,36,i?6:-6,i?A:B);
         }

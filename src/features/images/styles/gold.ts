@@ -1,6 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { brandName, finishPhoto, svg, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
-import { STYLE_FONTS, contentOf, fitText, snap } from "./shared";
+import { registerPhoto } from "../render/audit";
+import { STYLE_FONTS, chooseTitleLayout, contentOf, fitText, snap } from "./shared";
 import { seeded } from "./handDrawn";
 
 // 블랙 & 골드(연말 모임·기념일·프리미엄 코스): 검은 벨벳 바탕 위에 금박 선으로만 그린 이중 액자와 꽃무늬 모서리 장식,
@@ -69,13 +70,18 @@ async function photo(input:Buffer,width:number,height:number):Promise<Buffer> {
   const Wp=Math.round(width),Hp=Math.round(height);
   const base=await sharp(await finishPhoto(input,Wp,Hp)).modulate({saturation:1.04}).ensureAlpha().png().toBuffer();
   const shade=svg(Wp,Hp,`<defs><radialGradient id="goldShade" cx="50%" cy="50%" r="70%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".3"/></radialGradient></defs><rect width="${Wp}" height="${Hp}" fill="url(#goldShade)"/>`);
-  return sharp(base).composite([{input:shade,left:0,top:0}]).png().toBuffer();
+  const shaded=await sharp(base).composite([{input:shade,left:0,top:0}]).png().toBuffer();
+  registerPhoto(shaded);
+  return shaded;
 }
 // 아치 창 사진: 보정한 사진에 아치 마스크를 dest-in으로 얹어 창 모양만 남긴다.
 async function archPhoto(input:Buffer,width:number,height:number):Promise<Buffer> {
   const Wp=Math.round(width),Hp=Math.round(height);
   const mask=svg(Wp,Hp,`<path d="${archPath(0,0,Wp,Hp)}" fill="#fff"/>`);
-  return sharp(await photo(input,Wp,Hp)).composite([{input:mask,blend:"dest-in"}]).png().toBuffer();
+  const shaped=await sharp(await photo(input,Wp,Hp)).composite([{input:mask,blend:"dest-in"}]).png().toBuffer();
+  // 보정·마스크를 거친 새 버퍼는 자동 등록되지 않으므로 직접 등록한다(검수의 사진 면적 측정).
+  registerPhoto(shaped);
+  return shaped;
 }
 // 아치 둘레 금 링 두 줄: 창 가장자리에 1.5px(마스크 가장자리의 계단을 덮는다), 12px 바깥에 1px.
 const archRings=(x:number,y:number,w:number,h:number)=>`<path d="${archPath(x,y,w,h)}" fill="none" stroke="${GOLD}" stroke-width="1.5"/>`
@@ -86,16 +92,12 @@ const archRings=(x:number,y:number,w:number,h:number)=>`<path d="${archPath(x,y,
 // 글자 알파를 dest-in 마스크로 써서 글자 모양만 남긴다. 그라데이션은 줄 높이마다 반복해 모든 줄이 같은 빛을 받게 한다.
 // 이렇게 만든 레이어는 textLayer 결과가 아니라 자동 검수가 글자로 추적하지 않으므로, 쓰는 쪽에서
 // 같은 자리에 base(원래 textLayer, 금색)를 먼저 그리고 그 위에 foil을 정확히 겹쳐 검수 추적을 유지한다.
-async function foilText(value:string,options:{sizes:number[];width:number;maxHeight:number;align?:"left"|"centre"}):Promise<{base:Layer;foil:Buffer}> {
-  // fitText와 같은 방식으로 들어가는 가장 큰 크기를 고르되, 줄 높이를 알아야 하므로 고른 크기를 기억한다.
-  const font=STYLE_FONTS.serifHeavy;
-  let base:Layer|null=null,size=options.sizes[options.sizes.length-1];
-  for(const candidate of options.sizes){
-    size=candidate;
-    base=await textLayer(value,{size,color:GOLD,width:options.width,height:4000,font,align:options.align??"centre",spacing:Math.round(size*.16)});
-    if(base.info.height<=options.maxHeight)break;
-  }
-  if(!base||base.info.height>options.maxHeight)base=await textLayer(value,{size,color:GOLD,width:options.width,height:options.maxHeight,font,align:options.align??"centre",spacing:Math.round(size*.16)});
+async function foilText(value:string,options:{sizes:number[];width:number;maxHeight:number;align?:"left"|"centre"}):Promise<{base:Layer;foil:Buffer;lines:number}> {
+  // 크기와 균형 줄바꿈 폭은 모든 계열 공용 규칙(chooseTitleLayout)으로 정한다. 줄 높이를 알아야 하므로 고른 크기를 쓴다.
+  const font=STYLE_FONTS.serifHeavy,align=options.align??"centre";
+  const layout=await chooseTitleLayout(value,{sizes:options.sizes,width:options.width,maxHeight:options.maxHeight,font,align,spacing:size=>Math.round(size*.16)});
+  const size=layout.size;
+  const base:Layer=await textLayer(layout.text,{size,color:GOLD,width:layout.width,height:layout.fits?4000:options.maxHeight,font,align,spacing:Math.round(size*.16)});
   // 한 줄 높이: 같은 글꼴·크기로 한 글자를 그려 잰다(여러 줄 레이어 높이 = 줄 수×줄 높이 + (줄 수-1)×spacing).
   const probe=await textLayer("홍",{size,color:GOLD,width:300,height:400,font});
   const period=probe.info.height+Math.round(size*.16);
@@ -104,7 +106,7 @@ async function foilText(value:string,options:{sizes:number[];width:number;maxHei
     +`<stop offset="0" stop-color="${GOLD_LIGHT}"/><stop offset=".38" stop-color="${GOLD}"/><stop offset=".64" stop-color="${GOLD_DARK}"/><stop offset=".86" stop-color="${GOLD}"/><stop offset="1" stop-color="${GOLD_LIGHT}"/>`
     +`</linearGradient></defs><rect width="${Wt}" height="${Ht}" fill="url(#goldFoil)"/></svg>`);
   const foil=await sharp(gradient).ensureAlpha().composite([{input:base.data,blend:"dest-in"}]).png().toBuffer();
-  return {base,foil};
+  return {base,foil,lines:Math.max(1,Math.round((Ht+Math.round(size*.16))/period))};
 }
 // base와 foil을 같은 자리에 겹쳐 올린다(검수는 base를 추적, 눈에는 foil이 보인다).
 const foilLayers=(text:{base:Layer;foil:Buffer},left:number,top:number):OverlayOptions[]=>[{input:text.base.data,left,top},{input:text.foil,left,top}];
@@ -129,16 +131,23 @@ export const renderGold:CardRenderer=async(inputs,slide,index,total)=>{
   if(content.kind==="cover"&&shots.length){
     // 표지: 아치 창 안에 사진을 크게, 아래 금박 제목 가운데 정렬. 창 둘레 금 링 두 줄, 여백에 작은 별 몇 개.
     const title=await foilText(content.headline,{sizes:[92,84,76,68],width:W,maxHeight:340});
-    const archW=720,gap=64;
+    // 창 폭 860(본문 폭 W 전체): 금 링(12px 바깥)까지 액자 안쪽 선 안에 들어간다.
+    const archW=W,gap=64;
+    // 창 높이는 "남는 높이"(제목·간격을 뺀 나머지)에서 정한다. 상한 760, 제목이 한 줄이면 남는 80px까지 창에 줘 840.
     // 제목이 길면(4줄) 창을 줄여 자리를 만든다. 남는 높이는 덩어리를 가운데에 두어 위아래로 나눈다.
-    const PH=Math.round(Math.max(420,Math.min(760,avail-title.base.info.height-gap)));
+    const cap=title.lines===1?840:760;
+    const PH=Math.round(Math.max(420,Math.min(cap,avail-title.base.info.height-gap)));
     let y=top+Math.max(0,Math.round((avail-(PH+gap+title.base.info.height))/2));
     const ax=540-archW/2;
     layers.push({input:await archPhoto(shots[0],archW,PH),left:ax,top:y});
     over+=archRings(ax,y,archW,PH);
-    // 별: 창 양옆 여백에만, 장마다 조금씩 다른 자리(seeded).
-    for(const [sx,sy,r] of [[ax-62,y+110,11],[ax+archW+66,y+180,13],[ax-50,y+PH*.55,8],[ax+archW+52,y+PH*.72,9],[ax-70,y+PH-90,12],[ax+archW+74,y+PH-40,7]] as const)
-      under+=star(sx+(rand()-.5)*24,sy+(rand()-.5)*40,r,.55+rand()*.45);
+    // 별: 창 양옆 여백이 좁아져, 아치 꼭대기 반원 바깥의 빈 두 모서리(창 위 왼쪽·오른쪽)에 둔다. 장마다 조금씩 다른 자리(seeded).
+    const r=archW/2;
+    for(const [dx,dy,size] of [[.1,.16,12],[.2,.05,8],[.04,.38,9],[.9,.1,13],[.8,.03,7],[.96,.32,9]] as const){
+      // 반원 바깥(중심에서 반지름+40 밖)에만 찍는다.
+      const sx=ax+archW*dx+(rand()-.5)*16,sy=y+r*dy+(rand()-.5)*16;
+      if(Math.hypot(sx-540,sy-(y+r))>r+40&&sy>top-20)under+=star(sx,sy,size,.55+rand()*.45);
+    }
     // 창과 제목 사이 작은 플뢰롱.
     under+=fleuron(540,y+PH+gap/2,9);
     y+=PH+gap;

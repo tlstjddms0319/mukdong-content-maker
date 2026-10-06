@@ -4,7 +4,7 @@ import { STYLE_FONTS, contentOf, fitText, rotated, snap } from "./shared";
 import { handArrow, handEllipse, handStar, seeded, squiggle } from "./handDrawn";
 
 // 사진 위 손그림 낙서: 사진을 화면 가득 쓰고, 그 위에 마커로 동그라미·화살표·별과 짧은 손글씨 메모를 그린다.
-// 제목은 노란 형광펜을 그은 띠 위에 검은 손글씨. 아래 요점은 어둡게 깐 사진 위 흰 손글씨.
+// 제목은 노란 형광펜을 그은 띠 위에 검은 손글씨. 아래 요점은 어둡게 깐 사진 위 흰 고딕(그림자).
 // 사진이 없는 장은 흰 종이에 같은 낙서로. 친근하고 가볍게 "여기 좀 봐" 하는 카드에 쓴다.
 const HIGHLIGHT="#FFE14D",INK="#141414",PAPER="#FAF7F0";
 // 메모 문구는 사실을 단정하지 않는 감탄만 쓴다.
@@ -27,24 +27,39 @@ export const renderDoodle:CardRenderer=async(inputs,slide,index,total)=>{
   const hasPhoto=inputs.length>0;
   let deco="";
   const marker=hasPhoto?"#FFFFFF":INK;
-  if(hasPhoto){
-    // 사진 가득 + 아래쪽 글자가 읽히도록 어둡게.
-    layers.push({input:await croppedPhoto(inputs[0],1080,1350,0),left:0,top:0});
-    deco+=`<defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".2"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".82"/></linearGradient></defs><rect width="1080" height="1350" fill="url(#fade)"/>`;
+  // 사진 가득(croppedPhoto가 자동 검수용 사진으로 등록한다). 아래 그라데이션은 요점 높이가 정해진 뒤 깐다.
+  const photo=hasPhoto?await croppedPhoto(inputs[0],1080,1350,0):null;
+  if(photo){
+    layers.push({input:photo,left:0,top:0});
+    // 위쪽은 제목 띠 둘레만 살짝(.22) 어둡게.
+    deco+=`<defs><linearGradient id="fadeTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".22"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient></defs><rect width="1080" height="420" fill="url(#fadeTop)"/>`;
   }else{
     deco+=`<defs><pattern id="dots" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="2" fill="#D9D3C4"/></pattern></defs><rect width="1080" height="1350" fill="url(#dots)"/>`;
   }
   // 제목(형광펜 띠). 표지는 크게.
-  const title=await highlightedTitle(content.headline,{sizes:content.cover?[92,82,72,64]:hasPhoto?[64,58,52,46]:[80,70,62,56],width:860,maxHeight:content.cover?300:hasPhoto?200:280,angle:(rand()-.5)*3});
-  // 요점(아래부터 쌓는다): 사진 위는 흰 손글씨에 그림자, 종이 위는 검은 손글씨.
+  const title=await highlightedTitle(content.headline,{sizes:content.cover?[92,82,74,68]:hasPhoto?[68,64]:[80,72,64],width:860,maxHeight:content.cover?300:hasPhoto?240:280,angle:(rand()-.5)*3});
+  // 요점(아래부터 쌓는다): 여러 줄 읽는 글이라 마커 손글씨 대신 프리텐다드 세미볼드로 쓴다(손글씨는 짧은 메모만).
+  // 사진 위는 흰 글자 + 그림자 40px, 종이 위는 검은 글자 48px(글자만 장 46px 이상).
   const points=content.points.slice(0,hasPhoto?3:4);
-  const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:hasPhoto?44:54,color:hasPhoto?"#FFFFFF":INK,width:860,height:160,font:STYLE_FONTS.chalk,spacing:6,...(hasPhoto?{shadow:true}:{})})));
-  const pointsH=pointLayers.reduce((sum,layer)=>sum+layer.info.height+18,0);
+  const pointSize=hasPhoto?40:48;
+  const pointLayers=await Promise.all(points.map(point=>textLayer(point,{size:pointSize,color:hasPhoto?"#FFFFFF":INK,width:860,height:600,font:STYLE_FONTS.sansSemi,spacing:Math.round(pointSize*.22),...(hasPhoto?{shadow:true}:{})})));
+  // 종이 장은 요점 사이를 조금 더 벌려(30) 목록이 빽빽해 보이지 않게 한다.
+  const POINT_GAP=hasPhoto?18:30;
+  const pointsH=pointLayers.reduce((sum,layer)=>sum+layer.info.height+POINT_GAP,0);
   // 종이 장은 제목·요점·메모 덩어리를 세로 가운데에 둔다(메모 자리 150px 포함).
   const titleTop=hasPhoto?70:Math.max(110,Math.round((footerTop-(title.info.height+90+pointsH+150))/2));
   layers.push({input:title.data,left:M-10,top:titleTop});
   const y=titleTop+title.info.height+20;
   let py=hasPhoto?footerTop-pointsH-16:y+70;
+  if(photo){
+    // 아래 그라데이션은 요점 덩어리에 맞춘다: 요점 시작 140px 위에서 0으로 시작해 바닥에서 .72.
+    // 요점 뒤 사진이 밝으면(흰 접시·밝은 상) 흰 글자가 묻히므로 .82까지 더 어둡게 한다.
+    const from=Math.max(0,Math.round(py-140));
+    const region=await sharp(photo).extract({left:0,top:Math.min(1300,Math.max(0,py)),width:1080,height:Math.max(50,1350-Math.min(1300,Math.max(0,py)))}).stats();
+    const luma=.2126*region.channels[0].mean+.7152*region.channels[1].mean+.0722*region.channels[2].mean;
+    const end=luma>150?.82:.72;
+    deco+=`<defs><linearGradient id="fadeBottom" gradientUnits="userSpaceOnUse" x1="0" y1="${from}" x2="0" y2="1350"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".45" stop-color="#000" stop-opacity="${Math.round(end*.62*100)/100}"/><stop offset="1" stop-color="#000" stop-opacity="${end}"/></linearGradient></defs><rect y="${from}" width="1080" height="${1350-from}" fill="url(#fadeBottom)"/>`;
+  }
   // 사진 위 낙서: 가운데 비어 있는 곳(제목과 요점 사이)에 동그라미 + 메모 + 화살표.
   const gapTop=y,gapBottom=py-30;
   if(hasPhoto&&inputs[1]){
@@ -78,10 +93,11 @@ export const renderDoodle:CardRenderer=async(inputs,slide,index,total)=>{
   }
   // 요점 앞에 손으로 그린 체크 상자.
   for(const layer of pointLayers){
-    const bx=M,by=py+12;
+    // 체크 상자(34px)를 첫 줄 글자 가운데 높이에 맞춘다(그림자 글자는 사방 10px 여백이 붙어 있다).
+    const bx=M,by=py+(hasPhoto?10:0)+Math.round(pointSize*.62)-17;
     deco+=`<path d="M${bx} ${by} l34 -2 l2 34 l-35 2 Z" stroke="${marker}" stroke-width="4" fill="none" stroke-linejoin="round"/><path d="M${bx+6} ${by+16} l10 12 l24 -30" stroke="${HIGHLIGHT}" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
     layers.push({input:layer.data,left:M+56,top:py});
-    py+=layer.info.height+18;
+    py+=layer.info.height+POINT_GAP;
   }
   if(!hasPhoto&&pointLayers.length){
     deco+=`<path d="${squiggle(M,py+6,420,rand,12)}" stroke="${INK}" stroke-width="4" fill="none" stroke-linecap="round"/>`;

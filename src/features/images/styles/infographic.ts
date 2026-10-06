@@ -1,7 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
 import { croppedPhoto, mascotLayer, svgLayer, textLayer, type CardRenderer, brandName } from "../render/primitives";
-import { STYLE_FONTS, contentOf, fitText , snap } from "./shared";
+import { STYLE_FONTS, contentOf, fitText, rotated, snap } from "./shared";
 
 // 인포그래픽·도감: 모눈종이 바탕에 "홍어 도감 No.03" 표제, 둥근 사진에서 점선 지시선을 뽑아 부위·특징 설명을 단다.
 // 사진이 없는 장은 요점을 단계(1단계 → 2단계 …)로 이어 붙인 점선 흐름도로, 두 장이면 A·B 비교 도감으로 그린다.
@@ -27,7 +27,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
   const M=64,W=1080-M*2;
   const layers:OverlayOptions[]=[];
   let deco=graphPaper();
-  const texts:Array<{value:string;cx:number;cy:number;size:number;color?:string}>=[];
+  const texts:Array<{value:string;cx:number;cy:number;size:number;color?:string;rotate?:number}>=[];
   // 표제: 왼쪽 위 도감 번호 꼬리표, 그 아래 제목.
   const tag=await textLayer(`홍어 도감  No.${String(index).padStart(2,"0")}`,{size:30,color:"#FFFFFF",width:600,height:50,font:STYLE_FONTS.comic});
   deco+=`<rect x="${M}" y="${M}" width="${tag.info.width+40}" height="${tag.info.height+20}" rx="6" fill="${INK}"/>`;
@@ -45,17 +45,22 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
   if(inputs.length===1){
     // 둥근 사진 + 오른쪽 지시선 설명(최대 3개). 표지는 사진을 가운데 크게, 설명 대신 "FIELD GUIDE" 도장.
     // 원과 설명 묶음을 남은 공간의 세로 가운데에 둔다(아래가 휑하게 비지 않도록).
-    const R=content.cover?330:Math.min(240,Math.round((footerTop-y-60)/2));
-    const cx=content.cover?540:M+R,cy=content.cover?Math.min(y+R+20,footerTop-R-30):Math.round((y+footerTop-20)/2);
+    // 표지 원 지름은 제목 아래 남는 높이에서 역산한다(위 20 + 테두리 12×2 + 아래 30). 상한 760(R 380):
+    // 820이면 바닥글 위 여백이 0이 된다. 긴 제목이면 원이 저절로 작아지고 제목은 줄이지 않는다.
+    const R=content.cover?Math.max(240,Math.min(380,Math.floor((footerTop-30-(y+20)-24)/2))):Math.min(240,Math.round((footerTop-y-60)/2));
+    const cx=content.cover?540:M+R,cy=content.cover?Math.min(y+20+12+R,footerTop-R-12-30):Math.round((y+footerTop-20)/2);
     deco+=`<circle cx="${cx+10}" cy="${cy+12}" r="${R+12}" fill="${INK}" opacity=".15"/><circle cx="${cx}" cy="${cy}" r="${R+12}" fill="#fff" stroke="${INK}" stroke-width="4"/>`;
-    layers.push({input:await croppedPhoto(inputs[0],R*2,R*2,0,{circle:true}),left:cx-R,top:cy-R});
+    // 원에 접시 전체가 들어가면 음식이 손톱만 해져서 1.2배 접사로 음식 결이 보이게 자른다.
+    layers.push({input:await croppedPhoto(inputs[0],R*2,R*2,0,{circle:true,zoom:1.2}),left:cx-R,top:cy-R});
     if(content.cover){
-      deco+=`<g transform="rotate(-12 ${cx+R+20} ${cy-R+40})"><rect x="${cx+R-110}" y="${cy-R}" width="260" height="80" rx="8" fill="none" stroke="${ACCENT}" stroke-width="5"/></g>`;
-      texts.push({value:"FIELD GUIDE",cx:cx+R+20,cy:cy-R+40,size:34,color:ACCENT});
+      // FIELD GUIDE 도장은 원 밖, 원을 감싼 네모의 왼쪽 위 빈 모서리에 둔다(-12° 기울이면 오른쪽 아래 모서리가 원에서 멀어진다).
+      const sw=210,sh=64,sx=M+sw/2,sy=cy-R-12+sh/2+4;
+      deco+=`<g transform="rotate(-12 ${sx} ${sy})"><rect x="${sx-sw/2}" y="${sy-sh/2}" width="${sw}" height="${sh}" rx="8" fill="${PAPER}" fill-opacity=".85" stroke="${ACCENT}" stroke-width="5"/></g>`;
+      texts.push({value:"FIELD GUIDE",cx:sx,cy:sy,size:30,color:ACCENT,rotate:-12});
     }else{
       const LX=cx+R+60,LW=1080-M-LX+20;
-      // 설명 글자는 36px(긴 요점은 34px). 설명 묶음이 원 높이 안에 들어가면 고르게 나눠 놓고, 넘치면 위에서부터 차례로 쌓는다.
-      const labels=await Promise.all(points.map(point=>textLayer(point,{size:point.length>22?34:36,color:INK,width:LW-40,height:200,font:STYLE_FONTS.sansSemi,spacing:6})));
+      // 설명 글자는 40px(폰에서 읽히는 본문 하한). 설명 묶음이 원 높이 안에 들어가면 고르게 나눠 놓고, 넘치면 위에서부터 차례로 쌓는다.
+      const labels=await Promise.all(points.map(point=>textLayer(point,{size:40,color:INK,width:LW-40,height:200,font:STYLE_FONTS.sansSemi,spacing:6})));
       const span=R*2+20,step=labels.length>1?span/(labels.length):span;
       const stackH=labels.reduce((sum,label)=>sum+label.info.height+36,0);
       const sequential=stackH>span;
@@ -73,25 +78,41 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
       }
     }
   }else if(inputs.length>=2){
-    // A·B 비교 도감: 두 원형 사진과 아래 특징 목록.
-    const R=215;
-    for(const [i,shot] of inputs.slice(0,2).entries()){
-      const cx=i?1080-M-R-30:M+R+30,cy=y+R+10;
-      deco+=`<circle cx="${cx}" cy="${cy}" r="${R+10}" fill="#fff" stroke="${INK}" stroke-width="4"/>`;
-      layers.push({input:await croppedPhoto(shot,R*2,R*2,0,{circle:true}),left:cx-R,top:cy-R});
-      const b=badge(cx-R+20,cy-R+20,34,i?"B":"A",i?"#3A86FF":ACCENT);
-      deco+=b.svg;texts.push({value:b.label,cx:b.cx,cy:b.cy,size:36,color:"#fff"});
-    }
-    deco+=dashedArrow(540-60,y+R+10,540+60,y+R+10);
-    y+=R*2+70;
-    for(const [i,point] of points.entries()){
-      const line=await textLayer(point,{size:38,color:INK,width:W-110,height:130,font:STYLE_FONTS.sansSemi,spacing:6});
-      if(y+line.info.height>footerTop-20)break;
-      const b=badge(M+26,y+line.info.height/2,22,String(i+1));
-      deco+=b.svg+`<path d="M${M+70} ${y+line.info.height+14}H${1080-M}" stroke="${GRID_MAJOR}" stroke-width="2" stroke-dasharray="4 6"/>`;
-      texts.push({value:b.label,cx:b.cx,cy:b.cy,size:24,color:"#fff"});
-      layers.push({input:line.data,left:M+70,top:y});
-      y+=line.info.height+34;
+    if(content.cover){
+      // 표지 비교: 아래 목록이 없으니 원 두 개를 대각선으로 크게 겹쳐(A 왼쪽 위, B 오른쪽 아래) 남는 높이를 채운다.
+      // 반지름은 남는 높이에서 역산하고, 두 원이 세로로 어긋나도록 높이의 약 70%만 지름에 쓴다.
+      const H=footerTop-30-(y+20);
+      const R=Math.max(200,Math.min(300,Math.floor((H-24)/2*.7)));
+      for(const [i,shot] of inputs.slice(0,2).entries()){
+        const cx=i?1080-M-R-12:M+R+12,cy=i?footerTop-30-R-12:y+20+R+12;
+        deco+=`<circle cx="${cx+10}" cy="${cy+12}" r="${R+12}" fill="${INK}" opacity=".15"/><circle cx="${cx}" cy="${cy}" r="${R+12}" fill="#fff" stroke="${INK}" stroke-width="4"/>`;
+        layers.push({input:await croppedPhoto(shot,R*2,R*2,0,{circle:true,zoom:1.2}),left:cx-R,top:cy-R});
+        // 배지는 원 둘레의 비어 있는 위쪽 모서리(A는 왼쪽 위, B는 오른쪽 위)에 둬 겹친 부분을 가리지 않게.
+        const bx=cx+(i?1:-1)*Math.round(R*.72),by=cy-Math.round(R*.72);
+        const b=badge(bx,by,40,i?"B":"A",i?"#3A86FF":ACCENT);
+        deco+=b.svg;texts.push({value:b.label,cx:b.cx,cy:b.cy,size:42,color:"#fff"});
+      }
+    }else{
+      // A·B 비교 도감: 두 원형 사진과 아래 특징 목록.
+      const R=215;
+      for(const [i,shot] of inputs.slice(0,2).entries()){
+        const cx=i?1080-M-R-30:M+R+30,cy=y+R+10;
+        deco+=`<circle cx="${cx}" cy="${cy}" r="${R+10}" fill="#fff" stroke="${INK}" stroke-width="4"/>`;
+        layers.push({input:await croppedPhoto(shot,R*2,R*2,0,{circle:true,zoom:1.2}),left:cx-R,top:cy-R});
+        const b=badge(cx-R+20,cy-R+20,34,i?"B":"A",i?"#3A86FF":ACCENT);
+        deco+=b.svg;texts.push({value:b.label,cx:b.cx,cy:b.cy,size:36,color:"#fff"});
+      }
+      deco+=dashedArrow(540-60,y+R+10,540+60,y+R+10);
+      y+=R*2+70;
+      for(const [i,point] of points.entries()){
+        const line=await textLayer(point,{size:40,color:INK,width:W-110,height:130,font:STYLE_FONTS.sansSemi,spacing:6});
+        if(y+line.info.height>footerTop-20)break;
+        const b=badge(M+26,y+line.info.height/2,22,String(i+1));
+        deco+=b.svg+`<path d="M${M+70} ${y+line.info.height+14}H${1080-M}" stroke="${GRID_MAJOR}" stroke-width="2" stroke-dasharray="4 6"/>`;
+        texts.push({value:b.label,cx:b.cx,cy:b.cy,size:24,color:"#fff"});
+        layers.push({input:line.data,left:M+70,top:y});
+        y+=line.info.height+34;
+      }
     }
   }else{
     // 단계 흐름도: 왼쪽 세로 점선 위에 단계 번호, 오른쪽에 설명 카드. 단계 사이는 화살표.
@@ -110,14 +131,18 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
     }
   }
   // 오른쪽 아래 작은 마스코트(도감 삽화).
-  const mascot=await mascotLayer({width:150,pose:content.cover?"hello":"tip",left:1080-M+10,top:footerTop+40,anchor:"bottom-right",maxHeight:200});
+  // 표지 비교(원 두 개)는 B 원이 오른쪽 아래를 차지하므로 비어 있는 왼쪽 아래로 옮긴다(바닥글 글자 위, 구분선 위에 세운다).
+  const pairCover=content.cover&&inputs.length>=2;
+  const mascot=await mascotLayer({width:150,pose:content.cover?"hello":"tip",left:pairCover?M-10:1080-M+10,top:pairCover?footerTop+6:footerTop+40,anchor:pairCover?"bottom-left":"bottom-right",maxHeight:200});
   if(mascot&&(inputs.length!==1||content.cover))layers.push(mascot);
   deco+=`<path d="M${M} ${footerTop+14}H${1080-M}" stroke="${INK}" stroke-width="2"/>`;
   const folio=await textLayer(`${brandName()}  ·  홍어 도감 ${index} / ${total}`,{size:26,color:INK,width:700,height:40,font:STYLE_FONTS.sansSemi});
   layers.push({input:folio.data,left:M,top:footerTop+30});
   // 원 안·배지 위 글자는 가운데 정렬해서 마지막에 얹는다.
   for(const text of texts){
-    const layer=await textLayer(text.value,{size:text.size,color:text.color??INK,width:300,height:text.size*2,font:STYLE_FONTS.heavy,align:"centre"});
+    let layer=await textLayer(text.value,{size:text.size,color:text.color??INK,width:300,height:text.size*2,font:STYLE_FONTS.heavy,align:"centre"});
+    // 도장 글자는 도장 테두리와 같은 각도로 기울인다.
+    if(text.rotate)layer=await rotated(layer.data,text.rotate);
     layers.push({input:layer.data,left:Math.round(text.cx-layer.info.width/2),top:Math.round(text.cy-layer.info.height/2)});
   }
   layers.unshift(svgLayer(deco));

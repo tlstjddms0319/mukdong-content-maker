@@ -1,6 +1,7 @@
-import { registerText } from "./audit";
+import { noteAudit, registerPhoto, registerText } from "./audit";
 import { STORE_NAME } from "../slideLayout";
 import sharp, { type OverlayOptions } from "sharp";
+import type { Sharp } from "sharp";
 import path from "node:path";
 import { access } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -74,9 +75,13 @@ const breakOnlyAtSpaces=(value:string)=>value.replace(/(\S)(?=\S)/g,"$1⁠");
 export async function textLayer(value:string,style:TextStyle):Promise<Layer> {
   const font=resolveFont(style.font??FONTS.bold);
   await access(font.file);
-  const layer=await sharp({text:{text:`<span foreground="${style.color}">${escapeXml(breakOnlyAtSpaces(value))}</span>`,font:`${font.family} ${style.size}`,fontfile:font.file,width:Math.round(style.width),wrap:"word-char",align:style.align??"left",spacing:style.spacing??12,rgba:true}})
-    .resize({width:Math.round(style.width),height:Math.round(style.height),fit:"inside",withoutEnlargement:true})
+  const rendered=await sharp({text:{text:`<span foreground="${style.color}">${escapeXml(breakOnlyAtSpaces(value))}</span>`,font:`${font.family} ${style.size}`,fontfile:font.file,width:Math.round(style.width),wrap:"word-char",align:style.align??"left",spacing:style.spacing??12,rgba:true}})
     .png().toBuffer({resolveWithObject:true});
+  // 주어진 상자(width×height)를 넘으면 그림째 줄인다. 글자가 작아져 읽기 힘들어지는 "몰래 축소"이므로 검수 메모를 남긴다.
+  const W=Math.round(style.width),H=Math.round(style.height);
+  const fits=rendered.info.width<=W&&rendered.info.height<=H;
+  if(!fits)noteAudit({kind:"shrink",text:value.slice(0,24),from:rendered.info.height,to:H});
+  const layer=fits?rendered:await sharp(rendered.data).resize({width:W,height:H,fit:"inside",withoutEnlargement:true}).png().toBuffer({resolveWithObject:true});
   const result=style.shadow?await withShadow(layer,value,style,font):layer;
   // 자동 검수(render/audit.ts)가 이 버퍼를 "글자"로 알아보도록 등록한다.
   registerText(result.data,{width:result.info.width,height:result.info.height,color:style.color,size:style.size,...(style.shadow?{mask:layer.data,maskOffset:SHADOW_PAD}:{})});
@@ -142,7 +147,9 @@ export async function pointLayers(lines:string[],top:number,options:{left?:numbe
   const layers:OverlayOptions[]=[];
   let cursor=top;
   for(const [i,line] of lines.entries()){
-    const text=await textLayer(line,{size,color:options.color,width:width-indent,height:size*3,font:FONTS.regular,spacing:8,align:options.align});
+    // 높이 제한을 두지 않는다: 예전 size×3 제한은 좁은 칸에서 4줄로 접히는 요점을 그림째 줄여(몰래 축소) 글자가 작아졌다.
+    // 길어서 넘치면 자동 검수가 잡아 요점을 하나씩 빼고 다시 그린다(composeSlideCard).
+    const text=await textLayer(line,{size,color:options.color,width:width-indent,height:4000,font:FONTS.regular,spacing:8,align:options.align});
     if(options.align==="centre"){
       layers.push({input:text.data,left:left+Math.round((width-text.info.width)/2),top:cursor});
     }else{
@@ -284,28 +291,62 @@ export function photoOverlayLayer():OverlayOptions {
 //   2) 큰 반경 언샤프 sigma 8, m1 0·m2 .3: 국소 대비(입체감). clahe는 1080×1350에서 1.6초라 대신 쓴다(약 200ms).
 // sharp는 한 파이프라인에 sharpen을 한 번만 기억하므로 raw 버퍼를 사이에 두고 두 번 돌린다(인코드 비용 없음).
 // finish:"none"은 흑백·흐림처럼 계열이 사진을 일부러 뭉개는 경우용이다.
+// zoom(1~1.3): 칸보다 zoom배 크게 자른 뒤 가운데(또는 focus)를 잘라 내 음식을 더 가깝게 보인다(접사 느낌).
+//   원형·메달처럼 작은 창에 접시 전체가 들어가 음식이 손톱만 해지는 경우에 쓴다(원형 1.25, 표지 1.12 정도).
+// focus({x,y}, 0~1): 음식 중심이 어디인지 알 때(나중에 AI 상자로 채운다) 그 점이 칸 가운데에 오도록 자른다.
+//   없으면 sharp의 attention(눈에 띄는 곳) 위치를 쓴다.
 // 계열 파일은 이 뒤에 색(채도·온기)만 손대고 sharpen을 또 걸지 않는다(이중 선명화는 헤일로·JPEG 블록을 키운다).
 export type PhotoFinish="food"|"none";
-export async function finishPhoto(input:Buffer,rawWidth:number,rawHeight:number,options:{finish?:PhotoFinish;position?:string}={}):Promise<Buffer> {
+export type PhotoCrop={finish?:PhotoFinish;position?:string;zoom?:number;focus?:{x:number;y:number}};
+export async function finishPhoto(input:Buffer,rawWidth:number,rawHeight:number,options:PhotoCrop={}):Promise<Buffer> {
   // 레이아웃 계산에서 소수가 섞여 와도(긴 문안일 때 높이의 절반 등) sharp가 받을 수 있게 정수로 맞춘다.
   const width=Math.max(1,Math.round(rawWidth)),height=Math.max(1,Math.round(rawHeight));
-  const resized=sharp(input).rotate().resize(width,height,{fit:"cover",position:options.position??"attention"});
-  if((options.finish??"food")==="none")return resized.png().toBuffer();
-  const fine=await resized.removeAlpha().sharpen({sigma:.6,m1:.4,m2:1.2}).raw().toBuffer({resolveWithObject:true});
-  return sharp(fine.data,{raw:{width:fine.info.width,height:fine.info.height,channels:fine.info.channels}}).sharpen({sigma:8,m1:0,m2:.3}).png().toBuffer();
+  const resized=await cropTo(input,width,height,options);
+  let photo:Buffer;
+  if((options.finish??"food")==="none")photo=await resized.png().toBuffer();
+  else{
+    const fine=await resized.removeAlpha().sharpen({sigma:.6,m1:.4,m2:1.2}).raw().toBuffer({resolveWithObject:true});
+    photo=await sharp(fine.data,{raw:{width:fine.info.width,height:fine.info.height,channels:fine.info.channels}}).sharpen({sigma:8,m1:0,m2:.3}).png().toBuffer();
+  }
+  // 자동 검수가 사진 면적을 잴 수 있게 등록한다(render/audit.ts).
+  registerPhoto(photo);
+  return photo;
+}
+
+// 칸 크기로 자르기(확대·초점 반영). 결과는 아직 인코드하지 않은 sharp 파이프라인.
+async function cropTo(input:Buffer,width:number,height:number,options:PhotoCrop):Promise<Sharp> {
+  const zoom=Math.min(1.3,Math.max(1,options.zoom??1));
+  if(!options.focus&&zoom===1)return sharp(input).rotate().resize(width,height,{fit:"cover",position:options.position??"attention"});
+  if(!options.focus){
+    // 칸보다 zoom배 크게 attention으로 자른 뒤 가운데를 다시 잘라 낸다.
+    const W=Math.round(width*zoom),H=Math.round(height*zoom);
+    const big=await sharp(input).rotate().resize(W,H,{fit:"cover",position:options.position??"attention"}).raw().toBuffer({resolveWithObject:true});
+    return sharp(big.data,{raw:{width:W,height:H,channels:big.info.channels}}).extract({left:Math.round((W-width)/2),top:Math.round((H-height)/2),width,height});
+  }
+  // 초점이 있으면: 칸을 zoom배로 덮는 크기로 키운 뒤, 초점이 칸 가운데에 오도록(가장자리를 넘지 않게) 잘라 낸다.
+  const upright=await sharp(input).rotate().toBuffer({resolveWithObject:true});
+  const scale=Math.max(width*zoom/upright.info.width,height*zoom/upright.info.height);
+  const RW=Math.max(width,Math.round(upright.info.width*scale)),RH=Math.max(height,Math.round(upright.info.height*scale));
+  const left=Math.round(Math.min(RW-width,Math.max(0,options.focus.x*RW-width/2)));
+  const top=Math.round(Math.min(RH-height,Math.max(0,options.focus.y*RH-height/2)));
+  const big=await sharp(upright.data).resize(RW,RH,{fit:"fill"}).raw().toBuffer({resolveWithObject:true});
+  return sharp(big.data,{raw:{width:RW,height:RH,channels:big.info.channels}}).extract({left,top,width,height});
 }
 
 // 모서리를 둥글게 자른 사진 레이어. radius는 테마에 맞게 바뀌고(잡지·포스터는 각지게), 포스터는 굵은 테두리를 두른다.
-export async function croppedPhoto(input:Buffer,rawWidth:number,rawHeight:number,radius:number,options:{circle?:boolean;finish?:PhotoFinish}={}){
+export async function croppedPhoto(input:Buffer,rawWidth:number,rawHeight:number,radius:number,options:{circle?:boolean}&PhotoCrop={}){
   const width=Math.max(1,Math.round(rawWidth)),height=Math.max(1,Math.round(rawHeight));
-  const photo=await finishPhoto(input,width,height,{finish:options.finish});
+  const photo=await finishPhoto(input,width,height,options);
   const store=renderStore.getStore();
   const r=options.circle?Math.min(width,height)/2:kit().photoRadius(radius);
   const stroke=store?kit().photoStroke(store.palette):null;
   const layers:OverlayOptions[]=[];
   if(r)layers.push({input:svg(width,height,`<rect width="${width}" height="${height}" rx="${r}" ry="${r}" fill="#fff"/>`),blend:"dest-in"});
   if(stroke)layers.push({input:svg(width,height,`<rect x="${stroke.width/2}" y="${stroke.width/2}" width="${width-stroke.width}" height="${height-stroke.width}" rx="${Math.max(0,r-stroke.width/2)}" fill="none" stroke="${stroke.color}" stroke-width="${stroke.width}"/>`)});
-  return layers.length?sharp(photo).composite(layers).png().toBuffer():photo;
+  if(!layers.length)return photo;
+  const shaped=await sharp(photo).composite(layers).png().toBuffer();
+  registerPhoto(shaped);
+  return shaped;
 }
 
 // 단색 바탕 캔버스. 테마의 바탕 무늬(줄 노트·테두리 등)를 모든 레이어 아래에 먼저 깐다.

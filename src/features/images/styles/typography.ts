@@ -21,6 +21,8 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   const accent=ACCENTS[(index-1+(slide.variant??0))%ACCENTS.length];
   const M=64,W=1080-M*2;
+  // 이 배경은 흑백·흐림이라 "음식 사진"이 아니라 질감 바탕이다. 그래서 registerPhoto로 등록하지 않는다
+  // (표지 사진 면적은 음식이 보이는 넓이를 재는 값이라 0%가 맞다).
   // 사진을 흑백·흐리게 깐 뒤, 사진이 밝을수록 더 어둡게 눌러 평균 밝기를 0.2 안팎으로 맞춘다(흰 접시 사진에서도 글자가 뜨고, 음식 질감은 남게).
   const blurred=inputs.length?await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover",position:"attention"}).grayscale().blur(12).png().toBuffer():null;
   const brightness=blurred?Math.min(.55,.2/Math.max(.05,(await sharp(blurred).stats()).channels[0].mean/255)):1;
