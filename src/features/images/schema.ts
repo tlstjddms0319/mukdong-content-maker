@@ -14,7 +14,10 @@ export const ImageBriefSchema = z.object({
   refinement:z.string().trim().min(1).max(300).optional(),
   slide:CarouselSlidePlanSchema.optional(),
   slideIndex:z.number().int().min(1).max(10).optional(),
-  slideTotal:z.union([z.literal(3),z.literal(5),z.literal(7),z.literal(10)]).optional(),
+  // 전체 장 수. AI 구성안은 3/5/7/10장이지만, 초안을 고치며 장을 빼거나 넣으면 1~10장 아무 수나 된다(deckEdited).
+  slideTotal:z.number().int().min(1).max(10).optional(),
+  // 사용자가 장을 빼거나 넣은 캐러셀. 이때는 장 역할 순서(표지→정보→방문)가 구성안 표와 달라지므로 순서 검사를 건너뛴다.
+  deckEdited:z.boolean().optional(),
   styleAnchor:z.string().trim().min(12).max(500).optional(),
   // 캐러셀 공통 디자인(색 조합). 없으면 기본 색으로 그린다.
   design:DesignSpecSchema.optional(),
@@ -40,7 +43,13 @@ export const ImageBriefSchema = z.object({
     ctx.addIssue({code:"custom",path:["slideIndex"],message:"슬라이드 순번은 전체 장수를 넘을 수 없습니다."});
     return;
   }
-  if(brief.slide.role!==rolesForCount(brief.slideTotal)[brief.slideIndex-1]){
+  if(brief.deckEdited)return;
+  const total=brief.slideTotal;
+  if(total!==3&&total!==5&&total!==7&&total!==10){
+    ctx.addIssue({code:"custom",path:["slideTotal"],message:"전체 장 수는 3·5·7·10장이에요(장을 고친 캐러셀만 예외)."});
+    return;
+  }
+  if(brief.slide.role!==rolesForCount(total)[brief.slideIndex-1]){
     ctx.addIssue({code:"custom",path:["slide","role"],message:"슬라이드 역할 순서를 확인해 주세요."});
   }
 });
