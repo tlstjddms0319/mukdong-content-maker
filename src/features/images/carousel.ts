@@ -20,6 +20,8 @@ export const SLIDE_POINT_MAX_COUNT=4;
 export const CarouselSlidePlanSchema=z.object({
   role:CarouselRoleSchema,
   headline:z.string().trim().min(1).max(42),
+  // 표지 부제: 큰 훅 제목 아래 작은 한 줄(30자 이내). 표지가 아니면 빈 문자열. 예전 구성안에는 없으므로 기본값 "".
+  subline:z.string().trim().max(30).default(""),
   // 본문 장에 얹을 짧은 요점 2~4줄. 표지는 빈 배열. 엄격 JSON 스키마 제공자 때문에 선택 필드로 두지 않는다.
   points:z.array(z.string().trim().min(1).max(SLIDE_POINT_MAX_LENGTH)).max(SLIDE_POINT_MAX_COUNT),
   visualPrompt:z.string().trim().min(12).max(600),
@@ -108,6 +110,8 @@ export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan
       keywords:FALLBACK_KEYWORDS[role],
       figure:"",
       headline:role==="cover" ? parsed.topic.slice(0,42) : FALLBACK_SLIDES[role].headline,
+      // 준비된 표지 부제는 사실을 단정하지 않는 안내 한 줄만 쓴다.
+      subline:role==="cover" ? "한 장씩 넘기며 알아봐요" : "",
       // 준비된 장면 설명은 사진 기준으로 쓰여 있어, 그림 화풍이면 "사진"을 "그림"으로 바꿔 모델이 실사로 가지 않게 한다.
       visualPrompt:`${drawn?FALLBACK_SLIDES[role].visualPrompt.replace(/사진/g,"그림"):FALLBACK_SLIDES[role].visualPrompt}.${context}`,
     })),
@@ -124,7 +128,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     // 한 편의 이야기: 장마다 독립된 자랑을 나열하지 않고, 앞 장이 남긴 궁금증을 다음 장이 받는다.
     `[이야기 구조] ${parsed.slideCount}장은 한 사람이 친구에게 이 음식을 설명해 주는 한 편의 이야기입니다. 표지는 독자가 실제로 가질 법한 구체적인 궁금증 하나를 질문이나 한 문장으로 던지고, 각 본문 장은 앞 장이 남긴 궁금증에 답하면서 마지막 요점 한 줄로 다음 장의 내용을 예고하세요. 마지막 장은 첫 장의 궁금증이 어떻게 풀렸는지 한 줄로 돌아본 뒤 방문 전 확인할 것으로 닫으세요. 장마다 "우리 대단하죠" 식의 자랑이나 감탄으로 끝내지 말고, 정보가 한 방향으로 쌓이게 하세요.`,
     // 사람이 쓴 글처럼: 명사형 슬로건과 광고 상투어를 막고, 관찰 가능한 구체 정보로 쓴다.
-    `[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰려 빛에 비치면 결이 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요.`,
+    `[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰려 빛에 비치면 결이 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요. 표지 headline은 넘기고 싶게 만드는 짧은 훅(8~18자, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(30자 이내 해요체 한 줄)에 넣으세요. 표지가 아닌 장의 subline은 빈 문자열로 두세요.`,
     `[사실 기준] 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어전·찜·무침의 조리법을 구분하고 선택 주제에 없는 삼합 구성을 강제하지 마세요. 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요.`,
     // 글도 홍어가 주인공: "묵은지를 펼치고 수육을 올려요"처럼 곁들임이 문장을 이끌면 그림보다 글에서 먼저 주인공이 바뀐다.
     `[홍어 중심] headline과 points의 주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰세요. 수육·묵은지·막걸리는 "홍어 한 점을 묵은지에 싸요"처럼 홍어 문장 뒤에 곁들이는 말로만 넣고, 수육이나 묵은지로 시작하는 요점이나 단계 설명은 쓰지 마세요. 먹는 순서를 설명할 때도 첫 단계는 홍어를 고르거나 집는 동작입니다.`,
@@ -133,7 +137,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     // 장면 다양성: 같은 접시를 거리만 바꿔 다섯 번 찍지 않도록, 장면 유형과 사람 요소를 장마다 다르게 배정한다.
     `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도 또는 눈높이), 한 점의 질감(매크로), 젓가락으로 집거나 재료를 올리는 손, 함께 먹는 식탁(여러 손과 잔, 뒷모습), 준비 과정, 곁들임과의 조합. ${Math.max(2,Math.ceil(parsed.slideCount/2))}장 이상에는 손, 젓가락, 잔, 뒷모습처럼 사람이 먹고 있다는 느낌이 드는 요소를 넣되 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 음식이 나오는 모든 장면에서 홍어가 주인공입니다. visualPrompt에 홍어(또는 그 장의 홍어 요리)를 가장 크고 앞에, 초점이 맞게 둔다고 명시하고, 수육·묵은지·막걸리는 작게 곁들여지는 조연으로만 쓰세요. 집어 올리는 한 점도 홍어 조각이어야 합니다.`,
     `[디자인] ${designCatalogText()}`,
-    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(style, palette, theme, titleFont, bodyFont)를 두고, 각 slide는 role, headline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
+    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(style, palette, theme, titleFont, bodyFont)를 두고, 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
   ].join("\n");
 }
 

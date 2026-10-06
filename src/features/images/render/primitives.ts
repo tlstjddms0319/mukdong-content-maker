@@ -3,7 +3,7 @@ import { STORE_NAME } from "../slideLayout";
 import sharp, { type OverlayOptions } from "sharp";
 import type { Sharp } from "sharp";
 import path from "node:path";
-import { access } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isLight, type Palette } from "../design";
 import { typographyOf, type FontFace, type Typography } from "../typography";
@@ -63,7 +63,13 @@ function resolveFont(role:Font):Font {
 // ── 글자 ──────────────────────────────────────────────────────────────────────────────
 // shadow: 사진 위에 얹는 글자용. 같은 글자를 검게 흐리게 한 그림자를 아래에 깔아 밝은 사진에서도 읽히게 한다.
 // 그림자가 번질 자리만큼 사방에 SHADOW_PAD를 더 붙여 돌려준다(위치 계산에는 거의 영향이 없다).
-type TextStyle={size:number;color:string;width:number;height:number;font?:Font;align?:"left"|"centre";spacing?:number;shadow?:boolean};
+// 미세 타이포 옵션(계획서 B2·B13). 모두 선택이며, 주지 않으면 예전과 같은 그림이 나온다.
+//   letterSpacing : 자간(px, 음수면 좁힘). 큰 제목은 −size×.02 정도로 조이면 덩어리가 단단해 보인다. 영문 눈썹 글자는 +size×.2.
+//   lineHeight    : 줄 높이 배수(Pango line_height). spacing(px)보다 글꼴마다 다른 기본 줄 높이에 덜 휘둘린다.
+//   features      : OpenType 기능. "tnum"이면 숫자 폭이 같아져 장 번호(1 / 5, 10 / 10)가 흔들리지 않는다.
+//   emphasis      : 제목 속 핵심어 1~2개만 다른 색으로(같은 레이어 안이라 줄바꿈·기준선이 그대로다).
+export type TextEmphasis={words:string[];color:string};
+type TextStyle={size:number;color:string;width:number;height:number;font?:Font;align?:"left"|"centre";spacing?:number;shadow?:boolean;letterSpacing?:number;lineHeight?:number;features?:string;emphasis?:TextEmphasis};
 const SHADOW_PAD=10;
 export type Layer={data:Buffer;info:{width:number;height:number}};
 
@@ -71,11 +77,51 @@ export type Layer={data:Buffer;info:{width:number;height:number}};
 // 단어 결합자(U+2060)를 넣어 띄어쓰기 자리에서만 줄이 바뀌게 한다. 너무 긴 단어만 글자 단위로 나뉜다.
 const breakOnlyAtSpaces=(value:string)=>value.replace(/(\S)(?=\S)/g,"$1⁠");
 
+// 글자를 Pango 마크업으로 바꾼다. 강조어가 있으면 그 부분만 <span foreground>로 감싼다.
+// 강조 경계에서도 낱말이 끊기지 않도록 앞뒤가 모두 공백이 아니면 단어 결합자를 넣는다.
+function textMarkup(value:string,emphasis?:TextEmphasis):string {
+  const words=(emphasis?.words??[]).map(word=>word.trim()).filter(word=>word.length>=2&&value.includes(word)).slice(0,2);
+  if(!words.length)return escapeXml(breakOnlyAtSpaces(value));
+  // 긴 낱말부터 찾아 겹치지 않게 자른다("홍어회"와 "홍어"가 함께 오면 "홍어회"를 먼저).
+  const pattern=new RegExp(`(${[...words].sort((a,b)=>b.length-a.length).map(word=>word.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")})`,"g");
+  const parts=value.split(pattern).filter(part=>part.length>0);
+  return parts.map((part,i)=>{
+    const joined=escapeXml(breakOnlyAtSpaces(part));
+    const glue=i<parts.length-1&&/\S$/.test(part)&&/^\S/.test(parts[i+1])?"⁠":"";
+    return (words.includes(part)?`<span foreground="${emphasis!.color}">${joined}</span>`:joined)+glue;
+  }).join("");
+}
+
+// 빠진 글자 대체: Pango 글꼴 이름을 "글꼴, Pretendard 굵기" 목록으로 만든다. 손글씨·디스플레이 글꼴에 없는 음절이나 기호가
+// 시스템 중국어 글꼴(WenQuanYi)로 찍히던 것을 같은 굵기의 Pretendard로 메운다. 굵기 낱말은 family 끝에서 떼어 목록 전체에 건다.
+const WEIGHT_WORDS=/\s+(Thin|ExtraLight|Light|Regular|Medium|SemiBold|Bold|ExtraBold|Black)$/;
+export function fontDescription(family:string,size:number):string {
+  const match=family.match(WEIGHT_WORDS);
+  const base=match?family.slice(0,match.index):family;
+  const weight=match?` ${match[1]}`:"";
+  return base==="Pretendard"?`${family} ${size}`:`${base},Pretendard${weight} ${size}`;
+}
+
+// 대체 글꼴(Pretendard)이 fontconfig에 등록돼 있어야 위 목록이 동작한다. sharp는 fontfile로 그린 글꼴만 등록하므로
+// 프로세스에서 처음 글자를 그릴 때 assets/fonts의 모든 글꼴로 한 글자씩 그려 한꺼번에 등록한다(약 80ms, 한 번만).
+let fontsReady:Promise<void>|null=null;
+export function preloadFonts():Promise<void> {
+  fontsReady??=readdir(FONT_DIR).then(files=>Promise.all(files.filter(file=>/\.(ttf|otf)$/i.test(file)).map(file=>
+    sharp({text:{text:"홍",font:"sans 8",fontfile:path.join(FONT_DIR,file)}}).png().toBuffer().catch(()=>undefined)))).then(()=>undefined);
+  return fontsReady;
+}
+
 // 제목·요점·라벨이 모두 같은 경로로 그려지도록 하는 공용 텍스트 레이어. 결과의 info.height로 다음 요소 위치를 잡는다.
 export async function textLayer(value:string,style:TextStyle):Promise<Layer> {
   const font=resolveFont(style.font??FONTS.bold);
   await access(font.file);
-  const rendered=await sharp({text:{text:`<span foreground="${style.color}">${escapeXml(breakOnlyAtSpaces(value))}</span>`,font:`${font.family} ${style.size}`,fontfile:font.file,width:Math.round(style.width),wrap:"word-char",align:style.align??"left",spacing:style.spacing??12,rgba:true}})
+  await preloadFonts();
+  // 바깥 span에 색과 미세 타이포 속성을 한꺼번에 건다(Pango 단위: letter_spacing은 1/1024pt, 기본 72dpi라 1pt=1px).
+  const attrs=[`foreground="${style.color}"`,
+    ...(style.letterSpacing?[`letter_spacing="${Math.round(style.letterSpacing*1024)}"`]:[]),
+    ...(style.lineHeight?[`line_height="${style.lineHeight}"`]:[]),
+    ...(style.features?[`font_features="${style.features}"`]:[])].join(" ");
+  const rendered=await sharp({text:{text:`<span ${attrs}>${textMarkup(value,style.emphasis)}</span>`,font:fontDescription(font.family,style.size),fontfile:font.file,width:Math.round(style.width),wrap:"word-char",align:style.align??"left",spacing:style.spacing??12,rgba:true}})
     .png().toBuffer({resolveWithObject:true});
   // 주어진 상자(width×height)를 넘으면 그림째 줄인다. 글자가 작아져 읽기 힘들어지는 "몰래 축소"이므로 검수 메모를 남긴다.
   const W=Math.round(style.width),H=Math.round(style.height);
@@ -89,7 +135,7 @@ export async function textLayer(value:string,style:TextStyle):Promise<Layer> {
 }
 
 async function withShadow(layer:Layer,value:string,style:TextStyle,font:Font):Promise<Layer> {
-  const dark=await textLayer(value,{...style,color:"#000000",font,shadow:false});
+  const dark=await textLayer(value,{...style,color:"#000000",font,shadow:false,emphasis:undefined});
   const P=SHADOW_PAD;
   // 검은 글자를 살짝 번지게(blur) 한 뒤 알파를 세게 키워 획 둘레 3px 정도의 진한 테두리를 만들고,
   // 다시 부드럽게 풀어 92% 농도로 깐다. 자막처럼 흰 사진 위에서도 글자 둘레가 어두워져 읽힌다.

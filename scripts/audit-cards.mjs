@@ -16,8 +16,8 @@ const dark=await sample("hands-makgeolli"),bright=await sample("studio-hongeo"),
 const white=await sharp({create:{width:900,height:1100,channels:3,background:"#f4f2ee"}}).jpeg().toBuffer();
 const longPoints=["홍어 살은 얇게 썰려 빛에 비추면 결이 또렷하게 보여요","처음이라면 덜 삭힌 쪽부터 작게 한 점 집어 보세요","묵은지에 싸서 수육과 함께 한입에 넣으면 향이 부드러워져요","막걸리 한 모금으로 입안을 정리하고 다음 점을 집어요"];
 const copies={
-  normal:{headline:"홍어 한 점, 이렇게 드세요",points:["홍어 한 점을 결 방향으로 집어요","묵은지에 싸 한입 크기로 만들어요","막걸리 한 모금으로 마무리해요"]},
-  stress:{headline:"비 오는 날 막걸리 한 잔과 함께 먹는 홍어 한 점은 왜 생각날까",points:longPoints},
+  normal:{headline:"홍어 한 점, 이렇게 드세요",subline:"처음 먹는 친구에게 알려 주는 순서",points:["홍어 한 점을 결 방향으로 집어요","묵은지에 싸 한입 크기로 만들어요","막걸리 한 모금으로 마무리해요"]},
+  stress:{headline:"비 오는 날 막걸리 한 잔과 함께 먹는 홍어 한 점은 왜 생각날까",subline:"처음이라도 부담 없이 즐기는 방법을 모았어요",points:longPoints},
 };
 const base={visualPrompt:"",textPosition:"bottom",figure:"7일",titleFont:"auto",bodyFont:"auto",keywords:["홍어","막걸리","비 오는 날"]};
 // 어두운 실사진·밝은 단색 사진 두 가지로 글자 대비를 확인한다.
@@ -28,7 +28,8 @@ for(const style of StyleIdSchema.options.filter(id=>!only||id===only)){
   for(const layout of layouts){
     const variants=style==="template"?LAYOUT_VARIANTS[layout]:1;
     for(let variant=0;variant<variants;variant++)for(const [copyName,copy] of Object.entries(copies))for(const [photoName,photos] of Object.entries(photoSets)){
-      for(const role of ["cover","detail"]){
+      // 마지막 장(visit, 5/5)은 가게 명함 블록이 들어가므로 따로 검수한다.
+      for(const role of ["cover","detail","visit"]){
         if(role==="cover"&&(layout==="versus"||photosNeeded(layout)===0))continue;
         cases.push({style,layout,variant,copyName,photoName,role,photos,copy});
       }
@@ -39,8 +40,8 @@ const counts={};let failed=0;
 // 측정값(문제는 아님): 몰래 축소·외톨이 줄 건수, 표지 사진 면적(계열·레이아웃별 최소값).
 const measured={shrinks:{},orphans:{},coverArea:{}};
 for(const c of cases){
-  const slide={...base,...c.copy,role:c.role,layout:c.layout,variant:c.variant,points:c.role==="cover"?[]:c.copy.points};
-  const index=c.role==="cover"?1:2;
+  const slide={...base,...c.copy,subline:c.role==="cover"?c.copy.subline:"",role:c.role,layout:c.layout,variant:c.variant,points:c.role==="cover"?[]:c.copy.points};
+  const index=c.role==="cover"?1:c.role==="visit"?5:2;
   const {report}=await composeSlideCard(c.photos.slice(0,Math.max(1,photosNeeded(c.layout))),slide,index,5,"card",{palette:"warm",style:c.style},{contrast:true,brandHandle});
   const key=`${c.style}/${c.style==="template"?c.layout:"*"}`;
   if(report.metrics.shrinks)measured.shrinks[key]=(measured.shrinks[key]??0)+report.metrics.shrinks;

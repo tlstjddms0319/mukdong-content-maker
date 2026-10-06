@@ -1,10 +1,10 @@
 import sharp, { type OverlayOptions } from "sharp";
 import path from "node:path";
 import { STORE_NAME } from "../slideLayout";
-import type { CarouselSlidePlan } from "../carousel";
+import { rolesForCount, type CarouselSlidePlan } from "../carousel";
 import { noteAudit } from "../render/audit";
 import { seeded } from "./handDrawn";
-import { cleanPoints, finishPhoto, textLayer, type Font, type Layer } from "../render/primitives";
+import { brandHandle, cleanPoints, finishPhoto, textLayer, type TextEmphasis, type Font, type Layer } from "../render/primitives";
 
 // 스타일 계열(styles/*.ts)이 함께 쓰는 도구. 계열마다 고유한 글꼴·색을 쓰므로 여기의 글꼴은 사용자가 고른 제목·본문 글꼴로
 // 바뀌지 않는다(render/primitives의 FONTS 역할 객체가 아니라서 resolveFont가 그대로 둔다).
@@ -34,19 +34,82 @@ export const STYLE_FONTS={
   mono:face("NanumGothicCoding-Bold.ttf","NanumGothicCoding Bold"), // 모던 그리드·티켓(번호·꼬리표)
   display:face("AbrilFatface-Regular.ttf","Abril Fatface"),   // 푸드 매거진 표지(제호, 영문 전용)
   condensed:face("BebasNeue-Regular.ttf","Bebas Neue"),       // 티켓·라벨(좁은 영문 대문자, 영문 전용)
+  modernSerif:face("Hahmlet-Variable.ttf","Hahmlet Bold"),    // 현대 명조(골드·라벨·오마카세 제목). 2,788음절, 빠진 음절은 Pretendard로 대체
+  modernSerifHeavy:face("Hahmlet-Variable.ttf","Hahmlet ExtraBold"),
+  displayHeavy:face("GasoekOne-Regular.ttf","Gasoek One"),    // 아주 굵은 좁은 디스플레이(키치·팝업 큰 제목). 2,780음절
 } as const;
 
 // 장 하나를 스타일이 그리기 쉬운 모양으로 정리한다. 표지·사진 장·글자 장 가운데 어느 쪽인지 kind로 알려 준다.
+//   subline : 표지 부제(큰 훅 제목 아래 작은 한 줄). 표지가 아니거나 구성안에 없으면 "".
+//   teaser  : 표지 하단 예고 띠 글("먹는 법 · 곁들임 · 방문 전 확인 — 5장"). 표지가 아니면 "".
 export type StyleContent={
-  headline:string;points:string[];keywords:string[];index:number;total:number;cover:boolean;last:boolean;
+  headline:string;subline:string;teaser:string;points:string[];keywords:string[];index:number;total:number;cover:boolean;last:boolean;
   kind:"cover"|"photo"|"photos"|"text";
 };
 export function contentOf(slide:CarouselSlidePlan,inputs:Buffer[],index:number,total:number):StyleContent {
   const cover=slide.role==="cover";
   return {
-    headline:slide.headline.replace(/\s+/g," ").trim(),points:cleanPoints(slide.points),keywords:slide.keywords,index,total,cover,last:index===total,
+    headline:slide.headline.replace(/\s+/g," ").trim(),subline:cover?(slide.subline??"").replace(/\s+/g," ").trim():"",teaser:cover?teaserText(total):"",
+    points:cleanPoints(slide.points),keywords:slide.keywords,index,total,cover,last:index===total,
     kind:cover?"cover":inputs.length>=2?"photos":inputs.length===1?"photo":"text",
   };
+}
+
+// ── 표지 예고 띠·넘김 표시·마지막 장 명함(계획서 B9) ──────────────────────────────────────────
+// 장 역할의 짧은 이름. 표지 예고 띠에 "이 뒤에 무엇이 나오는지"로 쓴다.
+const ROLE_LABELS:Record<string,string>={overview:"한 상 미리보기",detail:"가까이 보기","how-to":"먹는 법",pairing:"곁들임",process:"준비 과정",occasion:"함께 먹기",mood:"분위기",visit:"방문 전 확인",cta:"마무리"};
+// 표지 예고 띠 글. 구성안 장 수(3/5/7/10)면 역할 순서표에서 뒤 장 이름을 최대 3개, 장을 고친 캐러셀이면 장 수만.
+export function teaserText(total:number):string {
+  if(total!==3&&total!==5&&total!==7&&total!==10)return total>1?`넘겨 보세요 — ${total}장`:"";
+  // 보는 사람이 가장 궁금해하는 순서(먹는 법 → 곁들임 → 방문 전 확인 → 나머지)로 3개를 고르고, 띠에는 장 순서대로 적는다.
+  const PRIORITY=["how-to","pairing","visit","detail","overview","occasion","process","mood","cta"];
+  const roles=rolesForCount(total).slice(1);
+  const picked=new Set([...roles].sort((a,b)=>PRIORITY.indexOf(a)-PRIORITY.indexOf(b)).slice(0,3));
+  const shown=roles.filter(role=>picked.has(role)).map(role=>ROLE_LABELS[role]).filter(Boolean);
+  return `${shown.join(" · ")} — ${total}장`;
+}
+
+// 본문 장 오른쪽 아래 "넘겨 보기 ›": 글자(검수 추적)와 화살표(SVG)를 따로 돌려준다. 마지막 장에는 쓰지 않는다.
+// 화살표 글리프(▸)는 대부분 글꼴에 없어 SVG 경로로 그린다. width·height는 글자+화살표 전체 크기.
+export async function nextCue(color:string,size=26):Promise<{label:Layer;arrow:(x:number,y:number)=>string;width:number;height:number}> {
+  const label=await textLayer("넘겨 보기",{size,color,width:300,height:size*2,font:STYLE_FONTS.sansSemi,letterSpacing:size*.04});
+  const gap=10,arrowW=Math.round(size*.55);
+  return {label,width:label.info.width+gap+arrowW,height:label.info.height,arrow:(x,y)=>{
+    const ax=x+label.info.width+gap,mid=y+label.info.height/2;
+    return `<path d="M${ax} ${mid-arrowW*.6}L${ax+arrowW} ${mid}L${ax} ${mid+arrowW*.6}" fill="none" stroke="${color}" stroke-width="${Math.max(MIN_STROKE,size*.12)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }};
+}
+
+// 마지막 장 "가게 명함": 워드마크(가게 이름) + 계정 + "저장해 두고 다시 보세요" 칩. 주소·영업시간은 넣지 않는다(확인 안 된 사실).
+// 높이는 240px 이하라 각 계열의 마지막 장 남는 높이 계산에 그대로 예약할 수 있다. chip은 알약 배경 SVG를 함께 돌려준다.
+export async function closingBlock(options:{width:number;color:string;accent:string;chipText?:string;font?:Font}):Promise<{wordmark:Layer;handle:Layer|null;chip:Layer;chipSvg:(x:number,y:number)=>string;height:number}> {
+  const wordmark=await textLayer(STORE_NAME,{size:44,color:options.color,width:options.width,height:120,font:options.font??STYLE_FONTS.serifHeavy,letterSpacing:44*.12,align:"centre"});
+  const account=brandHandle();
+  const handle=account?await textLayer(account,{size:28,color:options.color,width:options.width,height:60,font:STYLE_FONTS.sansSemi,align:"centre"}):null;
+  const chip=await textLayer(options.chipText??"저장해 두고 다시 보세요",{size:28,color:"#FFFFFF",width:options.width,height:60,font:STYLE_FONTS.sansSemi});
+  const padX=26,padY=12;
+  const height=wordmark.info.height+(handle?8+handle.info.height:0)+18+chip.info.height+padY*2;
+  return {wordmark,handle,chip,height,chipSvg:(x,y)=>`<rect x="${x-padX}" y="${y-padY}" width="${chip.info.width+padX*2}" height="${chip.info.height+padY*2}" rx="${(chip.info.height+padY*2)/2}" fill="${options.accent}"/>`};
+}
+
+// ── 브랜드 마크·선 두께(계획서 B8) ─────────────────────────────────────────────────────────
+// 폰 화면에서 1px 선은 사라진다. 장식 선은 이 두께 이상으로 그린다.
+export const MIN_STROKE=2.5;
+// 낙관(붉은 도장): 테두리가 살짝 거친 붉은 사각 안에 "묵동/홍어" 두 줄. 한지·티켓·그리드·라벨이 같은 모양을 쓴다(통일된 가게 표식).
+// on:"dark"면 어두운 바탕용으로 바탕을 종이색, 글자를 인주색으로 뒤집는다. 글자는 검수가 추적하는 textLayer다.
+export const SEAL_RED="#B8322A";
+export async function brandSeal(size:number,seed:number,options:{on?:"light"|"dark";rotate?:number}={}):Promise<{svg:(x:number,y:number)=>string;text:Layer}> {
+  const dark=options.on==="dark";
+  const ink=dark?SEAL_RED:"#FBEFE6",paper=dark?"#F3E9DA":SEAL_RED;
+  const text=await textLayer("묵동\n홍어",{size:Math.round(size*.3),color:ink,width:size,height:size,font:STYLE_FONTS.serifHeavy,align:"centre",spacing:2});
+  const id=`brandSeal${seed}`,angle=options.rotate??-3;
+  return {text,svg:(x,y)=>`<filter id="${id}"><feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="${seed}" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="5"/></filter><rect x="${x}" y="${y}" width="${size}" height="${size}" rx="${Math.round(size*.08)}" fill="${paper}" filter="url(#${id})" transform="rotate(${angle} ${x+size/2} ${y+size/2})"/>`};
+}
+
+// 제목 핵심어 강조(계획서 B13): 키워드 중 제목에 들어 있는 낱말 최대 2개를 색만 바꿔 강조한다. 없으면 undefined.
+export function emphasisOf(content:Pick<StyleContent,"headline"|"keywords">,color:string):TextEmphasis|undefined {
+  const words=content.keywords.map(word=>word.trim()).filter(word=>word.length>=2&&content.headline.includes(word)).slice(0,2);
+  return words.length?{words,color}:undefined;
 }
 export const hashtags=(content:StyleContent)=>content.keywords.length?content.keywords.map(word=>`#${word}`).join(" "):STORE_NAME;
 
@@ -71,19 +134,19 @@ export const hashtags=(content:StyleContent)=>content.keywords.length?content.ke
 export const HANDWRITING_MIN_SIZE=46;
 
 export type TitleLayout={text:string;size:number;width:number;lines:number;lastLineRatio:number;fits:boolean};
-type TitleMeasure={sizes:number[];width:number;maxHeight:number;font:Font;align?:"left"|"centre";spacing?:number|((size:number)=>number)};
+type TitleMeasure={sizes:number[];width:number;maxHeight:number;font:Font;align?:"left"|"centre";spacing?:number|((size:number)=>number);letterSpacing?:(size:number)=>number};
 const spacingOf=(options:TitleMeasure,size:number)=>typeof options.spacing==="function"?options.spacing(size):options.spacing??Math.round(size*.12);
 const ORPHAN=.35,BALANCE_BELOW=.6;
 
 export async function chooseTitleLayout(value:string,options:TitleMeasure):Promise<TitleLayout> {
-  const measure=(size:number,width:number,height=4000,text=value)=>textLayer(text,{size,color:"#000000",width,height,font:options.font,align:options.align,spacing:spacingOf(options,size)});
+  const measure=(size:number,width:number,height=4000,text=value)=>textLayer(text,{size,color:"#000000",width,height,font:options.font,align:options.align,spacing:spacingOf(options,size),letterSpacing:options.letterSpacing?.(size)});
   let size=options.sizes[options.sizes.length-1],height=0,fits=false;
   for(const candidate of options.sizes){
     size=candidate;
     height=(await measure(size,options.width)).info.height;
     if(height<=options.maxHeight){fits=true;break;}
   }
-  const balanced=await balanceWidth(value,{size,width:options.width,font:options.font,align:options.align,spacing:spacingOf(options,size),height});
+  const balanced=await balanceWidth(value,{size,width:options.width,font:options.font,align:options.align,spacing:spacingOf(options,size),height,letterSpacing:options.letterSpacing?.(size)});
   if(balanced.lines===2){
     const split=punctuationSplit(value);
     // 나눈 두 줄이 각각 한 줄에 들어가면 높이가 "두 줄 높이"(한 줄 높이×2 + 줄 간격)와 같다
@@ -112,8 +175,8 @@ function punctuationSplit(value:string):string|null {
 }
 
 // 크기가 정해진 글자의 균형 폭. height를 이미 재 두었으면 넘겨서 한 번 덜 그린다.
-export async function balanceWidth(value:string,options:{size:number;width:number;font:Font;align?:"left"|"centre";spacing:number;height?:number}):Promise<{width:number;lines:number;lastLineRatio:number}> {
-  const measure=(width:number,text=value)=>textLayer(text,{size:options.size,color:"#000000",width,height:4000,font:options.font,align:options.align,spacing:options.spacing}).then(layer=>layer.info.height);
+export async function balanceWidth(value:string,options:{size:number;width:number;font:Font;align?:"left"|"centre";spacing:number;height?:number;letterSpacing?:number}):Promise<{width:number;lines:number;lastLineRatio:number}> {
+  const measure=(width:number,text=value)=>textLayer(text,{size:options.size,color:"#000000",width,height:4000,font:options.font,align:options.align,spacing:options.spacing,letterSpacing:options.letterSpacing}).then(layer=>layer.info.height);
   const W=Math.round(options.width);
   const full=options.height??await measure(W);
   // 줄 수: 한 줄 높이(h1, "홍" 한 글자)와 줄 간격(spacing)으로 H = n·h1 + (n−1)·spacing 을 푼다.
@@ -136,19 +199,22 @@ export async function balanceWidth(value:string,options:{size:number;width:numbe
 
 // 들어가는 가장 큰 글자 크기를 고르고(chooseTitleLayout), 여러 줄이면 줄 길이를 고르게 맞춰 그린다.
 // balance:false는 요점 목록처럼 왼쪽 정렬 폭을 맞춰야 하는 글자용(크기만 고른다).
-export async function fitText(value:string,options:{sizes:number[];width:number;maxHeight:number;color:string;font:Font;align?:"left"|"centre";spacing?:number;balance?:boolean}):Promise<Layer> {
+// emphasis: 제목 속 핵심어 색 강조(emphasisOf). letterSpacing: 크기별 자간(px), 예) size=>-size*.02.
+export async function fitText(value:string,options:{sizes:number[];width:number;maxHeight:number;color:string;font:Font;align?:"left"|"centre";spacing?:number;balance?:boolean;emphasis?:TextEmphasis;letterSpacing?:(size:number)=>number}):Promise<Layer> {
   const spacing=(size:number)=>options.spacing??Math.round(size*.12);
+  const extra=(size:number)=>({emphasis:options.emphasis,letterSpacing:options.letterSpacing?.(size)});
   if(options.balance===false){
     let last:Layer|null=null;
     for(const size of options.sizes){
-      last=await textLayer(value,{size,color:options.color,width:options.width,height:4000,font:options.font,align:options.align,spacing:spacing(size)});
+      last=await textLayer(value,{size,color:options.color,width:options.width,height:4000,font:options.font,align:options.align,spacing:spacing(size),...extra(size)});
       if(last.info.height<=options.maxHeight)return last;
     }
-    return textLayer(value,{size:options.sizes[options.sizes.length-1],color:options.color,width:options.width,height:options.maxHeight,font:options.font,align:options.align,spacing:options.spacing});
+    const smallest=options.sizes[options.sizes.length-1];
+    return textLayer(value,{size:smallest,color:options.color,width:options.width,height:options.maxHeight,font:options.font,align:options.align,spacing:options.spacing,...extra(smallest)});
   }
-  const layout=await chooseTitleLayout(value,{...options,spacing});
+  const layout=await chooseTitleLayout(value,{...options,spacing,letterSpacing:options.letterSpacing});
   // 가장 작은 크기로도 넘치면 높이에 맞춰 줄인다(검수에 shrink 메모가 남는다).
-  return textLayer(layout.text,{size:layout.size,color:options.color,width:layout.width,height:layout.fits?4000:options.maxHeight,font:options.font,align:options.align,spacing:layout.fits?spacing(layout.size):options.spacing});
+  return textLayer(layout.text,{size:layout.size,color:options.color,width:layout.width,height:layout.fits?4000:options.maxHeight,font:options.font,align:options.align,spacing:layout.fits?spacing(layout.size):options.spacing,...extra(layout.size)});
 }
 
 // 외곽선 글자(만화 제목·키치 글자). 같은 글자를 외곽선 색으로 8방향으로 밀어 찍고 그 위에 본래 색을 얹는다.

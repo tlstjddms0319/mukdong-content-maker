@@ -7,7 +7,7 @@ import { buildImagePrompt } from "@/features/images/openaiRequest";
 import { composeSlideImage } from "@/features/images/composeSlide";
 import type { CarouselPlan } from "@/features/images/carousel";
 
-const body:CarouselPlan["slides"][number]={role:"how-to",headline:"한 점은 이렇게 만들어 먹어요",points:["재료를 차례로 올려 한입 크기로 집어요","첫 점은 양념을 적게 해서 맛을 확인해요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 한 점을 만드는 손동작 사진, 얼굴 없음",textPosition:"top",layout:"browser",keywords:["먹는 법","한 점"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0};
+const body:CarouselPlan["slides"][number]={role:"how-to",subline:"",headline:"한 점은 이렇게 만들어 먹어요",points:["재료를 차례로 올려 한입 크기로 집어요","첫 점은 양념을 적게 해서 맛을 확인해요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 한 점을 만드는 손동작 사진, 얼굴 없음",textPosition:"top",layout:"browser",keywords:["먹는 법","한 점"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0};
 const picture=(background:string)=>sharp({create:{width:60,height:80,channels:3,background}}).png().toBuffer();
 const pixel=async(image:Buffer,left:number,top:number)=>{const {data}=await sharp(image).extract({left,top,width:1,height:1}).raw().toBuffer({resolveWithObject:true});return [data[0],data[1],data[2]] as const;};
 
