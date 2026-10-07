@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { SessionExpiryNotice } from "@/components/states/SessionExpiryNotice";
 
 export const metadata: Metadata = {
   title: "묵동 콘텐츠 메이커",
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>{children}<SessionExpiryNotice/></body>
     </html>
   );
 }

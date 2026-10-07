@@ -1,4 +1,4 @@
-import { noteAudit, registerPhoto, registerText } from "./audit";
+import { noteAudit, registerPhoto, registerText, noteText } from "./audit";
 import { STORE_NAME } from "../slideLayout";
 import sharp, { type OverlayOptions } from "sharp";
 import type { Sharp } from "sharp";
@@ -123,6 +123,8 @@ export async function textLayer(value:string,style:TextStyle):Promise<Layer> {
   const font=resolveFont(style.font??FONTS.bold);
   await access(font.file);
   await preloadFonts();
+  // 카드에 무슨 글자를 그렸는지 검수에 남긴다(요점이 레이아웃 자리 때문에 빠졌는지 알아내려고).
+  noteText(value);
   // 바깥 span에 색과 미세 타이포 속성을 한꺼번에 건다(Pango 단위: letter_spacing은 1/1024pt, 기본 72dpi라 1pt=1px).
   const attrs=[`foreground="${style.color}"`,
     ...(style.letterSpacing?[`letter_spacing="${Math.round(style.letterSpacing*1024)}"`]:[]),

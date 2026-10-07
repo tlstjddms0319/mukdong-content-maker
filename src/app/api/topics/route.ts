@@ -26,7 +26,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
   try {
     const body = RequestSchema.parse(await request.json());
     // 초안 목록: 반응 좋았던 주제(성과 기록)와 최근에 만든 주제(반복 피하기)에 함께 쓴다. 못 읽어도 추천은 계속한다.
-    const drafts = await createDraftRepository().listDrafts().catch(() => []);
+    const drafts = await createDraftRepository().listDraftSummaries().catch(() => []);
     const recentDraftTopics = [...drafts].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 10).map((draft) => draft.topic).filter((title) => title.trim().length > 0 && title.length <= 120);
     // 피할 주제 = 이 브라우저에서 최근에 보여 준 것 + 최근 초안 주제(중복 없이 최대 30개).
     const avoidTitles = [...new Set([...(body.recentTitles ?? []), ...recentDraftTopics])].slice(0, 30);

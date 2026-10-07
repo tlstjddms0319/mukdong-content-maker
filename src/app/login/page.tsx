@@ -23,7 +23,8 @@ export default async function LoginPage({
             <input type="hidden" name="next" value={safeReturnPath(next ?? null)} />
             <label htmlFor="owner-password">관리자 암호</label>
             <input id="owner-password" name="password" type="password" autoComplete="current-password" required />
-            {error && <p role="alert">암호가 올바르지 않습니다. 다시 시도하세요.</p>}
+            {error === "locked" ? <p role="alert">로그인 시도가 너무 많아 15분 동안 막았어요. 잠시 뒤 다시 시도해 주세요.</p>
+              : error && <p role="alert">암호가 올바르지 않습니다. 다시 시도하세요.</p>}
             <button className="button login-submit" type="submit">로그인</button>
           </form>
         )}

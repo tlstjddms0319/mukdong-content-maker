@@ -53,7 +53,8 @@ export type AuditNote=
   |{kind:"photo-quality";photo:number;flags:PhotoQualityFlag[]};
 export type AuditWarningKind="decor-overlap"|"dead-band"|"photo-area"|"photo-quality";
 export const AUDIT_WARNING_KINDS:readonly AuditWarningKind[]=["decor-overlap","dead-band","photo-area","photo-quality"];
-type AuditStore={calls:CompositeCall[];notes:AuditNote[]};
+// texts: 이 카드에 그린 글자(textLayer에 넘긴 원문). 요점이 실제로 카드에 들어갔는지 확인하는 데 쓴다.
+type AuditStore={calls:CompositeCall[];notes:AuditNote[];texts:string[]};
 
 // 장식이 글자에 이만큼(px)까지 파고드는 건 의도된 접촉으로 본다(말풍선 꼬리, 간판에 기댄 소품).
 export const DECOR_TOUCH=6;
@@ -66,6 +67,7 @@ const decors=new WeakMap<Buffer,DecorKind>();
 const auditStore=new AsyncLocalStorage<AuditStore>();
 
 export function registerText(buffer:Buffer,info:TextInfo){texts.set(buffer,info);}
+export function noteText(text:string){auditStore.getStore()?.texts.push(text);}
 // 사진 레이어(finishPhoto·croppedPhoto 결과)를 등록한다. 사진 면적 측정에 쓴다. 모양을 모르면 사각 기준.
 export function registerPhoto(buffer:Buffer,options:{shape?:PhotoShape}={}){photos.set(buffer,options.shape??"rect");}
 // 마스코트·소품 레이어(decor.ts mascotLayer·propLayer 결과)를 등록한다. 글자를 가렸는지(decor-overlap)와 빈 띠 계산에 쓴다.
@@ -99,7 +101,7 @@ export type AuditIssue=
 export type AuditMetrics={photoArea:number;photoShape:PhotoShape|null;shrinks:number;orphans:number;warnings:Record<AuditWarningKind,number>};
 // occupied: 캔버스에 놓인 사진·장식(마스코트·소품·큰 장식) 상자. 글자 상자(boxes)와 함께 "이미 찬 자리"로,
 // 계절 소품(render/seasonLayer.ts)이 빈 자리를 찾을 때 쓴다. 바탕 사진(풀스크린)이면 화면 전체 한 상자.
-export type AuditReport={issues:AuditIssue[];boxes:TextBox[];metrics:AuditMetrics;notes:AuditNote[];occupied:Rect[]};
+export type AuditReport={issues:AuditIssue[];boxes:TextBox[];metrics:AuditMetrics;notes:AuditNote[];occupied:Rect[];texts:string[]};
 export type AuditOptions={cover?:boolean;contrast?:boolean;warnings?:boolean;photos?:Buffer[]};
 
 // 그리기 함수를 검수 컨텍스트 안에서 실행하고 결과 이미지와 함께 검수 결과를 돌려준다.
@@ -107,7 +109,7 @@ export type AuditOptions={cover?:boolean;contrast?:boolean;warnings?:boolean;pho
 // warnings: 경고(장식 겹침·빈 띠·사진 면적·사진 품질)를 잴지. 기본은 대비 검사와 같이 켜진다(검수 스크립트·테스트).
 // photos: 카드에 넣은 원본 사진. 주면 사진 품질 경고를 남긴다(보정 단계에서 이미 잰 값이 있으면 다시 재지 않는다).
 export async function auditRender(render:()=>Promise<Buffer>,options:AuditOptions={}):Promise<{image:Buffer;report:AuditReport}> {
-  const store:AuditStore={calls:[],notes:[]};
+  const store:AuditStore={calls:[],notes:[],texts:[]};
   const image=await auditStore.run(store,render);
   const {issues,boxes}=await analyze(image,store.calls,options);
   const area=await photoAreaOf(store.calls);
@@ -121,7 +123,7 @@ export async function auditRender(render:()=>Promise<Buffer>,options:AuditOption
     warnings:Object.fromEntries(AUDIT_WARNING_KINDS.map(kind=>[kind,count(kind)])) as Record<AuditWarningKind,number>,
   };
   const decorBoxes=(await canvasLayers(store.calls,decors)).map(item=>item.box);
-  return {image,report:{issues,boxes,metrics,notes:store.notes,occupied:[...area.boxes,...decorBoxes]}};
+  return {image,report:{issues,boxes,metrics,notes:store.notes,occupied:[...area.boxes,...decorBoxes],texts:store.texts}};
 }
 
 async function canvasSize(call:CompositeCall){

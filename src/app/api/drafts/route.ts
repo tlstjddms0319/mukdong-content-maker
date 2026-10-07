@@ -6,6 +6,7 @@ import { selectedDraftMedia } from "@/features/drafts/selection";
 import { plannedAtFromPlanDate } from "@/features/drafts/planLink";
 import { PerformanceSchema } from "@/features/drafts/performance";
 import { z } from "zod";
+import { createInstagramRepository } from "@/features/instagram/repository";
 
 function privateJson(body: unknown, init?: ResponseInit) { const headers=new Headers(init?.headers); headers.set("Cache-Control","no-store"); return NextResponse.json(body,{...init,headers}); }
 
@@ -64,4 +65,15 @@ export async function PATCH(request: Request) { const denied=await ownerApiError
   const draft = await repository.saveCaption(parsed.data.id, parsed.data.caption);
   if (!draft) return privateJson({ error:"초안을 찾을 수 없습니다." }, { status:404 });
   return privateJson(draft);
+}
+
+// 초안 지우기(초안·목록 요약·썸네일). 게시 중(준비 중)인 초안은 지우지 않는다(게시 기록과 어긋나지 않게).
+export async function DELETE(request: Request) { const denied=await ownerApiError(); if(denied)return denied;
+  const id = new URL(request.url).searchParams.get("id") ?? "";
+  if (!z.string().uuid().safeParse(id).success) return privateJson({ error: "초안 ID가 필요합니다." }, { status: 400 });
+  const publication = await createInstagramRepository().readPublication(id).catch(() => null);
+  if (publication?.status === "preparing" && !publication.mediaId) return privateJson({ error: "인스타그램에 게시하는 중이거나 확인이 필요한 초안이에요. 게시 상태를 정리한 뒤 지워 주세요." }, { status: 409 });
+  const removed = await repository.deleteDraft(id);
+  if (!removed) return privateJson({ error: "초안을 찾을 수 없습니다." }, { status: 404 });
+  return privateJson({ deleted: true });
 }

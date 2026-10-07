@@ -12,7 +12,7 @@ export async function runScheduledPublishing(log:(message:string)=>void=console.
   if(autoPublish&&(!baseUrl||!signingSecret))throw new SchedulerConfigurationError("게시 서버 설정이 필요합니다: MEDIA_PUBLIC_BASE_URL, MEDIA_SIGNING_SECRET");
   const drafts=createDraftRepository(),repo=createInstagramRepository();
   return runPublishScheduler({
-    listDrafts:drafts.listDrafts,readDraft:drafts.readDraft,
+    listDrafts:drafts.listDraftSummaries,readDraft:drafts.readDraft,
     readConnection:repo.readConnection,saveConnection:repo.saveConnection,repo,
     meta:instagramPublishingClient,refreshToken:refreshInstagramToken,
     baseUrl:baseUrl??"",signingSecret:signingSecret??"",log,autoPublish,

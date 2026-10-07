@@ -168,11 +168,13 @@ const VIBRANCE_DARK_CAP=.08,GLOBAL_DARK_CAP=.01;
 const enhancedQuality=new WeakMap<Buffer,PhotoQuality>();
 export const qualityOfEnhanced=(buffer:Buffer):PhotoQuality|undefined=>enhancedQuality.get(buffer);
 
-export async function enhancePhoto(input:Buffer,options:{kind?:Exclude<PhotoKind,"none">;food?:FoodLook|null}={}):Promise<Buffer> {
+// maxSide: 보정하며 줄이는 긴 변. 파노라마(표지+2장이 한 사진을 2160px 폭으로 나눠 씀)는 2160으로 받아야 다시 키우지 않는다.
+export async function enhancePhoto(input:Buffer,options:{kind?:Exclude<PhotoKind,"none">;food?:FoodLook|null;maxSide?:number}={}):Promise<Buffer> {
   const kind=options.kind??"real";
+  const side=options.maxSide??MAX_SIDE;
   // toColourspace("srgb"): 흑백 사진도 RGB 3채널로 받아 아래 루프가 항상 3칸 단위로 돈다.
   const [{data,info},meta]=await Promise.all([
-    sharp(input).rotate().resize(MAX_SIDE,MAX_SIDE,{fit:"inside",withoutEnlargement:true}).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject:true}),
+    sharp(input).rotate().resize(side,side,{fit:"inside",withoutEnlargement:true}).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject:true}),
     kind==="real"?sharp(input).metadata().catch(()=>null):Promise.resolve(null),
   ]);
   if(info.channels!==3)return sharp(input).rotate().jpeg({quality:92}).toBuffer();

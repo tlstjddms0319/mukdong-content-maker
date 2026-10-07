@@ -17,7 +17,9 @@ import { fillWithPhotoViews, fitPanorama, fitPlanToPhotos, matchPhotosToSlides, 
 
 // check: AI 표지 점검 결과(coverCheck.ts). 점수와 경고 배지를 후보 위에 보여 준다.
 // bases: 글자를 얹기 전 밑바탕 사진(AI 이미지). 카드 글자만 고쳐 다시 그릴 때 쓴다. 초안에는 저장하지 않는다(화면에서만).
-export type ApprovedImage={id:string;preview?:string;referencePreview?:string;bases?:string[];source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]}};
+// droppedPoints: 카드 자리가 모자라 그리지 못한 요점 수(서버가 알려 줌). 장 글자 고치기 옆에 안내한다.
+export type ApprovedImage={id:string;preview?:string;referencePreview?:string;bases?:string[];source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]};droppedPoints?:number};
+const droppedOf=(data:unknown)=>{const value=(data as {droppedPoints?:unknown})?.droppedPoints;return typeof value==="number"&&value>0?{droppedPoints:value}:{};};
 export type StudioMode="photo"|"ai"|"mix"|"free";
 export type StudioPhase="idle"|"uploading"|"planning"|"cover"|"slides";
 export type ReferenceUse="source"|"style";
@@ -120,10 +122,11 @@ export function setSeason(season:FontChoice<SeasonMotif>){patch({season});}
 // 파노라마 켜고 끄기는 다음에 캐러셀을 만들 때부터 적용된다(이미 만든 장은 그대로).
 export function setPanorama(panorama:boolean){patch({panorama});}
 // 이 장을 파노라마의 어느 쪽으로 그릴지. 표지와 2번째 장이 같은 사진(첫 칸)을 쓸 때만. 사진을 바꾸면 자연히 평소 디자인으로 돌아간다.
+// slots: 이 장에 (새로) 넣을 사진 칸. 짝이 되는 장(표지↔2번째)의 첫 사진과 같으면 파노라마의 한쪽이다.
 function panoramaSide(index:number,slots:number[]):"left"|"right"|undefined {
   if(!state.panorama||index>1)return undefined;
-  const cover=state.photoAssignment[0]?.[0],second=index===0?state.photoAssignment[1]?.[0]:slots[0];
-  if(cover===undefined||second!==cover||(index===0&&slots[0]!==cover))return undefined;
+  const mine=slots[0],other=state.photoAssignment[1-index]?.[0];
+  if(mine===undefined||mine!==other)return undefined;
   return index===0?"left":"right";
 }
 export function setStyle(style:FontChoice<StyleId>){patch({style});}
@@ -328,16 +331,20 @@ export async function startPlan(){
 
 async function generate(slide:CarouselPlan["slides"][number],index:number,refinement=""):Promise<ApprovedImage>{
   // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
-  const count=state.slideLayout==="card"?Math.max(1,photosNeeded(normalizeCardLayout(slide))):1;
+  // 디자인 계열(기본 템플릿 아님)은 한 장에 사진을 두 장까지만 그린다. 그 이상 만들면 돈만 들고 안 쓰인다.
+  const style=effectiveDesign(state.plan!.design).style;
+  const count=state.slideLayout==="card"?Math.min(Math.max(1,photosNeeded(normalizeCardLayout(slide))),!style||style==="template"?3:2):1;
   const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:state.plan!.styleAnchor,design:effectiveDesign(state.plan!.design),slideIndex:index,count,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFieldsFor(slide.role)})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");
   if(data.fallback)patch({providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."});
-  return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],...(data.baseImages?.[0]?{bases:data.baseImages[0]}:{}),source:sourceOf(data.source),role:slide.role};
+  return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],...(data.baseImages?.[0]?{bases:data.baseImages[0]}:{}),source:sourceOf(data.source),role:slide.role,...droppedOf(data)};
 }
 
-// 고른 표지 뒤의 남은 장을 차례로 만든다. 화면이 사라져도 이 루프는 계속 돌고 결과는 저장소에 쌓인다.
+// 한 번에 만드는 AI 장 수. 이미지 AI(Higgsfield·Cloudflare·OpenAI)가 동시에 받아 주는 범위 안에서 두 장.
+const SLIDE_CONCURRENCY=2;
+// 고른 표지 뒤의 남은 장을 만든다. 화면이 사라져도 이 루프는 계속 돌고 결과는 저장소에 쌓인다.
 export async function finishSlides(){
   const {plan,cover,slides,input}=state;
   // 장을 빼거나 넣은 뒤에는 설정 장 수까지 다시 채우지 않는다(사용자가 고른 장 수를 지킨다).
@@ -346,12 +353,26 @@ export async function finishSlides(){
   let next=slides[0]?.id===cover.id?slides:[cover];
   patch({phase:"slides",error:"",slides:next});
   try{
-    for(let i=next.length;i<input.slideCount;i++){
-      const generated=await generate(plan.slides[i],i+1);
-      if(token!==run)return;
-      next=[...next,generated];
-      patch({slides:next});
-    }
+    // 장끼리는 서로 기다릴 필요가 없어(표지만 참고) 두 장씩 동시에 만든다. 10장이면 기다리는 시간이 거의 절반이 된다.
+    // 화면에는 순서대로만 붙인다: 앞 장이 끝나기 전에 뒤 장이 먼저 오면 잠시 들고 있다가 앞 장이 오면 함께 붙인다.
+    const ready=new Map<number,ApprovedImage>();
+    let cursor=next.length,failure:unknown=null;
+    const worker=async()=>{
+      while(cursor<input.slideCount&&failure===null){
+        const i=cursor++;
+        try{
+          const generated=await generate(plan.slides[i],i+1);
+          if(token!==run)return;
+          ready.set(i,generated);
+          const add:ApprovedImage[]=[];
+          while(ready.has(next.length+add.length)){add.push(ready.get(next.length+add.length)!);}
+          if(add.length){next=[...next,...add];patch({slides:next});}
+        }catch(error){failure??=error;}
+      }
+    };
+    await Promise.all(Array.from({length:SLIDE_CONCURRENCY},worker));
+    if(token!==run)return;
+    if(failure!==null)throw failure;
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"남은 슬라이드를 만들지 못했습니다."});
   }finally{
@@ -441,7 +462,7 @@ async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[],v
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 만들지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
-  return {id:crypto.randomUUID(),preview:data.images[0],source:slots.length?"photo":"design",role:slide.role};
+  return {id:crypto.randomUUID(),preview:data.images[0],source:slots.length?"photo":"design",role:slide.role,...droppedOf(data)};
 }
 
 // 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. AI 이미지는 만들지 않는다.
@@ -527,8 +548,9 @@ export async function swapSlidePhoto(photoIndex:number){
   const index=activeSlideIndex(state);
   if(!plan||!photoAssignment[index]?.length)return;
   const slots=swapPhoto(photoAssignment[index],photoIndex);
-  // 파노라마(표지+2장)의 한쪽 사진을 바꾸면 짝이 된 다른 장도 평소 디자인으로 다시 그린다(반쪽 사진만 남지 않게).
-  const partner=index<=1&&panoramaSide(index,photoAssignment[index])?1-index:-1;
+  // 파노라마(표지+2장)의 짝이 바뀌면(풀리거나 다시 맞춰지거나) 짝이 된 다른 장도 다시 그린다(반쪽 사진만 남지 않게).
+  // 예전에는 바꾸기 전 짝만 봐서, 2번째 장 사진을 바꿨다가 표지 사진으로 되돌리면 2번째 장만 반쪽으로 그려졌다.
+  const partner=index<=1&&(panoramaSide(index,photoAssignment[index])||panoramaSide(index,slots))?1-index:-1;
   const token=++run;
   patch({phase:"slides",error:""});
   try{
@@ -581,13 +603,13 @@ export const canEditSlideText=(current:GenerationState,index:number)=>textEditBa
 
 // 밑바탕(사진·AI 원본·없음)으로 한 장을 다시 그린다. 이미지 AI를 부르지 않는다(비용 없음).
 // 장 번호·전체 장 수는 지금 상태(deckTotal)를 따른다.
-async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none";views?:readonly PhotoView[]}):Promise<string>{
+async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none";views?:readonly PhotoView[]}):Promise<{preview:string;droppedPoints?:number}>{
   const plan=state.plan!;
   const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind,...(base.photoKind==="real"?viewsField(base.views):{})}:{}),...(base.photoKind==="real"&&panoramaSide(index,state.photoAssignment[index]??[])?{panorama:panoramaSide(index,state.photoAssignment[index]??[])}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 다시 그리지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
-  return data.images[0];
+  return {preview:data.images[0],...droppedOf(data)};
 }
 
 export async function editSlideText(index:number,edit:SlideTextEdit){
@@ -600,10 +622,10 @@ export async function editSlideText(index:number,edit:SlideTextEdit){
   const token=++run;
   patch({phase:"slides",error:""});
   try{
-    const preview=await renderCard(index,slide,base);
+    const card=await renderCard(index,slide,base);
     if(token!==run)return;
     // 출처(실제 사진/AI)와 밑바탕은 그대로 두고 그림만 바꾼다. 구성안도 고친 글자로 바꿔 캡션이 같은 흐름을 따르게 한다.
-    const updated={...state.slides[index],id:crypto.randomUUID(),preview};
+    const updated={...state.slides[index],id:crypto.randomUUID(),preview:card.preview,droppedPoints:card.droppedPoints};
     patch({plan:{...plan,slides:plan.slides.map((item,i)=>i===index?slide:item)},slides:state.slides.map((item,i)=>i===index?updated:item),...(index===0?{cover:updated}:{}),approved:false});
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"카드를 다시 그리지 못했어요."});
@@ -630,9 +652,9 @@ async function redrawDeck(token:number,skip=-1){
     const base=state.plan?textEditBase(state,i):null;
     if(!base||!state.plan?.slides[i]){missed++;continue;}
     patch({deckStatus:`장 번호를 맞추는 중 ${i+1}/${total}`});
-    const preview=await renderCard(i,state.plan.slides[i],base);
+    const card=await renderCard(i,state.plan.slides[i],base);
     if(token!==run)return;
-    const updated={...state.slides[i],id:crypto.randomUUID(),preview};
+    const updated={...state.slides[i],id:crypto.randomUUID(),preview:card.preview,droppedPoints:card.droppedPoints};
     patch({slides:state.slides.map((item,k)=>k===i?updated:item),...(i===0?{cover:updated}:{})});
   }
   finishDeck();
@@ -748,7 +770,7 @@ export async function addSlide(input:NewSlide):Promise<boolean>{
   const token=++run;
   patch({slides,photos,photoAssignment:assignment,photoViews:views,refinements,plan:{...plan,slides:[...plan.slides.slice(0,position),slide,...plan.slides.slice(position)]},deckEdited:true,approved:false,activeSlide:position,error:"",providerNotice:"",phase:"slides",deckStatus:"새 장을 그리는 중"});
   try{
-    const card=input.source==="ai"?await generate(slide,position+1):{...placeholder,preview:await renderCard(position,slide,{photos:slots.map(i=>photos[i].preview),photoKind:slots.length?"real":"none"})};
+    const card=input.source==="ai"?await generate(slide,position+1):{...placeholder,...await renderCard(position,slide,{photos:slots.map(i=>photos[i].preview),photoKind:slots.length?"real":"none"})};
     if(token!==run)return false;
     patch({slides:state.slides.map(item=>item.id===placeholder.id?{...card,id:placeholder.id}:item)});
     await redrawDeck(token,position);

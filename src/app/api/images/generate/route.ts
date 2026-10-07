@@ -6,7 +6,7 @@ import { normalizeCardLayout, photosNeeded } from "@/features/images/design";
 import { AiConfigurationError, getOpenAIClient } from "@/lib/ai/openaiClient";
 import { buildImageEditRequest, buildImageRequest, candidateBriefs } from "@/features/images/openaiRequest";
 import { classifyOpenAIImageError } from "@/features/images/openaiError";
-import { composeSlideImage } from "@/features/images/composeSlide";
+import { composeSlideCard } from "@/features/images/composeSlide";
 import { CloudflareConfigurationError, CloudflareImageError, CloudflarePartialImageError, generateCloudflareImages } from "@/features/images/cloudflareRequest";
 import { readSettings } from "@/features/settings/repository";
 import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
@@ -61,17 +61,21 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const cardOptions={brandHandle:settings.brandHandle??"",remoteCutout,storeCard:parsed.data.storeCard===true,...(parsed.data.panorama?{panorama:parsed.data.panorama}:{})};
     // 이미지 AI가 만든 밑바탕은 색·밝기 보정 없이 따뜻한 색 vibrance만 약하게 준다(render/photoEnhance.ts).
     const aiCardOptions={...cardOptions,photoKind:"ai" as const};
+    // 카드를 그리며 레이아웃 자리 때문에 빠진 요점 수를 모은다(응답의 droppedPoints → 화면 안내).
+    let droppedPoints=0;
+    const composeSlideImage=async(...args:Parameters<typeof composeSlideCard>)=>{const card=await composeSlideCard(...args);droppedPoints=Math.max(droppedPoints,card.droppedPoints);return card.image;};
+    const dropped=()=>droppedPoints?{droppedPoints}:{};
     // 브라우저형·Q&A·대형 숫자처럼 사진이 없는 레이아웃은 이미지 AI를 부르지 않는다.
     if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&photosNeeded(normalizeCardLayout(parsed.data.slide))===0){
       const composed=await composeSlideImage([],parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design,cardOptions);
-      return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"design",provider:"none",fallback:false});
+      return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"design",provider:"none",fallback:false,...dropped()});
     }
     // 사장님이 올린 실제 사진으로 만드는 장: 이미지 AI 없이 그 사진들로 바로 카드를 그린다.
     if(parsed.data.slide&&parsed.data.photos?.length){
       const originals=await Promise.all(parsed.data.photos.map(async(source,index)=>viewOf(await imageBytes(source),parsed.data.photoViews?.[index])));
       await prepareCutouts(originals);
       const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,{...cardOptions,photoKind:parsed.data.photoKind??(parsed.data.enhance===false?"none":"real")});
-      return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"photo",provider:"none",fallback:false});
+      return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"photo",provider:"none",fallback:false,...dropped()});
     }
 
     // 후보마다 구도가 다른 프롬프트라 n장을 한 번에 요청하지 않고, 한 장씩 동시에 요청한다.
@@ -163,7 +167,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
       if(baseImages.length===order.length)baseImages=order.map(index=>baseImages[index]);
       checks.splice(0,checks.length,...order.map(index=>checks[index]));
     }
-    return NextResponse.json({ images, ...(referenceImages.length?{referenceImages}:{}), ...(baseImages.length===images.length?{baseImages}:{}), ...(checks?{checks:checks.map(({score,note,warnings})=>({score,note,warnings}))}:{}), source:parsed.data.referenceImage&&parsed.data.referenceMode!=="continuity"?"ai-edited":"ai-generated", provider, fallback, ...(notice?{notice}:{}), disclosure:"AI 연출 이미지입니다. 실제 메뉴와 다를 수 있어요." });
+    return NextResponse.json({ images, ...(referenceImages.length?{referenceImages}:{}), ...(baseImages.length===images.length?{baseImages}:{}), ...(checks?{checks:checks.map(({score,note,warnings})=>({score,note,warnings}))}:{}), source:parsed.data.referenceImage&&parsed.data.referenceMode!=="continuity"?"ai-edited":"ai-generated", provider, fallback, ...(notice?{notice}:{}), ...dropped(), disclosure:"AI 연출 이미지입니다. 실제 메뉴와 다를 수 있어요." });
   } catch (error) {
     if(error instanceof HiggsfieldConfigurationError)return NextResponse.json({message:error.message,retryable:false},{status:503});
     if(error instanceof HiggsfieldImageError)return NextResponse.json({message:HIGGSFIELD_MESSAGES[error.reason],retryable:error.reason!=="auth"&&error.reason!=="credits"},{status:error.reason==="nsfw"?422:502});

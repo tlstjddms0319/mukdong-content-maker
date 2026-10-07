@@ -1,4 +1,5 @@
 import type { Draft } from "@/features/drafts/schema";
+import type { DraftSummary } from "@/features/drafts/summary";
 import type { InstagramConnection, Publication } from "./schema";
 import { InstagramPublishError, publishApprovedDraft } from "./publish";
 import { MAX_PUBLISH_LATENESS_MS, NEEDS_CHECK_MESSAGE, isStalePreparing } from "./publicationState";
@@ -14,7 +15,8 @@ export const FAILED_RETRY_COOLDOWN_MS=30*60*1000; // 실패한 초안은 30분 �
 type PublishDeps=Parameters<typeof publishApprovedDraft>[1];
 
 export type SchedulerDeps=Omit<PublishDeps,"readDraft">&{
-  listDrafts:()=>Promise<Draft[]>;
+  // 목록은 가벼운 요약(이미지 없음)만 읽는다. 게시할 초안의 전체 내용은 게시 단계에서 readDraft로 읽는다.
+  listDrafts:()=>Promise<ScheduleView[]>;
   readDraft:PublishDeps["readDraft"];
   saveConnection:(value:InstagramConnection)=>Promise<InstagramConnection>;
   refreshToken:(accessToken:string)=>Promise<{accessToken:string;expiresIn:number}>;
@@ -34,7 +36,9 @@ export type SchedulerRun={
 };
 
 // 예약 시각이 지났고, 너무 오래(6시간 넘게) 지나지는 않은 초안만. 오래 지난 것은 "예약 놓침"으로 화면에 보여 주고 게시하지 않는다.
-export function isDueForPublishing(draft:Draft,now:Date):boolean {
+// 예약 점검에 필요한 칸만. 초안 요약(DraftSummary)과 전체 초안(Draft) 둘 다 이 모양을 만족한다.
+export type ScheduleView=Pick<Draft,"id"|"final_review_complete"|"planned_publish_at"|"selected_media_id"|"caption">&Partial<Pick<DraftSummary,"hasCaption">>;
+export function isDueForPublishing(draft:ScheduleView,now:Date):boolean {
   if(draft.final_review_complete!==true||typeof draft.planned_publish_at!=="string")return false;
   const late=now.getTime()-Date.parse(draft.planned_publish_at);
   return late>=0&&late<=MAX_PUBLISH_LATENESS_MS

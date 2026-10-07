@@ -11,7 +11,6 @@ import { readSettings } from "@/features/settings/repository";
 import { createDraftRepository } from "@/features/drafts/repository";
 import { STORE_MENU } from "@/features/store/menu";
 import { likedTopicTitles } from "@/features/drafts/performance";
-import { selectedDraftMedia } from "@/features/drafts/selection";
 import { matchPlanDraft, planDraftStarted } from "@/features/drafts/planLink";
 
 const STORE_NAME="묵동홍어마을";
@@ -40,8 +39,8 @@ export async function POST(request:Request){
     const today=seasonContext().today;
     const openDates=postDatesForMonth(month,undefined,month===today.slice(0,7)?today:undefined);
     // "다시 기획하기"여도 지난 날짜와 이미 초안을 시작한 칸은 그대로 둔다(주제가 바뀌면 초안과 칸의 연결이 끊겨 같은 날 글이 둘 생길 수 있다).
-    const drafts=await createDraftRepository().listDrafts().catch(()=>[]);
-    const summaries=drafts.map(draft=>({id:draft.id,topic:draft.topic,plan_date:draft.plan_date,hasImages:selectedDraftMedia(draft).length>0,hasCaption:!!draft.caption?.trim(),reviewed:!!draft.final_review_complete}));
+    const drafts=await createDraftRepository().listDraftSummaries().catch(()=>[]);
+    const summaries=drafts.map(draft=>({id:draft.id,topic:draft.topic,plan_date:draft.plan_date,hasImages:draft.imageCount>0,hasCaption:draft.hasCaption,reviewed:!!draft.final_review_complete}));
     const previous=await readMonthPlan(month).catch(()=>null);
     const kept=(previous?.items??[]).filter(item=>!openDates.includes(item.date)||planDraftStarted(matchPlanDraft(item,summaries)));
     const keptDates=new Set(kept.map(item=>item.date));
