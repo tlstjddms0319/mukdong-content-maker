@@ -12,7 +12,8 @@ import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
 import { AppSettingsSchema, type AppSettings } from "@/features/settings/schema";
 import { HiggsfieldConfigurationError, HiggsfieldImageError, HiggsfieldPartialImageError, generateHiggsfieldImages, isHiggsfieldConfigured } from "@/features/images/higgsfieldRequest";
 import sharp from "sharp";
-import { checkCoverCandidates, coverRank } from "@/features/images/coverCheck";
+import { prepareRemoteCutouts } from "@/features/images/remoteCutout";
+import { checkCoverCandidates, coverRank, expectedFoodFrom } from "@/features/images/coverCheck";
 
 type ImageProvider="higgsfield"|"cloudflare"|"openai";
 const PROVIDER_LABELS:Record<ImageProvider,string>={higgsfield:"Higgsfield",cloudflare:"Cloudflare",openai:"OpenAI"};
@@ -47,7 +48,11 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const settings:AppSettings=(await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 무료 이미지 경로만 사용합니다:",error instanceof Error?error.message:String(error));return null;}))
       ??{...AppSettingsSchema.parse(DEFAULT_SETTINGS),imageAiProvider:"cloudflare"};
     // 브랜드 키트: 카드 바닥글에 가게 이름과 함께 찍을 Instagram 계정(설정 화면).
-    const cardOptions={brandHandle:settings.brandHandle??""};
+    // 원격 누끼(설정, 기본 꺼짐): 누끼 계열이면 렌더 전에 로컬 누끼가 어려운 사진만 Higgsfield 배경 제거로 받아 둔다.
+    // 렌더는 받아 둔 것을 조회만 하고, 없거나 실패하면 로컬 누끼로 그린다(features/images/remoteCutout.ts).
+    const remoteCutout=settings.remoteCutout===true&&parsed.data.slideLayout!=="overlay";
+    const prepareCutouts=(photos:Buffer[])=>prepareRemoteCutouts(photos,{enabled:remoteCutout,style:parsed.data.design?.style,monthlyCredits:settings.remoteCutoutMonthlyCredits??20}).catch(()=>0);
+    const cardOptions={brandHandle:settings.brandHandle??"",remoteCutout};
     // 이미지 AI가 만든 밑바탕은 색·밝기 보정 없이 따뜻한 색 vibrance만 약하게 준다(render/photoEnhance.ts).
     const aiCardOptions={...cardOptions,photoKind:"ai" as const};
     // 브라우저형·Q&A·대형 숫자처럼 사진이 없는 레이아웃은 이미지 AI를 부르지 않는다.
@@ -58,6 +63,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 사장님이 올린 실제 사진으로 만드는 장: 이미지 AI 없이 그 사진들로 바로 카드를 그린다.
     if(parsed.data.slide&&parsed.data.photos?.length){
       const originals=await Promise.all(parsed.data.photos.map(imageBytes));
+      await prepareCutouts(originals);
       const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,{...cardOptions,photoKind:parsed.data.photoKind??(parsed.data.enhance===false?"none":"real")});
       return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"photo",provider:"none",fallback:false});
     }
@@ -100,7 +106,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     if (images.length !== parsed.data.count) throw new Error("incomplete image result");
     // 표지 후보가 여러 장이면 글자를 얹기 전 원본을 AI로 점검한다(이미지 속 글자, 홍어로 안 보임, 어색한 손).
     // 점검은 순서와 경고 배지에만 쓰고 다시 만들지는 않는다. 키가 없거나 실패하면 null(점검 없음).
-    const checks=parsed.data.slide?.role==="cover"&&images.length>1?await checkCoverCandidates(await Promise.all(images.map(imageBytes))):null;
+    const checks=parsed.data.slide?.role==="cover"&&images.length>1?await checkCoverCandidates(await Promise.all(images.map(imageBytes)),{expectedFood:expectedFoodFrom(parsed.data.topic,parsed.data.slide?.headline)}):null;
+    if(remoteCutout&&parsed.data.slide)await prepareCutouts(await Promise.all(images.map(imageBytes)));
     const referenceImages:string[]=[];
     // 결과 이미지마다 그 카드를 그린 밑바탕 사진들(콜라주는 여러 장).
     let baseImages:string[][]=[];

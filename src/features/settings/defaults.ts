@@ -8,6 +8,8 @@ export const DEFAULT_SETTINGS = {
   imageAiProvider: "automatic",
   imageQuality: "medium",
   brandHandle: "",
+  remoteCutout: false,
+  remoteCutoutMonthlyCredits: 20,
   aiModelMode: "automatic",
   preserveOriginals: true,
   blockUnverifiedClaims: true,

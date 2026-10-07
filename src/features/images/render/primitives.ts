@@ -9,6 +9,7 @@ import { isLight, type Palette } from "../design";
 import { typographyOf, type FontFace, type Typography } from "../typography";
 import type { ThemeId } from "../themes";
 import * as decor from "../decor";
+import { qualityOfEnhanced } from "./photoEnhance";
 
 // 모든 카드 레이아웃(composeSlide.ts, render/extraLayouts.ts)이 함께 쓰는 그리기 도구.
 // 글자 레이어, 요점 목록, 사진 자르기, 캔버스와 함께, 게시물 테마에 따라 모양이 바뀌는 장식 함수(테이프·반짝이 등)를 둔다.
@@ -38,7 +39,7 @@ export const DECOR_FONT:Font={...FONTS.bold};
 // ── 카드 한 장을 그리는 동안의 설정 ─────────────────────────────────────────────────────────
 // 글꼴·테마·변형 번호·색 조합. 서버는 여러 카드를 동시에 그릴 수 있으므로 모듈 변수 대신 AsyncLocalStorage에 담아,
 // 같은 비동기 흐름 안의 함수만 그 값을 보게 한다(요청끼리 글꼴이나 테마가 섞이지 않는다).
-export type RenderContext={typography:Typography;theme:ThemeId;variant:number;palette:Palette;brandHandle?:string;tone?:"loud"|"calm"};
+export type RenderContext={typography:Typography;theme:ThemeId;variant:number;palette:Palette;brandHandle?:string;tone?:"loud"|"calm";remoteCutout?:boolean};
 const renderStore=new AsyncLocalStorage<RenderContext>();
 export const withRenderContext=<T,>(context:RenderContext,task:()=>Promise<T>)=>renderStore.run(context,task);
 export const currentTheme=():ThemeId=>renderStore.getStore()?.theme??"classic";
@@ -46,6 +47,8 @@ export const currentTheme=():ThemeId=>renderStore.getStore()?.theme??"classic";
 export const currentVariant=():number=>renderStore.getStore()?.variant??0;
 // 장식 세기(계획서 B11). "calm"이면 장식이 많은 계열(kitsch·popup·neon·chalkboard)이 절제 변형으로 그린다.
 export const currentTone=():"loud"|"calm"=>renderStore.getStore()?.tone??"loud";
+// 원격 누끼(계획서 A7): 설정에서 켠 경우에만 true. 꺼져 있으면 지금처럼 서버 안에서만 누끼를 딴다(비용 없음).
+export const currentRemoteCutout=():boolean=>renderStore.getStore()?.remoteCutout??false;
 // 브랜드 키트: 바닥글의 가게 표시. 설정에 Instagram 계정이 있으면 "묵동홍어마을 · @계정"으로 모든 계열에 같은 모양으로 찍는다.
 export const brandHandle=():string=>{const handle=renderStore.getStore()?.brandHandle?.replace(/^@/,"").trim();return handle?`@${handle}`:"";};
 export const brandName=():string=>{
@@ -343,6 +346,7 @@ export function photoOverlayLayer():OverlayOptions {
 //   원형·메달처럼 작은 창에 접시 전체가 들어가 음식이 손톱만 해지는 경우에 쓴다(원형 1.25, 표지 1.12 정도).
 // focus({x,y}, 0~1): 음식 중심이 어디인지 알 때(나중에 AI 상자로 채운다) 그 점이 칸 가운데에 오도록 자른다.
 //   없으면 sharp의 attention(눈에 띄는 곳) 위치를 쓴다.
+// 보정 단계에서 "흔들림·작은 사진"으로 잰 사진은 선명화를 약하게 한다(softFinish).
 // 계열 파일은 이 뒤에 색(채도·온기)만 손대고 sharpen을 또 걸지 않는다(이중 선명화는 헤일로·JPEG 블록을 키운다).
 export type PhotoFinish="food"|"none";
 export type PhotoCrop={finish?:PhotoFinish;position?:string;zoom?:number;focus?:{x:number;y:number}};
@@ -352,7 +356,10 @@ export async function finishPhoto(input:Buffer,rawWidth:number,rawHeight:number,
   const resized=await cropTo(input,width,height,options);
   let photo:Buffer;
   if((options.finish??"food")==="none")photo=await resized.png().toBuffer();
-  else{
+  else if(softFinish(input)){
+    // 흐리거나 작은 사진은 선명화가 노이즈·JPEG 계단을 키운다. 잔결은 약하게(m2 .8), 큰 반경 언샤프는 건너뛴다.
+    photo=await resized.removeAlpha().sharpen({sigma:.6,m1:.3,m2:.8}).png().toBuffer();
+  }else{
     const fine=await resized.removeAlpha().sharpen({sigma:.6,m1:.4,m2:1.2}).raw().toBuffer({resolveWithObject:true});
     photo=await sharp(fine.data,{raw:{width:fine.info.width,height:fine.info.height,channels:fine.info.channels}}).sharpen({sigma:8,m1:0,m2:.3}).png().toBuffer();
   }
@@ -360,6 +367,9 @@ export async function finishPhoto(input:Buffer,rawWidth:number,rawHeight:number,
   registerPhoto(photo);
   return photo;
 }
+
+// 보정 단계(enhancePhoto)에서 잰 품질이 흔들림·작은 사진이면 true. 보정을 거치지 않은 버퍼(검수·테스트)는 기존대로.
+const softFinish=(input:Buffer)=>{const flags=qualityOfEnhanced(input)?.flags;return !!flags&&(flags.includes("blurry")||flags.includes("lowres"));};
 
 // 칸 크기로 자르기(확대·초점 반영). 결과는 아직 인코드하지 않은 sharp 파이프라인.
 async function cropTo(input:Buffer,width:number,height:number,options:PhotoCrop):Promise<Sharp> {

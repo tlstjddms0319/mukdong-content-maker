@@ -1,70 +1,188 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { z } from "zod";
+import { toStrictJsonSchema } from "@/lib/ai/jsonSchema";
 
-// AI 표지 후보 점검. 이미지 AI가 만든 표지 후보(글자를 얹기 전 원본)를 Gemini에 보여 주고
-// 흔한 실패(이미지 속 엉뚱한 글자·워터마크, 홍어로 안 보이는 음식, 어색한 손, 음식이 안 보임)를 확인한다.
-// 결과는 후보 순서를 정하고(점수 높은 것 먼저) 화면에 경고 배지를 붙이는 데만 쓴다. 다시 만들지는 않는다(이미지 비용 방지).
+// AI 표지 후보 점검(식욕 점수). 표지 후보(글자를 얹기 전 원본)나 사장님 사진을 Gemini에 보여 주고
+// 먹음직스러움·조명·구도 점수와 흔한 실패(이미지 속 글자, 기대한 음식으로 안 보임, 어색한 손, 어두움·흐림·어수선함)를 확인한다.
+// 결과는 후보 순서·"표지로 추천"과 화면 경고 배지에만 쓴다. 다시 만들지는 않는다(이미지 비용 방지).
 // Gemini 키가 없거나 호출이 실패하면 점검 없이 원래 순서를 쓴다.
 
+// 모델이 채우는 항목. score는 모델에게 묻지 않고 세 점수로 계산한다(모델마다 10점 척도가 들쭉날쭉해서).
 export const CoverCheckSchema=z.object({
   foodVisible:z.boolean(),          // 음식이 화면의 주인공으로 또렷이 보이는가
-  looksLikeSkate:z.boolean(),       // 얇게 썬 홍어(가오리류) 살처럼 보이는가
+  looksLikeSkate:z.boolean(),       // 기대한 음식(기본: 얇게 썬 홍어회)처럼 보이는가. 이름은 저장된 결과 호환 때문에 그대로 둔다.
   textInImage:z.boolean(),          // 이미지 안에 글자·숫자·로고·워터마크가 있는가
   oddHands:z.boolean(),             // 손가락 개수·모양이 어색한 손이 있는가
-  score:z.number().min(1).max(10),  // 인스타 표지로서의 전체 점수
+  appetite:z.number().int().min(1).max(5),     // 먹음직스러움(윤기·질감·색)
+  lighting:z.number().int().min(1).max(5),     // 빛의 방향·밝기·색온도
+  composition:z.number().int().min(1).max(5),  // 음식이 화면을 채우는 정도·여백·정리
+  dark:z.boolean(),                 // 전체가 어두워 음식이 잘 안 보이는가
+  blurry:z.boolean(),               // 초점이 나가거나 흔들렸는가
+  clutter:z.boolean(),              // 음식과 상관없는 물건이 많아 어수선한가
   note:z.string().max(80),          // 한국어 한 줄 메모
 });
-export type CoverCheck=z.infer<typeof CoverCheckSchema>&{warnings:string[]};
+export type CoverCheckFields=z.infer<typeof CoverCheckSchema>;
+// unchecked: 이 장만 점검 호출이 실패해 점수를 모르는 자리(다른 장의 결과는 그대로 쓴다).
+export type CoverCheck=CoverCheckFields&{score:number;warnings:string[];unchecked?:true};
 
-const PROMPT=`이 사진은 식당 Instagram 카드뉴스 표지 후보입니다(글자는 나중에 얹습니다). 음식은 삭힌 홍어회(얇게 썬 연분홍·흰 살, 결이 보임)여야 합니다.
+// 기대 음식. 주제·슬라이드 제목에서 메뉴 낱말을 찾아 점검 문장에 넣는다. 못 찾으면 홍어회.
+const DEFAULT_FOOD={name:"홍어",description:"삭힌 홍어회(얇게 썬 연분홍·흰 살, 결이 보임)"};
+const FOODS:ReadonlyArray<readonly [RegExp,{name:string;description:string}]>=[
+  [/홍어\s*전(?!문|통|체|날)/,{name:"홍어전",description:"홍어전(얇은 홍어 살에 전옷을 입혀 노릇하게 부친 전)"}],
+  [/홍어\s*찜/,{name:"홍어찜",description:"홍어찜(익혀서 결이 보이는 홍어 살, 생회처럼 투명하지 않음)"}],
+  [/홍어\s*무침/,{name:"홍어무침",description:"홍어무침(홍어 조각을 붉은 양념에 무친 것)"}],
+  [/애\s*탕|홍어\s*탕|애국/,{name:"홍어애탕",description:"홍어애탕(홍어 애와 보리순을 넣은 국물 요리)"}],
+  [/삼합/,{name:"삼합",description:"홍어 삼합(얇게 썬 홍어회와 수육, 묵은지를 한입에 겹친 것, 홍어가 주인공)"}],
+  [/홍어\s*회|홍어/,DEFAULT_FOOD],
+  [/수육|보쌈/,{name:"수육",description:"돼지고기 수육(삶아 얇게 썬 고기)"}],
+  [/막걸리/,{name:"막걸리",description:"막걸리와 안주가 놓인 상"}],
+];
+export function expectedFoodFrom(...texts:Array<string|undefined>):{name:string;description:string} {
+  const text=texts.filter(Boolean).join(" ");
+  return FOODS.find(([pattern])=>pattern.test(text))?.[1]??DEFAULT_FOOD;
+}
+
+function promptFor(food:string):string {
+  return `이 사진은 식당 Instagram 카드뉴스 표지 후보입니다(글자는 나중에 얹습니다). 음식은 ${food}여야 합니다.
 다음을 JSON으로 답하세요.
 - foodVisible: 음식이 화면의 주인공으로 또렷이 보이면 true
-- looksLikeSkate: 얇게 썬 홍어(가오리류) 살처럼 보이면 true. 통생선, 연어·참치 같은 다른 생선이면 false
+- looksLikeSkate: 위에서 말한 음식처럼 보이면 true. 통생선이나 연어·참치 같은 다른 음식이면 false
 - textInImage: 이미지 안에 글자, 숫자, 간판, 로고, 워터마크가 보이면 true
 - oddHands: 손이 있는데 손가락 개수·모양이 어색하면 true (손이 없으면 false)
-- score: 표지 사진으로서의 점수 1~10 (먹음직스러움, 선명도, 구도)
+- appetite: 먹음직스러움 1~5 (윤기, 촉촉함, 결과 색이 살아 있는가)
+- lighting: 조명 1~5 (빛 방향이 분명하고 따뜻하며 너무 어둡거나 하얗게 날아가지 않았는가)
+- composition: 구도 1~5 (음식이 화면을 충분히 채우고 정돈되어 표지 글자를 얹을 자리가 있는가)
+- dark: 전체가 어두워 음식이 잘 안 보이면 true
+- blurry: 초점이 나가거나 흔들렸으면 true
+- clutter: 음식과 상관없는 물건이 많아 어수선하면 true
 - note: 가장 큰 문제나 장점을 한국어 20자 안팎 한 줄로`;
+}
+
+// 세 점수(1~5)를 10점 척도로. 먹음직스러움을 두 배로 친다(표지는 맛있어 보이는 게 먼저).
+export function coverScore(check:Pick<CoverCheckFields,"appetite"|"lighting"|"composition">):number {
+  return Math.round((check.appetite*2+check.lighting+check.composition)/2*10)/10;
+}
+
+// 받침이 있으면 "으로", 없거나 ㄹ 받침이면 "로"(홍어로, 홍어전으로, 삼합으로, 막걸리로).
+function withRo(word:string):string {
+  const code=word.charCodeAt(word.length-1)-0xac00;
+  if(code<0||code>11171)return "(으)로";
+  const final=code%28;
+  return final===0||final===8?"로":"으로";
+}
 
 // 경고 문구(화면 배지). 문제가 없으면 빈 배열.
-export function coverWarnings(check:z.infer<typeof CoverCheckSchema>):string[] {
+export function coverWarnings(check:CoverCheckFields,foodName=DEFAULT_FOOD.name):string[] {
   return [
     ...(check.textInImage?["이미지 속 글자"]:[]),
     ...(!check.foodVisible?["음식이 잘 안 보임"]:[]),
-    ...(check.foodVisible&&!check.looksLikeSkate?["홍어로 안 보임"]:[]),
+    ...(check.foodVisible&&!check.looksLikeSkate?[`${foodName}${withRo(foodName)} 안 보임`]:[]),
     ...(check.oddHands?["손 모양 어색"]:[]),
+    ...(check.dark?["어두움"]:[]),
+    ...(check.blurry?["흐림"]:[]),
+    ...(check.clutter?["어수선함"]:[]),
   ];
 }
 
-// 경고가 있으면 점수를 깎아 순서를 정한다(글자·다른 음식은 크게, 손은 조금).
+// 경고가 있으면 점수를 깎아 순서를 정한다(글자·다른 음식은 크게, 손·어두움·흐림은 조금).
+// 점검을 못 한 자리는 중간쯤(4)에 둔다. 점검이 통과한 깨끗한 후보보다 앞서지 않게.
 export function coverRank(check:CoverCheck):number {
-  return check.score-(check.textInImage?4:0)-(!check.foodVisible?4:0)-(!check.looksLikeSkate?3:0)-(check.oddHands?2:0);
+  if(check.unchecked)return 4;
+  return check.score-(check.textInImage?4:0)-(!check.foodVisible?4:0)-(!check.looksLikeSkate?3:0)-(check.oddHands?2:0)
+    -(check.dark?1.5:0)-(check.blurry?1.5:0)-(check.clutter?1:0);
 }
 
+// 같은 사진을 다시 점검하지 않도록 기억해 둔다(사진 sha1 + 기대 음식). 최근 50장만(LRU).
+const CACHE_LIMIT=50;
+const cache=new Map<string,CoverCheck>();
+function cacheGet(key:string):CoverCheck|undefined {
+  const hit=cache.get(key);
+  if(hit){cache.delete(key);cache.set(key,hit);}
+  return hit;
+}
+function cachePut(key:string,value:CoverCheck){
+  cache.delete(key);cache.set(key,value);
+  while(cache.size>CACHE_LIMIT)cache.delete(cache.keys().next().value!);
+}
+export function clearCoverCheckCache(){cache.clear();}
+
+class GeminiStatusError extends Error {
+  constructor(readonly status:number){super(`Gemini ${status}`);this.name="GeminiStatusError";}
+}
+
+// 모델이 응답 스키마를 거부할 수 있어(지원 범위가 모델마다 다름) 한 번 거부되면 그 뒤로는 JSON 모드로만 보낸다.
+const RESPONSE_SCHEMA=toStrictJsonSchema(CoverCheckSchema);
+
 type Fetch=typeof fetch;
-// strict: 실패를 삼키지 않고 그대로 던진다(설정 화면의 "AI 연결 점검"이 실패 이유를 보여 주려고 쓴다).
-export async function checkCoverCandidates(images:Buffer[],options:{apiKey?:string;model?:string;fetch?:Fetch;strict?:boolean}={}):Promise<CoverCheck[]|null> {
+export type CoverCheckOptions={apiKey?:string;model?:string;fallbackModel?:string;fetch?:Fetch;strict?:boolean;
+  // 주제·슬라이드 제목에서 뽑은 기대 음식 설명(expectedFoodFrom). 없으면 홍어회.
+  expectedFood?:{name:string;description:string}};
+
+// 한 장씩 따로 점검한 결과. 실패한 장은 null(나머지 결과는 쓴다). 키가 없으면 null.
+// strict: 실패를 삼키지 않고 첫 실패를 그대로 던진다(설정 화면의 "AI 연결 점검"이 실패 이유를 보여 주려고 쓴다).
+export async function scoreImages(images:Buffer[],options:CoverCheckOptions={}):Promise<Array<CoverCheck|null>|null> {
   const apiKey=options.apiKey??process.env.GEMINI_API_KEY??"";
   if(!apiKey||!images.length)return null;
-  const model=options.model??process.env.GEMINI_VISION_MODEL??process.env.GEMINI_TEXT_MODEL??"gemini-3.5-flash-lite";
+  const primary=options.model??process.env.GEMINI_VISION_MODEL??process.env.GEMINI_TEXT_MODEL??"gemini-3.5-flash-lite";
+  // 무료 할당량은 모델마다 따로라 429면 다른 가벼운 모델로 한 번만 더 시도한다.
+  const fallback=options.fallbackModel??process.env.GEMINI_FALLBACK_TEXT_MODEL??"gemini-3.1-flash-lite";
   const request=options.fetch??fetch;
-  try{
-    return await Promise.all(images.map(async image=>{
-      // 비용·속도를 위해 512px JPEG로 줄여 보낸다.
-      const small=await sharp(image).rotate().resize(512,512,{fit:"inside"}).jpeg({quality:80}).toBuffer();
-      const response=await request(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
-        method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-        body:JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:"image/jpeg",data:small.toString("base64")}}]}],generationConfig:{responseMimeType:"application/json"}}),
-      });
-      if(!response.ok)throw new Error(`Gemini ${response.status}`);
-      const body=await response.json() as {candidates?:Array<{content?:{parts?:Array<{text?:string}>}}>};
-      const text=body.candidates?.[0]?.content?.parts?.map(part=>part.text??"").join("")??"";
-      const check=CoverCheckSchema.parse(JSON.parse(text));
-      return {...check,warnings:coverWarnings(check)};
-    }));
-  }catch(error){
-    if(options.strict)throw error;
-    console.warn("[cover-check] 표지 점검을 건너뜁니다:",error instanceof Error?error.message:String(error));
-    return null;
+  const food=options.expectedFood??DEFAULT_FOOD;
+  const prompt=promptFor(food.description);
+  let useSchema=true;
+  const canFallBack=Boolean(fallback)&&fallback!==primary;
+  let primaryLimited=false;  // 한 장이 429를 받으면 같은 묶음의 뒤 요청은 바로 다른 모델로 보낸다.
+
+  const call=async(model:string,data:string)=>{
+    const send=(schema:boolean)=>request(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
+      method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:"image/jpeg",data}}]}],
+        generationConfig:{responseMimeType:"application/json",...(schema?{responseJsonSchema:RESPONSE_SCHEMA}:{})}}),
+    });
+    let response=await send(useSchema);
+    if(response.status===400&&useSchema){useSchema=false;response=await send(false);}
+    return response;
+  };
+
+  const checkOne=async(image:Buffer):Promise<CoverCheck>=>{
+    const key=`${createHash("sha1").update(image).digest("hex")}|${food.description}`;
+    const cached=cacheGet(key);
+    if(cached)return cached;
+    // 비용·속도를 위해 512px JPEG로 줄여 보낸다.
+    const small=await sharp(image).rotate().resize(512,512,{fit:"inside"}).jpeg({quality:80}).toBuffer();
+    const data=small.toString("base64");
+    const first=primaryLimited&&canFallBack?fallback:primary;
+    let response=await call(first,data);
+    // 429면 다른 모델로 한 번만 더, 그래도 안 되면 이 장은 포기한다.
+    if(response.status===429&&first===primary&&canFallBack){primaryLimited=true;response=await call(fallback,data);}
+    if(!response.ok)throw new GeminiStatusError(response.status);
+    const body=await response.json() as {candidates?:Array<{content?:{parts?:Array<{text?:string}>}}>};
+    const text=body.candidates?.[0]?.content?.parts?.map(part=>part.text??"").join("")??"";
+    const fields=CoverCheckSchema.parse(JSON.parse(text));
+    const check:CoverCheck={...fields,score:coverScore(fields),warnings:coverWarnings(fields,food.name)};
+    cachePut(key,check);
+    return check;
+  };
+
+  const settled=await Promise.allSettled(images.map(checkOne));
+  const failure=settled.find((result):result is PromiseRejectedResult=>result.status==="rejected");
+  if(failure){
+    if(options.strict)throw failure.reason;
+    const reason=failure.reason instanceof Error?failure.reason.message:String(failure.reason);
+    console.warn(`[cover-check] ${settled.filter(result=>result.status==="rejected").length}/${images.length}장 점검을 건너뜁니다:`,reason);
   }
+  const results=settled.map(result=>result.status==="fulfilled"?result.value:null);
+  return results.some(Boolean)?results:null;
+}
+
+// 표지 후보 점검. 실패한 장은 "점검 못 함" 자리로 채워 순서·배지에 그대로 쓸 수 있게 한다. 모두 실패하면 null.
+export async function checkCoverCandidates(images:Buffer[],options:CoverCheckOptions={}):Promise<CoverCheck[]|null> {
+  const results=await scoreImages(images,options);
+  if(!results)return null;
+  return results.map(result=>result??{
+    foodVisible:true,looksLikeSkate:true,textInImage:false,oddHands:false,appetite:3,lighting:3,composition:3,dark:false,blurry:false,clutter:false,
+    note:"점검하지 못했어요",score:coverScore({appetite:3,lighting:3,composition:3}),warnings:["AI 점검 실패"],unchecked:true,
+  });
 }

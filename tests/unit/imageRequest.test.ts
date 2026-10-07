@@ -409,3 +409,22 @@ describe("hongeo stays the hero", () => {
     expect(prompt).toContain("Never show a whole small fish");
   });
 });
+
+describe("appetizing photo direction (A9)", () => {
+  const brief={topic:"홍어회",count:1,aspectRatio:"4:5" as const,slideIndex:1,slideTotal:5,styleAnchor:"따뜻한 색온도"};
+  it("asks for glossy texture, warm side light, Korean props only, at a sane length", () => {
+    const prompt=buildImagePrompt(brief);
+    expect(prompt).toContain("glossy moist highlights");
+    expect(prompt).toContain("3200-4000K side light");
+    expect(prompt).toContain("visible parallel fiber texture");
+    expect(prompt).toContain("translucent pink edges backlit");
+    expect(prompt).toContain("plate fills about 60%");
+    expect(prompt).toContain("brass yugi bowls");
+    expect(prompt).toContain("No Japanese props");
+    expect(prompt.length).toBeLessThan(3200);
+  });
+  it("keeps skate texture out of other foods and illustration styles", () => {
+    expect(buildImagePrompt({...brief,topic:"김치찌개"})).not.toContain("Skate texture:");
+    expect(buildImagePrompt({...brief,imageStyle:"anime"})).not.toContain("Skate texture:");
+  });
+});

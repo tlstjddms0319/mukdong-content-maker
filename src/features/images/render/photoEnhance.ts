@@ -24,6 +24,7 @@ import sharp from "sharp";
 // 5. 따뜻한 색 vibrance: 색상각 345°~60°(분홍·빨강·주황·노랑)만, 채도가 낮은 픽셀일수록 더 올린다
 //    k = 1 + .03 + .18 × 따뜻함 × (1 − 채도). 채도 .06 미만(흰 접시·막걸리·회색 그릇)은 손대지 않는다.
 //    2·3단계에서 많이 밝힌 사진(늘림 1.3배 초과 또는 감마 1.2 초과)은 어둠 속 센서 노이즈 색이 함께 커지므로 .10으로 줄인다.
+//    메뉴를 알면(options.food) 메뉴별 세기·색 범위를 쓰고(FOOD_LOOKS), 품질이 "어두움"이면 상한을 .08로 더 낮춘다.
 // 선명화는 여기서 하지 않는다. 카드 크기로 줄인 뒤 한 번 거는 것이 맞아서 primitives.ts finishPhoto가 맡는다.
 //
 // ── AI가 만든 사진(kind:"ai") ───────────────────────────────────────────────────────────
@@ -44,14 +45,156 @@ export async function photoStats(input:Buffer):Promise<PhotoStats> {
   return {mean,luminance};
 }
 
-export async function enhancePhoto(input:Buffer,options:{kind?:Exclude<PhotoKind,"none">}={}):Promise<Buffer> {
+// ── 사진 품질(계획서 A11) ─────────────────────────────────────────────────────────────────
+// 사장님 사진을 보관함에 넣을 때 한 번 재서 "어두움·흔들림·색 틀어짐·작은 사진" 배지를 붙이고,
+// 표지 추천과 렌더(흐린 사진은 선명화를 약하게)에 쓴다. 긴 변 384px 축소본에서 재므로 사진 한 장 100ms 안팎이다.
+// - luminance: 평균 밝기(0~1). .35 미만이면 어두움.
+// - saturation: 평균 채도(0~1). 홍어·막걸리는 원래 채도가 낮아 배지에는 쓰지 않고 참고값으로만 둔다.
+// - cast: 빨강·파랑 평균 차이를 평균 밝기로 나눈 값(음수면 푸르스름). −.18 미만 또는 .75 초과면 색 틀어짐.
+// - green: 초록이 빨강·파랑 평균보다 많은 정도(형광등). .08 초과면 색 틀어짐.
+// - sharpness: 가장 날카로운 경계(라플라시안 상위 1%)를 밝기 표준편차로 나눈 값. 샘플·픽스처의 정상 사진 .85~2.3,
+//   blur 3을 건 사진 .15~.38, 9px 흔들림 .43~.88. .6 미만이면 흔들림.
+// - longSide: 원본 긴 변(px). 900 미만이면 카카오톡 전송본처럼 작은 사진.
+import { PHOTO_QUALITY_LABELS, type PhotoQualityFlag } from "../freeCards";
+export { PHOTO_QUALITY_LABELS, type PhotoQualityFlag };
+export type PhotoQuality={luminance:number;saturation:number;cast:number;green:number;sharpness:number;longSide:number;flags:PhotoQualityFlag[]};
+export const PHOTO_QUALITY_LIMITS={dark:.35,blurry:.6,cast:.18,warmCast:.75,green:.08,lowres:900} as const;
+const QUALITY_SIDE=384;
+export async function photoQuality(input:Buffer):Promise<PhotoQuality> {
+  const meta=await sharp(input).rotate().metadata();
+  const longSide=Math.max(meta.autoOrient?.width??meta.width??0,meta.autoOrient?.height??meta.height??0);
+  const {data,info}=await sharp(input).rotate().resize(QUALITY_SIDE,QUALITY_SIDE,{fit:"inside"}).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject:true});
+  return qualityOfPixels(data,info.width,info.height,longSide);
+}
+
+// 384px 이하 RGB raw 픽셀에서 품질을 잰다. enhancePhoto는 이미 풀어 둔 픽셀을 줄여 여기로 넘겨, 원본을 다시 디코드하지 않는다.
+function qualityOfPixels(data:Buffer,W:number,H:number,longSide:number):PhotoQuality {
+  const n=W*H;
+  let r=0,g=0,b=0,sat=0;
+  const gray=new Float32Array(n);
+  for(let i=0,p=0;p<n;p++,i+=3){
+    const R=data[i],G=data[i+1],B=data[i+2];
+    r+=R;g+=G;b+=B;
+    const max=Math.max(R,G,B),min=Math.min(R,G,B);
+    sat+=max?(max-min)/max:0;
+    gray[p]=R*.2126+G*.7152+B*.0722;
+  }
+  r/=n;g/=n;b/=n;
+  const luminance=(r*.2126+g*.7152+b*.0722)/255;
+  const average=Math.max(1,(r+g+b)/3);
+  const cast=(r-b)/average;
+  // 초록 기운(형광등): 초록이 빨강·파랑 평균보다 얼마나 많은가.
+  const green=(g-(r+b)/2)/average;
+  // 선명도: 라플라시안(가운데×4 − 상하좌우) 절댓값의 상위 1% 값. 분산을 쓰면 흰 접시처럼 무늬가 적은 사진이
+  // 흐린 사진으로 잘못 잡힌다. 상위 1%는 "가장 또렷한 경계가 얼마나 날카로운가"라서, 접시 테두리 하나만 또렷해도 높게 나온다.
+  const histogram=new Uint32Array(1024);
+  let count=0;
+  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+    const p=y*W+x,v=Math.abs(4*gray[p]-gray[p-1]-gray[p+1]-gray[p-W]-gray[p+W]);
+    histogram[Math.min(1023,Math.round(v))]++;count++;
+  }
+  let edge=0;
+  for(let v=1023,seen=0;v>=0;v--){seen+=histogram[v];if(seen>=count*.01){edge=v;break;}}
+  // 어둡거나 뿌연(대비가 낮은) 사진은 경계 값도 함께 작아진다. 밝기 표준편차로 나눠 "대비에 비해 경계가 얼마나 날카로운가"를 잰다.
+  let graySum=0,graySq=0;
+  for(let p=0;p<n;p++){graySum+=gray[p];graySq+=gray[p]*gray[p];}
+  const grayStdev=Math.sqrt(Math.max(1,graySq/n-(graySum/n)**2));
+  const sharpness=Math.round(edge/grayStdev*100)/100;
+  const flags:PhotoQualityFlag[]=[];
+  if(luminance<PHOTO_QUALITY_LIMITS.dark)flags.push("dark");
+  if(sharpness<PHOTO_QUALITY_LIMITS.blurry)flags.push("blurry");
+  // 홍어·수육·묵은지·백열등 아래 사진은 원래 붉다(샘플 삼합 사진 .52). 따뜻한 쪽은 아주 크게 틀어졌을 때(>.75)만,
+  // 형광등·그늘에서 생기는 푸른 쪽(<−.18)은 민감하게 본다. 푸르스름한 홍어는 식욕을 떨어뜨린다.
+  if(cast<-PHOTO_QUALITY_LIMITS.cast||cast>PHOTO_QUALITY_LIMITS.warmCast||green>PHOTO_QUALITY_LIMITS.green)flags.push("cast");
+  if(longSide>0&&longSide<PHOTO_QUALITY_LIMITS.lowres)flags.push("lowres");
+  const round=(value:number,digits=3)=>Math.round(value*10**digits)/10**digits;
+  return {luminance:round(luminance),saturation:round(sat/n),cast:round(cast),green:round(green),sharpness,longSide,flags};
+}
+
+// ── 메뉴별 보정(계획서 A10) ───────────────────────────────────────────────────────────────
+// 같은 "맛있게"라도 메뉴마다 살려야 할 색이 다르다. 슬라이드 제목·키워드로 메뉴를 고르고(foodLookOf), 5단계 vibrance를 바꾼다.
+// - hongeo(홍어): 분홍·붉은 살(색상각 320°~30°)을 기본보다 세게(k .22). 다른 따뜻한 색은 기본과 같게 둔다.
+// - samhap(삼합·수육·묵은지): 붉은 수육·묵은지는 이미 R이 높아 vibrance가 채널을 255로 날려 결이 뭉개진다.
+//   어느 채널이든 245를 넘기지 않게 픽셀마다 k를 줄인다(이미 245를 넘은 픽셀은 손대지 않는다).
+// - makgeolli(막걸리): 흰 사발·뽀얀 막걸리가 누렇게 물들지 않게 vibrance를 약하게(k .10), 채도 .10 미만은 아예 건너뛰고
+//   .10~.18은 서서히 적용한다(기본은 .06 미만만 보호).
+// - jeon(전·부침): 색상각 0°~60°(노릇한 색)에서 밝은 곳은 조금 밝히고 중간 그늘은 조금 눌러 기름 윤기(하이라이트 대비)를 낸다.
+// 메뉴를 못 찾으면 null(기본 보정 = 지금 동작).
+export type FoodLook="hongeo"|"samhap"|"makgeolli"|"jeon";
+type Look={amount:number;global:number;neutral:number;ramp:number;weight:(hue:number)=>number;clip:number;sheen:boolean};
+const FOOD_WORDS:Record<FoodLook,string[]>={
+  samhap:["삼합","수육","묵은지","보쌈"],
+  hongeo:["홍어","홍어회","홍어무침","홍어애","애탕"],
+  jeon:["파전","김치전","해물전","모둠전","녹두전","육전","동태전","호박전","부침개","부침","빈대떡","지짐이","전"],
+  makgeolli:["막걸리","동동주","탁주"],
+};
+// 같은 글에 여러 메뉴가 나오면 먼저 나온 메뉴를 고른다. 단 삼합은 홍어를 품고 있어 삼합이 보이면 삼합.
+// "전"은 한 글자라 "전통·이전" 같은 낱말에 섞이지 않게, 낱말 하나가 정확히 "전"이거나 "~전"으로 끝나는 메뉴 이름일 때만 본다.
+export function foodLookOf(text:string):FoodLook|null {
+  const normalized=text.normalize("NFKC");
+  const tokens=normalized.split(/[^가-힣a-zA-Z0-9]+/).filter(Boolean);
+  const indexOf=(word:string)=>word.length===1?tokens.some(token=>token===word||token===`${word}을`||token===`${word}이`||token===`${word}은`||token===`${word}에`)?normalized.indexOf(word):-1:normalized.indexOf(word);
+  let best:{look:FoodLook;at:number}|null=null;
+  for(const look of Object.keys(FOOD_WORDS) as FoodLook[]){
+    const hits=FOOD_WORDS[look].map(indexOf).filter(at=>at>=0);
+    if(!hits.length)continue;
+    if(look==="samhap")return "samhap";
+    const at=Math.min(...hits);
+    if(!best||at<best.at)best={look,at};
+  }
+  return best?.look??null;
+}
+// 분홍·붉은 살 가중치: 320°~30°는 1, 양쪽 25°에 걸쳐 0으로.
+function pinkWeight(h:number):number {
+  if(h>=320||h<=30)return 1;
+  if(h>30&&h<55)return 1-(h-30)/25;
+  if(h>295&&h<320)return (h-295)/25;
+  return 0;
+}
+const DEFAULT_LOOK:Look={amount:VIBRANCE_REAL,global:VIBRANCE_GLOBAL_REAL,neutral:NEUTRAL_SAT,ramp:0,weight:h=>warmWeight(h),clip:255,sheen:false};
+const HONGEO_VIBRANCE=.22;
+export const FOOD_LOOKS:Record<FoodLook,Look>={
+  // 분홍 살은 .22, 그 밖의 따뜻한 색은 기본(.18)과 같은 세기가 되도록 가중치를 맞춘다.
+  hongeo:{...DEFAULT_LOOK,amount:HONGEO_VIBRANCE,weight:h=>Math.max(pinkWeight(h),warmWeight(h)*VIBRANCE_REAL/HONGEO_VIBRANCE)},
+  samhap:{...DEFAULT_LOOK,clip:245},
+  makgeolli:{...DEFAULT_LOOK,amount:.10,global:.015,neutral:.10,ramp:.08},
+  jeon:{...DEFAULT_LOOK,sheen:true},
+};
+// 어두운 사진(품질 dark)은 밝히면서 센서 노이즈 색도 커지므로 vibrance 상한을 더 낮춘다.
+const VIBRANCE_DARK_CAP=.08,GLOBAL_DARK_CAP=.01;
+
+// 보정한 사진 버퍼 → 보정 전에 잰 품질. finishPhoto가 흐리거나 작은 사진의 선명화를 약하게 할 때 쓴다.
+// 렌더 때 다시 재면 사진마다 100ms가 들어서, 보정 단계에서 이미 풀어 둔 픽셀로 한 번만 재 둔다.
+const enhancedQuality=new WeakMap<Buffer,PhotoQuality>();
+export const qualityOfEnhanced=(buffer:Buffer):PhotoQuality|undefined=>enhancedQuality.get(buffer);
+
+export async function enhancePhoto(input:Buffer,options:{kind?:Exclude<PhotoKind,"none">;food?:FoodLook|null}={}):Promise<Buffer> {
   const kind=options.kind??"real";
   // toColourspace("srgb"): 흑백 사진도 RGB 3채널로 받아 아래 루프가 항상 3칸 단위로 돈다.
-  const {data,info}=await sharp(input).rotate().resize(MAX_SIDE,MAX_SIDE,{fit:"inside",withoutEnlargement:true}).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject:true});
+  const [{data,info},meta]=await Promise.all([
+    sharp(input).rotate().resize(MAX_SIDE,MAX_SIDE,{fit:"inside",withoutEnlargement:true}).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject:true}),
+    kind==="real"?sharp(input).metadata().catch(()=>null):Promise.resolve(null),
+  ]);
   if(info.channels!==3)return sharp(input).rotate().jpeg({quality:92}).toBuffer();
+  // 사장님 사진만 품질을 잰다(AI 사진은 크기·밝기가 이미 정돈돼 있다). 실패해도 보정은 계속한다.
+  let quality:PhotoQuality|null=null;
+  if(kind==="real"){
+    try{
+      const small=await sharp(data,{raw:{width:info.width,height:info.height,channels:3}}).resize(QUALITY_SIDE,QUALITY_SIDE,{fit:"inside"}).raw().toBuffer({resolveWithObject:true});
+      const longSide=Math.max(meta?.width??0,meta?.height??0)||Math.max(info.width,info.height);
+      quality=qualityOfPixels(small.data,small.info.width,small.info.height,longSide);
+    }catch{quality=null;}
+  }
   const lifted=kind==="real"?applyTone(data):false;
-  applyWarmVibrance(data,kind==="ai"?VIBRANCE_AI:lifted?VIBRANCE_LIFTED:VIBRANCE_REAL,kind==="real"?VIBRANCE_GLOBAL_REAL:0);
-  return sharp(data,{raw:{width:info.width,height:info.height,channels:3}}).jpeg({quality:92}).toBuffer();
+  const base=options.food?FOOD_LOOKS[options.food]:DEFAULT_LOOK;
+  // AI 사진·많이 밝힌 사진은 기본 .18 대비 .10의 비율로 메뉴 세기도 함께 줄인다.
+  const scale=kind==="ai"?VIBRANCE_AI/VIBRANCE_REAL:lifted?VIBRANCE_LIFTED/VIBRANCE_REAL:1;
+  let amount=base.amount*scale,global=kind==="real"?base.global:0;
+  if(quality?.flags.includes("dark")){amount=Math.min(amount,VIBRANCE_DARK_CAP);global=Math.min(global,GLOBAL_DARK_CAP);}
+  applyWarmVibrance(data,{...base,amount,global});
+  const output=await sharp(data,{raw:{width:info.width,height:info.height,channels:3}}).jpeg({quality:92}).toBuffer();
+  if(quality)enhancedQuality.set(output,quality);
+  return output;
 }
 
 // 1~4단계: 채널별 배율 → 대비 늘림 → 감마 밝히기 → S자·롤오프를 256칸 표(LUT) 3개로 미리 계산해 한 번에 적용한다.
@@ -106,18 +249,43 @@ function applyTone(data:Buffer):boolean {
 }
 
 // 5단계: 따뜻한 색만, 채도가 낮을수록 더 올린다. 밝기(Rec.709 휘도)를 축으로 색을 바깥으로 민다.
-function applyWarmVibrance(data:Buffer,amount:number,global:number):void {
+// look.clip: 어느 채널도 이 값을 넘지 않게 k를 줄인다(삼합). look.sheen: 노릇한 색의 하이라이트 대비(전).
+function applyWarmVibrance(data:Buffer,look:Look):void {
+  const {amount,global,neutral,ramp,weight,clip,sheen}=look;
   for(let i=0;i<data.length;i+=3){
     const r=data[i],g=data[i+1],b=data[i+2];
     const max=Math.max(r,g,b),min=Math.min(r,g,b);
     if(max===0)continue;
     const sat=(max-min)/max;
-    if(sat<NEUTRAL_SAT)continue;
-    const warmth=warmWeight(hueOf(r,g,b,max,min));
-    const k=1+global+amount*warmth*(1-sat);
-    if(k===1)continue;
+    if(sat<neutral)continue;
+    const hue=hueOf(r,g,b,max,min);
+    // ramp: 중립 경계 바로 위 픽셀은 서서히 적용한다(흰 사발이 경계에서 갑자기 물들지 않게).
+    const fade=ramp>0?Math.min(1,(sat-neutral)/ramp):1;
+    let k=1+(global+amount*weight(hue)*(1-sat))*fade;
     const y=r*.2126+g*.7152+b*.0722;
-    data[i]=clamp8(y+(r-y)*k);data[i+1]=clamp8(y+(g-y)*k);data[i+2]=clamp8(y+(b-y)*k);
+    if(clip<255&&k>1){
+      // 가장 큰 채널이 clip을 넘지 않는 k까지만. 이미 넘은 픽셀은 그대로 둔다.
+      if(max>=clip)k=1;
+      else if(max-y>0)k=Math.min(k,(clip-y)/(max-y));
+    }
+    let gain=1;
+    if(sheen){
+      const w=hue<=60?1:hue<75?1-(hue-60)/15:hue>=345?(hue-345)/15:0;
+      if(w>0){
+        // 밝은 곳(140~230)은 최대 +6%, 중간 그늘(<140)은 최대 −4%. 결과가 250을 넘지 않게 묶는다.
+        const t=Math.min(1,Math.max(0,(y-140)/90)),up=t*t*(3-2*t);
+        const down=y<140?Math.min(1,y/70)*Math.min(1,(140-y)/70):0;
+        gain=1+w*(.06*up-.04*down);
+      }
+    }
+    if(k===1&&gain===1)continue;
+    let R=y+(r-y)*k,G=y+(g-y)*k,B=y+(b-y)*k;
+    if(gain!==1){
+      const top=Math.max(R,G,B);
+      if(gain>1&&top*gain>250)gain=Math.max(1,250/Math.max(1,top));
+      R*=gain;G*=gain;B*=gain;
+    }
+    data[i]=clamp8(R);data[i+1]=clamp8(G);data[i+2]=clamp8(B);
   }
 }
 

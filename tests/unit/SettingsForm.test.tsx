@@ -53,6 +53,21 @@ describe("SettingsForm", () => {
     expect(screen.queryByText(/token-123|sk-|gsk_/)).not.toBeInTheDocument();
   });
 
+  it("keeps remote cutout off by default and saves the toggle with a monthly budget", () => {
+    const onSave=vi.fn();
+    render(<SettingsForm onSave={onSave} connections={{gemini:false,groq:false,cloudflare:false,openai:false,higgsfield:true}}/>);
+    expect(screen.getByText(/누끼가 어려운 사진을 Higgsfield로 배경 제거합니다/)).toBeInTheDocument();
+    expect(screen.getByLabelText("원격 누끼 사용")).not.toBeChecked();
+    expect(screen.getByLabelText("원격 누끼 월 예산")).toBeDisabled();
+    expect(screen.getByLabelText("원격 누끼 월 예산")).toHaveValue(20);
+    fireEvent.click(screen.getByLabelText("원격 누끼 사용"));
+    fireEvent.change(screen.getByLabelText("원격 누끼 월 예산"),{target:{value:"500"}});
+    expect(screen.getByLabelText("원격 누끼 월 예산")).toHaveValue(200);
+    fireEvent.change(screen.getByLabelText("원격 누끼 월 예산"),{target:{value:"8"}});
+    fireEvent.click(screen.getByRole("button",{name:"설정 저장"}));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({remoteCutout:true,remoteCutoutMonthlyCredits:8}));
+  });
+
   it("saves the chosen text provider", () => {
     const onSave=vi.fn();
     render(<SettingsForm onSave={onSave}/>);

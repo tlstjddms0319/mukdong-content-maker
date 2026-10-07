@@ -101,19 +101,23 @@ async function waitForJob(job:Job,auth:string):Promise<string> {
   return url;
 }
 
-// 결과는 3:4로 오므로 게시물 비율(4:5, 1080×1350)로 가운데를 잘라 JPEG data URL로 돌려준다.
+// 결과는 3:4로 오므로 게시물 비율(4:5, 1080×1350)로 잘라 JPEG data URL로 돌려준다.
+// 자르는 자리는 가운데가 아니라 attention(눈에 띄는 부분: 채도·밝기 대비가 큰 곳)으로 잡아, 접시가 위아래로 치우친 사진에서도
+// 주인공 음식이 잘리지 않게 한다. 3:4 → 4:5는 세로를 약 6%만 덜어 내므로 구도가 크게 바뀌지 않는다.
 async function downloadAsPost(url:string):Promise<string> {
   let response:Response;
   try { response=await fetch(url,{signal:AbortSignal.timeout(60_000)}); }
   catch { throw new HiggsfieldImageError(504,"timeout"); }
   if(!response.ok)throw new HiggsfieldImageError(502);
-  const jpeg=await sharp(Buffer.from(await response.arrayBuffer())).rotate().resize({...OUTPUT,fit:"cover",position:"centre"}).jpeg({quality:92}).toBuffer();
+  const jpeg=await sharp(Buffer.from(await response.arrayBuffer())).rotate().resize({...OUTPUT,fit:"cover",position:"attention"}).jpeg({quality:92}).toBuffer();
   return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
 }
 
 async function generateOne(input:ImageBrief,auth:string,referenceUrl?:string):Promise<string> {
   const job=await api<Job>(MODEL_PATH,{method:"POST",body:{
     prompt:buildImagePrompt(input,Boolean(referenceUrl)),
+    // 이 모델이 받는 비율 목록에 4:5가 없어(1:1·3:4·2:3·9:16 등) 가장 가까운 3:4로 받아 자른다.
+    // 품질 값도 low·medium뿐이라 표지도 medium(가장 높은 값)으로 둔다.
     aspect_ratio:"3:4",
     resolution:"2k",
     quality:"medium",

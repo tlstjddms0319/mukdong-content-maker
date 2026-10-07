@@ -24,6 +24,10 @@ export function SettingsForm({ onSave = saveSettings, connections = { gemini:fal
     <section className="settings-section"><div><h2>브랜드 키트</h2><p>모든 디자인 계열의 카드 바닥글에 가게 이름과 함께 같은 모양으로 찍혀요. 비우면 가게 이름만 찍혀요.</p></div><div className="field-grid">
       <label>Instagram 계정<input aria-label="Instagram 계정" placeholder="@mukdong_hongeo" maxLength={31} value={settings.brandHandle??""} onChange={e=>update("brandHandle",e.target.value.trim())}/><small className="field-help">카드 예시: 묵동홍어마을 · {settings.brandHandle?.trim()?`@${settings.brandHandle.trim().replace(/^@/,"")}`:"@계정"}</small></label>
     </div></section>
+    <section className="settings-section"><div><h2>원격 누끼 (선택)</h2><p>켜면 누끼가 어려운 사진을 Higgsfield로 배경 제거합니다. 사진 1장당 크레딧이 들고, 같은 사진은 한 번만 처리합니다.</p></div><div className="field-grid">
+      <label><span><input type="checkbox" aria-label="원격 누끼 사용" checked={settings.remoteCutout??false} onChange={e=>update("remoteCutout",e.target.checked)}/> 원격 누끼 사용</span><small className="field-help">컬러 블록·3D 팝업북·B급 키치 계열에서만 써요. 꺼 두면 지금처럼 앱 안에서 무료로 누끼를 따요.{connections.higgsfield===false?" Higgsfield 키가 없으면 켜도 무료 누끼로 그려요.":""}</small></label>
+      <label>월 예산(크레딧)<input type="number" aria-label="원격 누끼 월 예산" min={0} max={200} step={1} disabled={!settings.remoteCutout} value={settings.remoteCutoutMonthlyCredits??20} onChange={e=>{const value=Math.round(Number(e.target.value));update("remoteCutoutMonthlyCredits",Number.isFinite(value)?Math.min(200,Math.max(0,value)):20);}}/><small className="field-help">이번 달에 쓴 크레딧이 이 값에 닿으면 그달은 무료 누끼로 그려요. 0~200, 기본 20.</small></label>
+    </div></section>
     <section className="settings-section"><div><h2>AI 연결 상태</h2><p>키가 저장됐는지만 표시해요. 실제 생성 성공 여부는 제작 화면에서 확인해 주세요.</p></div><div className="connection-panel">
       <p>이미지 AI의 자동은 키가 있으면 Higgsfield를 먼저 쓰고, 실패하면 Cloudflare, 그다음 OpenAI로 전환해요. Higgsfield는 한 장마다 크레딧을 쓰고 한 장에 2분 정도 걸려요. 제공자 요금제에 따라 비용이 들 수 있어요.</p>
       <p>고품질로 만들려면 이미지 AI에서 OpenAI를 선택하세요. 품질 옵션은 OpenAI 호출에 적용되며, Cloudflare에는 적용되지 않아요.</p>

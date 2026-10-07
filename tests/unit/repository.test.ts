@@ -130,6 +130,24 @@ describe("draft repository", () => {
     }
   });
 
+  it("reads settings saved before the remote cutout option existed with it turned off", async () => {
+    const directory = await temporaryDirectory();
+    const previous = process.env.DATA_DIR;
+    process.env.DATA_DIR = directory;
+    const older: Record<string, unknown> = { ...DEFAULT_SETTINGS };
+    delete older.remoteCutout;
+    delete older.remoteCutoutMonthlyCredits;
+    await writeFile(path.join(directory, "settings.json"), JSON.stringify({ ...older, imageAiRoutingVersion:1, copyWritingVersion:1, textAiRoutingVersion:1 }), "utf8");
+    try {
+      expect(await readSettings()).toMatchObject({ remoteCutout:false, remoteCutoutMonthlyCredits:20 });
+      await writeSettings({ ...(await readSettings()), remoteCutout:true, remoteCutoutMonthlyCredits:5 });
+      expect(await readSettings()).toMatchObject({ remoteCutout:true, remoteCutoutMonthlyCredits:5 });
+      await expect(writeSettings({ ...DEFAULT_SETTINGS, remoteCutoutMonthlyCredits:500 })).rejects.toThrow();
+    } finally {
+      if (previous === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = previous;
+    }
+  });
+
   it("handles concurrent settings saves without sharing a temporary file", async () => {
     const directory = await temporaryDirectory();
     const previous = process.env.DATA_DIR;
