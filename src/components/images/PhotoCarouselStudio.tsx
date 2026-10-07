@@ -44,17 +44,21 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
   const progress=deckStatus?deckStatus:phase==="uploading"?photoStatus||"사진을 저장하고 있어요":phase==="planning"?"캐러셀 구성을 만들고 있어요":filling?`${slides.length}/${slideCount}장 완성 · 사진을 카드에 앉히고 있어요`:phase==="slides"?`${activeIndex+1}번 장 사진을 바꾸고 있어요`:"";
   const usedInActive=photoAssignment[activeIndex]??[];
   // 사진 품질 배지·표지 추천. 고른 사진 묶음(순서와 무관)이 바뀌면 무료 로컬 검사만 다시 한다. 순서는 바꾸지 않는다(사장님이 고른다).
+  // 주제도 키에 넣는다: 사진 속 음식이 글의 메뉴와 맞는지(무료 검사)가 주제에 따라 달라진다.
   const photoKey=photos.map(photo=>photo.id).sort().join("|");
+  const topic=state.input.topic;
   const [analysis,setAnalysis]=useState<{key:string;data:AnalyzeResponse}|null>(null);
   const [scoring,setScoring]=useState(false);
   const [analysisNote,setAnalysisNote]=useState("");
   useEffect(()=>{
     if(!photoKey)return;
     let cancelled=false;
-    requestAnalysis(photoKey.split("|"),false,"").then(data=>{if(!cancelled)setAnalysis({key:photoKey,data});}).catch(()=>{/* 품질 배지는 보조 정보라 실패해도 조용히 넘어간다 */});
+    requestAnalysis(photoKey.split("|"),false,topic).then(data=>{if(!cancelled)setAnalysis({key:photoKey,data});}).catch(()=>{/* 품질 배지는 보조 정보라 실패해도 조용히 넘어간다 */});
     return ()=>{cancelled=true;};
-  },[photoKey]);
+  },[photoKey,topic]);
   const current=analysis?.key===photoKey?analysis.data:null;
+  // 글의 메뉴와 다른 사진(예: 과메기 글에 삼합 사진). 막지는 않고 몇 번 사진인지 알려 준다.
+  const mismatched=photos.map((photo,index)=>({index,info:current?.photos.find(item=>item.id===photo.id)})).filter(item=>item.info?.mismatch);
   const findTastiest=async()=>{
     const key=photoKey;
     setScoring(true);setAnalysisNote("");
@@ -95,11 +99,11 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
     {photos.length>0&&<ol className="photo-strip" aria-label="고른 사진">{photos.map((photo,index)=>{
       const info=current?.photos.find(item=>item.id===photo.id);
       const recommended=current?.recommended===photo.id&&photos.length>1;
-      return <li key={photo.id} aria-label={`${index+1}번 사진${recommended?" · 표지로 추천":""}${info?.labels.length?` · ${info.labels.join(", ")}`:""}`}>
+      return <li key={photo.id} aria-label={`${index+1}번 사진${recommended?" · 표지로 추천":""}${info?.mismatch?` · ${info.mismatch}`:""}${info?.labels.length?` · ${info.labels.join(", ")}`:""}`}>
         <Image src={photo.preview} alt={photo.name} width={110} height={110} unoptimized/>
         <span className="photo-order">{index===0?"표지":index+1}</span>
         {recommended&&<span className="photo-recommend" title={info?.appetite?`맛 점수 ${info.appetite.score}/10${info.appetite.note?` · ${info.appetite.note}`:""}`:"밝기·선명도로 고른 추천"}>표지로 추천</span>}
-        {info&&info.labels.length>0&&<span className="photo-quality">{info.labels.map(label=><span key={label}>{label}</span>)}</span>}
+        {info&&(info.labels.length>0||info.mismatch)&&<span className="photo-quality">{info.mismatch&&<span className="photo-mismatch" title={info.mismatch}>메뉴 다름</span>}{info.labels.map(label=><span key={label}>{label}</span>)}</span>}
         <span className="photo-strip-actions">
           {recommended&&index>0&&<button type="button" disabled={busy} aria-label={`${index+1}번 사진을 표지로`} title="이 사진을 첫 장(표지)으로" onClick={()=>moveToCover(index)}>★</button>}
           {index>0&&<button type="button" disabled={busy} aria-label={`${index+1}번 사진 앞으로`} onClick={()=>movePhotoForward(index)}>◀</button>}
@@ -108,9 +112,10 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       </li>;
     })}</ol>}
     {photos.length>1&&current?.scoreAvailable&&<div className="photo-studio-actions">
-      <button type="button" className="button secondary" disabled={busy||scoring} onClick={()=>void findTastiest()}>{scoring?"사진을 살펴보는 중…":"맛있어 보이는 사진 찾기"}</button>
+      <button type="button" className="button secondary" disabled={busy||scoring} onClick={()=>void findTastiest()}>{scoring?"사진을 살펴보는 중…":"맛있어 보이는 사진 찾기 · 메뉴 확인"}</button>
       {analysisNote&&<span role="status" className="field-help">{analysisNote}</span>}
     </div>}
+    {mismatched.length>0&&<p role="status" className="field-help photo-mismatch-note">{mismatched[0].info!.mismatch}{mismatched.length>1?` 외 ${mismatched.length-1}장`:""}({mismatched.map(item=>item.index===0?"표지":`${item.index+1}번`).join("·")}). 그대로 만들면 글과 사진이 달라 보여요. 맞는 사진으로 바꾸거나 빼 주세요.</p>}
     {photos.length>0&&!slides.length&&!busy&&<div className="photo-studio-actions">
       <button type="button" className="button primary" onClick={()=>void buildPhotoCarousel()}>사진 {photos.length}장으로 {slideCount}장 캐러셀 만들기</button>
       <button type="button" className="button secondary" disabled={approved} onClick={()=>approveRawPhotos(onApprove)}>글자 없이 사진만 쓰기</button>

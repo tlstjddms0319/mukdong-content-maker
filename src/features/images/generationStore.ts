@@ -6,6 +6,7 @@ import { normalizeCardLayout, photosNeeded, type DesignSpec } from "./design";
 import type { BodyFontId, TitleFontId } from "./typography";
 import type { ThemeId } from "./themes";
 import type { SeasonMotif } from "./seasonMotif";
+import { TOPIC_TAG } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { fitPlanToPhotos, swapPhoto } from "./photoCarousel";
@@ -297,9 +298,11 @@ export async function regenerateSlide(){
 async function uploadStudioPhoto(file:File):Promise<StudioPhoto>{
   const body=new FormData();
   body.append("file",file);
-  // 보관함 검색용 이름·검색어. 이름은 파일명, 검색어는 지금 주제.
+  // 보관함 검색용 이름·검색어. 이름은 파일명, 검색어는 지금 주제("주제:" 표시).
+  // 주제는 "이 사진을 올릴 때 쓰던 글"일 뿐 사진 속 음식이 아니다. 예전엔 주제를 그냥 태그로 붙여서, 과메기 글을 쓰다 올린
+  // 삼합 사진이 "과메기" 사진처럼 쌓였다. "주제:"를 붙여 두면 사진·메뉴 불일치 검사(photoAnalysis.ts)가 이 태그를 믿지 않는다.
   body.append("name",file.name.replace(/\.[a-z0-9]+$/i,"").slice(0,60)||"매장 사진");
-  body.append("tags",[state.input.topic.slice(0,24)||"홍어","매장 사진"].join(","));
+  body.append("tags",[...(state.input.topic.trim()?[`${TOPIC_TAG}${state.input.topic.trim()}`.slice(0,24)]:[]),"매장 사진"].join(","));
   body.append("kind","photo");
   body.append("credit","묵동홍어마을 직접 촬영");
   const response=await fetch("/api/images/assets",{method:"POST",body});

@@ -14,7 +14,7 @@ describe("AI connection check", () => {
       env:{GEMINI_API_KEY:"gem-key-123456",GROQ_API_KEY:"gsk_SECRETVALUE123",HF_API_KEY_ID:"id",HF_API_KEY_SECRET:"secret",OPENAI_API_KEY:"sk-open-123456"},
       fetch:fetcher as unknown as typeof fetch,
       textClients:{gemini:()=>gemini,groq:()=>failingGroq as never},
-      coverCheck:async()=>[{foodVisible:true,looksLikeSkate:true,textInImage:false,oddHands:false,appetite:4,lighting:4,composition:4,dark:false,blurry:false,clutter:false,score:8,note:"좋음",warnings:[]}],
+      coverCheck:async()=>[{foodVisible:true,looksLikeSkate:true,textInImage:false,oddHands:false,appetite:4,lighting:4,composition:4,dark:false,blurry:false,clutter:false,food:"홍어회",score:8,note:"좋음",warnings:[]}],
       sampleImage:async()=>Buffer.from("x"),
     });
     const byId=Object.fromEntries(items.map(item=>[item.id,item]));
