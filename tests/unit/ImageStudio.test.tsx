@@ -188,10 +188,27 @@ describe("owner photo cover recommendation",()=>{
     // 자동으로 순서를 바꾸지 않는다: 첫 사진은 여전히 사진1.
     const strip=screen.getByRole("list",{name:"고른 사진"});
     expect(strip.querySelectorAll("li")[0].querySelector("img")?.getAttribute("alt")).toBe("사진1");
-    fireEvent.click(screen.getByRole("button",{name:"맛있어 보이는 사진 찾기"}));
+    fireEvent.click(screen.getByRole("button",{name:"맛있어 보이는 사진 찾기 · 메뉴 확인"}));
     await waitFor(()=>expect(analyzeBodies().at(-1)).toMatchObject({score:true,topic:"홍어전"}));
     expect(await screen.findByText(/표지는 직접 골라 주세요/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:"2번 사진을 표지로"}));
     await waitFor(()=>expect(strip.querySelectorAll("li")[0].querySelector("img")?.getAttribute("alt")).toBe("사진2"));
+  });
+  it("warns when a chosen photo shows a different menu than the post, and tags uploads with the topic only as a topic",async()=>{
+    // 사장님이 겪은 사례: 과메기 글에 삼합 사진. 막지는 않고 어느 사진인지 알려 준다.
+    let uploads=0;const forms:FormData[]=[];
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/analyze"?{ok:true,json:async()=>({analyzed:true,ranking:["p1","p2"],recommended:null,scored:false,scoreAvailable:false,photos:[
+      {id:"p1",flags:[],labels:[],measured:true,food:"과메기",mismatch:null,appetite:null},
+      {id:"p2",flags:[],labels:[],measured:true,food:"삼합",mismatch:"과메기 글인데 삼합 사진이에요",appetite:null},
+    ]})}:(forms.push(init?.body as FormData),{ok:true,json:async()=>{uploads++;return {asset:{id:`p${uploads}`,preview:"data:image/jpeg;base64,AAAA",name:`사진${uploads}`}};}}));
+    vi.stubGlobal("fetch",request);
+    render(<ImageStudio topic="겨울엔 과메기 한 점" slideCount={3} onApprove={()=>undefined}/>);
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"}),new File(["b"],"b.png",{type:"image/png"})]}});
+    expect(await screen.findByText("메뉴 다름")).toBeInTheDocument();
+    expect(screen.getByText(/과메기 글인데 삼합 사진이에요\(2번\)/)).toBeInTheDocument();
+    const analyzeBody=JSON.parse(String(request.mock.calls.find(([url])=>url==="/api/images/analyze")![1]?.body));
+    expect(analyzeBody.topic).toBe("겨울엔 과메기 한 점");
+    // 올린 사진의 태그에는 주제가 "주제:"로만 붙는다(사진 속 음식으로 오해하지 않게).
+    expect(String(forms[0].get("tags"))).toBe("주제:겨울엔 과메기 한 점,매장 사진");
   });
 });

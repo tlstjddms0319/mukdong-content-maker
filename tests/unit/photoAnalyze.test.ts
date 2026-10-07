@@ -2,13 +2,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 
-const mocks=vi.hoisted(()=>({guard:vi.fn(),read:vi.fn(),score:vi.fn()}));
+const mocks=vi.hoisted(()=>({guard:vi.fn(),read:vi.fn(),score:vi.fn(),update:vi.fn()}));
 vi.mock("server-only",()=>({}));
 vi.mock("@/features/auth/guard",()=>({ownerApiError:mocks.guard}));
-vi.mock("@/features/images/assetLibrary",()=>({createAssetLibrary:()=>({read:mocks.read})}));
+vi.mock("@/features/images/assetLibrary",()=>({createAssetLibrary:()=>({read:mocks.read,update:mocks.update})}));
 vi.mock("@/features/images/coverCheck",async(importOriginal)=>({...await importOriginal<typeof import("@/features/images/coverCheck")>(),scoreImages:mocks.score}));
 const { POST }=await import("@/app/api/images/analyze/route");
-const { AnalyzeResponseSchema, photoRank, rankPhotos }=await import("@/features/images/photoAnalysis");
+const { AnalyzeResponseSchema, menuMismatch, photoFoodText, photoRank, rankPhotos }=await import("@/features/images/photoAnalysis");
 const { coverScore }=await import("@/features/images/coverCheck");
 
 const ID_A="11111111-1111-4111-8111-111111111111",ID_B="22222222-2222-4222-8222-222222222222",ID_C="33333333-3333-4333-8333-333333333333";
@@ -75,5 +75,42 @@ describe("owner photo cover recommendation", () => {
 
   it("keeps the owner's order on ties", () => {
     expect(rankPhotos([{id:"a",rank:photoRank({flags:[]})},{id:"b",rank:photoRank({flags:[]})},{id:"c",rank:photoRank({flags:["cast"]})}])).toEqual(["a","b","c"]);
+  });
+});
+
+describe("photo and menu mismatch (gwamegi post, samhap photo)", () => {
+  const tagged=(id:string,name:string,tags:string[])=>({...asset(id,[]),name,tags});
+  it("warns from the owner's own name or tags without any AI call", async () => {
+    mocks.read.mockImplementation(async(id:string)=>id===ID_A?tagged(ID_A,"삼합 한 접시",["삼합"]):id===ID_B?tagged(ID_B,"IMG_2031",["과메기"]):tagged(ID_C,"막걸리",["막걸리"]));
+    const data=AnalyzeResponseSchema.parse(await (await post({photos:[{id:ID_A},{id:ID_B},{id:ID_C}],topic:"겨울엔 과메기 한 점"})).json());
+    expect(data.photos[0]).toMatchObject({food:"삼합",mismatch:"과메기 글인데 삼합 사진이에요"});
+    expect(data.photos[1]).toMatchObject({food:"과메기",mismatch:null});
+    // 술 사진은 어떤 글에도 곁들일 수 있어 경고하지 않는다.
+    expect(data.photos[2].mismatch).toBeNull();
+    expect(mocks.score).not.toHaveBeenCalled();
+  });
+  it("does not trust the topic tag that uploads used to add", () => {
+    // 예전: 과메기 글을 쓰다 올린 삼합 사진에 주제가 그대로 태그로 붙었다. 지금은 "주제:"를 붙이고, 긴 문장 태그도 믿지 않는다.
+    expect(photoFoodText({name:"IMG_1",tags:["주제:겨울엔 과메기 한 점","매장 사진"]})).not.toContain("과메기");
+    expect(photoFoodText({name:"IMG_1",tags:["과메기는 왜 찬바람이 불면 찾","매장 사진"]})).not.toContain("과메기");
+    expect(photoFoodText({name:"IMG_1",tags:["음식:삼합","과메기"]})).toBe("삼합");
+  });
+  it("names the mismatch only when both sides are known, and never for a drink post", () => {
+    expect(menuMismatch("겨울엔 과메기 한 점","삼합")?.message).toBe("과메기 글인데 삼합 사진이에요");
+    expect(menuMismatch("홍어무침 한 접시","홍어회")?.message).toBe("홍어무침 글인데 홍어회 사진이에요");
+    expect(menuMismatch("막걸리 한 잔엔","미나리전")).toBeNull();
+    expect(menuMismatch("오늘 저녁 뭐 먹지","삼합")).toBeNull();
+    expect(menuMismatch("겨울엔 과메기 한 점","IMG_2031")).toBeNull();
+  });
+  it("uses what the AI saw and remembers it on the library photo", async () => {
+    process.env.GEMINI_API_KEY="test";
+    mocks.read.mockImplementation(async(id:string)=>tagged(id,"IMG_9",["주제:겨울엔 과메기","매장 사진"]));
+    mocks.update.mockImplementation(async(id:string,changes:{tags:string[]})=>({...tagged(id,"IMG_9",changes.tags)}));
+    mocks.score.mockResolvedValue([{...check(4),food:"삼합"},{...check(4),looksLikeSkate:false,food:""}]);
+    const data=AnalyzeResponseSchema.parse(await (await post({photos:[{id:ID_A},{id:ID_B}],score:true,topic:"겨울엔 과메기 한 점"})).json());
+    expect(data.photos[0].mismatch).toBe("과메기 글인데 삼합 사진이에요");
+    expect(mocks.update).toHaveBeenCalledWith(ID_A,{tags:["음식:삼합","주제:겨울엔 과메기","매장 사진"]});
+    // 음식 이름은 몰라도 "글의 음식처럼 안 보임"이면 알린다.
+    expect(data.photos[1].mismatch).toBe("AI가 보기엔 과메기 사진이 아니에요");
   });
 });

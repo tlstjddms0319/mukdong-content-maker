@@ -4,13 +4,14 @@ import { ownerApiError } from "@/features/auth/guard";
 import { createAssetLibrary } from "@/features/images/assetLibrary";
 import { PHOTO_QUALITY_LABELS, photoQuality, type PhotoQualityFlag } from "@/features/images/render/photoEnhance";
 import { coverRank, expectedFoodFrom, scoreImages, type CoverCheck } from "@/features/images/coverCheck";
-import { AnalyzeRequestSchema, photoRank, rankPhotos, type AnalyzeResponse, type AnalyzedPhoto } from "@/features/images/photoAnalysis";
+import { AnalyzeRequestSchema, FOOD_TAG, menuMismatch, photoFoodOf, photoFoodText, photoRank, rankPhotos, type AnalyzeResponse, type AnalyzedPhoto } from "@/features/images/photoAnalysis";
 
 // 사장님 사진 표지 추천. 1) 로컬 품질 검사(무료: 어두움·흔들림·색 틀어짐·작은 사진)로 먼저 거르고
 // 2) 요청에 score:true가 있고 Gemini 키가 있으면 거르고 남은 사진만 식욕 점수(coverCheck)를 매긴다.
 // 돌려주는 것은 "표지로 좋은 순서"뿐이고, 사진 순서를 바꾸는 것은 사장님이 화면에서 직접 한다.
 
-type Loaded={id:string;bytes:Buffer|null;flags:PhotoQualityFlag[]|null};
+// meta: 보관함 사진의 이름·태그(사진 속 음식을 읽는 데 쓴다). data URL 사진은 없다.
+type Loaded={id:string;bytes:Buffer|null;flags:PhotoQualityFlag[]|null;meta?:{name:string;tags:string[]}};
 
 async function loadPhoto(photo:{id:string;image?:string},library:ReturnType<typeof createAssetLibrary>):Promise<Loaded> {
   if(photo.image){
@@ -22,7 +23,7 @@ async function loadPhoto(photo:{id:string;image?:string},library:ReturnType<type
   if(!asset)return {id:photo.id,bytes:null,flags:null};
   const bytes=Buffer.from(asset.preview.slice(asset.preview.indexOf(",")+1),"base64");
   // 보관함에 넣을 때 원본으로 잰 품질이 있으면 그대로 쓴다(미리보기는 줄인 사진이라 "작은 사진" 판정이 틀어진다).
-  return {id:photo.id,bytes,flags:asset.quality?.flags??null};
+  return {id:photo.id,bytes,flags:asset.quality?.flags??null,meta:{name:asset.name??"",tags:asset.tags??[]}};
 }
 
 export async function POST(request:Request) { const denied=await ownerApiError(); if(denied)return denied;
@@ -51,10 +52,26 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     else if(results.some(check=>!check))message="일부 사진은 AI 점검을 못 해 밝기·선명도로만 순서를 정했어요.";
   }
 
+  // AI 점검이 사진 속 음식을 알려 주면 보관함 사진에 "음식:이름" 태그로 남긴다. 다음부터는 AI 없이도(무료) 불일치를 안다.
+  await Promise.all(measured.map(async item=>{
+    const food=checks.get(item.id)?.food?.trim().slice(0,10);
+    if(!food||!item.meta||item.meta.tags.some(tag=>tag.startsWith(FOOD_TAG)))return;
+    const tags=[`${FOOD_TAG}${food}`,...item.meta.tags].slice(0,12);
+    // 태그 저장은 보조 기능이라 실패해도 분석 결과는 그대로 돌려준다.
+    try{if(await library.update(item.id,{tags}))item.meta={...item.meta,tags};}catch{/* 다음 점검 때 다시 시도 */}
+  }));
+
   const analyzed:AnalyzedPhoto[]=measured.map(item=>{
     const check=checks.get(item.id);
     const flags=item.flags??[];
+    // 사진 속 음식: AI가 이번에 본 음식 → 보관함 "음식:" 태그 → 직접 단 이름·태그 순서로 믿는다.
+    const foodText=check?.food?.trim()||(item.meta?photoFoodText(item.meta):"");
+    const tagged=menuMismatch(topic,foodText);
+    // AI가 "글의 음식처럼 안 보인다"고 했는데 음식 이름으로는 못 가렸을 때도 알려 준다.
+    const expected=expectedFoodFrom(topic);
+    const aiMismatch=!tagged&&check&&check.foodVisible&&!check.looksLikeSkate&&topic?`AI가 보기엔 ${expected.name} 사진이 아니에요`:null;
     return {id:item.id,flags,labels:flags.map(flag=>PHOTO_QUALITY_LABELS[flag]),measured:item.flags!==null,
+      food:photoFoodOf(foodText)?.label??(check?.food?.trim().slice(0,10)||null),mismatch:tagged?.message??aiMismatch,
       appetite:check?{score:check.score,appetite:check.appetite,lighting:check.lighting,composition:check.composition,warnings:check.warnings,note:check.note}:null};
   });
   // 점수가 붙은 사진은 coverRank, 못 붙은 사진은 중간값(5)에서 품질 감점만 한다.

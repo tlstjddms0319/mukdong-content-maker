@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { mainMenuOf, menuOf, type StoreMenuItem } from "@/features/store/menu";
 
 // 사장님 사진 표지 추천(/api/images/analyze)의 요청·응답 모양과 순서 정하기.
 // 화면(PhotoCarouselStudio)과 서버가 함께 쓰므로 sharp·server-only를 넣지 않는다.
@@ -28,6 +29,10 @@ export const AnalyzedPhotoSchema=z.object({
   labels:z.array(z.string()),         // 화면 배지 문구(PHOTO_QUALITY_LABELS)
   measured:z.boolean(),
   // Gemini 식욕 점수. 점검하지 않았거나 실패했으면 null.
+  // 사진 속 음식(보관함 이름·태그 또는 AI 점검으로 안 것, 짧은 한국어). 모르면 null.
+  food:z.string().nullable().default(null),
+  // 글의 메뉴와 사진 속 음식이 다를 때의 안내 문구(예: "과메기 글인데 삼합 사진이에요"). 맞거나 모르면 null.
+  mismatch:z.string().nullable().default(null),
   appetite:z.object({
     score:z.number(),appetite:z.number(),lighting:z.number(),composition:z.number(),
     warnings:z.array(z.string()),note:z.string(),
@@ -55,4 +60,33 @@ export function photoRank(photo:{flags:ReadonlyArray<z.infer<typeof QualityFlagS
 // 순위가 같으면 원래 순서(사장님이 둔 순서)를 지킨다.
 export function rankPhotos(items:Array<{id:string;rank:number}>):string[] {
   return items.map((item,index)=>({...item,index})).sort((a,b)=>b.rank-a.rank||a.index-b.index).map(item=>item.id);
+}
+
+// ── 사진·메뉴 불일치(과메기 글에 삼합 사진) ─────────────────────────────────────────────
+// 보관함 사진의 이름·태그에서 음식을 읽는다. 단 자동으로 붙은 태그는 믿지 않는다:
+//  - "주제:…" 태그: 사진을 올릴 때 그때 쓰던 글의 주제를 붙인 것(사진 속 음식과 무관할 수 있다)
+//  - 예전 자동 태그: 주제 문장을 24자로 자른 긴 태그(띄어쓰기 여럿·물음표). 사장님이 직접 단 태그는 보통 짧은 낱말이다.
+// "음식:…" 태그는 AI 점검이 사진을 보고 붙인 것이라 가장 먼저 믿는다.
+export const TOPIC_TAG="주제:";
+export const FOOD_TAG="음식:";
+const trustedTag=(tag:string)=>!tag.startsWith(TOPIC_TAG)&&!/[?？]/.test(tag)&&tag.length<=12&&tag.split(/\s+/).length<=2;
+export function photoFoodText(asset:{name:string;tags:readonly string[]}):string {
+  const ai=asset.tags.filter(tag=>tag.startsWith(FOOD_TAG)).map(tag=>tag.slice(FOOD_TAG.length));
+  if(ai.length)return ai.join(" ");
+  return [asset.name,...asset.tags.filter(trustedTag)].join(" ");
+}
+// 사진 속 음식(술 제외). 홍어회 가운데 삼합이라고 적힌 사진은 "삼합"으로 부른다.
+export function photoFoodOf(text:string):{menu:StoreMenuItem;label:string}|null {
+  const menu=menuOf(text).find(item=>item.category!=="술");
+  if(!menu)return null;
+  return {menu,label:menu.id==="hongeo-hoe"&&/삼합/.test(text)?"삼합":menu.short};
+}
+// 글의 주인공 메뉴와 사진 속 음식이 다르면 안내 문구. 글이 술(막걸리) 이야기면 어떤 안주 사진이든 어울려 경고하지 않는다.
+// 글에서 메뉴를 못 찾거나 사진 속 음식을 모르면 null(괜히 겁주지 않는다).
+export function menuMismatch(topic:string|undefined,photoText:string):{label:string;message:string}|null {
+  const topicMenu=mainMenuOf(topic);
+  if(!topicMenu||topicMenu.category==="술")return null;
+  const food=photoFoodOf(photoText);
+  if(!food||food.menu.id===topicMenu.id)return null;
+  return {label:food.label,message:`${topicMenu.short} 글인데 ${food.label} 사진이에요`};
 }

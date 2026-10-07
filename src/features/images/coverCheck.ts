@@ -23,6 +23,9 @@ export const CoverCheckSchema=z.object({
   blurry:z.boolean(),               // 초점이 나가거나 흔들렸는가
   clutter:z.boolean(),              // 음식과 상관없는 물건이 많아 어수선한가
   note:z.string().max(80),          // 한국어 한 줄 메모
+  // 사진 속 주인공 음식 이름(짧은 한국어, 모르면 빈 문자열). 사진·글 메뉴 불일치 안내와 보관함 "음식:" 태그에 쓴다.
+  // 예전에 저장된 점검 결과에는 없으므로 기본값 "". 길이는 쓰는 쪽에서 자른다(모델이 길게 써도 점검 전체가 실패하지 않게).
+  food:z.string().default(""),
 });
 export type CoverCheckFields=z.infer<typeof CoverCheckSchema>;
 // unchecked: 이 장만 점검 호출이 실패해 점수를 모르는 자리(다른 장의 결과는 그대로 쓴다).
@@ -66,7 +69,8 @@ function promptFor(food:string):string {
 - dark: 전체가 어두워 음식이 잘 안 보이면 true
 - blurry: 초점이 나가거나 흔들렸으면 true
 - clutter: 음식과 상관없는 물건이 많아 어수선하면 true
-- note: 가장 큰 문제나 장점을 한국어 20자 안팎 한 줄로`;
+- note: 가장 큰 문제나 장점을 한국어 20자 안팎 한 줄로
+- food: 사진 속 주인공 음식 이름을 한국어로 짧게(예: 홍어회, 삼합, 홍어무침, 홍어애탕, 과메기, 미나리전, 막걸리, 수육). 모르겠으면 빈 문자열`;
 }
 
 // 세 점수(1~5)를 10점 척도로. 먹음직스러움을 두 배로 친다(표지는 맛있어 보이는 게 먼저).
@@ -191,7 +195,7 @@ export async function checkCoverCandidates(images:Buffer[],options:CoverCheckOpt
   const results=await scoreImages(images,options);
   if(!results)return null;
   return results.map(result=>result??{
-    foodVisible:true,looksLikeSkate:true,textInImage:false,oddHands:false,appetite:3,lighting:3,composition:3,dark:false,blurry:false,clutter:false,
+    foodVisible:true,looksLikeSkate:true,textInImage:false,oddHands:false,appetite:3,lighting:3,composition:3,dark:false,blurry:false,clutter:false,food:"",
     note:"점검하지 못했어요",score:coverScore({appetite:3,lighting:3,composition:3}),warnings:["AI 점검 실패"],unchecked:true,
   });
 }
