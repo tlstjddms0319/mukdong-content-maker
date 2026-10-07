@@ -109,8 +109,10 @@ const MENU_WORDS:Record<string,MenuWords>={
 };
 
 // 주제(와 내용 메모·이미지 설명)에서 이 캐러셀의 주인공 메뉴를 고른다. 못 찾으면 undefined(홍어회 문안을 쓴다).
-export function carouselMenu(input:Pick<CarouselPlanInput,"topic"|"contentBrief"|"imageBrief">):StoreMenuItem|undefined {
-  return mainMenuOf(input.topic,input.contentBrief,input.imageBrief);
+// 주제 → 내용 메모 → 이미지 설명 → (실제 사진 캐러셀이면) 사진 설명 순서로 찾는다.
+// 사진 설명까지 보는 이유: "입맛 없을 때 뭐 먹지?"처럼 메뉴 이름이 없는 주제에 미나리전 사진을 넣었으면 미나리전이 주인공이다.
+export function carouselMenu(input:Pick<CarouselPlanInput,"topic"|"contentBrief"|"imageBrief">&{photoNotes?:readonly string[]}):StoreMenuItem|undefined {
+  return mainMenuOf(input.topic,input.contentBrief,input.imageBrief,...(input.photoNotes??[]));
 }
 
 function fallbackSlides(menu:StoreMenuItem|undefined):Record<CarouselRole,FallbackSlide> {
@@ -170,7 +172,7 @@ export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan
 function heroRule(menu:StoreMenuItem|undefined,topic:string):string {
   const samhap=/삼합|수육|묵은지/.test(topic);
   const noSamhap=samhap?"":` 이 주제에는 삼합이 없으니 수육·묵은지·삼합을 꺼내지 마세요(삼합은 기본 구성이 아닙니다).`;
-  if(!menu||menu.id==="hongeo-hoe")return `[주인공 메뉴: 홍어] 선택 주제의 메뉴가 주인공입니다. 이 주제는 홍어 이야기이므로 headline과 points의 주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰세요. 곁들임은 "홍어 한 점을 묵은지에 싸요"처럼 홍어 문장 뒤에 붙는 말로만 넣고, 곁들임으로 시작하는 요점이나 단계 설명은 쓰지 마세요. 먹는 순서를 설명할 때도 첫 단계는 홍어를 고르는 데서 시작합니다.${noSamhap}`;
+  if(!menu||menu.id==="hongeo-hoe")return `[주인공 메뉴: 홍어] 선택 주제의 메뉴가 주인공입니다. 이 주제는 홍어 이야기이므로 headline과 points의 주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰세요. 곁들임은 ${samhap?'"홍어 한 점을 묵은지에 싸요"':'"홍어 한 점에 초장을 살짝 찍어요"'}처럼 홍어 문장 뒤에 붙는 말로만 넣고, 곁들임으로 시작하는 요점이나 단계 설명은 쓰지 마세요. 먹는 순서를 설명할 때도 첫 단계는 홍어를 고르는 데서 시작합니다.${noSamhap}`;
   return `[주인공 메뉴: ${menu.short}] 선택 주제의 메뉴가 주인공입니다. 이 주제는 ${menu.short} 이야기이므로 headline과 points의 주어와 첫 동작은 ${josa(menu.short,"으로","로")} 쓰고, 모든 음식 장면에서 ${josa(menu.short,"이","가")} 가장 크고 앞에 초점이 맞게 놓이게 하세요. 홍어·삼합을 억지로 끌어오지 마세요. 다른 메뉴는 글이 직접 말할 때만 곁들임으로 짧게 쓰세요.${noSamhap} 겉모습 참고: ${menu.lookKo}.`;
 }
 
@@ -221,10 +223,11 @@ export interface CarouselPlanAi {
 // 여러 장에 쓰면 캐러셀이 같은 사진 다섯 장이 된다. 두 번째부터는 그 장의 글에서 장면을 다시 짓는다.
 // "젓가락 없음"처럼 막는 말은 세지 않도록, 실제로 집어 드는 표현만 본다.
 export const CHOPSTICK_SCENE=/젓가락으로|집어\s*(?:올|든|드)|집는|chopsticks?\s+(?:lift|hold|pick)/i;
-export function sceneFromCopy(slide:CarouselSlidePlan,topic:string):string {
+// menu: 이 캐러셀의 주인공 메뉴(carouselMenu). 장 글과 주제 제목에 메뉴 이름이 없을 때 홍어로 넘어가지 않고 이 메뉴를 쓴다.
+export function sceneFromCopy(slide:CarouselSlidePlan,topic:string,menu?:StoreMenuItem):string {
   const text=[slide.headline,...slide.points].join(" ");
   // 장 글과 주제에서 주인공 메뉴를 고른다. 홍어 조합(삼합·묵은지·수육)은 홍어 장면에서만 쓴다.
-  const hero=heroMenu(text,topic);
+  const hero=heroMenu(text,topic)??menu;
   const skate=!hero||hero.id==="hongeo-hoe";
   const dish=skate?"홍어":hero.short;
   const subject=skate&&/삼합/.test(text)?"홍어·수육·묵은지를 겹친 삼합 한 입이 접시 위에 놓인 모습"
@@ -238,12 +241,12 @@ export function sceneFromCopy(slide:CarouselSlidePlan,topic:string):string {
     :"홍어 접시와 곁들임이 놓인 식탁을 45도에서 담은 모습";
   return `${subject}. ${topic} 이야기의 "${slide.headline}" 장면. 음식은 접시 위에 놓여 있고 얼굴은 나오지 않음`.slice(0,600);
 }
-export function limitChopstickScenes(plan:CarouselPlan,topic:string):CarouselPlan {
+export function limitChopstickScenes(plan:CarouselPlan,topic:string,menu?:StoreMenuItem):CarouselPlan {
   let seen=false;
   return {...plan,slides:plan.slides.map(slide=>{
     if(!CHOPSTICK_SCENE.test(slide.visualPrompt))return slide;
     if(!seen){seen=true;return slide;}
-    return {...slide,visualPrompt:sceneFromCopy(slide,topic)};
+    return {...slide,visualPrompt:sceneFromCopy(slide,topic,menu)};
   })};
 }
 
@@ -256,7 +259,7 @@ export function keepScenesOnMenu(plan:CarouselPlan,topic:string,menu:StoreMenuIt
   return {...plan,styleAnchor:foodFreeAnchor(plan.styleAnchor),slides:plan.slides.map(slide=>{
     if(!isOtherMenu(topicMenu)||!SKATE_TABLE.test(slide.visualPrompt))return slide;
     if(copyMentionsSkate([slide.headline,...slide.points].join(" ")))return slide;
-    return {...slide,visualPrompt:sceneFromCopy(slide,topic)};
+    return {...slide,visualPrompt:sceneFromCopy(slide,topic,topicMenu)};
   })};
 }
 
@@ -268,7 +271,7 @@ export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,op
   if(!ai)return vary(fallback,true);
   try {
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));
-    if(plan.slideCount===parsed.slideCount)return vary(keepScenesOnMenu(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic),parsed.topic,carouselMenu(parsed)),false);
+    if(plan.slideCount===parsed.slideCount){const menu=carouselMenu(parsed);return vary(keepScenesOnMenu(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic,menu),parsed.topic,menu),false);}
     options.onFallback?.(new Error("wrong slide count"));
     return vary(fallback,true);
   } catch(error) {

@@ -41,6 +41,12 @@ export function resolveTextClients(setting: AppSettings["textAiProvider"] | unde
   return clients;
 }
 
+// 키 문제(고치면 바로 됨) > 한도 초과(기다리면 됨) > 서버 혼잡·시간 초과 > 형식 오류 순으로 사장님에게 알릴 가치가 크다.
+export function failureRank(error:unknown):number {
+  if (error instanceof TextAiHttpError) return error.status === 401 || error.status === 403 ? 4 : error.status === 429 ? 3 : 2;
+  return error instanceof TextAiUnavailableError ? 0 : 1;
+}
+
 function describe(error:unknown):string {
   return error instanceof Error ? error.message.replace(/\s+/g, " ").slice(0, 200) : String(error);
 }
@@ -53,6 +59,9 @@ export function createTextClient(setting: AppSettings["textAiProvider"] | undefi
     configured: clients.map((client) => client.provider),
     async generateJson<T>(prompt:string, schema:z.ZodType<T>):Promise<T> {
       let failure: unknown = new TextAiUnavailableError();
+      // 제공자마다 마지막 실패를 모아 두고, 다 실패하면 가장 도움이 되는 이유를 던진다(아래 failureRank).
+      // 예전에는 마지막 제공자의 오류만 던져, Gemini 한도 초과인데 "형식이 맞지 않았어요"가 보이곤 했다.
+      const failures: unknown[] = [];
       for (const client of clients) {
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
@@ -68,9 +77,10 @@ export function createTextClient(setting: AppSettings["textAiProvider"] | undefi
             if (error instanceof TextAiHttpError) break;
           }
         }
+        failures.push(failure);
         options.onSwitch?.(client.provider, describe(failure));
       }
-      throw failure;
+      throw failures.length ? failures.reduce((best, error) => failureRank(error) > failureRank(best) ? error : best, failures[0]) : failure;
     },
   };
 }

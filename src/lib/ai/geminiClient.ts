@@ -1,6 +1,6 @@
 import "server-only";
 import type { z } from "zod";
-import { TextAiHttpError } from "./errors";
+import { TEXT_AI_TIMEOUT_MS, TextAiHttpError, guardedFetch } from "./errors";
 import { recordUsage } from "@/lib/usage/ledger";
 import { OptionalFieldsError, toStrictJsonSchema } from "./jsonSchema";
 
@@ -19,10 +19,11 @@ export function createGeminiClient(options: { apiKey?:string; model?:string; fal
   const model = options.model ?? process.env.GEMINI_TEXT_MODEL ?? "gemini-3.5-flash-lite";
   const fallbackModel = options.fallbackModel ?? process.env.GEMINI_FALLBACK_TEXT_MODEL ?? "gemini-3.1-flash-lite";
   const request = options.fetch ?? fetch;
-  const call = (name:string, prompt:string, jsonSchema?:Record<string, unknown>) => request(
+  // 요청마다 45초 제한. 멈추거나 연결이 끊기면 TextAiHttpError(0)로 바꿔 textClient가 바로 다음 AI로 넘어가게 한다.
+  const call = (name:string, prompt:string, jsonSchema?:Record<string, unknown>) => guardedFetch("Gemini", () => request(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(name)}:generateContent`,
-    { method:"POST", headers:{ "Content-Type":"application/json", "x-goog-api-key":apiKey }, body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }], generationConfig:{ responseMimeType:"application/json", ...(jsonSchema ? { responseJsonSchema:jsonSchema } : {}) } }) },
-  );
+    { method:"POST", signal:AbortSignal.timeout(TEXT_AI_TIMEOUT_MS), headers:{ "Content-Type":"application/json", "x-goog-api-key":apiKey }, body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }], generationConfig:{ responseMimeType:"application/json", ...(jsonSchema ? { responseJsonSchema:jsonSchema } : {}) } }) },
+  ));
   return {
     provider: "gemini" as const,
     async generateJson<T>(prompt:string, schema:z.ZodType<T>):Promise<T> {

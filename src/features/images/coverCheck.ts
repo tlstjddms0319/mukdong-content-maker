@@ -140,6 +140,7 @@ export type CoverCheckOptions={apiKey?:string;model?:string;fallbackModel?:strin
 
 // 한 장씩 따로 점검한 결과. 실패한 장은 null(나머지 결과는 쓴다). 키가 없으면 null.
 // strict: 실패를 삼키지 않고 첫 실패를 그대로 던진다(설정 화면의 "AI 연결 점검"이 실패 이유를 보여 주려고 쓴다).
+const VISION_TIMEOUT_MS=20_000;
 export async function scoreImages(images:Buffer[],options:CoverCheckOptions={}):Promise<Array<CoverCheck|null>|null> {
   const apiKey=options.apiKey??process.env.GEMINI_API_KEY??"";
   if(!apiKey||!images.length)return null;
@@ -154,8 +155,10 @@ export async function scoreImages(images:Buffer[],options:CoverCheckOptions={}):
   let primaryLimited=false;  // 한 장이 429를 받으면 같은 묶음의 뒤 요청은 바로 다른 모델로 보낸다.
 
   const call=async(model:string,data:string)=>{
+    // 사진 한 장 점검에 20초까지만 기다린다. 넘기면 이 장은 "점검 못 함"(null)으로 두고 표지·캐러셀은 그대로 진행한다.
+    // (예전에는 Gemini가 멈추면 표지 후보가 돌아오지 않거나 사진 캐러셀이 "구성을 만들고 있어요"에서 멈췄다.)
     const send=(schema:boolean)=>request(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
-      method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      method:"POST",signal:AbortSignal.timeout(VISION_TIMEOUT_MS),headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
       body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:"image/jpeg",data}}]}],
         generationConfig:{responseMimeType:"application/json",...(schema?{responseJsonSchema:RESPONSE_SCHEMA}:{})}}),
     });

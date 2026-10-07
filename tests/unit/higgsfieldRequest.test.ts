@@ -97,6 +97,15 @@ describe("Higgsfield image generation",()=>{
     expect(body).toMatchObject({provider:"cloudflare",fallback:true,notice:"Higgsfield 생성이 어려워 Cloudflare(으)로 전환했어요."});
   });
 
+  it("in automatic mode shows the credit problem instead of a missing OpenAI key",async()=>{
+    // Cloudflare·OpenAI 키가 없으면 자동 순서에서 빠지고, Higgsfield의 실제 실패 이유(크레딧 부족)가 보인다.
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","");vi.stubEnv("CLOUDFLARE_API_TOKEN","");vi.stubEnv("OPENAI_API_KEY","");
+    vi.stubGlobal("fetch",vi.fn(async()=>json({detail:"Not enough credits"},403)));
+    const { POST }=await import("@/app/api/images/generate/route");
+    const response=await POST(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어 한 상",count:1,aspectRatio:"4:5"})}));
+    expect(response.status).toBe(502);
+    expect((await response.json()).message).toContain("크레딧이 부족");
+  });
   it("explains missing credits when Higgsfield is the only selected image AI",async()=>{
     readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"higgsfield"});
     vi.stubGlobal("fetch",vi.fn(async()=>json({detail:"Not enough credits"},403)));

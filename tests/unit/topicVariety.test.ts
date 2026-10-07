@@ -54,7 +54,7 @@ describe("topic variety", () => {
     expect(onPartial).toHaveBeenCalledWith(1);
     expect(partial[0].title).toBe("굴은 왜 겨울에 맛있을까?");
     const broken=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[1,2,3].map(n=>({...make(`광고 ${n}`,String(n)),summary:"짧음"}))},onFallback);
-    expect(onFallback).toHaveBeenCalledWith(expect.stringContaining("broke the topic rules"));
+    expect(onFallback).toHaveBeenCalledWith(expect.stringContaining("broke the topic rules"),undefined);
     expect(broken.every(topic=>topic.id.startsWith("fallback-"))).toBe(true);
   });
 

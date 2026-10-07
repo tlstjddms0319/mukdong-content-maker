@@ -30,6 +30,23 @@ describe("copy quality",()=>{
     // 주제 태그(최대 3개) + 지역 태그 + 가게 태그. AI가 넣은 지역 태그(#중랑구맛집 등)는 정해진 지역 태그로 바뀐다.
     expect((await response.json()).hashtags).toEqual(["#홍어","#묵동맛집","#묵동홍어마을"]);
   });
+  it("keeps the first draft when the repair call runs out of quota",async()=>{
+    // 첫 초안은 길이만 조금 모자람(다듬으면 되는 문제) → 보완 요청이 429로 실패해도 첫 초안을 돌려준다.
+    generate.mockResolvedValueOnce({...result,information:"너무 짧음"}).mockRejectedValue(new TextAiHttpError("Gemini",429));
+    const response=await POST(request());
+    expect(response.status).toBe(200);
+    const body=await response.json();
+    expect(body.information).toBe("너무 짧음");
+    expect(body._meta.repairFailed).toBe(true);
+    expect(body.quality_warnings.length).toBeGreaterThan(0);
+  });
+  it("asks for a one-sentence hook of 60 characters when only the hook is rewritten",async()=>{
+    generate.mockResolvedValue({replacement:"과메기는 왜 찬바람이 불면 생각날까요? 바다 향이 짙어지는 계절이라 그런지도 몰라요. 김에 싸서 한 점 드셔 보세요."});
+    const response=await POST(request({focus:"hook",currentText:"기존 문안"}));
+    expect(response.status).toBe(200);
+    expect(generate.mock.calls[0][0]).toContain("60자 이내");
+    expect((await response.json()).replacement).toBe("과메기는 왜 찬바람이 불면 생각날까요?");
+  });
   it("keeps a too-short draft with a note to fix instead of throwing it away, and reports provider failures",async()=>{
     // 예전에는 길이가 모자라면 문안 전체를 버리고 "AI 문안을 완성하지 못했어요"를 띄웠다. 이제 쓰고 다듬을 곳만 알려 준다.
     generate.mockResolvedValue({...result,information:"너무 짧음"});

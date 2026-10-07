@@ -231,9 +231,10 @@ export function normalizeTrendLabels(topics:TopicSuggestion[],trends:readonly st
   });
 }
 
-export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string)=>void,season?:SeasonContext,onPartial?:(filled:number)=>void,hints:TopicHints={}):Promise<TopicSuggestion[]> {
+// onFallback(reason, error): 준비된 주제로 바꾼 이유(로그용 글)와, AI 호출이 실패했으면 그 오류(화면에 보여 줄 이유를 고르는 데 쓴다).
+export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string,error?:unknown)=>void,season?:SeasonContext,onPartial?:(filled:number)=>void,hints:TopicHints={}):Promise<TopicSuggestion[]> {
   const parsed=TopicInputSchema.parse(input);
-  const fallback=(reason="no AI client")=>{onFallback?.(reason);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season,parsed.avoidTitles,hints);};
+  const fallback=(reason="no AI client",error?:unknown)=>{onFallback?.(reason,error);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season,parsed.avoidTitles,hints);};
   if(!ai)return fallback();
   try{
     const suggestions=normalizeTrendLabels(normalizeSeasonLabels(TopicSuggestionsSchema.parse(await ai.suggest(parsed)),season),hints.trends);
@@ -241,5 +242,5 @@ export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallbac
     if(filled>=3)return fallback(`suggestions broke the topic rules: ${suggestions.map(topic=>topic.title).join(" / ").slice(0,200)}`);
     if(filled>0)onPartial?.(filled);
     return topics;
-  }catch(error){return fallback(error instanceof Error?error.message.replace(/\s+/g," ").slice(0,300):"AI request failed");}
+  }catch(error){return fallback(error instanceof Error?error.message.replace(/\s+/g," ").slice(0,300):"AI request failed",error);}
 }

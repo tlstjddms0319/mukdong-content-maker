@@ -86,8 +86,11 @@ export async function POST(request: Request) { const denied=await ownerApiError(
       return results.flat();
     };
     // 자동은 키가 있는 Higgsfield부터, 실패하면 무료 Cloudflare, 마지막으로 OpenAI 순서로 남은 장수만 이어서 만든다.
+    // 키가 없는 제공자는 자동 순서에서 뺀다(예전에는 Higgsfield 크레딧 부족 → Cloudflare 한도 → 키 없는 OpenAI 순으로 가서
+    // 실제 이유 대신 "OpenAI API 키가 연결되지 않았습니다"가 떴다). 하나도 없으면 설정 안내가 나오도록 Cloudflare를 남긴다.
+    const configured:ImageProvider[]=[...(isHiggsfieldConfigured()?["higgsfield" as const]:[]),...(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN?["cloudflare" as const]:[]),...(process.env.OPENAI_API_KEY?["openai" as const]:[])];
     const chain:ImageProvider[]=settings.imageAiProvider==="automatic"
-      ?[...(isHiggsfieldConfigured()?["higgsfield" as const]:[]),"cloudflare","openai"]
+      ?(configured.length?configured:["cloudflare"])
       :[settings.imageAiProvider];
     const generators:Record<ImageProvider,(input:ImageBrief)=>Promise<string[]>>={
       higgsfield:generateHiggsfieldImages,
@@ -99,6 +102,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const brief:ImageBrief={...parsed.data,...(windowRatio?{windowRatio}:{})};
     let images:string[]=[];
     const used:ImageProvider[]=[];
+    // 모든 제공자가 실패하면 마지막 오류가 아니라 가장 도움이 되는 이유(크레딧 부족·안전 필터·한도 초과)를 보여 준다.
+    const failures:unknown[]=[];
     for(const [index,name] of chain.entries()){
       // 앞 제공자가 일부만 만들었으면 남은 장수만, 그리고 이어지는 후보 번호부터 요청한다.
       try {
@@ -113,7 +118,11 @@ export async function POST(request: Request) { const denied=await ownerApiError(
         // 일부만 만든 실패도 한 번의 요청으로 센다(만든 장수는 units로).
         recordUsage({provider:USAGE_IDS[name],ok:false,units:completed.length,status:imageErrorStatus(error),quota:error instanceof HiggsfieldImageError&&error.reason==="credits"});
         if(completed.length){images=[...images,...completed];used.push(name);}
-        if(index===chain.length-1)throw error;
+        failures.push(error);
+        if(index===chain.length-1){
+          if(images.length)console.warn(`[images] 일부만 만들어진 이미지 ${images.length}장을 쓰지 못했어요(요청 ${brief.count}장).`);
+          throw mostInformativeImageError(failures);
+        }
         console.warn(`[images] ${name} 생성 실패, 다음 이미지 AI로 전환합니다:`,error instanceof Error?error.name:String(error));
       }
     }
@@ -160,7 +169,29 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     if(error instanceof HiggsfieldImageError)return NextResponse.json({message:HIGGSFIELD_MESSAGES[error.reason],retryable:error.reason!=="auth"&&error.reason!=="credits"},{status:error.reason==="nsfw"?422:502});
     if(error instanceof CloudflareConfigurationError)return NextResponse.json({message:error.message,retryable:false},{status:503});
     if(error instanceof CloudflareImageError)return NextResponse.json({message:error.status===401?"Cloudflare API 토큰을 확인해 주세요.":"무료 이미지 생성에 실패했습니다. 잠시 뒤 다시 시도하거나 직접 사진을 넣어 주세요.",retryable:error.status!==401},{status:502});
-    const detail = error instanceof AiConfigurationError ? {message:error.message,retryable:false} : classifyOpenAIImageError(error);
-    return NextResponse.json(detail, { status:error instanceof AiConfigurationError ? 503 : 502 });
+    if(error instanceof AiConfigurationError)return NextResponse.json({message:error.message,retryable:false},{status:503});
+    // 제공자 오류가 아니면(카드 그리기·사진 읽기·글꼴 등) 서버 기록에 남기고, OpenAI 문구 대신 그 사실을 알린다.
+    if(!isProviderError(error)){
+      console.error("[images] 이미지·카드를 만들다 오류:",error instanceof Error?`${error.name}: ${error.message}\n${error.stack??""}`.slice(0,2000):String(error));
+      return NextResponse.json({message:"카드를 그리는 중 문제가 생겼어요. 다시 시도해 보고, 계속되면 사진을 바꿔 보세요.",retryable:true},{status:500});
+    }
+    return NextResponse.json(classifyOpenAIImageError(error), { status:502 });
   }
+}
+
+// OpenAI SDK 오류는 status 숫자를 가진다. 그 밖의 알려진 제공자 오류 클래스도 제공자 오류로 본다.
+function isProviderError(error:unknown):boolean {
+  return error instanceof HiggsfieldImageError||error instanceof CloudflareImageError||error instanceof HiggsfieldConfigurationError||error instanceof CloudflareConfigurationError
+    ||(typeof error==="object"&&error!==null&&typeof (error as {status?:unknown}).status==="number");
+}
+// 여러 제공자가 실패했을 때 사장님에게 보여 줄 이유: 크레딧·키·안전 필터 > 한도 초과 > 그 밖의 실패 > 설정 없음. 같으면 먼저 난 것.
+function mostInformativeImageError(errors:unknown[]):unknown {
+  const rank=(error:unknown)=>{
+    if(error instanceof HiggsfieldImageError)return error.reason==="credits"||error.reason==="auth"||error.reason==="nsfw"?4:2;
+    if(error instanceof CloudflareImageError)return error.status===401||error.status===429?3:2;
+    if(error instanceof HiggsfieldConfigurationError||error instanceof CloudflareConfigurationError||error instanceof AiConfigurationError)return 0;
+    const status=(error as {status?:unknown})?.status;
+    return status===401||status===429?3:1;
+  };
+  return errors.reduce((best,error)=>rank(error)>rank(best)?error:best,errors[0]);
 }

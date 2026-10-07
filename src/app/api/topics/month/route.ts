@@ -1,20 +1,23 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ownerApiError } from "@/features/auth/guard";
-import { suggestTopics, topicDirectionsForRound } from "@/features/topics/service";
-import { buildTopicPrompt, topicGenerationSchema } from "@/features/topics/prompt";
+import { overusedMenus, suggestTopics, topicDirectionsForRound } from "@/features/topics/service";
+import { buildTopicPrompt, readTopicGeneration, topicGenerationSchema } from "@/features/topics/prompt";
 import { seasonContext } from "@/features/topics/season";
 import { MonthSchema, groupByWeek, pickWeekTopics, postDatesForMonth, rotateStyles, type MonthPlanItem } from "@/features/topics/monthPlan";
 import { readMonthPlan, writeMonthPlan } from "@/features/topics/monthPlanRepository";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
 import { createDraftRepository } from "@/features/drafts/repository";
+import { STORE_MENU } from "@/features/store/menu";
 import { likedTopicTitles } from "@/features/drafts/performance";
 import { selectedDraftMedia } from "@/features/drafts/selection";
 import { matchPlanDraft, planDraftStarted } from "@/features/drafts/planLink";
 
 const STORE_NAME="묵동홍어마을";
 const titleKey=(title:string)=>title.replace(/[\s?!.,]/g,"");
+// "2026-01" → -1달 → "2025-12".
+const shiftMonth=(month:string,delta:number)=>{const [year,m]=month.split("-").map(Number);const date=new Date(Date.UTC(year,m-1+delta,1));return `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,"0")}`;};
 
 // 저장된 한 달 기획 불러오기.
 export async function GET(request:Request){
@@ -53,13 +56,20 @@ export async function POST(request:Request){
     const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
     // 남겨 둔 칸의 주제는 새 주제와 겹치지 않게 미리 넣어 둔다.
     const used=new Set<string>(kept.map(item=>titleKey(item.title)));
-    const recent:string[]=kept.map(item=>item.title);
+    // 메뉴를 고르게 돌리려고 지난달 기획과 최근 초안 주제도 "최근 주제"로 본다(예전: 11·12월 기획이 거의 같고 12월에 과메기 3번).
+    const previousMonth=await readMonthPlan(shiftMonth(month,-1)).catch(()=>null);
+    const recentDrafts=drafts.slice(0,10).map(draft=>draft.topic).reverse();
+    const recent:string[]=[...(previousMonth?.items??[]).map(item=>item.title),...recentDrafts,...kept.map(item=>item.title)];
+    let filledSlots=0;
     const weekly:Array<{dates:string[];topics:Awaited<ReturnType<typeof suggestTopics>>}>=[];
     let fallbackWeeks=0;
     for(const [index,weekDates] of groupByWeek(dates).entries()){
       const season=seasonContext(new Date(`${weekDates[0]}T12:00:00+09:00`));
       const input={storeName:STORE_NAME,recommendationRound:index,excludeTitles:recent.slice(-3),avoidTitles:recent.slice(-30)};
-      const topics=await suggestTopics(input,{suggest:()=>client.generateJson(buildTopicPrompt(input,season,likedTitles),topicGenerationSchema(topicDirectionsForRound(index)))},()=>{fallbackWeeks++;},season);
+      // 최근 주제(최근 것부터)에 두 번 넘게 나온 메뉴는 이번 주 주인공에서 뺀다(주제 추천 화면과 같은 기준).
+      const recentMenus=overusedMenus([...recent].reverse());
+      const recentMenuNames=STORE_MENU.filter(item=>recentMenus.has(item.id)).map(item=>item.name);
+      const topics=await suggestTopics(input,{suggest:async()=>readTopicGeneration(await client.generateJson(buildTopicPrompt(input,season,likedTitles,[],recentMenuNames),topicGenerationSchema(topicDirectionsForRound(index))))},()=>{fallbackWeeks++;},season,filled=>{filledSlots+=filled;},{recentMenus});
       const picked=pickWeekTopics(topics,weekDates.length,used);
       for(const topic of picked){used.add(titleKey(topic.title));recent.push(topic.title);}
       weekly.push({dates:weekDates,topics:picked});
@@ -70,7 +80,7 @@ export async function POST(request:Request){
     const items=[...kept,...fresh].sort((a,b)=>a.date.localeCompare(b.date));
     const plan={month,createdAt:new Date().toISOString(),items};
     await writeMonthPlan(plan);
-    return NextResponse.json({plan,fallbackWeeks,kept:kept.length});
+    return NextResponse.json({plan,fallbackWeeks,kept:kept.length,...(filledSlots?{filled:filledSlots}:{})});
   }catch(error){
     console.warn("[month-plan] 기획 실패:",error instanceof Error?error.message:String(error));
     return NextResponse.json({message:"한 달 기획을 만들지 못했어요. 잠시 뒤 다시 시도해 주세요."},{status:500});

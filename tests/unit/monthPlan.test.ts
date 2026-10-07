@@ -9,7 +9,8 @@ vi.mock("@/features/auth/guard",()=>({ownerApiError:async()=>null}));
 vi.mock("server-only",()=>({}));
 vi.mock("@/features/settings/repository",()=>({readSettings:async()=>({textAiProvider:"automatic"})}));
 // 텍스트 AI 없음 → 준비된 주제(시즌 주제 포함)로 채워지는 경로를 시험한다.
-vi.mock("@/lib/ai/textClient",()=>({createTextClient:()=>({provider:null,generateJson:async()=>{throw new Error("offline");}})}));
+const generateJson=vi.hoisted(()=>vi.fn(async(_prompt:string):Promise<unknown>=>{throw new Error("offline");}));
+vi.mock("@/lib/ai/textClient",()=>({createTextClient:()=>({provider:null,generateJson})}));
 
 describe("month plan helpers", () => {
   it("lists Tuesdays and Fridays, optionally from today", () => {
@@ -76,5 +77,19 @@ describe("month plan route", () => {
     expect(second.kept).toBe(1);
     expect(again.map(item=>item.date)).toEqual(first.map(item=>item.date));
     expect(new Set(again.map(item=>item.title)).size).toBe(again.length);
+  });
+
+  it("rotates menus across months instead of repeating last month's plan",async()=>{
+    vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const { POST }=await import("@/app/api/topics/month/route");
+    const plan=async(month:string)=>((await (await POST(new Request("http://localhost/api/topics/month",{method:"POST",body:JSON.stringify({month})}))).json()).plan.items as Array<{title:string}>).map(item=>item.title);
+    const november=await plan("2030-11");
+    generateJson.mockClear();
+    const december=await plan("2030-12");
+    // AI에게 지난달 기획 주제를 "최근 주제"로 알려 준다(예전에는 이번 달 것만 알려 11·12월 기획이 거의 같았다).
+    const firstWeekPrompt=String(generateJson.mock.calls[0]?.[0]??"");
+    expect(november.some(title=>firstWeekPrompt.includes(title))).toBe(true);
+    // 준비된 주제로 채워도 한 메뉴가 한 달에 몰리지 않는다.
+    expect(december.filter(title=>title.includes("과메기")).length).toBeLessThanOrEqual(2);
   });
 });
