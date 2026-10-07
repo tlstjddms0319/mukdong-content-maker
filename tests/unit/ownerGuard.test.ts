@@ -47,7 +47,7 @@ describe("owner server guard", () => {
   });
 
   it("places the owner guard at the start of every private route and page", () => {
-    const routes = ["topics", "images/analyze", "images/plan", "images/generate", "copy", "media/upload", "drafts", "export/[draftId]", "settings", "instagram/connect", "instagram/connection", "instagram/status", "instagram/publish"];
+    const routes = ["topics", "images/analyze", "images/plan", "images/generate", "copy", "media/upload", "drafts", "drafts/thumbnail", "instagram/publication", "settings", "instagram/connect", "instagram/connection", "instagram/status", "instagram/publish"];
     for (const route of routes) {
       const source = readFileSync(path.join(process.cwd(), "src/app/api", route, "route.ts"), "utf8");
       const handlers = source.split("\n").filter((line) => /^export async function (?:GET|POST|PUT|PATCH|DELETE)\(/.test(line));

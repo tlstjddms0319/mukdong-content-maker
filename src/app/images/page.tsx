@@ -8,6 +8,6 @@ export const dynamic = "force-dynamic";
 
 export default async function ImagesPage() {
   await requireOwnerPage();
-  const drafts=await createDraftRepository().listDrafts();
+  const drafts=await createDraftRepository().listDraftSummaries();
   return <WizardShell step="topic" section="images"><ImageGallery drafts={drafts}/><PhotoLibraryManager/></WizardShell>;
 }

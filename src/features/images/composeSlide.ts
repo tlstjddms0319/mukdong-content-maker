@@ -719,13 +719,15 @@ export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlid
 }
 
 // 카드와 자동 검수 결과를 함께 돌려준다. options.contrast를 켜면 글자 대비까지 잰다(검수 스크립트·테스트용).
-export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions&{contrast?:boolean}={}):Promise<{image:Buffer;report:AuditReport}> {
+// droppedPoints: 구성안 요점 가운데 카드에 들어가지 못한 수(레이아웃 자리가 3개뿐이거나, 넘쳐서 자동으로 뺀 경우). 화면이 알려 준다.
+export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions&{contrast?:boolean}={}):Promise<{image:Buffer;report:AuditReport;droppedPoints:number}> {
   await access(FONTS.bold.file);
   const raw=Array.isArray(input)?input:[input];
   const kind=photoKindOf(options);
   // 메뉴별 보정(홍어·삼합·막걸리·전): 장 제목과 키워드에서 메뉴를 찾는다. 못 찾으면 기본 보정.
   const food=kind==="none"?null:foodLookOf([slide.headline,...(slide.keywords??[])].join(" "));
-  const inputs=kind==="none"?raw:await Promise.all(raw.map(photo=>enhancePhoto(photo,{kind,food})));
+  // 파노라마는 2160px 폭 사진을 반씩 쓰므로 보정 단계에서 1600px로 줄이지 않는다(줄였다 다시 키우면 흐려진다).
+  const inputs=kind==="none"?raw:await Promise.all(raw.map(photo=>enhancePhoto(photo,{kind,food,...(options.panorama?{maxSide:2160}:{})})));
   const card:CardLayout=layout==="overlay"?"fullscreen":normalizeCardLayout(slide);
   if(photosNeeded(card)>0&&!inputs.length)throw new Error("slide image required");
   const fonts=resolveSlideFonts(design,slide);
@@ -750,5 +752,9 @@ export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlide
     current={...current,points:points.slice(0,-1)};
   }
   // 계절 소품(design.season)은 검수가 찾은 글자·사진 자리를 피해 빈 자리에만 얹는다(render/seasonLayer.ts).
-  return {image:await addSeasonMotif(best!.image,best!.report,design?.season,index),report:best!.report};
+  // 요점마다 카드에 그린 글자 안에 들어 있는지 본다(띄어쓰기·불릿 기호는 무시).
+  const plain=(text:string)=>text.replace(/[\s•·‧∙–—-]/g,"");
+  const shown=best!.report.texts.map(plain).join("\n");
+  const droppedPoints=index===1?0:cleanPoints(slide.points).filter(point=>!shown.includes(plain(point))).length;
+  return {image:await addSeasonMotif(best!.image,best!.report,design?.season,index),report:best!.report,droppedPoints};
 }

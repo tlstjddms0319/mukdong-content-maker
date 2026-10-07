@@ -129,6 +129,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       {coverWide&&slideCount>=3&&<label className="field-check"><input type="checkbox" checked={panorama} onChange={event=>setPanoramaChoice(event.target.checked)}/> 표지와 2번째 장을 한 장의 사진으로 잇기(파노라마)</label>}
       <button type="button" className="button primary" onClick={()=>void buildPhotoCarousel({panorama:panorama&&coverWide})}>사진 {photos.length}장으로 {slideCount}장 캐러셀 만들기</button>
       <button type="button" className="button secondary" disabled={approved} onClick={()=>approveRawPhotos(onApprove)}>글자 없이 사진만 쓰기</button>
+      <span className="field-help">사진만 쓰면 인스타그램 비율(세로 4:5)에 맞게 가운데를 기준으로 잘려 올라가요. 가로로 긴 사진은 양옆이 많이 잘리니 최종 확인 화면 미리보기로 확인해 주세요.</span>
     </div>}
     {progress&&<GenerationProgress stage={`${phase}-${slides.length}`} message={progress} progress={filling?slides.length/slideCount:undefined}/>}
     {!busy&&photoDeckIncomplete(state)&&plan&&<div className="photo-studio-actions">
@@ -154,7 +155,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
         {activeView&&activeView!=="full"&&<span className="field-help">사진이 장 수보다 적어 {usedInActive[0]+1}번 사진을 &apos;{PHOTO_VIEW_LABELS[activeView]}&apos;로 한 번 더 썼어요.</span>}
         <div className="photo-library">{photos.map((photo,index)=><button key={photo.id} type="button" className="photo-thumb" aria-pressed={usedInActive[0]===index} disabled={busy} onClick={()=>void swapSlidePhoto(index)} aria-label={`${index+1}번 사진으로 바꾸기`}><Image src={photo.preview} alt="" width={80} height={80} unoptimized/></button>)}</div>
       </div>:<p className="field-help">이 장은 사진 없이 글자로 만든 카드예요.{plan?` (${plan.slides[activeIndex]?.headline})`:""}</p>)}
-      {done&&plan?.slides[activeIndex]&&<SlideTextEditor key={`${activeIndex}|${plan.slides[activeIndex].headline}|${(plan.slides[activeIndex].points??[]).join("|")}`} index={activeIndex} headline={plan.slides[activeIndex].headline} points={plan.slides[activeIndex].points??[]} busy={busy} canEdit={canEditSlideText(state,activeIndex)}/>}
+      {active?.droppedPoints?<p role="status" className="field-help">이 장은 카드 자리가 모자라 요점 {active.droppedPoints}개가 카드에 들어가지 않았어요(캡션에는 남아 있어요). 아래 글자 고치기에서 요점을 줄이거나 합쳐 보세요.</p>:null}{done&&plan?.slides[activeIndex]&&<SlideTextEditor key={`${activeIndex}|${plan.slides[activeIndex].headline}|${(plan.slides[activeIndex].points??[]).join("|")}`} index={activeIndex} headline={plan.slides[activeIndex].headline} points={plan.slides[activeIndex].points??[]} busy={busy} canEdit={canEditSlideText(state,activeIndex)}/>}
       {(done||(busy&&deckEdited))&&<DeckEditor state={state}/>}
       {done&&<div className="photo-studio-actions">
         <button type="button" className="button secondary" disabled={busy||!photos.length} onClick={()=>void buildPhotoCarousel({panorama:state.panorama&&coverWide})}>다시 만들기</button>

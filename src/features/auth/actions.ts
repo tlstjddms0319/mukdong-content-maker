@@ -16,7 +16,9 @@ export async function login(formData: FormData): Promise<void> {
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      redirect(`/login?error=invalid&next=${encodeURIComponent(destination)}`);
+      // 틀린 암호(invalid)와, 시도가 너무 많아 잠시 막힌 경우(locked)를 나눠 알린다.
+      const locked = (error as { code?: unknown }).code === "locked";
+      redirect(`/login?error=${locked ? "locked" : "invalid"}&next=${encodeURIComponent(destination)}`);
     }
     throw error;
   }

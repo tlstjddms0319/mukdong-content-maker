@@ -155,12 +155,28 @@ describe("ImageStudio carousel",()=>{
     expect(await screen.findByRole("alert")).toHaveTextContent("구성안을 만들 수 없어요.");expect(screen.getByRole("button",{name:"AI 이미지 생성"})).toHaveAttribute("aria-pressed","true");expect(screen.getByRole("button",{name:"표지 후보 2장 만들기"})).toBeInTheDocument();
   });
   it("shows distinct planning, cover, and remaining-slide progress",async()=>{
-    let resolvePlan:(value:unknown)=>void=()=>{},resolveCover:(value:unknown)=>void=()=>{},resolveSlide:(value:unknown)=>void=()=>{};
-    const request=vi.fn((url:string,init?:RequestInit)=>url==="/api/images/plan"?new Promise(resolve=>{resolvePlan=resolve;}):JSON.parse(String(init?.body)).count===2?new Promise(resolve=>{resolveCover=resolve;}):new Promise(resolve=>{resolveSlide=resolve;}));vi.stubGlobal("fetch",request);render(<ImageStudio topic="진행 상태" slideCount={3} onApprove={()=>undefined}/>);
+    // 남은 장은 두 장씩 동시에 요청하므로, 장 요청마다 따로 풀 수 있게 차례대로 모아 둔다.
+    let resolvePlan:(value:unknown)=>void=()=>{},resolveCover:(value:unknown)=>void=()=>{};const slideResolvers:Array<(value:unknown)=>void>=[];
+    const resolveSlide=(value:unknown)=>slideResolvers.shift()?.(value);
+    const request=vi.fn((url:string,init?:RequestInit)=>url==="/api/images/plan"?new Promise(resolve=>{resolvePlan=resolve;}):JSON.parse(String(init?.body)).count===2?new Promise(resolve=>{resolveCover=resolve;}):new Promise(resolve=>{slideResolvers.push(resolve);}));vi.stubGlobal("fetch",request);render(<ImageStudio topic="진행 상태" slideCount={3} onApprove={()=>undefined}/>);
     fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));expect(screen.getByRole("status")).toHaveTextContent("캐러셀 구성을 만들고 있어요");
     resolvePlan({ok:true,json:async()=>({plan})});expect(await screen.findByRole("status")).toHaveTextContent("표지 후보 2장을 만들고 있어요");
     resolveCover({ok:true,json:async()=>({images:["cover-1","cover-2"]})});await screen.findByRole("button",{name:"표지 후보 1 선택"});fireEvent.click(screen.getByRole("button",{name:"표지 후보 1 선택"}));fireEvent.click(screen.getByRole("button",{name:"이 표지로 3장 완성하기"}));
-    expect(await screen.findByRole("status")).toHaveTextContent("1/3장 완성");resolveSlide({ok:true,json:async()=>({images:["two"]})});await waitFor(()=>expect(screen.getByRole("status")).toHaveTextContent("2/3장 완성"));resolveSlide({ok:true,json:async()=>({images:["three"]})});await screen.findByRole("button",{name:"이 캐러셀 사용"});
+    expect(await screen.findByRole("status")).toHaveTextContent("1/3장 완성");await waitFor(()=>expect(slideResolvers).toHaveLength(2));resolveSlide({ok:true,json:async()=>({images:["two"]})});await waitFor(()=>expect(screen.getByRole("status")).toHaveTextContent("2/3장 완성"));resolveSlide({ok:true,json:async()=>({images:["three"]})});await screen.findByRole("button",{name:"이 캐러셀 사용"});
+  });
+  it("makes the remaining slides two at a time but keeps them in order",async()=>{
+    const slideResolvers:Array<(value:unknown)=>void>=[];
+    const request=vi.fn((url:string,init?:RequestInit)=>url==="/api/images/plan"?Promise.resolve({ok:true,json:async()=>({plan})}):JSON.parse(String(init?.body)).count===2?Promise.resolve({ok:true,json:async()=>({images:["cover-1","cover-2"]})}):new Promise(resolve=>{slideResolvers.push(resolve);}));
+    vi.stubGlobal("fetch",request);render(<ImageStudio topic="동시에" slideCount={3} onApprove={()=>undefined}/>);
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
+    fireEvent.click(await screen.findByRole("button",{name:"표지 후보 1 선택"}));fireEvent.click(screen.getByRole("button",{name:"이 표지로 3장 완성하기"}));
+    await waitFor(()=>expect(slideResolvers).toHaveLength(2));
+    // 세 번째 장이 먼저 와도 두 번째 장을 기다렸다가 순서대로 붙인다.
+    slideResolvers[1]({ok:true,json:async()=>({images:["three"]})});
+    slideResolvers[0]({ok:true,json:async()=>({images:["two"]})});
+    await screen.findByRole("button",{name:"이 캐러셀 사용"});
+    expect(screen.getByRole("button",{name:"생성된 슬라이드 2 보기"})).toHaveStyle({backgroundImage:'url("two")'});
+    expect(screen.getByRole("button",{name:"생성된 슬라이드 3 보기"})).toHaveStyle({backgroundImage:'url("three")'});
   });
   it("explains when automatic image generation used the OpenAI fallback",async()=>{
     const request=vi.fn(async(url:string)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>({images:["cover-1","cover-2"],provider:"openai",fallback:true,notice:"Cloudflare 생성이 어려워 OpenAI(으)로 전환했어요."})});

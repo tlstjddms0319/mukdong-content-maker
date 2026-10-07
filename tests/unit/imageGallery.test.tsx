@@ -4,6 +4,7 @@ import { ImageGallery } from "@/components/images/ImageGallery";
 import ImagesError from "@/app/images/error";
 import DraftsError from "@/app/drafts/error";
 import type { Draft } from "@/features/drafts/schema";
+import { summarizeDraft } from "@/features/drafts/summary";
 
 const baseDraft: Draft = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -37,25 +38,23 @@ describe("ImageGallery", () => {
 
   it("shows selected media only and keeps an image-less draft reachable", () => {
     const noImage: Draft = { ...baseDraft, id: "33333333-3333-4333-8333-333333333333", topic: "이미지 없는 초안" };
-    render(<ImageGallery drafts={[selected, noImage]} />);
+    render(<ImageGallery drafts={[selected, noImage].map(summarizeDraft)} />);
     expect(screen.getByText("선택 이미지 1장")).toBeInTheDocument();
     expect(screen.getByText("이미지 미선택")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "초안 열기" })[0]).toHaveAttribute("href", `/?draft=${selected.id}`);
     expect(screen.getAllByRole("link", { name: "초안 열기" })[1]).toHaveAttribute("href", `/?draft=${noImage.id}`);
   });
 
-  it("uses a text fallback for an unusable preview without hiding its draft", () => {
-    const broken: Draft = { ...selected, id: "55555555-5555-4555-8555-555555555555", media_candidates: [{ ...selected.media_candidates[0], file_id: "broken-media" }] };
-    render(<ImageGallery drafts={[broken]} />);
-    expect(screen.getByText("미리보기 없음")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "초안 열기" })).toHaveAttribute("href", `/?draft=${broken.id}`);
+  it("shows the small thumbnail from the thumbnail route, not the original image", () => {
+    render(<ImageGallery drafts={[summarizeDraft(selected)]} />);
+    const image = screen.getByRole("img", { name: "홍어 한 상 선택 이미지 미리보기" });
+    expect(image.getAttribute("src")).toBe(`/api/drafts/thumbnail?id=${selected.id}&v=${encodeURIComponent(selected.updated_at)}`);
   });
-  it("falls back when a plausible image URL fails to load", () => {
-    const broken: Draft = { ...selected, media_candidates: [{ ...selected.media_candidates[0], file_id: "https://example.invalid/missing.png" }] };
-    render(<ImageGallery drafts={[broken]} />);
+  it("falls back when the thumbnail cannot be loaded, without hiding its draft", () => {
+    render(<ImageGallery drafts={[summarizeDraft(selected)]} />);
     fireEvent.error(screen.getByRole("img", { name: "홍어 한 상 선택 이미지 미리보기" }));
     expect(screen.getByText("미리보기 없음")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "초안 열기" })).toHaveAttribute("href", `/?draft=${broken.id}`);
+    expect(screen.getByRole("link", { name: "초안 열기" })).toHaveAttribute("href", `/?draft=${selected.id}`);
   });
 });
 
