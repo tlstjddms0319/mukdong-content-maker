@@ -203,6 +203,9 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .planning-list > li strong { overflow-wrap:anywhere; }
 .planning-list > li small { color:var(--muted); }
 .planning-overview-status { display:flex; flex-wrap:wrap; gap:6px; }
+/* 새 탭으로 열었을 때 "만들던 초안 이어서 하기" 안내 */
+.resume-draft { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:0 0 16px; padding:12px 14px; border:1px solid var(--line); border-radius:var(--control-radius); background:var(--surface-soft); }
+.resume-draft span { flex:1 1 220px; font-weight:700; }
 /* 게시 상태: 놓침·실패·확인 필요는 눈에 띄게, 게시됨은 차분하게. */
 .publish-status { grid-column:2 / -1; display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
 .publish-status small { flex-basis:100%; color:var(--muted); }

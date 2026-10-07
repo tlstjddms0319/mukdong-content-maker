@@ -11,7 +11,7 @@ import type { LibraryAsset } from "@/features/images/freeCards";
 import { filterLibrary, popularTags, usageLabel, type LibrarySort } from "@/features/images/libraryFilter";
 import { AnalyzeResponseSchema, type AnalyzeResponse } from "@/features/images/photoAnalysis";
 import { PHOTO_VIEW_LABELS } from "@/features/images/photoCarousel";
-import { MAX_STUDIO_PHOTOS, activeSlideIndex, approvedDeck, storeCardPending, deckComplete, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, recordPhotoUse, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
+import { MAX_STUDIO_PHOTOS, activeSlideIndex, approvedDeck, storeCardPending, deckComplete, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, recordPhotoUse, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, photoDeckIncomplete, resumePhotoCarousel, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
 // 사진 품질·표지 추천(/api/images/analyze). score:false는 서버의 로컬 검사만(무료), true는 Gemini 식욕 점수까지(버튼으로만).
 async function requestAnalysis(ids:string[],score:boolean,topic:string):Promise<AnalyzeResponse> {
@@ -131,6 +131,11 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       <button type="button" className="button secondary" disabled={approved} onClick={()=>approveRawPhotos(onApprove)}>글자 없이 사진만 쓰기</button>
     </div>}
     {progress&&<GenerationProgress stage={`${phase}-${slides.length}`} message={progress} progress={filling?slides.length/slideCount:undefined}/>}
+    {!busy&&photoDeckIncomplete(state)&&plan&&<div className="photo-studio-actions">
+      <span role="status" className="field-help">{plan.slides.length}장 중 {slides.length}장까지 만들고 멈췄어요. 만든 장은 그대로 두고 남은 장만 이어서 만들 수 있어요.</span>
+      <button type="button" className="button primary" onClick={()=>void resumePhotoCarousel()}>남은 {plan.slides.length-slides.length}장 이어 만들기</button>
+      <button type="button" className="button secondary" onClick={()=>void buildPhotoCarousel({panorama:state.panorama&&coverWide})}>처음부터 다시 만들기</button>
+    </div>}
     {planFallback&&slides.length>0&&<p role="status" className="field-help">AI가 구성안을 만들지 못해 준비된 기본 문안으로 채웠어요.{state.planFallbackMessage?` 이유: ${state.planFallbackMessage}`:""} 문안이 주제와 다르면 다시 만들어 보세요.</p>}
     {unused.length>0&&<p role="status" className="field-help">사진 {unused.length}장은 장 수보다 많아 이번 캐러셀에 넣지 않았어요({unused.map(index=>`${index+1}번`).join("·")}). 넣고 싶은 장에서 &apos;이 장 사진 바꾸기&apos;로 바꿔 넣을 수 있어요.</p>}
     {slides.length>0&&<>

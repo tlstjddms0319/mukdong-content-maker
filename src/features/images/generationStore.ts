@@ -68,6 +68,8 @@ export type GenerationState={
   // 맨 뒤 가게 홍보 카드(사장님 결정: 모든 캐러셀 끝에 "묵동홍어마을" 홍보 카드 한 장, 이미지 AI 비용 없음).
   // include: 붙일지(장 고치기에서 끌 수 있음). image: 그려 둔 카드. key: 그릴 때의 디자인·장 수(바뀌면 다시 그린다).
   storeCard:{include:boolean;image?:ApprovedImage;key?:string;pending?:boolean};
+  // 캐러셀을 다 그렸을 때의 디자인. 완성 뒤에 디자인 고르기를 바꿔도(다음에 만들 때부터 적용) 홍보 카드는 이미 그린 장과 같은 디자인으로 남는다.
+  deckDesign?:DesignSpec;
 };
 
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
@@ -81,7 +83,7 @@ export function initialGenerationState(key:string,input:GenerationInput,approved
 }
 
 // 만든 것들만 비우고 모드·화풍·참고 사진은 남긴다(모드 카드나 표지 다시 만들기에서 쓰는 초기화).
-const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,planFallbackMessage:"",refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[],photoViews:[],photoNotes:[],deckEdited:false,deckStatus:""};
+const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,planFallbackMessage:"",refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[],photoViews:[],photoNotes:[],deckEdited:false,deckStatus:"",deckDesign:undefined};
 
 let state:GenerationState=initialGenerationState("",EMPTY_INPUT);
 // 늦게 도착한 응답을 버리기 위한 토큰. 새 작업이 시작되거나 상태가 초기화될 때마다 올라간다.
@@ -107,7 +109,8 @@ export function ensureGeneration(key:string,input:GenerationInput,approvedImages
 
 export const activeSlideIndex=(current:GenerationState)=>Math.min(current.activeSlide,Math.max(current.slides.length-1,0));
 
-export function chooseMode(next:StudioMode){run++;patch({...CLEARED,mode:next,phase:"idle"});}
+// 같은 모드를 다시 고르면 아무것도 하지 않는다(예전에는 다 만든 캐러셀이 한 번 탭에 지워졌다). 다른 모드로 바꿀지는 화면이 먼저 묻는다.
+export function chooseMode(next:StudioMode){if(next===state.mode)return;run++;patch({...CLEARED,mode:next,phase:"idle"});}
 export function setImageStyle(imageStyle:ImageStyle){patch({imageStyle});}
 export function setSlideLayout(slideLayout:SlideLayout){patch({slideLayout});}
 export function setTitleFont(titleFont:FontChoice<TitleFontId>){patch({titleFont});}
@@ -190,7 +193,13 @@ export const storeCardOn=(current:GenerationState)=>current.storeCard.include&&B
 export const postTotal=(current:GenerationState)=>deckTotal(current)+(storeCardOn(current)?1:0);
 // "이 캐러셀 사용"으로 넘길 이미지: 내용 장 + (붙였으면) 맨 뒤 홍보 카드.
 // 홍보 카드 그림이 지금 디자인·장 수로 그린 것일 때만 붙인다(다시 그리기에 실패해 옛 장 번호가 남은 카드는 빼고).
-const storeCardKey=(current:GenerationState)=>current.plan?JSON.stringify([effectiveDesign(current.plan.design,current),postTotal(current)]):"";
+const deckDesignOf=(current:GenerationState)=>current.plan?current.deckDesign??effectiveDesign(current.plan.design,current):undefined;
+const storeCardKey=(current:GenerationState)=>current.plan?JSON.stringify([deckDesignOf(current),postTotal(current)]):"";
+// 캐러셀을 다 그린 직후(또는 장 번호를 다시 그린 직후) 그 디자인을 기억하고 홍보 카드를 맞춘다.
+function finishDeck(){
+  if(state.plan&&deckComplete(state))patch({deckDesign:effectiveDesign(state.plan.design)});
+  void ensureStoreCard();
+}
 export const approvedDeck=(current:GenerationState):ApprovedImage[]=>[...current.slides,...(storeCardOn(current)&&current.storeCard.image&&current.storeCard.key===storeCardKey(current)?[current.storeCard.image]:[])];
 // 홍보 카드를 그리는 중인지. 그리는 동안 "이 캐러셀 사용"을 막는다(카드에는 이미 "n / 전체+1"이 찍혀 있어 빠지면 장 번호가 어긋난다).
 export const storeCardPending=(current:GenerationState)=>storeCardOn(current)&&Boolean(current.storeCard.pending);
@@ -198,7 +207,7 @@ let storeRun=0;
 // 홍보 카드를 (다시) 그린다. 디자인·장 수가 그대로면 그려 둔 것을 쓴다. 실패해도 캐러셀은 그대로 쓸 수 있게 조용히 넘어간다.
 export async function ensureStoreCard(){
   if(!storeCardOn(state)||!deckComplete(state)||!state.plan)return;
-  const design=effectiveDesign(state.plan.design),total=postTotal(state);
+  const design=deckDesignOf(state)!,total=postTotal(state);
   const key=storeCardKey(state);
   if(state.storeCard.image&&state.storeCard.key===key)return;
   const mine=++storeRun;
@@ -346,7 +355,7 @@ export async function finishSlides(){
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"남은 슬라이드를 만들지 못했습니다."});
   }finally{
-    if(token===run){patch({phase:"idle"});void ensureStoreCard();}
+    if(token===run){patch({phase:"idle"});finishDeck();}
   }
 }
 
@@ -485,7 +494,30 @@ export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"사진 캐러셀을 만들지 못했어요."});
   }finally{
-    if(token===run){patch({phase:"idle"});void ensureStoreCard();}
+    if(token===run){patch({phase:"idle"});finishDeck();}
+  }
+}
+
+// 사진 캐러셀이 중간에 멈췄는지(서버 재시작·502·사진 한 장 오류). 이때는 남은 장만 이어 그릴 수 있다.
+export const photoDeckIncomplete=(current:GenerationState)=>current.mode==="photo"&&Boolean(current.plan)&&!current.deckEdited&&current.slides.length>0&&current.slides.length<(current.plan?.slides.length??0);
+// 멈춘 사진 캐러셀의 남은 장만 이어서 그린다. 구성안·사진 배치는 그대로 쓰고, 이미 그린 장은 다시 그리지 않는다.
+export async function resumePhotoCarousel(){
+  const {plan}=state;
+  if(!plan||state.phase!=="idle"||!photoDeckIncomplete(state))return;
+  const token=++run;
+  patch({phase:"slides",error:""});
+  let next=state.slides;
+  try{
+    for(let i=next.length;i<plan.slides.length;i++){
+      const card=await composePhotoSlide(plan,i,state.photoAssignment[i]??[],state.photoViews[i]);
+      if(token!==run)return;
+      next=[...next,card];
+      patch({slides:next,...(i===0?{cover:card}:{})});
+    }
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"남은 장을 만들지 못했어요."});
+  }finally{
+    if(token===run){patch({phase:"idle"});finishDeck();}
   }
 }
 
@@ -603,7 +635,7 @@ async function redrawDeck(token:number,skip=-1){
     const updated={...state.slides[i],id:crypto.randomUUID(),preview};
     patch({slides:state.slides.map((item,k)=>k===i?updated:item),...(i===0?{cover:updated}:{})});
   }
-  void ensureStoreCard();
+  finishDeck();
   // 카드로 그린 장인데 밑바탕이 없어 다시 못 그린 경우에만 알린다(사진 그대로 쓴 장은 장 번호가 없다).
   if(missed&&state.slides.some(slide=>slide.source!=="photo"||state.plan))patch({providerNotice:"저장된 초안에서 다시 연 카드는 장 번호(예: 3 / 7)를 다시 그리지 못해요. 카드에 적힌 장 번호가 실제 장 수와 다를 수 있어요."});
 }
@@ -653,22 +685,23 @@ function newSlidePlan(input:NewSlide&{visualPrompt?:string;keywords?:string[]},a
 //   text : 사진 없이 글자 카드(체크리스트)로 그린다.
 //   raw  : 구성안이 없는 초안(다시 연 초안·사진 그대로 쓴 캐러셀)에 사진을 그대로 넣는다. 구성안이 없으면 고른 방식과
 //          상관없이 이 길로 간다(카드를 그릴 디자인 정보가 없다).
-export async function addSlide(input:NewSlide){
-  if(state.slides.length>=MAX_DECK_SLIDES){patch({error:`캐러셀은 ${MAX_DECK_SLIDES}장까지예요.`});return;}
-  if(state.phase!=="idle")return;
+// 반환값: 새 장을 넣었으면(또는 홍보 카드 요청을 처리했으면) true. 화면은 true일 때만 입력란을 비운다(실패하면 다시 적지 않게).
+export async function addSlide(input:NewSlide):Promise<boolean>{
+  if(state.slides.length>=MAX_DECK_SLIDES){patch({error:`캐러셀은 ${MAX_DECK_SLIDES}장까지예요.`});return false;}
+  if(state.phase!=="idle")return false;
   const position=Math.min(activeSlideIndex(state)+1,state.slides.length);
   if(!state.plan){
-    if(!input.photo){patch({error:"넣을 사진을 골라 주세요."});return;}
+    if(!input.photo){patch({error:"넣을 사진을 골라 주세요."});return false;}
     const image:ApprovedImage={id:crypto.randomUUID(),preview:input.photo.preview,source:"photo"};
     const slides=[...state.slides];slides.splice(position,0,image);
     patch({slides,deckEdited:true,approved:false,activeSlide:position,error:""});
-    return;
+    return true;
   }
   if(input.verbatim){
     const problem=slideTextProblem({headline:input.headline,points:input.points});
-    if(problem){patch({error:problem});return;}
-  }else if(![input.headline,...input.points].some(text=>text.trim())){patch({error:"어떤 장을 넣을지 적어 주세요."});return;}
-  if(input.source==="photo"&&!input.photo){patch({error:"새 장에 넣을 사진을 골라 주세요."});return;}
+    if(problem){patch({error:problem});return false;}
+  }else if(![input.headline,...input.points].some(text=>text.trim())){patch({error:"어떤 장을 넣을지 적어 주세요."});return false;}
+  if(input.source==="photo"&&!input.photo){patch({error:"새 장에 넣을 사진을 골라 주세요."});return false;}
   const plan=state.plan;
   // 요청으로 읽기: 문안 AI가 카드 제목·요점·사진 장면을 짓는다(실패하면 서버가 규칙으로 지은 문구를 준다).
   let drafted:Partial<Pick<NewSlide,"headline"|"points">>&{visualPrompt?:string;keywords?:string[]}={};
@@ -682,20 +715,20 @@ export async function addSlide(input:NewSlide){
         previous:plan.slides[position-1]?.headline??"",next:plan.slides[position]?.headline??"",source:input.source,
       })});
       const data=await readJsonResponse(response);
-      if(token!==run)return;
+      if(token!==run)return false;
       if(!response.ok||!data.draft)throw new Error(data.message||"새 장 문구를 짓지 못했어요.");
       // 가게 홍보 카드를 원하는 요청이면 새 장을 따로 만들지 않고 맨 뒤 홍보 카드(낙관·가게 이름·마스코트)를 켠다.
       if(data.draft.kind==="store"){
         patch({phase:"idle",deckStatus:"",providerNotice:"가게 홍보 카드는 맨 뒤에 자동으로 붙어요(로고·가게 이름·마스코트). 장 고치기에서 켜고 끌 수 있어요."});
         if(!state.storeCard.include)await setStoreCardIncluded(true);else void ensureStoreCard();
-        return;
+        return true;
       }
       drafted={headline:data.draft.headline,points:data.draft.points,visualPrompt:data.draft.visualPrompt,keywords:data.draft.keywords};
     }catch(error){
       if(token===run)patch({phase:"idle",deckStatus:"",error:error instanceof Error?error.message:"새 장 문구를 짓지 못했어요."});
-      return;
+      return false;
     }
-    if(token!==run)return;
+    if(token!==run)return false;
     patch({phase:"idle",deckStatus:""});
   }
   const slide=newSlidePlan({...input,...drafted},plan.slides[position-1]);
@@ -705,7 +738,7 @@ export async function addSlide(input:NewSlide){
     const existing=photos.findIndex(photo=>photo.id===input.photo!.id);
     if(existing>=0)slots=[existing];
     else if(photos.length<MAX_STUDIO_PHOTOS){photos=[...photos,input.photo];slots=[photos.length-1];}
-    else{patch({error:`사진은 ${MAX_STUDIO_PHOTOS}장까지 쓸 수 있어요. 쓰지 않는 사진을 빼 주세요.`});return;}
+    else{patch({error:`사진은 ${MAX_STUDIO_PHOTOS}장까지 쓸 수 있어요. 쓰지 않는 사진을 빼 주세요.`});return false;}
   }
   const placeholder:ApprovedImage={id:crypto.randomUUID(),source:input.source==="photo"?"photo":input.source==="ai"?sourceOf():"design",role:slide.role};
   const slides=[...state.slides];slides.splice(position,0,placeholder);
@@ -716,9 +749,10 @@ export async function addSlide(input:NewSlide){
   patch({slides,photos,photoAssignment:assignment,photoViews:views,refinements,plan:{...plan,slides:[...plan.slides.slice(0,position),slide,...plan.slides.slice(position)]},deckEdited:true,approved:false,activeSlide:position,error:"",providerNotice:"",phase:"slides",deckStatus:"새 장을 그리는 중"});
   try{
     const card=input.source==="ai"?await generate(slide,position+1):{...placeholder,preview:await renderCard(position,slide,{photos:slots.map(i=>photos[i].preview),photoKind:slots.length?"real":"none"})};
-    if(token!==run)return;
+    if(token!==run)return false;
     patch({slides:state.slides.map(item=>item.id===placeholder.id?{...card,id:placeholder.id}:item)});
     await redrawDeck(token,position);
+    return token===run;
   }catch(error){
     // 새 장을 못 그렸으면 끼워 넣은 자리를 되돌린다(빈 장이 남지 않게).
     if(token===run){
@@ -726,6 +760,7 @@ export async function addSlide(input:NewSlide){
       if(at>=0&&!state.slides[at].preview)patch({slides:state.slides.filter((_,i)=>i!==at),plan:{...state.plan!,slides:state.plan!.slides.filter((_,i)=>i!==at)},photoAssignment:state.photoAssignment.filter((_,i)=>i!==at),photoViews:state.photoViews.filter((_,i)=>i!==at),activeSlide:Math.max(0,at-1)});
       patch({error:error instanceof Error?error.message:"새 장을 만들지 못했어요."});
     }
+    return false;
   }finally{
     if(token===run)patch({phase:"idle",deckStatus:""});
   }

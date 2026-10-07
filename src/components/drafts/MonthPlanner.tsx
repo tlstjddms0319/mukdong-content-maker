@@ -27,13 +27,16 @@ export function MonthPlanner({drafts=[]}:{drafts?:PlanDraftSummary[]}){
   },[month]);
 
   const build=async()=>{
+    // 다시 기획하면 아직 시작하지 않은 날짜의 주제가 바뀐다. 시작한 칸·지난 날짜는 서버가 그대로 둔다.
+    if(plan&&!window.confirm("다시 기획하면 아직 초안을 시작하지 않은 날짜의 주제가 새로 바뀌어요. 초안을 시작한 날짜와 지난 날짜는 그대로 둬요. 다시 기획할까요?"))return;
     setState("working");setNotice("");
     try{
       const response=await fetch("/api/topics/month",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({month})});
       const data=await readJsonResponse(response);
       if(!response.ok)throw new Error(data.message);
       setPlan(data.plan);
-      if(data.fallbackWeeks)setNotice(`AI 추천을 받지 못한 ${data.fallbackWeeks}주는 준비된 주제로 채웠어요.`);
+      const notes=[data.message,data.kept?`초안을 시작했거나 지난 ${data.kept}칸은 그대로 두었어요.`:"",data.fallbackWeeks?`AI 추천을 받지 못한 ${data.fallbackWeeks}주는 준비된 주제로 채웠어요.`:""].filter(Boolean);
+      if(notes.length)setNotice(data.message??notes.join(" "));
     }catch(error){setNotice(error instanceof Error&&error.message?error.message:"한 달 기획을 만들지 못했어요.");}
     finally{setState("idle");}
   };

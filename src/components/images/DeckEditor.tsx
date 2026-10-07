@@ -47,8 +47,8 @@ export function DeckEditor({state}:{state:GenerationState}){
     if(added){setExtra(list=>[...list,added]);setPicked(added.id);}
   };
   const submit=async()=>{
-    await addSlide({headline:title,points:body.split("\n"),source,verbatim,...(photo?{photo}:{})});
-    setTitle("");setBody("");setPicked("");setOpen(false);
+    // 새 장을 넣지 못했으면(문구 짓기·그리기 실패) 적은 글을 그대로 두어 다시 누를 수 있게 한다.
+    if(await addSlide({headline:title,points:body.split("\n"),source,verbatim,...(photo?{photo}:{})})){setTitle("");setBody("");setPicked("");setOpen(false);}
   };
 
   return <div className="deck-editor" aria-label="장 고치기">

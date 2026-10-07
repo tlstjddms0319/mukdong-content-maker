@@ -18,10 +18,15 @@ import { clearWizardSession, readWizardSession, saveWizardSession } from "@/feat
 import { readJsonResponse } from "@/lib/http/readJson";
 import { STYLES, StoredStyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
 import { PLAN_DATE_PATTERN, PLAN_POST_TIME_KST } from "@/features/drafts/planLink";
+import { SAME_TOPIC_SIMILARITY, topicSimilarity } from "@/features/topics/topicSimilarity";
 
 const DEFAULT_TOPICS:TopicSuggestion[] = fallbackTopics();
 // 이 브라우저에서 최근에 보여 준 추천 주제(최대 15개)와 마지막 추천 방향 번호. 같은 주제가 매번 나오지 않게 서버에 알려 준다.
 const RECENT_TOPICS_KEY="mukdong-recent-topics",TOPIC_ROUND_KEY="mukdong-topic-round";
+// 이 브라우저에서 마지막으로 저장한 초안의 주제. 새 탭으로 열었을 때 "만들던 초안 이어서 하기" 안내에 쓴다(초안 전체를 읽지 않게).
+const CURRENT_DRAFT_KEY="mukdong-current-draft",CURRENT_TOPIC_KEY="mukdong-current-draft-topic";
+function rememberCurrentDraft(id:string,topic:string){try{localStorage.setItem(CURRENT_DRAFT_KEY,id);localStorage.setItem(CURRENT_TOPIC_KEY,topic.slice(0,120));}catch{/* 무시 */}}
+function forgetCurrentDraft(){try{localStorage.removeItem(CURRENT_DRAFT_KEY);localStorage.removeItem(CURRENT_TOPIC_KEY);}catch{/* 무시 */}}
 function readRecentTopics():string[] {
   try{const value=JSON.parse(localStorage.getItem(RECENT_TOPICS_KEY)??"[]");return Array.isArray(value)?value.filter((item):item is string=>typeof item==="string").slice(0,15):[];}catch{return [];}
 }
@@ -77,16 +82,54 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
   // 게시물에 실제로 들어간 사진에 보이는 것(사진 분석). 문안이 사진과 맞게 쓰이게 함께 넘긴다.
   const photoNotes=generation.key===`${draftId}|${slideCount}`?deckPhotoNotes(generation):undefined;
   const [loadError,setLoadError]=useState("");
+  // 새 탭으로 열었는데 이 브라우저에 만들던 초안이 있으면, 바로 들어가지 않고 추천 주제 위에 "이어서 하기"만 보여 준다.
+  const [resumeDraft,setResumeDraft]=useState<{id:string;topic:string}|null>(null);
   // 마운트 시 복원 판단이 끝나기 전에는 세션을 쓰지 않는다. 그래야 개발 모드의 effect 재실행이 저장된 세션을 덮어쓰지 않는다.
   const [sessionLoaded,setSessionLoaded]=useState(false);
   const initialQueryRef=useRef<string|null>(null);
-  const changeTopic=useCallback((nextTopic:string,nextAudience:"A"|"B"|"C",nextImageBrief="",preserveDraft=false,nextContentBrief="")=>{
+  // 아직 저장하지 않은 작업: 이 초안에서 만든 장·표지 후보를 '이 캐러셀 사용'으로 넘기기 전이거나, 만드는 중이거나, 문안을 고치고 저장하기 전.
+  const generationMine=generation.key===`${draftId}|${slideCount}`;
+  // 돈 드는 작업(만드는 중이거나, 만들어 놓고 아직 '이 캐러셀 사용'을 누르지 않은 장·표지 후보).
+  // 저장된 초안을 다시 열면 저장된 장이 그대로 스튜디오에 들어오므로, 이미 저장한 장(같은 id)은 빼고 본다.
+  const savedImageIds=new Set(images.map(image=>image.id));
+  const deckUnsaved=generation.slides.some(slide=>!savedImageIds.has(slide.id))||(generation.covers.length>0&&!generation.slides.length);
+  const paidWork=generationMine&&(generation.phase!=="idle"||(deckUnsaved&&!generation.approved));
+  const unsavedWork=paidWork||(caption.trim()!==""&&caption!==savedCaption);
+  const unsavedRef=useRef(unsavedWork);
+  useEffect(()=>{unsavedRef.current=unsavedWork;},[unsavedWork]);
+  // 새로고침·탭 닫기·로그아웃으로 만든 이미지가 사라지기 전에 브라우저가 한 번 묻게 한다.
+  useEffect(()=>{
+    if(!unsavedWork)return;
+    const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
+    window.addEventListener("beforeunload",warn);
+    return()=>window.removeEventListener("beforeunload",warn);
+  },[unsavedWork]);
+  const confirmDiscard=()=>!unsavedRef.current||window.confirm("아직 저장하지 않은 이미지·문안이 있어요. 다른 주제로 바꾸면 사라져요. 바꿀까요?");
+  // 지금 초안이 어떤 주제에서 시작했는지(추천 카드·한 달 기획·저장된 초안의 제목). 직접 고친 제목이 이것과 비슷하면 같은 초안으로 본다.
+  const anchorTopicRef=useRef(topic);
+  const changeTopic=useCallback((nextTopic:string,nextAudience:"A"|"B"|"C",nextImageBrief="",preserveDraft=false,nextContentBrief="",keepAnchor=false)=>{
     const next={topic:nextTopic,audience:nextAudience,imageBrief:nextImageBrief,contentBrief:nextContentBrief};
+    if(!keepAnchor)anchorTopicRef.current=nextTopic;
     const current=topicSelectionRef.current;
     const changed=current.topic!==next.topic||current.audience!==next.audience||current.imageBrief!==next.imageBrief||current.contentBrief!==next.contentBrief;
     topicSelectionRef.current=next;setTopic(next.topic);setAudience(next.audience);setImageBrief(next.imageBrief);setContentBrief(next.contentBrief);
-    if(changed&&!preserveDraft){setPlanLink(null);const nextDraftId=crypto.randomUUID();draftIdRef.current=nextDraftId;createdAtRef.current=new Date().toISOString();setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopySaveState("idle");setDraftId(nextDraftId);localStorage.removeItem("mukdong-current-draft");if(window.location.search)window.history.replaceState({},"","/");}
+    if(changed&&!preserveDraft){setPlanLink(null);const nextDraftId=crypto.randomUUID();draftIdRef.current=nextDraftId;createdAtRef.current=new Date().toISOString();setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopySaveState("idle");setDraftId(nextDraftId);forgetCurrentDraft();if(window.location.search)window.history.replaceState({},"","/");}
   },[]);
+  // 직접 주제 칸.
+  // - 몇 단어만 고친 제목(시작한 주제와 비슷함)이면 같은 초안·한 달 기획 연결·내용/이미지 메모를 그대로 둔다.
+  //   (예전에는 한 글자만 고쳐도 새 초안이 시작돼 게시일 연결과 메모가 조용히 사라졌다.)
+  // - 아예 다른 주제를 적으면 예전처럼 새 초안으로 시작한다(다른 주제의 이미지·문안·메모가 따라가지 않게).
+  //   단, 만들어 놓고 아직 쓰지 않은 이미지가 있으면 지우지 않는다(키를 누를 때마다 물을 수 없으므로 남겨 두고, 다시 만들 수 있게).
+  // - 이 초안에 붙은 것(이미지·문안·게시일·메모)이 하나도 없으면 지울 것도 없으니 그대로 이어 간다.
+  const editTopicText=(value:string)=>{
+    const current=topicSelectionRef.current;
+    const attached=images.length>0||caption.trim()!==""||planLink!==null||current.imageBrief!==""||current.contentBrief!=="";
+    const same=topicSimilarity(value,anchorTopicRef.current)>=SAME_TOPIC_SIMILARITY;
+    // 붙은 것이 없을 때는 지금 적는 제목을 새 기준으로 삼는다(나중에 이미지를 만든 뒤 한 단어 고쳐도 같은 초안으로 보이게).
+    if(!attached)changeTopic(value,current.audience,current.imageBrief,true,current.contentBrief);
+    else if(same||paidWork)changeTopic(value,current.audience,current.imageBrief,true,current.contentBrief,true);
+    else changeTopic(value,current.audience,"",false,"");
+  };
   // round를 주지 않으면(처음 열 때) 지난번 다음 방향으로 시작한다.
   const loadTopics=useCallback(async(requestedRound?:number,excludeTitles:string[]=[])=>{
     const round=requestedRound??nextInitialRound();
@@ -101,7 +144,7 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
         setTopics(data.topics);setTopicsFallback(data.source==="fallback");rememberTopics(data.topics.map((item:TopicSuggestion)=>item.title));rememberRound(round);if(data.season)setSeasonInfo(data.season);if(Array.isArray(data.trends))setTrendInfo(data.trends);if(typeof data.trendStatus==="string")setTrendStatus(data.trendStatus);
         // 주제 단계에 머물러 있고 그사이 주제를 직접 바꾸지 않았을 때만 첫 추천으로 자동 선택한다.
         // (이미지 단계로 넘어간 뒤 바꾸면 새 초안이 시작돼 올리던 사진·만들던 이미지가 사라진다.)
-        if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest)changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",false,data.topics[0].summary ?? "");
+        if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest&&!unsavedRef.current)changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",false,data.topics[0].summary ?? "");
         setRecommendationRound(round);
       }
     }catch{if(requestId===topicRequestRef.current)setTopicsFallback(true);}finally{if(requestId===topicRequestRef.current)setTopicsLoading(false);}
@@ -110,7 +153,7 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
   const startNewDraft=useCallback(()=>{
     const nextDraftId=crypto.randomUUID();draftIdRef.current=nextDraftId;createdAtRef.current=new Date().toISOString();
     setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopySaveState("idle");setLoadError("");setPlanLink(null);setDraftId(nextDraftId);
-    localStorage.removeItem("mukdong-current-draft");clearWizardSession();
+    forgetCurrentDraft();clearWizardSession();
     if(window.location.search)window.history.replaceState({},"","/");
     setTopics(DEFAULT_TOPICS);changeTopic(DEFAULT_TOPICS[0].title,DEFAULT_TOPICS[0].audience,DEFAULT_TOPICS[0].imageBrief ?? "",true,DEFAULT_TOPICS[0].summary ?? "");
     setStep("topic");
@@ -128,7 +171,7 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
       const response=await fetch("/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:savingDraftId,status:"ready",topic,audience,image_brief:imageBrief,content_brief:contentBrief,media_candidates:approved.map((item,index)=>({id:item.id,source:item.source,file_id:item.preview ?? item.id,purpose:approved.length===1?"instagram-primary":`instagram-${item.role ?? (index===0?"cover":"slide")}`})),selected_media_id:approved[0]?.id ?? null,...(approved.length?{selected_media_ids:approved.map(item=>item.id)}:{}),copy:null,...(caption.trim()?{caption}:{}),...(planLink?{plan_date:planLink.date}:{}),...(designStyle?{design_style:designStyle}:{}),facts_to_verify:[],store_profile_version:"2026-09-10",created_at:createdAtRef.current,updated_at:now})});
       if(!response.ok) throw new Error();
       if(draftIdRef.current!==savingDraftId)return;
-      localStorage.setItem("mukdong-current-draft",savingDraftId);
+      rememberCurrentDraft(savingDraftId,topic);
       setSaveState("saved");
     } catch { if(draftIdRef.current===savingDraftId)setSaveState("error"); }
   };
@@ -160,25 +203,32 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
       const requestedBriefValue=query.get("brief")?.trim()??"";
       const requestedBrief=requestedBriefValue.length<=600?requestedBriefValue:"";
       if(!requestedId&&requestedTopic&&requestedTopic.length<=120){
-        localStorage.removeItem("mukdong-current-draft");
+        forgetCurrentDraft();
         changeTopic(requestedTopic,requestedAudience,requestedImageBrief,false,requestedBrief);
         // 한 달 기획에서 왔으면 게시일·추천 계열을 이어받는다(형식이 틀린 값은 버린다).
         setPlanLink(planLinkFrom(query.get("planDate"),query.get("style")));
         setStep("topic");
         return;
       }
-      const savedId=requestedId??localStorage.getItem("mukdong-current-draft");
+      const savedId=requestedId??localStorage.getItem(CURRENT_DRAFT_KEY);
+      // 새 방문(이 탭의 진행 기록이 없음): 지난 초안으로 곧장 들어가면 추천 주제를 못 받고, 이미 게시한 초안을 덮어쓸 수도 있다.
+      // 추천 주제부터 보여 주고, 위에 이어서 하기 안내를 띄운다.
+      if(!requestedId&&savedId&&!session){
+        setResumeDraft({id:savedId,topic:localStorage.getItem(CURRENT_TOPIC_KEY)??""});
+        void loadTopics();
+        return;
+      }
       if(savedId){
         try{
           const response=await fetch(`/api/drafts?id=${encodeURIComponent(savedId)}`);
           if(response.ok){
             const draft=await readJsonResponse(response);
             const selected=selectedDraftMedia(draft);
-            if(active&&draft?.id&&draft?.topic){changeTopic(draft.topic,draft.audience,draft.image_brief??"",true,draft.content_brief??"");setPlanLink(draft.plan_date?{date:draft.plan_date}:null);draftIdRef.current=draft.id;createdAtRef.current=draft.created_at??new Date().toISOString();setDraftId(draft.id);setImages(selected.map(item=>({id:item.id,preview:item.file_id,source:item.source})));setCaption(draft.caption??"");setSavedCaption(draft.caption??"");setSaveState("saved");localStorage.setItem("mukdong-current-draft",draft.id);if(requestedId||!selected.length)setStep(selected.length&&draft.caption?.trim()?"review":"image");if(!requestedId&&session&&session.draftId===draft.id)setStep(session.step);return;}
+            if(active&&draft?.id&&draft?.topic){changeTopic(draft.topic,draft.audience,draft.image_brief??"",true,draft.content_brief??"");setPlanLink(draft.plan_date?{date:draft.plan_date}:null);draftIdRef.current=draft.id;createdAtRef.current=draft.created_at??new Date().toISOString();setDraftId(draft.id);setImages(selected.map(item=>({id:item.id,preview:item.file_id,source:item.source})));setCaption(draft.caption??"");setSavedCaption(draft.caption??"");setSaveState("saved");rememberCurrentDraft(draft.id,draft.topic);if(requestedId||!selected.length)setStep(selected.length&&draft.caption?.trim()?"review":"image");if(!requestedId&&session&&session.draftId===draft.id)setStep(session.step);return;}
           }
         }catch{}
         if(requestedId)setLoadError("선택한 초안을 찾지 못했어요. 내 초안에서 다시 골라 주세요.");
-        else localStorage.removeItem("mukdong-current-draft");
+        else forgetCurrentDraft();
       }
       if(!active)return;
       // 저장되지 않은 초안이라도 이 탭에서 주제를 고르고 다음 단계로 넘어갔던 것이 있으면 같은 초안·이미지 단계로 돌아간다.
@@ -198,10 +248,11 @@ export function DraftWizard({slideCount=5}:{slideCount?:CarouselSlideCount}) {
   // 한 달 기획에서 시작한 초안 안내 한 줄: 언제 올릴 글인지, 어떤 계열을 추천받았는지.
   const planDay=planLink?new Date(`${planLink.date}T00:00:00`):null;
   const planNote=planLink&&planDay?<p className="season-line plan-line">한 달 기획 · {planDay.getMonth()+1}/{planDay.getDate()}({"일월화수목금토"[planDay.getDay()]}) {PLAN_POST_TIME_KST} 게시 예정{planLink.style?` · 추천 계열 ${STYLES[planLink.style].label}`:""}</p>:null;
-  const shell={canVisit,onStepChange:setStep,onNewDraft:step==="topic"?undefined:startNewDraft};
+  const shell={canVisit,onStepChange:setStep,onNewDraft:step==="topic"?undefined:()=>{if(confirmDiscard())startNewDraft();}};
+  const resumeNote=resumeDraft&&step==="topic"?<div className="resume-draft" role="status"><span>만들던 초안이 있어요{resumeDraft.topic?` · ${resumeDraft.topic}`:""}</span><button type="button" className="button secondary" onClick={()=>window.location.assign(`/?draft=${encodeURIComponent(resumeDraft.id)}`)}>이어서 만들기</button><button type="button" className="button secondary" onClick={()=>{forgetCurrentDraft();setResumeDraft(null);}}>닫기</button></div>:null;
   if(loadError)return <WizardShell step="topic" {...shell}><div className="state-card"><p role="alert">{loadError}</p><Link className="button secondary" href="/drafts">내 초안으로 돌아가기</Link></div></WizardShell>;
   if(step==="image") return <WizardShell step={step} {...shell}>{planNote}<ImageStudio preferredStyle={planLink?.style} topic={topic} imageBrief={imageBrief.trim()||undefined} contentBrief={contentBrief.trim()||undefined} slideCount={slideCount} approvedImages={images} onApprove={approveImage} sessionKey={draftId}/><div className="bottom-action"><button type="button" className="button secondary" onClick={()=>setStep("topic")}>이전: 주제</button>{saveState!=="idle"&&<span role="status">{saveState==="saving"?"이미지 선택을 저장하는 중…":saveState==="saved"?`이미지 ${images.length}장을 저장했어요.`:"저장하지 못했어요. 다시 선택해 주세요."}</span>}{saveState==="error"&&<button type="button" className="button secondary" onClick={()=>void approveImage(images)}>저장 다시 시도</button>}<button className="button primary" disabled={!images.length||saveState!=="saved"} onClick={()=>setStep("copy")}>문안 만들기</button></div></WizardShell>;
   if(step==="copy") return <WizardShell step={step} {...shell}><CopyEditor topic={topic} audience={audience} contentBrief={contentBrief} imageBrief={imageBrief} slideOutline={slideOutline} photoNotes={photoNotes} hasAiImages={images.some(image=>image.source==="ai-generated"||image.source==="ai-edited")} initialText={caption} onTextChange={setCaption} saving={copySaveState==="saving"} onContinue={text=>void saveCaption(text)}/>{copySaveState==="error"&&<p role="alert">문안을 저장하지 못했어요. 다시 시도해 주세요.</p>}<div className="bottom-action"><button type="button" className="button secondary" onClick={()=>setStep("image")}>이전: 이미지</button></div></WizardShell>;
   if(step==="review") {const reviewImages=images.flatMap(image=>image.preview?[{url:image.preview,source:image.source}]:[]);return <WizardShell step={step} {...shell}><p className="eyebrow">4 최종 확인</p><h1>게시하기 전에 한 번만 확인해요</h1><div className="review-status" aria-label="게시 전 확인할 항목"><span>사진과 AI 이미지의 출처를 확인해 주세요</span><span>가격·영업시간·메뉴 표현을 확인해 주세요</span><span>원본 사진은 따로 보관해 주세요</span></div><PostPreview caption={caption} imageUrls={reviewImages.map(image=>image.url)}/><ExportActions caption={caption} images={reviewImages} topic={topic} audience={audience} draftId={draftId}/><ReelMaker cards={reviewImages.map(image=>image.url)} coverSource={images[0]?.referencePreview} topic={topic}/><div className="bottom-action"><button type="button" className="button secondary" onClick={()=>setStep("copy")}>이전: 문안</button></div></WizardShell>;}
-  return <WizardShell step="topic" {...shell}><p className="eyebrow">새 게시물 · 1분이면 충분해요</p><h1>오늘은 어떤 이야기로 가게를 소개할까요?</h1><p className="lead">일상 음식 궁금증 2개와 홍어 질문 1개를 추천해요. 이번 시기에 맞는 주제도 섞어 드려요.</p>{planNote}{seasonInfo&&<p className="season-line">이번 시즌 · {seasonInfo.name}{seasonInfo.events.map(event=><span key={event.name}> · {event.name}{event.daysAway>0?` ${event.daysAway}일 뒤`:" 진행 중"}</span>)}</p>}{trendInfo.length>0&&<p className="season-line trend-line">요즘 검색이 늘어난 말(네이버){trendInfo.map(trend=><span key={trend.keyword}> · {trend.keyword} +{Math.round((trend.growth-1)*100)}%</span>)}{topics.some(item=>item.trend)?" · 아래 '검색 흐름' 표시가 붙은 주제에 반영했어요":" · 이번 추천에는 가게 메뉴와 이어지는 주제가 없어 반영하지 않았어요"}</p>}{trendStatus==="none"&&<p className="season-line trend-line">네이버 검색 흐름 · 지금은 눈에 띄게 늘어난 음식 말이 없어 반영하지 않았어요</p>}{trendStatus==="error"&&<p className="season-line trend-line">네이버 검색 흐름을 불러오지 못했어요(설정 → AI 연결 점검에서 확인)</p>}<div className="topic-tools"><button type="button" className="button secondary" disabled={topicsLoading} onClick={()=>void loadTopics(recommendationRound + 1,topics.map(item=>item.title))}>AI 추천 새로고침</button>{topicsLoading&&<GenerationProgress label="추천 주제"/>}</div>{topicsFallback&&!topicsLoading&&<p role="status" className="field-help">AI 추천을 불러오지 못해 준비된 주제를 보여드려요. 잠시 후 AI 추천 새로고침을 다시 눌러 보세요.</p>}<div className="topic-grid">{topics.map(item=><button key={item.id} type="button" className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "")}><span className="topic-badges"><span className="soft-badge">추천 {item.audience}</span>{item.season&&<span className="season-badge">이번 시즌 · {item.season}</span>}{item.trend&&<span className="season-badge trend-badge">검색 흐름 · {item.trend}{(()=>{const found=trendInfo.find(trend=>trend.keyword===item.trend);return found?` +${Math.round((found.growth-1)*100)}%`:"";})()}</span>}</span><strong>{item.title}</strong><span>{item.summary}</span><span>{item.reason}</span></button>)}</div><label className="custom-topic"><span>직접 주제를 적고 싶다면</span><input maxLength={120} value={topic} onChange={e=>changeTopic(e.target.value,topicSelectionRef.current.audience)} /></label><div className="bottom-action"><span>나머지는 권장 설정으로 자동 진행돼요.</span><button type="button" className="button primary" disabled={!topic.trim()} onClick={()=>setStep("image")}>이미지 선택</button></div></WizardShell>;
+  return <WizardShell step="topic" {...shell}>{resumeNote}<p className="eyebrow">새 게시물 · 1분이면 충분해요</p><h1>오늘은 어떤 이야기로 가게를 소개할까요?</h1><p className="lead">일상 음식 궁금증 2개와 홍어 질문 1개를 추천해요. 이번 시기에 맞는 주제도 섞어 드려요.</p>{planNote}{seasonInfo&&<p className="season-line">이번 시즌 · {seasonInfo.name}{seasonInfo.events.map(event=><span key={event.name}> · {event.name}{event.daysAway>0?` ${event.daysAway}일 뒤`:" 진행 중"}</span>)}</p>}{trendInfo.length>0&&<p className="season-line trend-line">요즘 검색이 늘어난 말(네이버){trendInfo.map(trend=><span key={trend.keyword}> · {trend.keyword} +{Math.round((trend.growth-1)*100)}%</span>)}{topics.some(item=>item.trend)?" · 아래 '검색 흐름' 표시가 붙은 주제에 반영했어요":" · 이번 추천에는 가게 메뉴와 이어지는 주제가 없어 반영하지 않았어요"}</p>}{trendStatus==="none"&&<p className="season-line trend-line">네이버 검색 흐름 · 지금은 눈에 띄게 늘어난 음식 말이 없어 반영하지 않았어요</p>}{trendStatus==="error"&&<p className="season-line trend-line">네이버 검색 흐름을 불러오지 못했어요(설정 → AI 연결 점검에서 확인)</p>}<div className="topic-tools"><button type="button" className="button secondary" disabled={topicsLoading} onClick={()=>void loadTopics(recommendationRound + 1,topics.map(item=>item.title))}>AI 추천 새로고침</button>{topicsLoading&&<GenerationProgress label="추천 주제"/>}</div>{topicsFallback&&!topicsLoading&&<p role="status" className="field-help">AI 추천을 불러오지 못해 준비된 주제를 보여드려요. 잠시 후 AI 추천 새로고침을 다시 눌러 보세요.</p>}<div className="topic-grid">{topics.map(item=><button key={item.id} type="button" className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><span className="topic-badges"><span className="soft-badge">추천 {item.audience}</span>{item.season&&<span className="season-badge">이번 시즌 · {item.season}</span>}{item.trend&&<span className="season-badge trend-badge">검색 흐름 · {item.trend}{(()=>{const found=trendInfo.find(trend=>trend.keyword===item.trend);return found?` +${Math.round((found.growth-1)*100)}%`:"";})()}</span>}</span><strong>{item.title}</strong><span>{item.summary}</span><span>{item.reason}</span></button>)}</div><label className="custom-topic"><span>직접 주제를 적고 싶다면</span><input maxLength={120} value={topic} onChange={e=>editTopicText(e.target.value)} /></label><div className="bottom-action"><span>나머지는 권장 설정으로 자동 진행돼요.</span><button type="button" className="button primary" disabled={!topic.trim()} onClick={()=>setStep("image")}>이미지 선택</button></div></WizardShell>;
 }
