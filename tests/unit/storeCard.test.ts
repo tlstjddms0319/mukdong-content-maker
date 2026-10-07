@@ -117,3 +117,19 @@ describe("store card route", () => {
     expect((await POST(request({index:2,total:2}))).status).toBe(200);
   },30_000);
 });
+
+describe("owner's promo poster", () => {
+  it("uses the poster in assets/store as the last card, fitted whole into 4:5", async () => {
+    const { storePoster, STORE_POSTER_FILE }=await import("@/features/images/storeCard");
+    const image=await storePoster();
+    expect(image).not.toBeNull();
+    const meta=await sharp(image!).metadata();
+    expect([meta.width,meta.height,meta.format]).toEqual([1080,1350,"jpeg"]);
+    // 같은 파일이면 다시 굽지 않는다.
+    expect(await storePoster(STORE_POSTER_FILE)).toBe(image);
+  });
+  it("falls back to the drawn design when there is no poster", async () => {
+    const { storePoster }=await import("@/features/images/storeCard");
+    expect(await storePoster("/nonexistent/promo-card.webp")).toBeNull();
+  });
+});
