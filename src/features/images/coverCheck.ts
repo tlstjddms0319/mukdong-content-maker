@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { z } from "zod";
 import { toStrictJsonSchema } from "@/lib/ai/jsonSchema";
+import { mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 
 // AI 표지 후보 점검(식욕 점수). 표지 후보(글자를 얹기 전 원본)나 사장님 사진을 Gemini에 보여 주고
 // 먹음직스러움·조명·구도 점수와 흔한 실패(이미지 속 글자, 기대한 음식으로 안 보임, 어색한 손, 어두움·흐림·어수선함)를 확인한다.
@@ -28,27 +29,35 @@ export type CoverCheckFields=z.infer<typeof CoverCheckSchema>;
 export type CoverCheck=CoverCheckFields&{score:number;warnings:string[];unchecked?:true};
 
 // 기대 음식. 주제·슬라이드 제목에서 메뉴 낱말을 찾아 점검 문장에 넣는다. 못 찾으면 홍어회.
+// 가게 메뉴(과메기·미나리전·홍어애탕·홍어무침·배다리 막걸리 등)는 STORE_MENU의 겉모습 묘사를 쓴다.
 const DEFAULT_FOOD={name:"홍어",description:"삭힌 홍어회(얇게 썬 연분홍·흰 살, 결이 보임)"};
-const FOODS:ReadonlyArray<readonly [RegExp,{name:string;description:string}]>=[
+// 메뉴 목록에 없지만 글에 나오면 알아볼 음식(홍어전·찜은 확인된 메뉴가 아니어도 사장님이 직접 적을 수 있다).
+const EXTRA_FOODS:ReadonlyArray<readonly [RegExp,{name:string;description:string}]>=[
   [/홍어\s*전(?!문|통|체|날)/,{name:"홍어전",description:"홍어전(얇은 홍어 살에 전옷을 입혀 노릇하게 부친 전)"}],
   [/홍어\s*찜/,{name:"홍어찜",description:"홍어찜(익혀서 결이 보이는 홍어 살, 생회처럼 투명하지 않음)"}],
-  [/홍어\s*무침/,{name:"홍어무침",description:"홍어무침(홍어 조각을 붉은 양념에 무친 것)"}],
-  [/애\s*탕|홍어\s*탕|애국/,{name:"홍어애탕",description:"홍어애탕(홍어 애와 보리순을 넣은 국물 요리)"}],
-  [/삼합/,{name:"삼합",description:"홍어 삼합(얇게 썬 홍어회와 수육, 묵은지를 한입에 겹친 것, 홍어가 주인공)"}],
-  [/홍어\s*회|홍어/,DEFAULT_FOOD],
-  [/수육|보쌈/,{name:"수육",description:"돼지고기 수육(삶아 얇게 썬 고기)"}],
-  [/막걸리/,{name:"막걸리",description:"막걸리와 안주가 놓인 상"}],
 ];
+function menuFood(menu:StoreMenuItem,text:string):{name:string;description:string} {
+  if(menu.id==="hongeo-hoe")return /삼합/.test(text)
+    ?{name:"삼합",description:"홍어 삼합(얇게 썬 홍어회와 수육, 묵은지를 한입에 겹친 것, 홍어가 주인공)"}
+    :DEFAULT_FOOD;
+  return {name:menu.short,description:`${menu.short}(${menu.lookKo})`};
+}
+// 앞의 글(주제)에 나온 메뉴를 먼저 본다. 같은 글 안에서는 먼저 나온 메뉴.
 export function expectedFoodFrom(...texts:Array<string|undefined>):{name:string;description:string} {
   const text=texts.filter(Boolean).join(" ");
-  return FOODS.find(([pattern])=>pattern.test(text))?.[1]??DEFAULT_FOOD;
+  const extra=EXTRA_FOODS.find(([pattern])=>pattern.test(text))?.[1];
+  if(extra)return extra;
+  const menu=mainMenuOf(...texts);
+  if(menu)return menuFood(menu,text);
+  if(/수육|보쌈/.test(text))return {name:"수육",description:"돼지고기 수육(삶아 얇게 썬 고기)"};
+  return DEFAULT_FOOD;
 }
 
 function promptFor(food:string):string {
   return `이 사진은 식당 Instagram 카드뉴스 표지 후보입니다(글자는 나중에 얹습니다). 음식은 ${food}여야 합니다.
 다음을 JSON으로 답하세요.
 - foodVisible: 음식이 화면의 주인공으로 또렷이 보이면 true
-- looksLikeSkate: 위에서 말한 음식처럼 보이면 true. 통생선이나 연어·참치 같은 다른 음식이면 false
+- looksLikeSkate: 위에서 말한 음식처럼 보이면 true. 다른 음식으로 보이면 false(예: 썬 홍어회여야 하는데 통생선이나 연어·참치처럼 보임)
 - textInImage: 이미지 안에 글자, 숫자, 간판, 로고, 워터마크가 보이면 true
 - oddHands: 손이 있는데 손가락 개수·모양이 어색하면 true (손이 없으면 false)
 - appetite: 먹음직스러움 1~5 (윤기, 촉촉함, 결과 색이 살아 있는가)

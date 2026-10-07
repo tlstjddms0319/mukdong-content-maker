@@ -1,5 +1,5 @@
 import { enhancePhoto, foodLookOf, type PhotoKind } from "./render/photoEnhance";
-import { registerPhoto, auditRender, describeIssue, type AuditReport } from "./render/audit";
+import { registerDecor, registerPhoto, auditRender, describeIssue, type AuditReport } from "./render/audit";
 import sharp, { type OverlayOptions } from "sharp";
 import { access } from "node:fs/promises";
 import type { CarouselSlidePlan } from "./carousel";
@@ -7,7 +7,7 @@ import { DEFAULT_SLIDE_LAYOUT, STORE_NAME, slideEyebrow, type SlideLayout } from
 import { type CardLayout, type DesignSpecInput, type Palette, inkOn, mutedOn, normalizeCardLayout, paletteOf, photosNeeded, readableOn } from "./design";
 import { resolveSlideFonts, typographyOf } from "./typography";
 import { CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, brandName, cleanPoints, cornerMarks, croppedPhoto, currentVariant, finishPhoto, dotGrid, grainLayer, mascotLayer, photoOverlayLayer, pointLayers, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, withRenderContext } from "./render/primitives";
-import { BODY_TITLE, COVER_TITLE, EXTRA_RENDERERS, POINT, closingPlan, counterLayer, cueAt, footerPlan, isCover, isLast, cardShadow, mascotContact, photoWell, slideTitle, sublineLayer, teaserLayer, texturedCanvas } from "./render/extraLayouts";
+import { BODY_TITLE, COVER_TITLE, EXTRA_RENDERERS, POINT, closingPlan, fillerProp, fillerProps, counterLayer, cueAt, footerPlan, isCover, isLast, cardShadow, mascotContact, photoWell, slideTitle, sublineLayer, teaserLayer, texturedCanvas } from "./render/extraLayouts";
 import { ROLE_POSES, type MascotPose } from "./decor";
 import { STYLE_RENDERERS } from "./styles";
 import { MIN_STROKE } from "./styles/shared";
@@ -320,20 +320,31 @@ async function composeBrowser(slide:CarouselSlidePlan,index:number,total:number,
   const available=capY-40-closingH-(WIN_TOP+BAR+PAD)-(headline.info.height+56);
   let pointOptions={left:WIN_LEFT+PAD,width:WIN_W-PAD*2,numbered:true,color:ink,markerColor:readableOn(palette.accent,windowFill),size:POINT};
   let measured=await pointLayers(lines,0,pointOptions);
-  for(const size of [44,40,38]){
+  // 50·46은 아주 짧은 목록(창 아래가 크게 남는 경우)용: 줄 사이 여백을 다 벌리고도 창의 절반이 남을 때만 쓴다.
+  for(const size of [50,46,44,40,38]){
     const candidate={...pointOptions,size};
     const tried=await pointLayers(lines,0,candidate);
-    if(tried.bottom+24*Math.max(0,lines.length-1)<=available){pointOptions=candidate;measured=tried;break;}
+    const need=size>44?available/2:0;
+    if(tried.bottom+24*Math.max(0,lines.length-1)+need<=available){pointOptions=candidate;measured=tried;break;}
   }
-  const room=available-measured.bottom;
+  const room=available-measured.bottom
   // 제목은 창 위쪽에 고정하고, 남는 높이는 요점 사이(최대 110)로 나눠 목록이 검색창 바로 위까지 고르게 퍼지게 한다.
   const gap=lines.length>1?Math.max(0,Math.min(110,Math.floor(room/(lines.length-1)))):0;
+  // 요점 사이를 다 벌리고도 남는 높이(짧은 문안 3줄이면 350px 남짓)는 제목→목록 사이(최대 +90)와 목록 아래로 반씩 나눈다.
+  // 예전에는 전부 목록 아래(검색창 위)에 남아 창 안 아래쪽이 텅 비었다.
+  const leftover=Math.max(0,room-gap*Math.max(0,lines.length-1));
+  const titleGap=56+Math.min(90,Math.floor(leftover/2));
   const contentTop=WIN_TOP+BAR+PAD;
-  const points=await pointLayers(lines,contentTop+headline.info.height+56,{...pointOptions,gap});
+  const points=await pointLayers(lines,contentTop+headline.info.height+titleGap,{...pointOptions,gap});
   const query=slide.keywords.length?slide.keywords.join(" "):slideEyebrow(slide.role,index).split(" · ").pop()??"";
   // 검색창 캡슐은 밝은 강조색이라 글자는 늘 짙게 쓴다.
   const search=await textLayer(query,{size:30,color:"#141414",width:WIN_W-PAD*2-160,height:42,font:FONTS.bold});
   const capW=Math.min(WIN_W-PAD*2,search.info.width+150),capX=WIN_LEFT+PAD;
+  // 짧은 목록이면 요점을 다 벌려도 목록과 검색창 사이가 250px 넘게 빈다(창 높이는 고정). 그 자리 오른쪽에 메뉴 소품을 하나 붙인다.
+  // 검색창 캡슐 오른쪽 옆까지 내려 쓰고, 캡슐이 길어 옆자리가 좁으면 캡슐 위 칸만 쓴다. 명함이 있는 마지막 장은 넣지 않는다.
+  const besideCap=WIN_LEFT+WIN_W-PAD-(capX+capW+32)>=160;
+  const propBottom=besideCap?capY+capH:capY-16;
+  const prop=closing?null:await fillerProp(fillerProps(slide)[0],{left:WIN_LEFT+WIN_W/2,top:points.bottom+24,width:WIN_W/2-PAD,height:propBottom-(points.bottom+24)},{align:"right",maxSize:260});
   // 마스코트가 창의 왼쪽 아래 모서리에 걸터앉는다. 채널명은 마스코트 오른쪽으로 비킨다.
   // 검색창 캡슐 아래로만 올라오게 높이를 제한한다(캡슐 글자를 가리지 않게).
   const mascot=await mascotLayer({width:150,pose:poseFor(slide,"curious"),left:MARGIN-12,top:WIN_TOP+WIN_H+88,anchor:"bottom-left",maxHeight:WIN_TOP+WIN_H+88-(capY+capH+12)});
@@ -352,6 +363,7 @@ async function composeBrowser(slide:CarouselSlidePlan,index:number,total:number,
     ...points.layers,
     {input:search.data,left:capX+78,top:capY+Math.round((capH-search.info.height)/2)},
     ...(closing?closing.place(WIN_LEFT+WIN_W/2,capY-24-closing.height):[]),
+    ...(prop?[prop]:[]),
     ...(mascot?[svgLayer(mascotContact(mascot,.2)),mascot]:[]),
     ...foot.layers,
     await grainLayer(),
@@ -368,29 +380,49 @@ async function composeStat(slide:CarouselSlidePlan,index:number,total:number,pal
   const capW=title.info.width+64,capX=Math.round((1080-capW)/2),capY=88;
   // 마지막 장은 명함 자리만큼 큰 숫자를 줄인다(300 → 240).
   const closing=isLast(slide,index,total)?await closingPlan({color:white,accent:palette.accent}):null;
-  const figure=await textLayer(slide.figure||slide.keywords[0]||"",{size:closing?240:300,color:onPalette?palette.accent:palette.highlight,width:CONTENT,height:420,font:FONTS.bold,align:"centre",spacing:0});
+  const figureText=slide.figure||slide.keywords[0]||"";
+  const figureStyle={color:onPalette?palette.accent:palette.highlight,width:CONTENT,font:FONTS.bold,align:"centre" as const,spacing:0};
   const headline=await slideTitle(slide,{sizes:BODY_TITLE,color:white,accent:onPalette?readableOn(palette.accent,bg,3):palette.highlight,align:"centre",maxHeight:240});
   const lines=cleanPoints(slide.points);
-  const note=lines.length?await textLayer(lines.join("\n"),{size:POINT,color:gray,width:CONTENT,height:600,font:FONTS.regular,align:"centre",spacing:8}):null;
+  // 명함이 없는 장은 설명 줄 사이를 조금 더 띄운다(8 → 16). 짧은 문안에서 설명 묶음이 숫자 아래에 납작하게 붙지 않게.
+  const note=lines.length?await textLayer(lines.join("\n"),{size:POINT,color:gray,width:CONTENT,height:600,font:FONTS.regular,align:"centre",spacing:isLast(slide,index,total)?8:16}):null;
   const foot=await footerPlan(slide,index,total,{ink:white,muted:gray,top:1284});
-  const blockHeight=figure.info.height+28+headline.info.height+(note?36+note.info.height:0)+(closing?40+closing.height:0);
-  const blockTop=Math.max(170,Math.min(Math.round((1350-blockHeight)/2)-20,1284-foot.extra-40-blockHeight));
+  // 글 묶음이 놓일 세로 범위: 위 캡슐 아래 ~ 바닥글 위 40.
+  const AREA_TOP=170,AREA_BOTTOM=1284-foot.extra-40;
+  const restHeight=28+headline.info.height+(note?36+note.info.height:0)+(closing?40+closing.height:0);
+  // 문안이 짧으면 숫자·설명이 화면 가운데에 작게 몰려 위아래가 휑했다(빈 띠 250~360px). 남는 높이가 크면 숫자를
+  // 한 줄에 들어가는 한에서 키운다(300 → 최대 440). 높이 제한을 넉넉히 두고 그려 보고 한 줄일 때만 쓴다(몰래 축소 없음).
+  let figure=await textLayer(figureText,{...figureStyle,size:closing?240:300,height:420});
+  for(const size of closing?[280,260]:[440,400,380,340]){
+    const tried=await textLayer(figureText,{...figureStyle,size,height:2000});
+    if(tried.info.height<=size*1.5&&tried.info.height+restHeight<=AREA_BOTTOM-AREA_TOP-120){figure=tried;break;}
+  }
+  // 그래도 남는 높이는 숫자→제목, 제목→설명, 설명→명함 사이 여백으로 조금씩(각 최대 100) 나눈 뒤 나머지를 위아래로 가른다.
+  const gapCount=1+(note?1:0)+(closing?1:0);
+  const grow=Math.max(0,Math.min(100,Math.floor((AREA_BOTTOM-AREA_TOP-figure.info.height-restHeight)/(gapCount+2))));
+  const GAP_HEAD=28+grow,GAP_NOTE=36+grow,GAP_CLOSING=40+grow;
+  const blockHeight=figure.info.height+restHeight+grow*gapCount;
+  // 위 캡슐(아래 끝 144)과 바닥글(1284) 사이 한가운데에 둔다. 숫자 글자 상자는 위쪽에 아래쪽보다 조금 더 큰 빈 여백을
+  // 품고 있어 그만큼 위로 올려 눈에 보이는 위아래 여백이 같게 한다.
+  const blockTop=Math.max(AREA_TOP-40,Math.min(Math.round((144+1284-blockHeight)/2-figure.info.height/30),AREA_BOTTOM-blockHeight));
   // 숫자 뒤에 강조색 빛무리와 점선 고리, 주변에 반짝이. 네 귀퉁이에는 옅은 크롭 마크.
   const figureCy=blockTop+Math.round(figure.info.height/2);
+  // 숫자를 키우면 고리도 숫자 폭에 맞춰 넓힌다(숫자가 고리 선을 뚫고 나가지 않게, 최대 400).
+  const ringR=Math.min(400,Math.max(330,Math.round(figure.info.width/2+70)));
   const layers:OverlayOptions[]=[
-    svgLayer(`<defs><radialGradient id="glow"><stop offset="0" stop-color="${palette.highlight}" stop-opacity=".28"/><stop offset="1" stop-color="${palette.highlight}" stop-opacity="0"/></radialGradient></defs><circle cx="540" cy="${figureCy}" r="400" fill="url(#glow)"/>`
-      +ring({cx:540,cy:figureCy,r:330,color:white,strokeWidth:3,dashed:true,opacity:.22})
+    svgLayer(`<defs><radialGradient id="glow"><stop offset="0" stop-color="${palette.highlight}" stop-opacity=".28"/><stop offset="1" stop-color="${palette.highlight}" stop-opacity="0"/></radialGradient></defs><circle cx="540" cy="${figureCy}" r="${ringR+70}" fill="url(#glow)"/>`
+      +ring({cx:540,cy:figureCy,r:ringR,color:white,strokeWidth:3,dashed:true,opacity:.22})
       +sparkles([[214,figureCy-150,22],[870,figureCy-190,15],[900,figureCy+120,26],[180,figureCy+170,12]],palette.highlight,.9)
       +cornerMarks({inset:34,length:46,color:white,opacity:.3})),
     svgLayer(`<rect x="${capX}" y="${capY}" width="${capW}" height="56" rx="28" fill="none" stroke="${white}" stroke-opacity=".6" stroke-width="${MIN_STROKE}"/>`),
     {input:title.data,left:capX+32,top:capY+Math.round((56-title.info.height)/2)},
     {input:figure.data,left:Math.round((1080-figure.info.width)/2),top:blockTop},
-    {input:headline.data,left:Math.round((1080-headline.info.width)/2),top:blockTop+figure.info.height+28},
+    {input:headline.data,left:Math.round((1080-headline.info.width)/2),top:blockTop+figure.info.height+GAP_HEAD},
     ...foot.layers,
   ];
-  let cursor=blockTop+figure.info.height+28+headline.info.height;
-  if(note){layers.push({input:note.data,left:Math.round((1080-note.info.width)/2),top:cursor+36});cursor+=36+note.info.height;}
-  if(closing)layers.push(...closing.place(540,cursor+40));
+  let cursor=blockTop+figure.info.height+GAP_HEAD+headline.info.height;
+  if(note){layers.push({input:note.data,left:Math.round((1080-note.info.width)/2),top:cursor+GAP_NOTE});cursor+=GAP_NOTE+note.info.height;}
+  if(closing)layers.push(...closing.place(540,cursor+GAP_CLOSING));
   layers.push(await grainLayer({opacity:.22}));
   return texturedCanvas(bg,layers);
 }
@@ -536,18 +568,29 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
   }
   const {q,a,tipLayer}=fitted;
   const qH=q.info.height+PAD*2,aH=a.info.height+PAD*2;
+  // 남는 높이가 크면(마지막 장처럼 블록이 작아진 경우) 질문→답변, 답변→팁 사이를 조금씩(각 최대 60) 벌린 뒤 가운데에 둔다.
+  // 예전에는 블록을 그대로 가운데에 두어 팁과 명함 사이가 250px 넘게 비었다.
+  const gaps=tipLayer?2:1;
+  const grow=Math.max(0,Math.min(60,Math.floor((LIMIT-100-fitted.height)/(gaps+2))));
+  // 두 말풍선 사이는 130을 넘기지 않는다(말풍선 사이 맨바닥이 150을 넘으면 그 자체가 빈 띠다).
+  const QA_GAP=90+Math.min(40,grow),TIP_GAP=70+grow;
   // 질문·답변·팁 블록을 화면 세로 가운데에 둔다.
-  const blockHeight=fitted.height;
-  const qX=MARGIN+70,qY=Math.max(100,Math.min(Math.round((LIMIT-blockHeight)/2),LIMIT-blockHeight));
-  const aX=1080-MARGIN-70-BUBBLE_W,aY=qY+qH+90;
+  const blockHeight=fitted.height+(QA_GAP-90)+(tipLayer?grow:0);
+  // 마지막 장은 블록 바로 아래(LIMIT+10)에 명함이 오므로 위쪽 160을 뺀 범위의 가운데에 두어 명함 쪽으로 붙인다.
+  // 단 팁과 명함 사이는 최소 40(LIMIT-30 + 명함 10)을 남긴다.
+  const qX=MARGIN+70,qY=Math.max(100,Math.min(Math.round(((closing?160:0)+LIMIT-blockHeight)/2),LIMIT-(closing?30:0)-blockHeight));
+  const aX=1080-MARGIN-70-BUBBLE_W,aY=qY+qH+QA_GAP;
+  // 말풍선·답변 카드는 속이 꽉 찬 도형이라 자동 검수의 빈 띠 계산에서 "찬 자리"로 치도록 장식(ornament)으로 등록한다.
+  // 말풍선 안쪽 여백(위아래 40)이 글자 사이 빈 줄로 잘못 잡히지 않게. 점 무늬·덩어리·그림자는 따로 두고 등록하지 않는다.
+  const filledShape=(body:string)=>{const layer=svgLayer(body);registerDecor(layer.input as Buffer,"ornament");return layer;};
   const badge=(x:number,y:number,letter:string,fill:string)=>`<circle cx="${x}" cy="${y}" r="34" fill="${fill}"/>`;
   const qLetter=await textLayer("Q",{size:34,color:onDark,width:60,height:44,font:FONTS.bold,align:"centre"});
   const aLetter=await textLayer("A",{size:34,color:palette.onAccent,width:60,height:44,font:FONTS.bold,align:"centre"});
   const bigQ=cardStyle?await textLayer("Q.",{size:110,color:palette.accent,width:200,height:130,font:DECOR_FONT,spacing:0}):null;
   const layers:OverlayOptions[]=cardStyle&&bigQ?[
     svgLayer(dotGrid({x:820,y:48,width:230,height:Math.max(60,qY-70),color:bgInk,opacity:.18})
-      +softShadow({x:aX,y:aY+12,width:BUBBLE_W,height:aH,rx:24,blur:16,opacity:.16})
-      +`<rect x="${aX}" y="${aY}" width="${BUBBLE_W}" height="${aH}" rx="24" fill="#ffffff"/><rect x="${aX}" y="${aY}" width="12" height="${aH}" rx="6" fill="${palette.accent}"/>`
+      +softShadow({x:aX,y:aY+12,width:BUBBLE_W,height:aH,rx:24,blur:16,opacity:.16})),
+    filledShape(`<rect x="${aX}" y="${aY}" width="${BUBBLE_W}" height="${aH}" rx="24" fill="#ffffff"/><rect x="${aX}" y="${aY}" width="12" height="${aH}" rx="6" fill="${palette.accent}"/>`
       +`<path d="M${qX} ${qY+qH+30}H${qX+160}" stroke="${palette.accent}" stroke-width="5" stroke-linecap="round"/>`),
     {input:bigQ.data,left:MARGIN-6,top:qY-bigQ.info.height+36},
     {input:q.data,left:qX+PAD,top:qY+PAD},
@@ -557,10 +600,10 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
     // 말풍선 꼬리는 말하는 쪽을 가리킨다: 질문은 왼쪽 Q 동그라미, 답변은 오른쪽 A 동그라미 쪽으로 뻗는다.
     svgLayer(dotGrid({x:820,y:48,width:230,height:Math.max(60,qY-70),color:bgInk,opacity:.18})+blob({cx:90,cy:1230,r:160,color:palette.accent,opacity:.12,seed:4})
       +softShadow({x:qX,y:qY+12,width:BUBBLE_W,height:qH,rx:30,blur:16,opacity:.16})+softShadow({x:aX,y:aY+12,width:BUBBLE_W,height:aH,rx:30,blur:16,opacity:.16})),
-    svgLayer(`<rect x="${qX}" y="${qY}" width="${BUBBLE_W}" height="${qH}" rx="30" fill="${dark}"/><path d="M${qX+4} ${qY+18}L${qX-26} ${qY+34}L${qX+4} ${qY+50}z" fill="${dark}"/>${badge(MARGIN+34,qY+34,"Q",dark)}`),
+    filledShape(`<rect x="${qX}" y="${qY}" width="${BUBBLE_W}" height="${qH}" rx="30" fill="${dark}"/><path d="M${qX+4} ${qY+18}L${qX-26} ${qY+34}L${qX+4} ${qY+50}z" fill="${dark}"/>${badge(MARGIN+34,qY+34,"Q",dark)}`),
     {input:qLetter.data,left:MARGIN+34-Math.round(qLetter.info.width/2),top:qY+34-Math.round(qLetter.info.height/2)},
     {input:q.data,left:qX+PAD,top:qY+PAD},
-    svgLayer(`<rect x="${aX}" y="${aY}" width="${BUBBLE_W}" height="${aH}" rx="30" fill="${palette.accent}"/><path d="M${aX+BUBBLE_W-4} ${aY+18}L${aX+BUBBLE_W+26} ${aY+34}L${aX+BUBBLE_W-4} ${aY+50}z" fill="${palette.accent}"/>${badge(1080-MARGIN-34,aY+34,"A",palette.accent)}`),
+    filledShape(`<rect x="${aX}" y="${aY}" width="${BUBBLE_W}" height="${aH}" rx="30" fill="${palette.accent}"/><path d="M${aX+BUBBLE_W-4} ${aY+18}L${aX+BUBBLE_W+26} ${aY+34}L${aX+BUBBLE_W-4} ${aY+50}z" fill="${palette.accent}"/>${badge(1080-MARGIN-34,aY+34,"A",palette.accent)}`),
     {input:aLetter.data,left:1080-MARGIN-34-Math.round(aLetter.info.width/2),top:aY+34-Math.round(aLetter.info.height/2)},
     {input:a.data,left:aX+PAD,top:aY+PAD},
   ];
@@ -568,7 +611,7 @@ async function composeQa(slide:CarouselSlidePlan,index:number,total:number,palet
     // 팁 머리표: 영문 TIP 대신 한글 "팁"(영문 장식 문구 한글화).
     const label=await textLayer("팁",{size:28,color:bgInk,width:80,height:40,font:FONTS.bold});
     const text=tipLayer;
-    const tipY=aY+aH+70;
+    const tipY=aY+aH+TIP_GAP;
     // 형광펜 자국은 글 바로 뒤의 평행사변형. skewX를 그대로 쓰면 원점 기준으로 밀려 글과 어긋난다.
     const hx=MARGIN+92,hy=tipY+8,hw=text.info.width+36,hh=text.info.height,slant=Math.round(hh*.12);
     layers.push(svgLayer(`<polygon points="${hx+slant},${hy} ${hx+hw+slant},${hy} ${hx+hw},${hy+hh} ${hx},${hy+hh}" fill="${palette.highlight}" fill-opacity=".7"/>`
@@ -665,7 +708,8 @@ const CARD_RENDERERS:Record<CardLayout,(inputs:Buffer[],slide:CarouselSlidePlan,
 //   "none" 보정 없음(기본값. 검수 스크립트·테스트가 같은 입력으로 같은 그림을 보게)
 // options.enhance는 예전 호출과의 호환용이다(true → "real").
 // remoteCutout: 설정의 "원격 누끼"가 켜졌을 때만 true. 누끼 계열(colorblock·popup·kitsch)이 Higgsfield 배경 제거를 먼저 시도한다.
-export type CardOptions={photoKind?:PhotoKind;enhance?:boolean;brandHandle?:string;remoteCutout?:boolean};
+// storeCard: 맨 뒤에 가게 홍보 카드가 붙는 캐러셀(total은 홍보 카드 포함). 표지 예고 띠의 장 이름은 내용 장 수로 고른다.
+export type CardOptions={photoKind?:PhotoKind;enhance?:boolean;brandHandle?:string;remoteCutout?:boolean;storeCard?:boolean};
 const photoKindOf=(options:CardOptions):PhotoKind=>options.photoKind??(options.enhance?"real":"none");
 export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions={}):Promise<Buffer> {
   return (await composeSlideCard(input,slide,index,total,layout,design,options)).image;
@@ -688,7 +732,7 @@ export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlide
   // 단 "사진 위 글자"(overlay)로 고른 경우는 계열과 무관하게 풀스크린으로 그린다.
   const style=design?.style??"template";
   const render=style!=="template"&&layout!=="overlay"?STYLE_RENDERERS[style]:CARD_RENDERERS[card];
-  const draw=(current:CarouselSlidePlan)=>withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:current.variant??0,palette,brandHandle:options.brandHandle,tone:design?.tone,remoteCutout:options.remoteCutout},()=>render(inputs,current,index,total,palette));
+  const draw=(current:CarouselSlidePlan)=>withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:current.variant??0,palette,brandHandle:options.brandHandle,tone:design?.tone,remoteCutout:options.remoteCutout,storeCard:options.storeCard},()=>render(inputs,current,index,total,palette));
   // 그린 카드를 바로 검수해서(render/audit.ts) 글자가 넘치거나 겹치면 요점을 뒤에서부터 하나씩 빼고 다시 그린다(최대 2번).
   // 그래도 남으면 문제가 가장 적은 결과를 쓰고 서버 로그에 남긴다. 대비 검사는 무거워서 자동 검수 테스트에서만 한다.
   let current=slide,best:{image:Buffer;report:AuditReport;count:number}|null=null;

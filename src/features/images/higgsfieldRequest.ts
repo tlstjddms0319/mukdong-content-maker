@@ -128,7 +128,11 @@ async function generateOne(input:ImageBrief,auth:string,referenceUrl?:string):Pr
 
 export async function generateHiggsfieldImages(input:ImageBrief):Promise<string[]> {
   const auth=authorization();
-  const referenceUrl=input.referenceImage?await uploadReference(input.referenceImage,auth):undefined;
+  // 표지를 이어 가는 장(continuity)에는 표지 이미지를 넘기지 않는다. 이 모델은 참고 이미지를 따르는 정도를 조절할 수 없어
+  // 같은 접시·같은 "집어 든 한 점"을 장마다 거의 그대로 복사했다(장 문구가 "묵은지에 싸요"여도). 색감·그릇의 통일감은
+  // 프롬프트의 공통 스타일(styleAnchor)로 잇는다. 사장님 사진을 살리는 source·style 모드는 그대로 참고 이미지를 쓴다.
+  const useReference=Boolean(input.referenceImage)&&input.referenceMode!=="continuity";
+  const referenceUrl=useReference?await uploadReference(input.referenceImage!,auth):undefined;
   // 한 장에 2분 가까이 걸려서 후보 여러 장은 동시에 요청한다. 후보마다 구도가 다른 요청이다.
   const results=await Promise.allSettled(candidateBriefs(input).map(brief=>generateOne(brief,auth,referenceUrl)));
   const images=results.flatMap(result=>result.status==="fulfilled"?[result.value]:[]);

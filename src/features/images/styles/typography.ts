@@ -1,5 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { svgLayer, textLayer, type CardRenderer, type Layer, brandName } from "../render/primitives";
+import { registerDecor, registerPhoto } from "../render/audit";
 import { STORE_NAME } from "../slideLayout";
 import { MIN_STROKE, STYLE_FONTS, closingBlock, contentOf, emphasisOf, fitText, hashtags, nextCue, snap } from "./shared";
 
@@ -24,14 +25,16 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   const accent=ACCENTS[(index-1+(slide.variant??0))%ACCENTS.length];
   const M=64,W=1080-M*2;
-  // 이 배경은 흑백·흐림이라 "음식 사진"이 아니라 질감 바탕이다. 그래서 registerPhoto로 등록하지 않는다
-  // (표지 사진 면적은 음식이 보이는 넓이를 재는 값이라 0%가 맞다).
+  // 흑백·흐림이어도 이 바탕은 화면 전체에 깐 실제 음식 사진이다(접시·그릇 윤곽이 보인다). 그래서 캔버스 밑바탕 버퍼를
+  // bleed 사진으로 등록한다 — 등록하지 않으면 표지 사진 면적이 0%, 사진 뒤 모든 자리가 "빈 띠"로 잘못 잡힌다.
+  // 사진이 없는 장(단색 바탕)은 등록하지 않는다(바탕 단색·안개는 사진이 아니다).
   // 사진을 흑백·흐리게 깐 뒤, 사진이 밝을수록 더 어둡게 눌러 평균 밝기를 0.2 안팎으로 맞춘다(흰 접시 사진에서도 글자가 뜨고, 음식 질감은 남게).
   const blurred=inputs.length?await sharp(inputs[0]).rotate().resize(1080,1350,{fit:"cover",position:"attention"}).grayscale().blur(12).png().toBuffer():null;
   const brightness=blurred?Math.min(.55,.2/Math.max(.05,(await sharp(blurred).stats()).channels[0].mean/255)):1;
   const base=blurred
     ?await sharp(blurred).modulate({brightness}).png().toBuffer()
     :await sharp({create:{width:1080,height:1350,channels:3,background:"#141414"}}).png().toBuffer();
+  if(blurred)registerPhoto(base,{shape:"bleed"});
   const layers:OverlayOptions[]=[];
   // 사진 없는 장: 단색 #141414만으로는 납작해 보여, 강조색 안개(옅은 원형 그라데이션)를 오른쪽 위와 왼쪽 아래에 깐다.
   // 글자보다 먼저(맨 아래) 깔고 진하기를 .16 이하로 둬 흰 글자 대비를 거의 건드리지 않는다. 질감은 넣지 않는다(글자가 질감).
@@ -71,13 +74,16 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
   if(content.teaser){points=[await textLayer(content.teaser,{size:27,color:"#F2F2F2",width:W-40,height:60,font:STYLE_FONTS.sansSemi,shadow:true})];pointSize=27;}
   const pointsH=heightOf(points);
   let py=Math.max(y+50,1350-110-pointsH-reserve);
-  // 유령 글자: 제목과 요점 사이가 160px 넘게 비면 핵심 낱말을 강조색 14% 농도로 크게 깐다(검수 대상 글자가 아니라 흐려도 된다).
+  // 유령 글자: 제목과 요점 사이가 160px 넘게 비면 핵심 낱말을 강조색 17% 농도로 크게 깐다(검수 대상 글자가 아니라 흐려도 된다).
   const gapH=py-y-60;
   // 유령 글자는 한 줄이어야 하므로 글자 수 × 크기가 폭에 들어가는 크기만 고른다(핵심 낱말이 6자를 넘으면 생략).
   const ghostSizes=[420,360,300,260,220,180].filter(size=>size*hero.length<=W+40);
   if(gapH>160&&ghostSizes.length){
     const ghost=await fitText(hero,{sizes:ghostSizes,width:W+40,maxHeight:gapH,color:accent,font:STYLE_FONTS.gothicBlack,spacing:0});
-    const faint=await sharp(ghost.data).ensureAlpha().linear([1,1,1,.14],[0,0,0,0]).png().toBuffer();
+    const faint=await sharp(ghost.data).ensureAlpha().linear([1,1,1,.17],[0,0,0,0]).png().toBuffer();
+    // 유령 글자는 일부러 크게 깐 장식이라 빈 띠 계산에서 "찬 자리"로 친다(옅어도 눈에는 큰 글자 덩어리로 보인다).
+    // 농도를 .14에서 .17로 올린 이유: 검수는 알파 40(16%) 이하를 "빈 것"으로 보는데, .14면 실제로 보이는 유령 글자가 빈 자리로 잡혔다.
+    registerDecor(faint,"ornament");
     layers.push({input:faint,left:M-10,top:y+30+Math.round((gapH-ghost.info.height)/2)});
   }
   // 세로 막대 위, 첫 요점의 첫 줄 높이에 강조색 점 하나: 막대가 "목록의 시작"을 가리키는 표지가 된다.

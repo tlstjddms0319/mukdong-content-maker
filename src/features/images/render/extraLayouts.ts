@@ -2,9 +2,10 @@ import sharp, { type OverlayOptions } from "sharp";
 import type { CarouselSlidePlan } from "../carousel";
 import { STORE_NAME } from "../slideLayout";
 import { inkOn, mutedOn, readableOn } from "../design";
-import { CONTENT, FONTS, MARGIN, META, brandName, canvas, cleanPoints, croppedPhoto, currentTheme, currentVariant, grainLayer, pointLayers, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, type CardRenderer, type Layer } from "./primitives";
+import { CONTENT, FONTS, MARGIN, META, brandName, canvas, cleanPoints, croppedPhoto, currentTheme, currentVariant, grainLayer, mascotLayer, pointLayers, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, type CardRenderer, type Layer } from "./primitives";
 import { MIN_STROKE, closingBlock, emphasisOf, fitText, nextCue, teaserText } from "../styles/shared";
-import { contactShadow, shadowLayer, textureLayer, type TextureName } from "../decor";
+import { registerPhoto } from "./audit";
+import { ROLE_POSES, contactShadow, propLayer, shadowLayer, textureLayer, type PropName, type TextureName } from "../decor";
 
 // 추가 레이아웃 8종: 잡지 편집형, 반반 분할, 폴라로이드, 영수증, 체크리스트, 타임라인, 큰 글자 포스터, 원형 사진.
 // 모두 같은 원칙을 따른다. ① 글자 레이어를 먼저 그려 높이를 잰다 ② 남는 높이에 맞춰 사진·간격을 정한다
@@ -180,6 +181,39 @@ export async function cardShadow(options:Parameters<typeof softShadow>[0]):Promi
 export const mascotContact=(mascot:{left:number;top:number;width:number;height:number},opacity=.24)=>
   contactShadow({cx:mascot.left+mascot.width/2,cy:mascot.top+mascot.height*.96,rx:mascot.width*.34,ry:Math.max(6,Math.round(mascot.width*.045)),opacity});
 
+// 사진 없는 글자 장(브라우저·체크리스트·타임라인·영수증)에서 짧은 문안 때문에 남는 자리를 채우는 소품 스티커.
+// 바탕만 보이던 150px 넘는 빈 띠를 "글을 늘리거나 장식으로 덮는" 대신, 장 내용과 맞는 메뉴 그림 한 점으로 채운다.
+// 키워드(앞쪽 우선)와 제목에서 메뉴를 찾고, 못 찾으면 홍어 한 점. 소품 파일이 없으면 propLayer가 null을 돌려 그냥 비워 둔다.
+const PROP_WORDS:[RegExp,PropName][]=[[/막걸리/,"makgeolli"],[/김치|묵은지/,"kimchi"],[/수육|삼합/,"suyuk"],[/홍어|가오리/,"skate"]];
+export function fillerProps(slide:CarouselSlidePlan):PropName[] {
+  const picked:PropName[]=[];
+  for(const text of [...slide.keywords,slide.headline])for(const [pattern,name] of PROP_WORDS)if(pattern.test(text)&&!picked.includes(name))picked.push(name);
+  for(const name of ["skate","makgeolli","kimchi"] as const)if(!picked.includes(name))picked.push(name);
+  return picked;
+}
+// 빈 자리(box) 안에 소품 하나를 놓는다. box가 소품 최소 크기(높이 110)보다 작으면 null.
+// align: 상자 안 가로 위치. 소품은 살짝 기울여 손으로 붙인 스티커처럼 보이게 한다.
+export async function fillerProp(name:PropName,box:{left:number;top:number;width:number;height:number},options:{align?:"left"|"centre"|"right";rotate?:number;maxSize?:number}={}):Promise<(OverlayOptions&{left:number;top:number;width:number;height:number})|null> {
+  // 기울이면 그림 상자가 커지므로 9할 크기로 그려 상자 안에 들어가게 한다.
+  const size=Math.floor(Math.min(options.maxSize??240,box.width,box.height)*.9);
+  if(size<110)return null;
+  const prop=await propLayer(name,{width:size,maxHeight:size,left:0,top:0,rotate:options.rotate??-6});
+  if(!prop)return null;
+  const align=options.align??"centre";
+  const left=align==="left"?box.left:align==="right"?box.left+box.width-prop.width:box.left+Math.round((box.width-prop.width)/2);
+  return {...prop,left:Math.round(left),top:Math.round(box.top+(box.height-prop.height)/2)};
+}
+
+// 투명 PNG(마스코트)의 위쪽 빈 줄 수. 포즈 그림마다 위 여백이 달라 그림이 실제로 시작하는 높이에 맞춰 놓을 때 쓴다.
+const inkTopCache=new WeakMap<Buffer,Promise<number>>();
+function inkTop(buffer:Buffer):Promise<number> {
+  if(!inkTopCache.has(buffer))inkTopCache.set(buffer,sharp(buffer).ensureAlpha().extractChannel(3).raw().toBuffer({resolveWithObject:true}).then(({data,info})=>{
+    for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++)if(data[y*info.width+x]>40)return y;
+    return 0;
+  }));
+  return inkTopCache.get(buffer)!;
+}
+
 // 11. 잡지 편집형: 위쪽 가득 찬 사진, 아래 작은 머리글(키워드)·큰 제목·가는 선·본문 문단.
 // 표지는 제목 아래 부제, 마지막 장은 바닥글 위에 가게 명함. 둘 다 사진 높이에서 자리를 뺀다.
 const composeMagazine:CardRenderer=async(inputs,slide,index,total,palette)=>{
@@ -197,7 +231,8 @@ const composeMagazine:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const textHeight=eyebrow.info.height+18+headline.info.height+(subline?20+subline.info.height:0)+(body?30+2+30+body.info.height:0);
   const bottom=FOOTER_TOP-foot.extra-40-(closing?closing.height+36:0);
   // 글 아래 여백(본문 끝 ~ 채널명 줄)을 40px 남기고 나머지를 사진에 준다. 마지막 장은 명함 자리만큼 사진 최소 높이를 낮춘다.
-  const PHOTO_H=Math.max(closing?320:440,Math.min(820,bottom-44-textHeight));
+  // 위 한도는 880(예전 820은 짧은 문안 본문 장에서 본문 아래가 150px 넘게 비었다).
+  const PHOTO_H=Math.max(closing?320:440,Math.min(880,bottom-44-textHeight));
   let cursor=PHOTO_H+44;
   const layers:OverlayOptions[]=[{input:await croppedPhoto(inputs[0],1080,PHOTO_H,0),left:0,top:0},{input:eyebrow.data,left:MARGIN,top:cursor}];
   cursor+=eyebrow.info.height+18;
@@ -271,7 +306,10 @@ const composePolaroid:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const pointsHeight=lines.length?measured.bottom+30:0;
   const bottom=FOOTER_TOP-foot.extra-40-(closing?closing.height+36:0);
   // 폴라로이드 크기는 남는 높이에 맞춘다(사진 정사각형 + 아래 메모 여백).
-  const SIDE=Math.max(closing?240:280,Math.min(470,bottom-pointsHeight-TOP-150));
+  // 짧은 문안이면 위 한도(500)까지 키운다. 두 장이 조금 더 겹치지만 아래가 비는 것보다 낫다.
+  // 사진 아래로 더 차지하는 높이: 테두리·메모 여백 96 + 기울기로 커지는 약 60 + 둘째 장이 내려간 70 ≈ 230.
+  // (예전 150은 모자라 긴 문안의 마지막 장에서 요점이 명함에 닿았다.)
+  const SIDE=Math.max(closing?240:280,Math.min(500,bottom-pointsHeight-TOP-230));
   const BORDER=18,CAPTION=78;
   const make=async(photo:Buffer,caption:string)=>{
     const W=SIDE+BORDER*2,H=SIDE+BORDER+CAPTION;
@@ -289,13 +327,16 @@ const composePolaroid:CardRenderer=async(inputs,slide,index,total,palette)=>{
   let photosBottom=TOP;
   for(const card of cards){
     const tilted=await sharp(card.image).rotate(card.angle,{background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer({resolveWithObject:true});
+    // 사진을 인화지(폴라로이드) 안에 넣고 그 인화지를 캔버스에 놓으므로, 놓는 인화지를 사진으로 등록해야 검수가 사진 자리로 본다.
+    registerPhoto(tilted.data);
     const meta=await sharp(card.image).metadata();
     layers.push(await cardShadow({x:card.x+8,y:card.y+16,width:meta.width!,height:meta.height!,rx:4,blur:14,opacity:.22,rotate:card.angle}));
     layers.push({input:tilted.data,left:card.x,top:card.y});
     layers.push(svgLayer(washiTape({x:card.x+Math.round(tilted.info.width/2)-80,y:card.y-14,width:160,color:palette.highlight,angle:card.angle*-1.2,opacity:.8})));
     photosBottom=Math.max(photosBottom,card.y+tilted.info.height);
   }
-  if(lines.length){const points=await pointLayers(lines,Math.max(photosBottom+30,bottom-measured.bottom),{color:ink,markerColor:palette.accent,size:POINT});layers.push(...points.layers);}
+  // 요점은 사진 아래 남는 자리의 가운데에 둔다. 예전에는 바닥(채널명 위)에 붙여 사진과 요점 사이가 250px 넘게 비었다.
+  if(lines.length){const points=await pointLayers(lines,Math.max(photosBottom+30,Math.round((photosBottom+30+bottom-measured.bottom)/2)),{color:ink,markerColor:palette.accent,size:POINT});layers.push(...points.layers);}
   if(closing)layers.push(...closing.place(540,FOOTER_TOP-foot.extra-30-closing.height));
   layers.push(svgLayer(sparkles([[1080-MARGIN-20,MARGIN+20,16]],palette.accent)));
   layers.push(...foot.layers,await grainLayer());
@@ -321,11 +362,24 @@ const composeReceipt:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   const totalLabel=await textLayer("합계",{size:30,color:paperInk,width:200,height:44,font:FONTS.bold});
   const totalValue=await textLayer(`${lines.length}가지`,{size:30,color:paperInk,width:200,height:44,font:FONTS.bold});
   const thanks=await textLayer(keywordLine(slide),{size:META,color:dim,width:TEXT_W,height:40,font:FONTS.regular,align:"centre"});
-  const ITEM_GAP=36;
-  const itemsHeight=items.reduce((sum,item)=>sum+item.info.height+ITEM_GAP,0);
-  const H=PAD+shop.info.height+30+title.info.height+40+itemsHeight+30+40+40+70+20+thanks.info.height+PAD;
+  // 항목 사이 여백은 남는 높이에 맞춘다(16~64). 예전 고정 36은 짧은 문안에서 종이가 작게 떠 아래가 300px 넘게 비었고,
+  // 긴 문안의 마지막 장에서는 종이가 명함 뒤까지 내려가 겹쳤다.
+  const top0=closing?56:70;
   const bottom=FOOTER_TOP-foot.extra-30-(closing?closing.height+50:0);
-  const Y=Math.max(closing?56:70,Math.round((bottom-H)/2));
+  // 마지막 항목 아래(합계 점선 위)는 늘 36. 바코드(80)는 장식이라, 항목 여백을 16까지 줄여도 명함 위에 안 들어가면 뺀다.
+  const LAST_GAP=36,BARS=80;
+  const baseH=PAD+shop.info.height+30+title.info.height+40+items.reduce((sum,item)=>sum+item.info.height,0)+LAST_GAP+30+40+40+70+20+thanks.info.height+PAD-BARS;
+  const gapsN=Math.max(1,items.length-1),room=bottom-top0-14;
+  const bars=baseH+BARS+16*gapsN<=room;
+  const fixedH=baseH+(bars?BARS:0);
+  const ITEM_GAP=Math.max(16,Math.min(64,Math.floor((room-fixedH)/gapsN)));
+  const H=fixedH+ITEM_GAP*Math.max(0,items.length-1);
+  // 그래도 종이 아래가 크게 남으면(짧은 문안 본문 장) 종이 아래에 메뉴 소품을 하나 놓고, 종이+소품 묶음을 세로 가운데에 둔다.
+  const PROP_GAP=24,spareBelow=bottom-top0-(H+14);
+  const prop=!closing&&spareBelow>=200?await fillerProp(fillerProps(slide)[0],{left:0,top:0,width:W,height:Math.min(260,spareBelow-PROP_GAP-40)},{rotate:-8}):null;
+  const stackH=H+14+(prop?PROP_GAP+prop.height:0);
+  // 마지막 장은 종이를 명함 바로 위로 내린다(남는 높이를 모두 위에). 가운데에 두면 종이 끝과 명함 사이가 250px 넘게 빈다.
+  const Y=Math.max(top0,Math.round(top0+(bottom-top0-stackH)*(closing?1:.5)));
   const dashed=(y:number)=>`<path d="M${X+PAD} ${y}H${X+W-PAD}" stroke="${dim}" stroke-width="${MIN_STROKE}" stroke-dasharray="8 8"/>`;
   // 종이 아래 끝은 톱니 모양으로 찢는다.
   let zig=`M${X} ${Y}H${X+W}V${Y+H}`;
@@ -339,17 +393,20 @@ const composeReceipt:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   svgBody+=dashed(cursor);cursor+=20;
   for(const [i,item] of items.entries()){
     layers.push({input:numbers[i].data,left:X+PAD,top:cursor+2},{input:item.data,left:X+PAD+80,top:cursor});
-    cursor+=item.info.height+ITEM_GAP;
+    cursor+=item.info.height+(i<items.length-1?ITEM_GAP:LAST_GAP);
   }
   svgBody+=dashed(cursor+6);cursor+=30;
   layers.push({input:totalLabel.data,left:X+PAD,top:cursor},{input:totalValue.data,left:X+W-PAD-totalValue.info.width,top:cursor});
   cursor+=40+30;
   // 바코드: 굵기가 다른 세로줄. 장식이라 내용과 무관하게 장 번호로 무늬만 바꾼다.
-  let bars="",bx=X+PAD+120;
-  for(let i=0;bx<X+W-PAD-120;i++){const w=MIN_STROKE+((i*7+index*3)%4);bars+=`<rect x="${bx}" y="${cursor}" width="${w}" height="60" fill="${paperInk}"/>`;bx+=w+3+((i*5)%3);}
-  svgBody+=bars;cursor+=70+10;
+  if(bars){
+    let barcode="",bx=X+PAD+120;
+    for(let i=0;bx<X+W-PAD-120;i++){const w=MIN_STROKE+((i*7+index*3)%4);barcode+=`<rect x="${bx}" y="${cursor}" width="${w}" height="60" fill="${paperInk}"/>`;bx+=w+3+((i*5)%3);}
+    svgBody+=barcode;cursor+=70+10;
+  }
   layers.push({input:thanks.data,left:X+Math.round((W-thanks.info.width)/2),top:cursor});
   layers.push(svgLayer(svgBody+sparkles([[X-30,Y+40,16],[X+W+28,Y+H-60,12]],palette.accent)));
+  if(prop)layers.push({...prop,left:Math.round(540+W/4-prop.width/2),top:Y+H+14+PROP_GAP});
   if(closing)layers.push(...closing.place(540,FOOTER_TOP-foot.extra-30-closing.height));
   layers.push(...foot.layers,await grainLayer());
   return texturedCanvas(palette.soft,layers);
@@ -367,26 +424,45 @@ const composeChecklist:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   const headline=await slideTitle(slide,{sizes:BODY_TITLE,color:ink,accent:readableOn(palette.accent,"#fffdf8",3),width:W-PAD*2,maxHeight:240});
   const items=await Promise.all(lines.map(line=>textLayer(line,{size:POINT,color:ink,width:W-PAD*2-80,height:POINT*5,font:FONTS.regular,spacing:6})));
   const contentHeight=headline.info.height+40+items.reduce((sum,item)=>sum+Math.max(item.info.height,52)+34,0);
-  const Y=110,H=Math.max(closing?520:700,Math.min(FOOTER_TOP-foot.extra-40-Y-(closing?closing.height+40:0),contentHeight+PAD*2+60));
-  // 남는 높이를 항목 사이에 나눠 수첩 아래쪽이 비지 않게 한다.
-  const extra=Math.max(0,Math.min(60,Math.floor((H-PAD*2-60-contentHeight)/Math.max(1,items.length))));
+  // 수첩은 늘 바닥글(마지막 장은 명함) 바로 위까지 내린다. 예전에는 내용 높이에 맞춰(최소 700) 수첩 아래 바탕이 500px 넘게 비었다.
+  const Y=110,H=FOOTER_TOP-foot.extra-40-Y-(closing?closing.height+20:0);
+  // 남는 높이를 항목 사이에 조금 나눈다(최대 70). 더 벌리면 목록이 듬성듬성해 보여, 나머지는 아래 마스코트 자리로 남긴다.
+  // 마스코트 칸(목록 끝+10 ~ 수첩 아래 끝-20)이 170보다 좁아지면 마스코트 없이 항목 사이를 최대 90까지 벌려 맨종이를 줄인다.
+  // 여백은 항목 "사이"에만 둔다(마지막 항목 뒤에 두면 그만큼 수첩 아래가 빈다).
+  const slack=H-PAD*2-60-contentHeight,rows=Math.max(1,items.length-1);
+  // 여백 e일 때 마지막 줄 밑선 바로 아래 위치.
+  const listEndAt=(e:number)=>Y+PAD+20+contentHeight+e*rows-14;
+  const e70=Math.max(0,Math.min(70,Math.floor(slack/rows)));
+  const roomy=Y+H-20-(listEndAt(e70)+10)>=170;
+  // 마스코트가 없으면 수첩 아래 여분(60)까지 항목 사이로 돌린다.
+  const extra=roomy?e70:Math.max(0,Math.min(90,Math.floor((slack+60)/rows)));
+  const listEnd=listEndAt(extra);
   let rings="";
   for(let x=X+70;x<X+W-40;x+=74)rings+=`<rect x="${x}" y="${Y-26}" width="16" height="52" rx="8" fill="${palette.ink}" fill-opacity=".7"/>`;
   const layers:OverlayOptions[]=[await cardShadow({x:X,y:Y+10,width:W,height:H,rx:18,blur:16,opacity:.18}),svgLayer(`<rect x="${X}" y="${Y}" width="${W}" height="${H}" rx="18" fill="#fffdf8"/>`+rings)];
   let cursor=Y+PAD+20;
   layers.push({input:headline.data,left:X+PAD,top:cursor});cursor+=headline.info.height+40;
   let boxes="";
-  for(const item of items){
+  for(const [i,item] of items.entries()){
     const rowH=Math.max(item.info.height,52);
     // 체크 상자와 강조색 체크 표시. 줄 아래에 옅은 노트 선.
     boxes+=`<rect x="${X+PAD}" y="${cursor+4}" width="40" height="40" rx="8" fill="none" stroke="${ink}" stroke-width="3"/><path d="M${X+PAD+8} ${cursor+24}l10 11 22-26" fill="none" stroke="${palette.accent}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`
       +`<path d="M${X+PAD} ${cursor+rowH+16}H${X+W-PAD}" stroke="${ink}" stroke-opacity=".12" stroke-width="${MIN_STROKE}"/>`;
     layers.push({input:item.data,left:X+PAD+72,top:cursor+Math.max(0,Math.round((48-Math.min(item.info.height,48))/2))});
-    cursor+=rowH+34+extra;
+    cursor+=rowH+34+(i<items.length-1?extra:0);
   }
   layers.push(svgLayer(boxes));
+  // 그래도 목록 아래 수첩 왼쪽이 크게 비면(짧은 문안) 수첩에 붙인 스티커처럼 마스코트를 세운다. 오른쪽 아래는 포스트잇 자리.
+  // 그림 위쪽 투명 여백을 빼고 실제 그림이 목록 끝 30px 아래에서 시작하게 둔다(수첩 아래 끝에 붙이면 목록과 사이가 다시 빈다).
+  const zoneTop=listEnd+10,zoneBottom=Y+H-20;
+  const mascot=roomy?await mascotLayer({width:380,pose:ROLE_POSES[slide.role]??"tip",left:X+PAD-10,top:zoneBottom,anchor:"bottom-left",maxHeight:Math.min(340,zoneBottom-zoneTop),minHeight:160}):null;
+  if(mascot){
+    const blank=await inkTop(mascot.input as Buffer);
+    mascot.top=Math.round(Math.max(zoneTop-blank,Math.min(zoneBottom-mascot.height,listEnd+30-blank)));
+    layers.push(svgLayer(mascotContact(mascot,.16)),mascot);
+  }
   // 포스트잇은 목록 마지막 줄과 겹치지 않을 때만 붙인다(마지막 장은 수첩이 짧아 자리가 모자랄 수 있다).
-  if(slide.keywords[0]&&cursor<=Y+H-190){
+  if(slide.keywords[0]&&listEnd<=Y+H-190){
     const note=await textLayer(`#${slide.keywords[0]}`,{size:30,color:"#2a2a2a",width:200,height:90,font:FONTS.bold,align:"centre"});
     const nx=X+W-230,ny=Y+H-190;
     layers.push(svgLayer(`<g transform="rotate(6 ${nx+100} ${ny+80})"><rect x="${nx+6}" y="${ny+8}" width="200" height="160" fill="#000" fill-opacity=".12"/><rect x="${nx}" y="${ny}" width="200" height="160" fill="${palette.highlight}"/></g>`));
@@ -410,10 +486,25 @@ const composeTimeline:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   const lines=cleanPoints(slide.points);
   const LINE_X=MARGIN+36,TEXT_X=MARGIN+110,TEXT_W=1080-MARGIN-TEXT_X;
   const steps=await Promise.all(lines.map(line=>textLayer(line,{size:POINT+2,color:ink,width:TEXT_W,height:(POINT+2)*5,font:FONTS.regular,spacing:8})));
-  const top=MARGIN+eyebrow.info.height+16+headline.info.height+70;
+  let top=MARGIN+eyebrow.info.height+16+headline.info.height+70;
   const used=steps.reduce((sum,step)=>sum+Math.max(step.info.height,72),0);
   const bottom=FOOTER_TOP-foot.extra-60-(closing?closing.height+30:0);
-  const gap=steps.length>1?Math.max(closing?28:40,Math.min(150,Math.floor((bottom-top-used)/(steps.length-1)))):0;
+  // 단계 사이는 최대 110(번호 점 높이 72와 합쳐 글줄 사이 맨바닥이 150을 넘지 않게). 예전 150은 단계 사이마다 빈 띠가 생겼다.
+  const gapFor=(cap:number)=>steps.length>1?Math.max(closing?28:40,Math.min(cap,Math.floor((bottom-top-used)/(steps.length-1)))):0;
+  const endFor=(g:number)=>top+used+g*Math.max(0,steps.length-1);
+  // 그래도 마지막 단계 아래가 크게 남으면(짧은 문안) 오른쪽 아래에 마스코트를 세워 순서를 안내하는 모습으로 채운다.
+  // 마스코트가 들어가지 않을 만큼만 남으면 단계 묶음을 남는 높이의 절반만큼 내려 제목 아래와 단계 아래 여백을 나눈다.
+  const gap=gapFor(110);
+  const zone=bottom+40-endFor(gap);
+  const mascot=zone>=200?await mascotLayer({width:400,pose:ROLE_POSES[slide.role]??"point",left:1080-MARGIN,top:bottom+40,anchor:"bottom-right",maxHeight:Math.min(360,zone-20),minHeight:160}):null;
+  const shift=mascot?0:Math.max(0,Math.floor((bottom-endFor(gap))/2));
+  top+=shift;
+  const stepsEnd=endFor(gap);
+  if(mascot){
+    // 그림 위 투명 여백을 빼고, 마지막 단계와 바닥 사이 가운데에 둔다.
+    const blank=await inkTop(mascot.input as Buffer),inked=mascot.height-blank;
+    mascot.top=Math.round(Math.min(bottom+40-mascot.height,stepsEnd+(bottom+40-stepsEnd-inked)/2-blank));
+  }
   const layers:OverlayOptions[]=[{input:eyebrow.data,left:MARGIN,top:MARGIN},{input:headline.data,left:MARGIN,top:MARGIN+eyebrow.info.height+16}];
   let cursor=top,dots="";
   const centers:number[]=[];
@@ -428,6 +519,7 @@ const composeTimeline:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   const line=centers.length>1?`<path d="M${LINE_X} ${centers[0]}V${centers[centers.length-1]}" stroke="${palette.accent}" stroke-opacity=".45" stroke-width="6" stroke-dasharray="2 14" stroke-linecap="round"/>`:"";
   layers.splice(0,0,svgLayer(line+dots+sparkles([[1080-MARGIN-20,MARGIN+16,16]],palette.accent)));
   // 번호 점(svg)은 숫자 레이어보다 먼저 깔려야 하므로 맨 앞에 넣었다.
+  if(mascot)layers.push(svgLayer(mascotContact(mascot,.18)),mascot);
   if(closing)layers.push(...closing.place(540,FOOTER_TOP-foot.extra-30-closing.height));
   layers.push(...foot.layers,await grainLayer());
   return texturedCanvas(palette.soft,layers);
@@ -442,16 +534,35 @@ const composePoster:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const cover=isCover(slide),last=isLast(slide,index,total);
   const foot=await footerPlan(slide,index,total,{ink,muted,accent:teaserInk});
   const tag=await textLayer(keywordLine(slide),{size:META+2,color:readableOn(palette.accent,palette.paper),width:CONTENT,height:44,font:FONTS.semibold});
-  const D=360,CX=1080-MARGIN-D/2,CY=FOOTER_TOP-foot.extra-60-D/2;
-  const COL=CONTENT-D-40;
-  const closing=last?await closingPlan({color:ink,accent:palette.accent,width:COL}):null;
   const lines=cleanPoints(slide.points).slice(0,3);
-  const points=lines.length?await pointLayers(lines,0,{width:COL,color:ink,markerColor:palette.accent,size:POINT}):null;
   const subline=await sublineLayer(slide,{color:muted});
   // 제목은 들어가는 가장 큰 크기를 고른다(위쪽 영역 높이 안에서 128px부터 줄여 본다). 부제가 있으면 그 자리를 먼저 뺀다.
-  const room=CY-D/2-40-(MARGIN+tag.info.height+24)-(subline?48+subline.info.height:0);
+  // 제목 자리는 예전처럼 지름 360 원 기준으로 잡는다(원을 키우려고 제목 높이를 줄이지 않는다).
+  const D0=360,room=FOOTER_TOP-foot.extra-60-D0-40-(MARGIN+tag.info.height+24)-(subline?48+subline.info.height:0);
   const headline=await slideTitle(slide,{sizes:cover?[128,112,100,92,88,80,72]:[128,112,98,86,72,64,56],color:ink,accent,maxHeight:room,balance:true});
   const titleTop=MARGIN+tag.info.height+24,ruleY=titleTop+headline.info.height+24;
+  // 제목(·부제) 아래 빈 자리. 예전에는 지름 360 원과 요점을 바닥에 붙여 제목과 원 사이가 400px 가까이 비었고,
+  // 표지 사진 면적도 9%뿐이었다. 이제 원을 이 자리에 들어가는 만큼 키운다(표지 최대 720, 본문 520, 마지막 장 440).
+  // 요점은 원 왼쪽 칸에 제목 바로 아래부터 쌓는다(원이 아래쪽 줄을 채운다).
+  const contentTop=ruleY+(subline?28+subline.info.height:0)+40;
+  const circleBottom=FOOTER_TOP-foot.extra-60;
+  // 원의 맨 위는 가운데(CX)만 뾰족하게 올라오므로, 부제 줄이 원 가운데보다 60 이상 왼쪽에서 끝나면 원 위 끝이 부제 아래 여백(40)까지 올라와도 된다.
+  const reach=(d:number)=>subline&&MARGIN+subline.info.width<1080-MARGIN-d/2-60?40:0;
+  const sizes=(cover?[720,680,640,600,560,520,480,440,400]:last?[440,400]:[520,480,440,400]).filter(d=>circleBottom-d-18>=contentTop-reach(d)-(lines.length?0:10));
+  let plan:{D:number;COL:number;closing:Awaited<ReturnType<typeof closingPlan>>|null;points:Awaited<ReturnType<typeof pointLayers>>|null}|null=null;
+  for(const d of [...sizes,D0]){
+    const col=CONTENT-d-40;
+    const closingTry=last?await closingPlan({color:ink,accent:palette.accent,width:col}):null;
+    const pointsTry=lines.length?await pointLayers(lines,contentTop,{width:col,color:ink,markerColor:palette.accent,size:POINT}):null;
+    const limit=closingTry?FOOTER_TOP-foot.extra-30-closingTry.height-30:FOOTER_TOP-foot.extra-50;
+    plan={D:d,COL:col,closing:closingTry,points:pointsTry};
+    if(!pointsTry||pointsTry.bottom<=limit)break;
+  }
+  const {D,COL,closing,points}=plan!;
+  const CX=1080-MARGIN-D/2,CY=circleBottom-D/2;
+  const photo=await croppedPhoto(inputs[0],D,D,0,{circle:true});
+  // 원형 사진은 모서리가 비므로 검수의 사진 면적을 원 기준(30%)으로 재게 모양을 알려 준다.
+  registerPhoto(photo,{shape:"circle"});
   const layers:OverlayOptions[]=[
     {input:tag.data,left:MARGIN,top:MARGIN},
     {input:headline.data,left:MARGIN,top:titleTop},
@@ -459,11 +570,11 @@ const composePoster:CardRenderer=async(inputs,slide,index,total,palette)=>{
       +ring({cx:CX,cy:CY,r:D/2+18,color:palette.accent,strokeWidth:4,dashed:true,opacity:.6})+sparkles([[CX-D/2-20,CY-D/2+10,20]],palette.highlight)),
     // 원형 사진 뒤 두 겹 그림자(주변광+주광 두 겹). 원이 종이 위에 "놓인" 두께가 생긴다.
     await cardShadow({x:CX-D/2,y:CY-D/2+14,width:D,height:D,rx:D/2,blur:18,opacity:.22}),
-    {input:await croppedPhoto(inputs[0],D,D,0,{circle:true}),left:CX-D/2,top:CY-D/2},
+    {input:photo,left:CX-D/2,top:CY-D/2},
   ];
   if(subline)layers.push({input:subline.data,left:MARGIN,top:ruleY+28});
   const closingTop=closing?FOOTER_TOP-foot.extra-30-closing.height:FOOTER_TOP-foot.extra-50;
-  if(points){const placed=await pointLayers(lines,closingTop-(closing?30:0)-points.bottom,{width:COL,color:ink,markerColor:palette.accent,size:POINT});layers.push(...placed.layers);}
+  if(points)layers.push(...points.layers);
   if(closing)layers.push(...closing.place(MARGIN+COL/2,closingTop));
   layers.push(...foot.layers,await grainLayer());
   return texturedCanvas(palette.paper,layers);
@@ -484,13 +595,17 @@ const composeCircle:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const textHeight=headline.info.height+(subline?20+subline.info.height:0)+(lines.length?30+measured.bottom:0);
   const TOP=closing?72:100;
   const bottom=FOOTER_TOP-foot.extra-40-(closing?closing.height+36:0);
-  // 지름은 짝수로(반지름이 정수여야 사진 위치가 정수 픽셀이 된다).
-  const D=2*Math.round(Math.max(closing?320:400,Math.min(660,bottom-TOP-50-textHeight))/2);
+  // 지름은 짝수로(반지름이 정수여야 사진 위치가 정수 픽셀이 된다). 위 한도 660은 짧은 문안에서 글 아래가 200px 넘게 비어
+  // 780으로 올렸다(고리 포함 폭 824 < 화면 1080).
+  const D=2*Math.round(Math.max(closing?320:400,Math.min(780,bottom-TOP-50-textHeight))/2);
   const cx=540,cy=TOP+D/2;
+  const photo=await croppedPhoto(inputs[0],D,D,0,{circle:true});
+  // 원형 사진: 검수의 사진 면적을 원 기준(30%)으로 재게 모양을 알려 준다.
+  registerPhoto(photo,{shape:"circle"});
   const layers:OverlayOptions[]=[
     svgLayer(ring({cx,cy,r:D/2+22,color:palette.accent,strokeWidth:4,dashed:true,opacity:.5})+sparkles([[cx+D/2+10,cy-D/2+30,20],[cx-D/2-14,cy+D/2-40,13]],palette.accent)),
     await cardShadow({x:cx-D/2,y:cy-D/2+14,width:D,height:D,rx:D/2,blur:18,opacity:.22}),
-    {input:await croppedPhoto(inputs[0],D,D,0,{circle:true}),left:cx-D/2,top:TOP},
+    {input:photo,left:cx-D/2,top:TOP},
     {input:headline.data,left:Math.round((1080-headline.info.width)/2),top:TOP+D+50},
   ];
   let cursor=TOP+D+50+headline.info.height;

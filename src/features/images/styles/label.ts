@@ -142,8 +142,13 @@ function medalOver(cx:number,cy:number,R:number,s:number):string {
     +`<circle cx="${cx}" cy="${cy}" r="${R+12*s}" fill="none" stroke="${FRAME}" stroke-width="${MIN_STROKE}"/>`;
 }
 // 메달 속 사진: 원형으로 자른다. 예전의 탈채도(.92)는 홍어 살을 탁하게 만들어 뺐다(종이 느낌은 테두리·질감이 맡는다).
-// 큰 원 안에 접시 전체가 들어가면 음식이 작아 보이므로 zoom으로 조금 당겨(접사) 자른다. croppedPhoto 결과는 자동으로 검수에 등록된다.
-const medalPhoto=(input:Buffer,R:number,zoom=1)=>croppedPhoto(input,R*2,R*2,0,{circle:true,zoom});
+// 큰 원 안에 접시 전체가 들어가면 음식이 작아 보이므로 zoom으로 조금 당겨(접사) 자른다.
+// 검수(render/audit.ts)가 사각 기준(40%)이 아니라 메달 기준(30%)으로 표지 면적을 재도록 같은 버퍼를 "medal"로 다시 등록한다.
+async function medalPhoto(input:Buffer,R:number,zoom=1):Promise<Buffer> {
+  const photo=await croppedPhoto(input,R*2,R*2,0,{circle:true,zoom});
+  registerPhoto(photo,{shape:"medal"});
+  return photo;
+}
 
 // 아치 창(위가 둥근 창) 사진: 직사각형 위에 반원을 얹은 마스크로 자른다.
 const archPath=(x:number,y:number,w:number,h:number)=>{const r=w/2;return `M${x} ${y+r}A${r} ${r} 0 0 1 ${x+w} ${y+r}V${y+h}H${x}Z`;};
@@ -152,8 +157,8 @@ async function archPhoto(input:Buffer,width:number,height:number):Promise<Buffer
   // 탈채도 없이 온기만 살짝(파랑 −4%).
   const photo=await sharp(await finishPhoto(input,w,h)).linear([1.02,1,.96],[3,1,-3]).png().toBuffer();
   const shaped=await sharp(photo).composite([{input:svg(w,h,`<path d="${archPath(0,0,w,h)}" fill="#fff"/>`),blend:"dest-in"}]).png().toBuffer();
-  // 마스크를 씌운 새 버퍼는 자동 등록되지 않으므로 직접 등록한다(검수의 사진 면적 측정).
-  registerPhoto(shaped);
+  // 마스크를 씌운 새 버퍼는 자동 등록되지 않으므로 직접 등록한다(검수의 사진 면적 측정, 아치 기준 35%).
+  registerPhoto(shaped,{shape:"arch"});
   return shaped;
 }
 // 아치 창 테두리: 황금 굵은 선 + 바깥 가는 갈색 선(이중 테두리). 꼭대기 장식은 바로 위 제목 장식선의 마름모와 겹쳐 보여 두지 않는다.

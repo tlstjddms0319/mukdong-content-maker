@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { suggestTopics } from "@/features/topics/service";
+import { isOtherMenuTopic, suggestTopics } from "@/features/topics/service";
+import { menuOf } from "@/features/store/menu";
 import { TopicSuggestionSchema } from "@/features/topics/schema";
 
 const input = { intent: "", storeName: "묵동홍어마을" };
@@ -11,17 +12,21 @@ describe("topic service", () => {
   });
   it("uses valid Gemini suggestions when connected", async () => {
     const topics = Array.from({ length:3 }, (_, index) => ({
-      id:`gemini-${index}`, title:["수육 옆에는 왜 김치가 있을까?","같은 회인데 왜 식감은 다를까?","홍어는 왜 수육이랑 먹을까?"][index], summary:"익숙한 음식의 맛과 식감에 대한 질문에 답하고 홍어를 구체적인 사례로 연결한다.", reason:"이유", audience:(['A','B','C'] as const)[index], imageBrief:"음식 사진",
+      id:`gemini-${index}`, title:["미나리전엔 왜 막걸리가 생각날까?","같은 회인데 왜 식감은 다를까?","홍어는 왜 수육이랑 먹을까?"][index], summary:index===0?"비 오는 날 미나리전과 배다리 막걸리를 곁들이는 장면에서 시작해 어울리는 이유를 단정하지 않고 소개한다.":"익숙한 음식의 맛과 식감에 대한 질문에 답하고 홍어를 구체적인 사례로 연결한다.", reason:"이유", audience:(['A','B','C'] as const)[index], imageBrief:"음식 사진",
     }));
     await expect(suggestTopics(input, { suggest:async () => topics })).resolves.toEqual(topics.map(topic=>({...topic,season:""})));
   });
 
-  it("offers two everyday questions and one hongeo question in every offline round", async () => {
+  it("offers two everyday questions and one hongeo dish question, with at least one other menu, in every offline round", async () => {
     for (let recommendationRound=0; recommendationRound<4; recommendationRound++) {
       const result=await suggestTopics({...input,recommendationRound});
       expect(result.every(topic=>topic.title.endsWith("?"))).toBe(true);
       expect(result.filter(topic=>!/홍어|삼합|묵동홍어마을/.test(topic.title))).toHaveLength(2);
-      expect(result.every(topic=>topic.summary.includes("홍어"))).toBe(true);
+      // 모든 주제가 가게 메뉴로 이어지고, 최소 하나는 홍어회·삼합이 아닌 메뉴(과메기·미나리전·막걸리·애탕·무침)다.
+      expect(result.every(topic=>menuOf(topic.summary).length>0)).toBe(true);
+      expect(result.some(isOtherMenuTopic)).toBe(true);
+      // 삼합은 한 묶음에 최대 하나.
+      expect(result.filter(topic=>/삼합|수육/.test(topic.title+topic.summary)).length).toBeLessThanOrEqual(1);
     }
   });
 

@@ -1,7 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { currentTone, svgLayer, textLayer, type CardRenderer, brandName, type Layer, type TextEmphasis, type Font } from "../render/primitives";
 import { contactShadow, mascotLayer, textureLayer } from "../decor";
-import { registerPhoto } from "../render/audit";
+import { registerDecor, registerPhoto } from "../render/audit";
 import { MIN_STROKE, STYLE_FONTS, blobCutout, closingBlock, contentOf, cutoutPhoto, emphasisOf, fitText, nextCue, stickerize , snap } from "./shared";
 
 // 3D 모션·팝업북: 진한 바탕 한가운데 스포트라이트, 아래쪽에 펼친 책을 놓고 그 위로 음식(누끼)이 튀어나오게 한다.
@@ -137,57 +137,86 @@ export const renderPopup:CardRenderer=async(inputs,slide,index,total)=>{
   const makeTabs=(size:number)=>Promise.all(content.points.slice(0,hasPhoto?3:4).map(point=>textLayer(point,{size,color:"#1A1A1A",width:hasPhoto?W-80:W-140,height:size*3.4,font:STYLE_FONTS.comic,spacing:6})));
   const heightOf=(made:Layer[])=>made.reduce((sum,tab)=>sum+tab.info.height+30+(hasPhoto?14:26),0);
   let tabs:Layer[]=[];
-  for(const size of hasPhoto?[36,33,30]:[50,44,40,36]){tabs=await makeTabs(size);if(heightOf(tabs)<=tabsRoom)break;}
+  // 비교 장(사진 두 장)은 스티커가 폭 때문에 500px에서 멈춰 세로 자리가 남으므로 탭 글자를 한 단계 크게(40px) 먼저 시도한다.
+  for(const size of hasPhoto?(inputs.length>1?[40,36,33,30]:[36,33,30]):[50,44,40,36]){tabs=await makeTabs(size);if(heightOf(tabs)<=tabsRoom)break;}
   const tabsH=heightOf(tabs);
   // 글자 장: 제목과 탭 계단 사이에 홍어 마스코트(가리키는 포즈, 없으면 인사)를 오른쪽에 세워 계단을 가리키게 한다.
   // 남는 높이가 200px 넘을 때만, 마스코트+탭을 한 덩어리로 세로 가운데에 둔다. 마스코트 때문에 탭 글자를 줄이지 않는다.
+  // 마스코트는 남는 높이에 맞춰 300px까지 키운다(240px 상한일 때는 탭 계단 위아래가 200px 가까이 비었다).
   const spare=hasPhoto?0:spineY-60-y-tabsH;
-  const mascot=spare>=200&&tabs.length?await mascotLayer({width:260,pose:"point",left:1080-M-20,top:0,anchor:"top-right",maxHeight:Math.min(240,spare-30),minHeight:150}):null;
-  if(!hasPhoto&&tabs.length)y=Math.max(y,Math.round((y+spineY-60-tabsH-(mascot?mascot.height+10:0))/2));
+  const mascot=spare>=200&&tabs.length?await mascotLayer({width:320,pose:"point",left:1080-M-20,top:0,anchor:"top-right",maxHeight:Math.min(300,spare-30),minHeight:150}):null;
+  // 글자 장: 남는 높이는 탭 사이(장마다 최대 28px)에 먼저 나누고, 나머지로 마스코트+탭 덩어리를 세로 가운데에 둔다.
+  // 가운데 정렬만 하면 마지막 탭과 책 사이가 200px 넘게 비었다.
+  let tabGap=hasPhoto?14:26;
+  if(!hasPhoto&&tabs.length){
+    const block=(gap:number)=>tabsH+(gap-26)*tabs.length-gap+(mascot?mascot.height+10:0);
+    if(tabs.length>1)tabGap+=Math.max(0,Math.min(28,Math.floor((spineY-60-y-block(26))*.4/(tabs.length-1))));
+    y=Math.max(y,y+Math.round((spineY-60-y-block(tabGap))/2));
+  }
   if(mascot){layers.push({...mascot,top:y});y+=mascot.height+10;}
+  // 책 위로 튀어나오는 음식: 누끼가 되면 흰 테두리 스티커, 안 되면 손으로 오린 듯한 블롭 스티커. 두 장이면 좌우로 하나씩.
+  // 탭보다 먼저 만든다: 스티커의 실제 높이를 알아야 탭과 스티커 사이에 남는 높이를 탭 위·사이에 나눠 줄 수 있다.
+  const stickers:{sticker:Layer;cut:boolean;cx:number}[]=[];
+  if(hasPhoto){
+    const shots=inputs.slice(0,2);
+    // 스티커 몫은 흰 테두리(12px의 두 배를 양쪽, 48px)와 접촉 그림자(24px)를 더한 72px다. 예전에는 100px을 떼어 두어
+    // 스티커가 작아지고 탭 아래가 180px 안팎 비었다. 블롭은 오리면서 8%쯤 더 작아지므로 72px이면 넘치지 않는다.
+    const room=spineY+70-(y+tabsH+10)-72;
+    // 두 장(비교)은 좌우(290·790)에 두고 500px까지 키운다. 보통 블롭이면 가운데에서 맞닿고, 가장 큰 블롭·누끼면
+    // 오른쪽 스티커가 왼쪽 가장자리를 40px 남짓 덮는다(팝업북에 겹쳐 붙인 모양이라 괜찮다). 더 키우면 캔버스 끝에 붙는다.
+    const size=Math.max(minSticker,Math.min(shots.length>1?500:780,room));
+    for(const [i,shot] of shots.entries()){
+      const cut=await cutoutPhoto(shot,size);
+      // 블롭은 지름이 오린 크기의 83~92%라 같은 크기로 오리면 자리가 남는다. 92%로 나눈 크기로 오려 가장 큰 블롭도 자리에 꼭 맞게 한다.
+      const shape=cut??await blobCutout(shot,Math.round(size/.92),index*11+i*17+(slide.variant??0));
+      const sticker=await stickerize(shape,{border:12,contact:true});
+      // 누끼는 음식 모양 그대로라 상자 면적이 작게 잡히므로 cutout, 블롭은 둥근 원에 가까워 circle 기준으로 잰다.
+      registerPhoto(sticker.data,{shape:cut?"cutout":"circle"});
+      stickers.push({sticker,cut:!!cut,cx:shots.length>1?(i?790:290):540});
+    }
+  }
+  // 사진 장: 스티커를 키우고도 남는 높이(비교 장처럼 스티커 크기 상한에 걸릴 때)는 탭 사이에 장마다 최대 24px씩 더 벌리고,
+  // 나머지는 절반을 탭 위(제목 아래)로 보낸다. 탭이 제목 밑에 붙고 그 아래가 통째로 비어 보이던 것을 막는다.
+  if(stickers.length&&tabs.length){
+    const top=Math.min(...stickers.map(({sticker})=>spineY+70-sticker.info.height));
+    const slack=Math.max(0,top-(y+tabsH+10));
+    const extra=tabs.length>1?Math.min(24,Math.floor(slack*.3/(tabs.length-1))):0;
+    tabGap+=extra;
+    y+=Math.round((slack-extra*tabs.length)/2);
+  }
   for(const [i,tab] of tabs.entries()){
     const w=tab.info.width+60,h=tab.info.height+30;
     // 글자 장은 탭을 계단처럼 오른쪽으로 조금씩 밀어 책에서 튀어나온 종이처럼 보이게 한다.
     const x=hasPhoto?Math.round((1080-w)/2):Math.min(1080-M-w-12,M+i*44);
     deco+=paperTab(x,y,w,h,hasPhoto?8:12,i%2?"#FFFFFF":scene.tab,scene.tabSide);
     tabLayers.push({input:tab.data,left:x+30,top:y+15});
-    y+=h+(hasPhoto?14:26);
+    y+=h+tabGap;
   }
   const bookW=hasPhoto?420:380;
   // 책 종이 결: 리넨 질감 자산이 있으면 쪽 모양으로 잘라 multiply로 옅게, 없으면 openBook이 SVG 실 무늬를 그린다.
   const linen=await textureLayer("linen",{opacity:.35,blend:"multiply"});
-  deco+=openBook(540,spineY,bookW,!!linen);
+  // 펼친 책은 장면의 주인공 소품이라 따로 한 장(SVG)으로 그려 ornament로 등록한다(빈 띠 계산에서 찬 자리로 친다).
+  // 스티커의 접촉 그림자도 책 위에 떨어지므로 이 장에 같이 그린다. 바탕(스포트라이트·빛줄기)은 등록하지 않는다.
+  let bookSvg=openBook(540,spineY,bookW,!!linen);
   const linenLayer:OverlayOptions[]=[];
   if(linen){
     const mask=Buffer.from(`<svg width="1080" height="1350" xmlns="http://www.w3.org/2000/svg"><path d="${bookPages(540,spineY,bookW)}" fill="#fff"/></svg>`);
     linenLayer.push({input:await sharp(linen.input as Buffer).composite([{input:mask,blend:"dest-in"}]).png().toBuffer(),left:0,top:0,blend:"multiply"});
   }
-  // 책 위로 튀어나오는 음식: 누끼가 되면 흰 테두리 스티커, 안 되면 손으로 오린 듯한 블롭 스티커. 두 장이면 좌우로 하나씩.
   // 스티커 바닥은 책 접힘선(spineY~spineY+110) 위에 닿게 두고 접촉 그림자를 깔아 책에서 솟아 나온 것처럼 보이게 한다.
   // 스티커 뒤에는 노란 후광(screen 합성 .3)을 깔아 음식이 어두운 바탕에서 앞으로 튀어나와 보이게 한다.
   const popped:OverlayOptions[]=[];
   const halos:OverlayOptions[]=[];
-  if(hasPhoto){
-    const shots=inputs.slice(0,2);
-    // 스티커 몫(테두리·그림자·접촉 그림자 약 100px)을 뺀 남는 높이가 사진 크기다.
-    const room=spineY+70-(y+10)-100;
-    const size=Math.max(minSticker,Math.min(shots.length>1?400:780,room));
-    for(const [i,shot] of shots.entries()){
-      const cx=shots.length>1?(i?770:310):540;
-      const cut=await cutoutPhoto(shot,size);
-      const shape=cut??await blobCutout(shot,size,index*11+i*17+(slide.variant??0));
-      // 그림자는 딱딱한 오프셋 대신 blur 10으로 번진 실루엣 그림자(어두운 바탕에서 스티커가 떠오른 거리감)를 직접 깐다.
-      const sticker=await stickerize(shape,{border:12,contact:true});
-      registerPhoto(sticker.data);
-      const left=Math.round(cx-sticker.info.width/2),top=Math.max(y+10,spineY+70-sticker.info.height);
-      const shadow=await softSilhouette(sticker.data,10,.55);
-      popped.push(await clipToCanvas(shadow,left-shadow.pad+(cut?16:12),top-shadow.pad+(cut?18:14)),{input:sticker.data,left,top});
-      // 접힘선 위 접촉 그림자: 스티커 바닥(접촉 그림자 몫 24px 위)이 책에 닿는 자리에 납작한 타원.
-      deco+=contactShadow({cx:left+sticker.info.width/2,cy:top+sticker.info.height-28,rx:sticker.info.width*.36,opacity:.45});
-      // 후광 반경은 스티커의 긴 변 이상으로 잡아 가장자리까지 은은하게 퍼지게 한다.
-      const R=Math.max(sticker.info.width,sticker.info.height),hx=left+sticker.info.width/2,hy=top+sticker.info.height/2;
-      halos.push({...svgLayer(`<defs><radialGradient id="halo${i}" cx="${hx}" cy="${hy}" r="${R}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFD84D" stop-opacity="${calm?.15:.3}"/><stop offset=".55" stop-color="#FFD84D" stop-opacity="${calm?.07:.14}"/><stop offset="1" stop-color="#FFD84D" stop-opacity="0"/></radialGradient></defs><circle cx="${hx}" cy="${hy}" r="${R}" fill="url(#halo${i})"/>`),blend:"screen"});
-    }
+  for(const [i,{sticker,cut,cx}] of stickers.entries()){
+    // 그림자는 딱딱한 오프셋 대신 blur 10으로 번진 실루엣 그림자(어두운 바탕에서 스티커가 떠오른 거리감)를 직접 깐다.
+    const left=Math.round(cx-sticker.info.width/2),top=Math.max(y+10,spineY+70-sticker.info.height);
+    const shadow=await softSilhouette(sticker.data,10,.55);
+    popped.push(await clipToCanvas(shadow,left-shadow.pad+(cut?16:12),top-shadow.pad+(cut?18:14)),{input:sticker.data,left,top});
+    // 접힘선 위 접촉 그림자: 스티커 바닥(접촉 그림자 몫 24px 위)이 책에 닿는 자리에 납작한 타원.
+    bookSvg+=contactShadow({cx:left+sticker.info.width/2,cy:top+sticker.info.height-28,rx:sticker.info.width*.36,opacity:.45});
+    // 후광 반경은 스티커의 긴 변 이상으로 잡아 가장자리까지 은은하게 퍼지게 한다.
+    const R=Math.max(sticker.info.width,sticker.info.height),hx=left+sticker.info.width/2,hy=top+sticker.info.height/2;
+    halos.push({...svgLayer(`<defs><radialGradient id="halo${i}" cx="${hx}" cy="${hy}" r="${R}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFD84D" stop-opacity="${calm?.15:.3}"/><stop offset=".55" stop-color="#FFD84D" stop-opacity="${calm?.07:.14}"/><stop offset="1" stop-color="#FFD84D" stop-opacity="0"/></radialGradient></defs><circle cx="${hx}" cy="${hy}" r="${R}" fill="url(#halo${i})"/>`),blend:"screen"});
   }
   // 반짝이·별·연기. 위쪽 두 개는 마지막 탭 "아래"에 둔다(탭 위에 얹히면 글자를 가린다).
   const sparkles=[[110,y+34,26],[980,y+60,34],[150,Math.max(spineY-120,y+40),20],[950,Math.max(spineY-200,y+20),24]] as const;
@@ -224,7 +253,9 @@ export const renderPopup:CardRenderer=async(inputs,slide,index,total)=>{
     front+=paperTab(x,cy,w,h,6,scene.tab,scene.tabSide)+cue.arrow(x+18,cy+7);
     frontText.push({input:cue.label.data,left:x+18,top:cy+7});
   }
+  const book=svgLayer(bookSvg);
+  registerDecor(book.input as Buffer,"ornament");
   return sharp({create:{width:1080,height:1350,channels:3,background:scene.bg}})
-    .composite(snap([svgLayer(deco),...linenLayer,...halos,...tabLayers,...popped,...layers,svgLayer(front),...frontText]))
+    .composite(snap([svgLayer(deco),book,...linenLayer,...halos,...tabLayers,...popped,...layers,svgLayer(front),...frontText]))
     .jpeg({quality:92}).toBuffer();
 };

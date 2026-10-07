@@ -10,7 +10,7 @@ import { LibraryFilterBar } from "./LibraryFilterBar";
 import type { LibraryAsset } from "@/features/images/freeCards";
 import { filterLibrary, popularTags, usageLabel, type LibrarySort } from "@/features/images/libraryFilter";
 import { AnalyzeResponseSchema, type AnalyzeResponse } from "@/features/images/photoAnalysis";
-import { MAX_STUDIO_PHOTOS, activeSlideIndex, deckComplete, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, recordPhotoUse, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
+import { MAX_STUDIO_PHOTOS, activeSlideIndex, approvedDeck, storeCardPending, deckComplete, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, recordPhotoUse, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
 // 사진 품질·표지 추천(/api/images/analyze). score:false는 서버의 로컬 검사만(무료), true는 Gemini 식욕 점수까지(버튼으로만).
 async function requestAnalysis(ids:string[],score:boolean,topic:string):Promise<AnalyzeResponse> {
@@ -136,7 +136,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       {(done||(busy&&deckEdited))&&<DeckEditor state={state}/>}
       {done&&<div className="photo-studio-actions">
         <button type="button" className="button secondary" disabled={busy||!photos.length} onClick={()=>void buildPhotoCarousel()}>다시 만들기</button>
-        <button type="button" className="button primary" disabled={approved||busy} onClick={()=>{markApproved();onApprove(slides);recordPhotoUse(photoAssignment.flat().map(i=>photos[i]?.id));}}>이 캐러셀 사용</button>
+        <button type="button" className="button primary" disabled={approved||busy||storeCardPending(state)} onClick={()=>{markApproved();onApprove(approvedDeck(state));recordPhotoUse(photoAssignment.flat().map(i=>photos[i]?.id));}}>이 캐러셀 사용</button>
       </div>}
     </>}
   </div>;

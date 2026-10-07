@@ -398,15 +398,56 @@ describe("hongeo stays the hero", () => {
   it("tells the image model that the skate is largest and in front while pork and kimchi are sides", () => {
     const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",subline:"",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0}});
     expect(prompt).toContain("주인공은 홍어");
-    expect(prompt).toContain("hero of every scene");
-    expect(prompt).toContain("수육이 홍어보다 크거나 앞에 오면 안 된다");
+    expect(prompt).toContain("The fermented skate is the hero");
+    expect(prompt).toContain("수육이 홍어를 가리면 안 된다");
     // 홍어와 무관한 주제에는 붙지 않는다.
-    expect(buildImagePrompt({topic:"김치찌개",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:3,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블"})).not.toContain("hero of every scene");
+    expect(buildImagePrompt({topic:"김치찌개",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:3,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블"})).not.toContain("The fermented skate is the hero");
   });
   it("forbids drawing the skate as a whole small fish", () => {
     const prompt=buildImagePrompt({topic:"홍어회",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:5,styleAnchor:"따뜻한 색온도"});
     expect(prompt).toContain("통째 생선으로 그리지 않는다");
     expect(prompt).toContain("Never show a whole small fish");
+  });
+});
+
+describe("the topic's menu is the hero", () => {
+  const brief=(topic:string,headline?:string,points:string[]=[])=>({topic,count:1,aspectRatio:"4:5" as const,slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 조명",
+    ...(headline?{slide:{role:"detail" as const,subline:"",headline,points,visualPrompt:"접시 위 음식을 낮은 각도에서 가까이",textPosition:"top" as const,layout:"frame" as const,keywords:[],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0}}:{})});
+  it("makes gwamegi the hero of a gwamegi topic and leaves the skate out", () => {
+    const prompt=buildImagePrompt(brief("과메기는 왜 찬바람이 불면 찾을까?"));
+    expect(prompt).toContain("주인공은 과메기다");
+    expect(prompt).toContain("gwamegi");
+    expect(prompt).toContain("Do not add skate slices");
+    expect(prompt).not.toContain("주인공은 홍어");
+    expect(prompt).not.toContain("The fermented skate is the hero");
+    expect(prompt).not.toContain("통째 생선으로 그리지 않는다");
+    expect(prompt).not.toContain("Skate texture:");
+  });
+  it("follows the slide copy: a minari-jeon slide in a makgeolli topic shows the pancake", () => {
+    const prompt=buildImagePrompt(brief("막걸리 한 잔엔 어떤 안주가 어울릴까?","미나리전 한 장을 곁들여요",["노릇한 반죽 사이로 미나리가 보여요"]));
+    expect(prompt).toContain("주인공은 미나리전이다");
+    expect(prompt).toContain("minari-jeon");
+    expect(prompt).toContain("미나리전이 보이는 모습");
+    expect(prompt).not.toContain("The fermented skate is the hero");
+  });
+  it("draws hongeo aetang as a hot soup, not sliced sashimi", () => {
+    const prompt=buildImagePrompt(brief("홍어애탕은 어떤 국물일까?"));
+    expect(prompt).toContain("홍어애탕 장면은 뚝배기");
+    expect(prompt).toContain("주인공은 홍어애탕이다");
+    expect(prompt).not.toContain("Show the skate only as sliced pieces");
+    expect(prompt).not.toContain("숙성 홍어 날개 살을 얇고 불규칙하게");
+    expect(prompt).not.toContain("Skate texture:");
+  });
+  it("keeps the skate combinations out of a gwamegi slide's must-show line", () => {
+    const prompt=buildImagePrompt(brief("과메기는 왜 찬바람이 불면 찾을까?","과메기 한 점을 김치에 올려 싸요",["막걸리 한 잔을 곁들여요"]));
+    expect(prompt).toContain("과메기가 보이는 모습");
+    expect(prompt).toContain("bowl of milky makgeolli");
+    expect(prompt).not.toContain("a skate slice wrapped");
+  });
+  it("does not pull boiled pork and kimchi into a plain hongeo scene", () => {
+    const prompt=buildImagePrompt(brief("홍어의 톡 쏘는 향은 어디서 올까?"));
+    expect(prompt).toContain("주인공은 홍어");
+    expect(prompt).toContain("장면 설명에 없는 수육·묵은지를 새로 넣지 않는다");
   });
 });
 
@@ -426,5 +467,38 @@ describe("appetizing photo direction (A9)", () => {
   it("keeps skate texture out of other foods and illustration styles", () => {
     expect(buildImagePrompt({...brief,topic:"김치찌개"})).not.toContain("Skate texture:");
     expect(buildImagePrompt({...brief,imageStyle:"anime"})).not.toContain("Skate texture:");
+  });
+});
+
+describe("each slide shows what its copy describes", () => {
+  const slide=(headline:string,points:string[])=>({role:"how-to" as const,subline:"",headline,points,visualPrompt:"젓가락으로 한 점을 집는 손",textPosition:"top" as const,layout:"frame" as const,keywords:["홍어"],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0});
+  const brief=(headline:string,points:string[])=>({topic:"홍어가 코를 찡하게 하는 이유",count:1,aspectRatio:"4:5" as const,slideIndex:4,slideTotal:5,styleAnchor:"따뜻한 조명",slide:slide(headline,points)});
+  it("puts the kimchi wrap and the boiled pork from the copy into the image prompt", () => {
+    // 사장님이 보내 준 실제 사례: "묵은지에 가볍게 감싸요"·"수육 한 조각을 곁들여요" 장인데 홍어만 든 사진이 나왔다.
+    const prompt=buildImagePrompt(brief("홍어 한 점을 묵은지에 가볍게 감싸요.",["홍어 한 점을 새콤한 묵은지 위에 올려 부드럽게 감싸요","홍어의 독특한 향 뒤로 담백한 수육 한 조각을 살짝 곁들여요"]));
+    expect(prompt).toContain("MUST SHOW");
+    expect(prompt).toContain("wrapped in or laid on a leaf of red aged kimchi");
+    expect(prompt).toContain("a slice of boiled pork belly together with the skate");
+    // 필수 장면은 공통 지시문보다 앞(장면 설명 바로 앞)에 온다.
+    expect(prompt.indexOf("MUST SHOW")).toBeLessThan(prompt.indexOf("슬라이드 역할"));
+  });
+  it("uses one samhap line instead of repeating pork and kimchi", () => {
+    const prompt=buildImagePrompt(brief("삼합은 이렇게 겹쳐 드세요",["묵은지 위에 수육과 홍어를 올려요"]));
+    expect(prompt).toContain("stacked together in one chopstick bite");
+    expect(prompt).not.toContain("a slice of boiled pork belly together with the skate");
+  });
+  it("adds nothing when the copy names no combination", () => {
+    expect(buildImagePrompt(brief("홍어 살은 씹을수록 찰져요",["얇게 썰려 결이 보여요"]))).not.toContain("MUST SHOW");
+  });
+});
+
+describe("no chopstick lifting unless the scene asks for it", () => {
+  const brief=(visualPrompt:string)=>({topic:"홍어회",count:1,aspectRatio:"4:5" as const,slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 조명",
+    slide:{role:"pairing" as const,subline:"",headline:"막걸리와 함께 놓아요",points:["사발에 막걸리를 따라요"],visualPrompt,textPosition:"top" as const,layout:"frame" as const,keywords:["막걸리"],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0}});
+  it("tells the model to keep the food on the plate when the scene does not mention lifting", () => {
+    expect(buildImagePrompt(brief("홍어 접시 옆 사발에 막걸리를 따르는 순간, 손·젓가락·얼굴 없음"))).toContain("Do NOT show chopsticks lifting a slice");
+  });
+  it("allows it when the scene itself is about lifting a slice", () => {
+    expect(buildImagePrompt(brief("젓가락으로 홍어 한 점을 집어 든 손을 눈높이에서"))).not.toContain("Do NOT show chopsticks lifting a slice");
   });
 });

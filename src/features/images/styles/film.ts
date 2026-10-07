@@ -142,7 +142,8 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
       if((two?room/2:room)>=320)break;
     }
     const room=floor-y-40-textH-(closingH?closingH+36:0);
-    const FH=two?Math.round((room-24)/2):Math.min(760,room);
+    // 한 장 상한 860(폭 880에 거의 정사각): 760이면 짧은 자막(요점 3개 한 줄씩)에서 자막 아래 바닥글까지 200px 가까이 비었다.
+    const FH=two?Math.round((room-24)/2):Math.min(860,room);
     for(const [i,shot] of shots.entries()){
       layers.push({input:await framePhoto(shot,FW,FH,i?(leak==="left"?"right":"left"):leak,"light"),left:FX,top:y});
       const dust=await filmDust(FX,y,FW,FH);

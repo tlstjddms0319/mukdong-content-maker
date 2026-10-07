@@ -153,9 +153,11 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
   const title=await shoutTitle(content.headline,{sizes:titleSizes,maxHeight:titleRoom,width:W,font:STYLE_FONTS.heavy,fill:v%2?"#FFFFFF":"#FFE600",stroke:"#E8001C",strokeWidth:10,shadow:"#111111",emphasis:emphasisOf(content,KITSCH_EMPH)});
   layers.push({input:title.data,left:Math.round((1080-title.info.width)/2),top:titleTop});
   let y=titleTop+title.info.height+24;
+  let subBoard="";
   if(sub){
     const w=sub.info.width+48,h=sub.info.height+24,x=Math.round((1080-w)/2);
-    deco+=ledBoard(x,y-6,w,h,false);
+    // 부제 전광판은 사진 뒤 햇살보다 나중에(위에) 그린다. 햇살이 판 위에 겹치면 노란 도트 글자 둘레가 밝아져 대비가 떨어진다.
+    subBoard=ledBoard(x,y-6,w,h,false);
     layers.push({input:sub.data,left:x+24,top:y-6+12});
     y+=h+18;
   }
@@ -180,7 +182,10 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
     // 액자는 사진보다 테두리·그림자 60px, 기울인 만큼(한 장 4° ≈ 폭의 7%, 두 장 6°+엇갈림 30px) 더 높아지므로 그 몫을 뺀다.
     // 예전에는 40px만 빼서 액자 아래가 경계를 넘었다(표지 예고 띠를 덮었다).
     const room=floor-y-(content.points.length?boxesH+10:0);
-    const avail=shots.length>1?room-60-53-30:Math.floor((room-60-4)/1.0875);
+    // 한 장은 4° 기울이면 높이가 "폭×0.07"만큼 늘어난다(1.25:1이면 높이의 8.75%). 표지의 넓은 액자(1.6:1)는 3°만 기울여
+    // 늘어나는 높이를 폭×0.052(높이의 8.4%)로 묶는다 — 4°로 두면 11%가 늘어 사진을 그만큼 줄여야 했다.
+    const tiltGrow=content.cover?1+1.6*.0524:1.0875;
+    const avail=shots.length>1?room-60-53-30:Math.floor((room-60-4)/tiltGrow);
     // 한 장이고 누끼가 깨끗하면 스티커로 크게. 누끼는 접시만 남기고 잘라 내 원본보다 작아지므로,
     // 넉넉한 크기(900)로 오린 뒤 남는 칸(스티커 테두리·그림자 몫 약 92px을 뺀)에 꽉 차게 다시 맞춘다.
     const cut=shots.length===1?await cutoutPhoto(shots[0],900):null;
@@ -201,7 +206,8 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
       // 높이에 막힌 경우(사진 높이가 칸 높이와 같음)에만 키운다. 폭에 막혔으면 더 키워도 그대로다.
       const grow=first.photoH>=boxH-2&&first.tilt.info.height<slotH-24;
       const tilt=grow?(await draw(first.photoH+(slotH-first.tilt.info.height)-4)).tilt:first.tilt;
-      registerPhoto(tilt.data);
+      // 누끼 스티커는 음식 모양만 남아 같은 크기라도 상자 면적이 작게 잡히므로 cutout 기준으로 잰다.
+      registerPhoto(tilt.data,{shape:"cutout"});
       // 칸 가운데에 둔다(스티커가 칸보다 작을 때 위아래 빈 띠가 한쪽에 몰리지 않게).
       const top=Math.round(slotTop+Math.max(0,(slotBottom-slotTop-tilt.info.height)/2));
       if(!calm)deco+=sunburst(540,top+tilt.info.height/2,Math.max(tilt.info.width,tilt.info.height)*.68);
@@ -209,7 +215,10 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
       y=top+tilt.info.height;
     }else{
       let photoBottom=y,rowWidth=0;
-      const PH=Math.round(Math.max(closing?220:300,Math.min(560,avail))),PW=shots.length>1?440:Math.round(PH*1.25);
+      // 표지 한 장 액자는 외침 딱지·두 줄 제목·부제·예고 띠 사이에 끼어 높이가 먼저 막힌다(1.25:1이면 사진 면적 25% 안팎).
+      // 그래서 표지만 가로를 1.6:1(최대 840px, 기울여도 폭 안에 든다)까지 넓혀 같은 높이에서 음식이 더 크게 보이게 한다.
+      const PH=Math.round(Math.max(closing?220:300,Math.min(560,avail)));
+      const PW=shots.length>1?440:content.cover?Math.min(840,Math.round(PH*1.6)):Math.round(PH*1.25);
       for(const [i,shot] of shots.entries()){
         const photo=await kitschTone(await croppedPhoto(shot,PW,PH,0));
         // 액자(흰 안쪽·빨간 바깥 테두리) 오른쪽 아래로 12px 검은 그림자를 깔아 바탕에서 떠 보이게 한다.
@@ -220,7 +229,7 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
           {input:svgFrame(FW,FH),left:0,top:0},
           {input:photo,left:24,top:24},
         ]).png().toBuffer();
-        const tilt=await rotated(framed,shots.length>1?(i?5:-6):(v%2?4:-4));
+        const tilt=await rotated(framed,shots.length>1?(i?5:-6):(content.cover?(v%2?3:-3):(v%2?4:-4)));
         // 부품 대부분이 사진이므로 회전한 액자를 사진으로 등록한다(자동 검수의 사진 면적).
         registerPhoto(tilt.data);
         const left=shots.length>1?(i?1080-M-tilt.info.width+10:M-10):Math.round((1080-tilt.info.width)/2);
@@ -274,6 +283,7 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
     layers.push(svgLayer(closing.chipSvg(chipX,chipY)),{input:closing.chip.data,left:chipX,top:chipY});
   }
   // 아래 검은 띠에 노란 가게 이름(전광판 느낌). 오른쪽에 장 번호(숫자 폭 고정), 본문 장이면 그 옆에 하늘색 "넘겨 보기 ›".
+  deco+=subBoard;
   deco+=`<rect x="0" y="${footerTop+10}" width="1080" height="80" fill="#111"/>`;
   const number=await textLayer(`${index}/${total}`,{size:30,color:"#FFE600",width:120,height:48,font:STYLE_FONTS.heavy,features:"tnum"});
   const cue=!content.cover&&!content.last?await nextCue("#7CF6FF",26):null;

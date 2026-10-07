@@ -18,6 +18,8 @@ export const ImageBriefSchema = z.object({
   slideTotal:z.number().int().min(1).max(10).optional(),
   // 사용자가 장을 빼거나 넣은 캐러셀. 이때는 장 역할 순서(표지→정보→방문)가 구성안 표와 달라지므로 순서 검사를 건너뛴다.
   deckEdited:z.boolean().optional(),
+  // 맨 뒤에 가게 홍보 카드가 붙는 캐러셀. slideTotal은 홍보 카드를 포함한 장 수이고, 내용 장의 역할 순서는 그 하나를 뺀 수로 본다.
+  storeCard:z.boolean().optional(),
   styleAnchor:z.string().trim().min(12).max(500).optional(),
   // 캐러셀 공통 디자인(색 조합). 없으면 기본 색으로 그린다.
   design:DesignSpecSchema.optional(),
@@ -44,12 +46,12 @@ export const ImageBriefSchema = z.object({
     return;
   }
   if(brief.deckEdited)return;
-  const total=brief.slideTotal;
+  const total=brief.slideTotal-(brief.storeCard?1:0);
   if(total!==3&&total!==5&&total!==7&&total!==10){
     ctx.addIssue({code:"custom",path:["slideTotal"],message:"전체 장 수는 3·5·7·10장이에요(장을 고친 캐러셀만 예외)."});
     return;
   }
-  if(brief.slide.role!==rolesForCount(total)[brief.slideIndex-1]){
+  if(brief.slideIndex>total||brief.slide.role!==rolesForCount(total)[brief.slideIndex-1]){
     ctx.addIssue({code:"custom",path:["slide","role"],message:"슬라이드 역할 순서를 확인해 주세요."});
   }
 });
