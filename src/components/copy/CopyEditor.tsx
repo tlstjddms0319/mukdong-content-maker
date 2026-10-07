@@ -19,6 +19,8 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
   const [factsToVerify,setFactsToVerify]=useState<string[]>([]);
   // AI가 함께 준 첫 문장 후보(질문형·장면형·비교형). 누르면 지금 첫 문장 자리에 바꿔 끼운다.
   const [hookOptions,setHookOptions]=useState<string[]>([]);
+  // AI가 만든 문안에 남은 다듬을 곳(길이·첫 문장 길이 등, 서버가 알려 줌). 글을 고치면 지운다.
+  const [qualityWarnings,setQualityWarnings]=useState<string[]>([]);
   const writingIssues=copyTextIssues(text);
   const facts=[...new Set([...factsToVerify,...checkTextClaims(text).verify])];
   const disclosureMissing=hasAiImages&&!text.includes(AI_IMAGE_DISCLOSURE);
@@ -34,7 +36,7 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
       if(run!==runRef.current)return;
       const next=section?current.slice(0,section.start)+(section.start===current.length?"\n\n":"")+copy.replacement+current.slice(section.end):formatCopy(copy);
       if(next.length>2200)throw new Error("문안이 2,200자를 넘었어요. 글을 줄인 뒤 다시 시도해 주세요.");
-      if(!edited.current){setText(next);onTextChange?.(next);if(!focus){setFactsToVerify(copy.facts_to_verify??[]);setHookOptions(Array.isArray(copy.hook_options)?copy.hook_options:[]);}}
+      if(!edited.current){setText(next);onTextChange?.(next);if(!focus){setFactsToVerify(copy.facts_to_verify??[]);setHookOptions(Array.isArray(copy.hook_options)?copy.hook_options:[]);setQualityWarnings(Array.isArray(copy.quality_warnings)?copy.quality_warnings:[]);}}
       setProvider(String((copy as {_meta?:{provider?:string}})._meta?.provider??""));
       setStatus("ai");
     }catch(reason){if(run===runRef.current){setStatus("fallback");setError(reason instanceof Error?reason.message:"문안 생성에 실패했어요. 기존 글은 그대로 있어요.");}}
@@ -45,7 +47,7 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     let active=true;
     fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,...(outlineKey?{slideOutline:outlineKey.split("\n")}:{}),...(notesKey?{photoNotes:notesKey.split("\n")}:{})})})
       .then(async response=>{const body=await readJsonResponse(response);if(!response.ok)throw new Error(body.message||"문안을 만들지 못했어요.");return body;})
-      .then(copy=>{if(active){if(!edited.current){const next=formatCopy(copy);setText(next);onTextChange?.(next);setFactsToVerify(copy.facts_to_verify??[]);setHookOptions(Array.isArray(copy.hook_options)?copy.hook_options:[]);}setProvider(String(copy._meta?.provider??""));setStatus("ai");}})
+      .then(copy=>{if(active){if(!edited.current){const next=formatCopy(copy);setText(next);onTextChange?.(next);setFactsToVerify(copy.facts_to_verify??[]);setHookOptions(Array.isArray(copy.hook_options)?copy.hook_options:[]);setQualityWarnings(Array.isArray(copy.quality_warnings)?copy.quality_warnings:[]);}setProvider(String(copy._meta?.provider??""));setStatus("ai");}})
       .catch(reason=>{if(active){setStatus("fallback");setError(reason instanceof Error?reason.message:"문안을 만들지 못했어요. 다시 시도해 주세요.");}});
     return ()=>{active=false;runCounter.current++;};
   },[topic,audience,contentBrief,imageBrief,hasAiImages,outlineKey,notesKey,onTextChange]);
@@ -64,12 +66,12 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     {imageBrief&&<p className="copy-brief"><strong>이미지와 맞출 이야기</strong><br/>{imageBrief}</p>}
     {status==="loading"?<GenerationProgress label="AI가 문안을"/>:<p role="status">{status==="saved"?"저장된 문안을 불러왔어요.":status==="ai"?`AI로 문안을 만들었어요${provider?` (${PROVIDER_LABELS[provider]??provider})`:""}`:"문안 생성이 완료되지 않았어요."}</p>}
     {error&&<p role="alert">{error}</p>}
-    <textarea aria-label="게시물 문안" rows={18} maxLength={2200} value={text} onChange={event=>{edited.current=true;setText(event.target.value);onTextChange?.(event.target.value);}}/>
+    <textarea aria-label="게시물 문안" rows={18} maxLength={2200} value={text} onChange={event=>{edited.current=true;setQualityWarnings([]);setText(event.target.value);onTextChange?.(event.target.value);}}/>
     {hookOptions.length>0&&status!=="loading"&&<div className="hook-options" role="group" aria-label="첫 문장 후보"><span>첫 문장 후보 · 피드에서 &apos;더 보기&apos; 전에 보이는 부분이에요</span>{hookOptions.map(option=><button key={option} type="button" className="button secondary" disabled={saving} onClick={()=>applyHook(option)}>{option}</button>)}</div>}
     <p>{text.length.toLocaleString()} / 2,200자 · 해시태그는 주제 태그 + #묵동맛집 + #묵동홍어마을로 3~5개를 써요.</p>
     <button type="button" className="button secondary" disabled={status==="loading"||saving} onClick={()=>void generate()}>전체 문안 새로 생성</button>
     <div className="copy-actions">{([["첫 문장 다시 만들기","hook"],["가게 연결 다시 만들기","store_connection"],["마무리 다시 만들기","call_to_action"],["해시태그 다시 만들기","hashtags"]] as const).map(([label,focus])=><button type="button" key={focus} className="button secondary" disabled={status==="loading"||saving||!text.trim()} onClick={()=>void generate(focus)}>{label}</button>)}</div>
-  </div><aside className="verify-card"><strong>문안 다듬기</strong>{writingIssues.length>0?<ul>{writingIssues.map(issue=><li key={issue}>{issue}</li>)}</ul>:<p>짧은 첫 문장, 새로운 정보, 자연스러운 가게 연결이 있는지 읽어 보세요.</p>}
+  </div><aside className="verify-card"><strong>문안 다듬기</strong>{writingIssues.length+qualityWarnings.length>0?<ul>{[...new Set([...qualityWarnings,...writingIssues])].map(issue=><li key={issue}>{issue}</li>)}</ul>:<p>짧은 첫 문장, 새로운 정보, 자연스러운 가게 연결이 있는지 읽어 보세요.</p>}
     {disclosureMissing&&<><p>AI 이미지 안내를 문안에 넣어 주세요.</p><button type="button" className="button secondary" disabled={status==="loading"||saving||text.length+AI_IMAGE_DISCLOSURE.length+2>2200} onClick={()=>{edited.current=true;const next=text.trimEnd()+"\n\n"+AI_IMAGE_DISCLOSURE;setText(next);onTextChange?.(next);}}>AI 이미지 안내 넣기</button></>}
     <strong>사실 확인</strong>{facts.length>0&&<ul>{facts.map(fact=><li key={fact}>{fact}</li>)}</ul>}<p>가격·영업시간·표현은 게시 전에 직접 확인해 주세요. 위 안내는 사실 검증 결과가 아닙니다.</p><button type="button" className="button primary" disabled={!text.trim()||saving||status==="loading"} onClick={()=>onContinue(text)}>{saving?"문안 저장 중…":"최종 화면 보기"}</button></aside></section>;
 }
