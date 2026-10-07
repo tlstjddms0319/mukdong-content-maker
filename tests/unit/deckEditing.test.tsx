@@ -148,3 +148,37 @@ describe("store promo card", () => {
     expect(bodies.every(body=>body.slideTotal===5&&!body.storeCard)).toBe(true);
   });
 });
+
+describe("cover panorama requests", () => {
+  afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
+  async function build(options?:{panorama?:boolean}){
+    const plan=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:5});
+    const bodies:Array<Record<string,unknown>>=[];
+    let n=0;
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
+      if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
+      bodies.push(JSON.parse(String(init?.body)));
+      return {ok:true,json:async()=>({images:[card(++n)],source:"photo"})};
+    }));
+    const hook=renderHook(()=>useGenerationState());
+    act(()=>{ensureGeneration("pano|5",{topic:"홍어 한 점",slideCount:5});[1,2,3].forEach(i=>addLibraryPhoto({id:`p${i}`,preview:photo(i),name:`사진${i}`}));});
+    await act(async()=>{await buildPhotoCarousel(options);});
+    await waitFor(()=>expect(hook.result.current.slides).toHaveLength(5));
+    return {hook,bodies};
+  }
+  it("draws the cover and slide 2 as two halves of the cover photo when asked", async () => {
+    const {hook,bodies}=await build({panorama:true});
+    expect(bodies[0]).toMatchObject({slideIndex:1,panorama:"left",photos:[photo(1)]});
+    expect(bodies[1]).toMatchObject({slideIndex:2,panorama:"right",photos:[photo(1)]});
+    expect(bodies.slice(2).every(body=>body.panorama===undefined)).toBe(true);
+    // 나머지 사진(2·3번)은 그대로 뒤 장들에 쓰인다.
+    expect(bodies.slice(2).flatMap(body=>(body.photos as string[]|undefined)??[])).toEqual(expect.arrayContaining([photo(2),photo(3)]));
+    // 2번째 장 사진을 바꾸면 파노라마가 풀리고 표지도 평소 디자인으로 다시 그린다.
+    expect(hook.result.current.photoAssignment[1]).toEqual([0]);
+  });
+  it("stays off unless asked", async () => {
+    const {bodies}=await build();
+    expect(bodies.every(body=>body.panorama===undefined)).toBe(true);
+  });
+});

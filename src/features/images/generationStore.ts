@@ -9,7 +9,7 @@ import type { SeasonMotif } from "./seasonMotif";
 import { TOPIC_TAG } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
 import { readJsonResponse } from "@/lib/http/readJson";
-import { fitPlanToPhotos, swapPhoto } from "./photoCarousel";
+import { fitPanorama, fitPlanToPhotos, swapPhoto } from "./photoCarousel";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
 // 화면(ImageStudio)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
@@ -38,6 +38,7 @@ export type GenerationState={
   titleFont:FontChoice<TitleFontId>;
   bodyFont:FontChoice<BodyFontId>;
   theme:FontChoice<ThemeId>;      // 게시물 테마. "auto"면 구성안(AI·서버)이 고른 테마.
+  panorama:boolean;               // 표지+2장 파노라마를 쓸지(실제 사진 캐러셀, 표지 사진이 가로로 길 때만 화면에 보인다).
   season:FontChoice<SeasonMotif>; // 계절 소품(빗줄기·보름달·색동…). "auto"면 구성안이 고른 값(없으면 장식 없음).
   style:FontChoice<StyleId>;      // 디자인 계열(컬러 블록·신문·웹툰 등). "auto"면 구성안이 고른 계열.
   referenceUse:ReferenceUse;
@@ -67,7 +68,7 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],
     // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 캐러셀로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
@@ -108,6 +109,15 @@ export function setTitleFont(titleFont:FontChoice<TitleFontId>){patch({titleFont
 export function setBodyFont(bodyFont:FontChoice<BodyFontId>){patch({bodyFont});}
 export function setTheme(theme:FontChoice<ThemeId>){patch({theme});}
 export function setSeason(season:FontChoice<SeasonMotif>){patch({season});}
+// 파노라마 켜고 끄기는 다음에 캐러셀을 만들 때부터 적용된다(이미 만든 장은 그대로).
+export function setPanorama(panorama:boolean){patch({panorama});}
+// 이 장을 파노라마의 어느 쪽으로 그릴지. 표지와 2번째 장이 같은 사진(첫 칸)을 쓸 때만. 사진을 바꾸면 자연히 평소 디자인으로 돌아간다.
+function panoramaSide(index:number,slots:number[]):"left"|"right"|undefined {
+  if(!state.panorama||index>1)return undefined;
+  const cover=state.photoAssignment[0]?.[0],second=index===0?state.photoAssignment[1]?.[0]:slots[0];
+  if(cover===undefined||second!==cover||(index===0&&slots[0]!==cover))return undefined;
+  return index===0?"left":"right";
+}
 export function setStyle(style:FontChoice<StyleId>){patch({style});}
 
 // 서버에 보낼 디자인: 구성안의 추천(palette·글꼴)에 사용자가 직접 고른 글꼴을 덮어쓴다.
@@ -350,7 +360,7 @@ export function movePhotoForward(index:number){
 
 async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[]):Promise<ApprovedImage>{
   const slide=plan.slides[index];
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview)}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview)}:{}),...(panoramaSide(index,slots)?{panorama:panoramaSide(index,slots)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 만들지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
@@ -358,17 +368,19 @@ async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[]):
 }
 
 // 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. AI 이미지는 만들지 않는다.
-export async function buildPhotoCarousel(){
+// options.panorama: 표지+2장 파노라마로 만들지. 화면이 "표지 사진이 가로로 긴지"(사진 분석)를 확인하고 넘긴다.
+// 넘기지 않으면 끈다(가로로 짧은 사진이면 2번째 장에 같은 사진만 한 번 더 나오게 되므로).
+export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
   if(!state.photos.length)return;
   const token=++run;
-  patch({...CLEARED,phase:"planning",slideLayout:"card"});
+  patch({...CLEARED,phase:"planning",slideLayout:"card",panorama:options.panorama===true});
   try{
     const {topic,imageBrief,contentBrief,slideCount}=state.input;
     const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:"photo"})});
     const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
-    const fit=fitPlanToPhotos(data.plan as CarouselPlan,state.photos.length);
+    const fit=(state.panorama?fitPanorama:fitPlanToPhotos)(data.plan as CarouselPlan,state.photos.length);
     // 기본 문안이어도 비용이 들지 않으니 멈추지 않고, 안내만 남긴다.
     patch({plan:fit.plan,planFallback:data.provider==="fallback",planFallbackMessage:data.provider==="fallback"?fallbackMessageOf(data):"",photoAssignment:fit.assignment,phase:"slides",...reviewNotice(data.review)});
     let next:ApprovedImage[]=[];
@@ -439,7 +451,7 @@ export const canEditSlideText=(current:GenerationState,index:number)=>textEditBa
 // 장 번호·전체 장 수는 지금 상태(deckTotal)를 따른다.
 async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none"}):Promise<string>{
   const plan=state.plan!;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind}:{}),...(base.photoKind==="real"&&panoramaSide(index,state.photoAssignment[index]??[])?{panorama:panoramaSide(index,state.photoAssignment[index]??[])}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 다시 그리지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");

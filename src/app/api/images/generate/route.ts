@@ -52,7 +52,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 렌더는 받아 둔 것을 조회만 하고, 없거나 실패하면 로컬 누끼로 그린다(features/images/remoteCutout.ts).
     const remoteCutout=settings.remoteCutout===true&&parsed.data.slideLayout!=="overlay";
     const prepareCutouts=(photos:Buffer[])=>prepareRemoteCutouts(photos,{enabled:remoteCutout,style:parsed.data.design?.style,monthlyCredits:settings.remoteCutoutMonthlyCredits??20}).catch(()=>0);
-    const cardOptions={brandHandle:settings.brandHandle??"",remoteCutout,storeCard:parsed.data.storeCard===true};
+    const cardOptions={brandHandle:settings.brandHandle??"",remoteCutout,storeCard:parsed.data.storeCard===true,...(parsed.data.panorama?{panorama:parsed.data.panorama}:{})};
     // 이미지 AI가 만든 밑바탕은 색·밝기 보정 없이 따뜻한 색 vibrance만 약하게 준다(render/photoEnhance.ts).
     const aiCardOptions={...cardOptions,photoKind:"ai" as const};
     // 브라우저형·Q&A·대형 숫자처럼 사진이 없는 레이아웃은 이미지 AI를 부르지 않는다.

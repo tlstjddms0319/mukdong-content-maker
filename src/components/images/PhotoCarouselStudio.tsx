@@ -58,6 +58,9 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
   },[photoKey,topic]);
   const current=analysis?.key===photoKey?analysis.data:null;
   // 글의 메뉴와 다른 사진(예: 과메기 글에 삼합 사진). 막지는 않고 몇 번 사진인지 알려 준다.
+  // 표지(첫 사진)가 가로로 길면 표지+2장 파노라마를 고를 수 있다(사진 분석이 알려 준다).
+  const coverWide=Boolean(photos[0]&&current?.photos.find(item=>item.id===photos[0].id)?.wide);
+  const [panorama,setPanoramaChoice]=useState(false);
   const mismatched=photos.map((photo,index)=>({index,info:current?.photos.find(item=>item.id===photo.id)})).filter(item=>item.info?.mismatch);
   const findTastiest=async()=>{
     const key=photoKey;
@@ -117,7 +120,8 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
     </div>}
     {mismatched.length>0&&<p role="status" className="field-help photo-mismatch-note">{mismatched[0].info!.mismatch}{mismatched.length>1?` 외 ${mismatched.length-1}장`:""}({mismatched.map(item=>item.index===0?"표지":`${item.index+1}번`).join("·")}). 그대로 만들면 글과 사진이 달라 보여요. 맞는 사진으로 바꾸거나 빼 주세요.</p>}
     {photos.length>0&&!slides.length&&!busy&&<div className="photo-studio-actions">
-      <button type="button" className="button primary" onClick={()=>void buildPhotoCarousel()}>사진 {photos.length}장으로 {slideCount}장 캐러셀 만들기</button>
+      {coverWide&&slideCount>=3&&<label className="field-check"><input type="checkbox" checked={panorama} onChange={event=>setPanoramaChoice(event.target.checked)}/> 표지와 2번째 장을 한 장의 사진으로 잇기(파노라마)</label>}
+      <button type="button" className="button primary" onClick={()=>void buildPhotoCarousel({panorama:panorama&&coverWide})}>사진 {photos.length}장으로 {slideCount}장 캐러셀 만들기</button>
       <button type="button" className="button secondary" disabled={approved} onClick={()=>approveRawPhotos(onApprove)}>글자 없이 사진만 쓰기</button>
     </div>}
     {progress&&<GenerationProgress stage={`${phase}-${slides.length}`} message={progress} progress={filling?slides.length/slideCount:undefined}/>}

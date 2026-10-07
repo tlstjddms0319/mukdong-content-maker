@@ -63,6 +63,18 @@ export function fitPlanToPhotos(plan:CarouselPlan,photoCount:number):PhotoFit {
   return {plan:{...plan,slides:fitted},assignment};
 }
 
+// 표지+2장 파노라마(render/panorama.ts): 표지 사진을 2번째 장에도 한 번 더 쓴다(두 장이 반씩 나눠 그린다).
+// 나머지 장은 2번째 장을 뺀 구성안으로 평소처럼 사진을 나눈 뒤, 2번째 장을 표지 사진(0번) 한 장짜리로 다시 끼운다.
+export function fitPanorama(plan:CarouselPlan,photoCount:number):PhotoFit {
+  if(plan.slides.length<2)return fitPlanToPhotos(plan,photoCount);
+  const rest=fitPlanToPhotos({...plan,slides:[plan.slides[0],...plan.slides.slice(2)]},photoCount);
+  const second={...plan.slides[1],layout:SINGLE_LAYOUT,variant:0};
+  return {
+    plan:{...rest.plan,slides:[rest.plan.slides[0],second,...rest.plan.slides.slice(1)]},
+    assignment:[rest.assignment[0],[0],...rest.assignment.slice(1)],
+  };
+}
+
 // 한 장의 사진을 바꿀 때: 그 장의 첫 칸을 고른 사진으로 바꾸고, 같은 사진이 다른 칸에 있으면 자리를 맞바꾼다.
 export function swapPhoto(slots:number[],photoIndex:number,slot=0):number[] {
   const next=[...slots];

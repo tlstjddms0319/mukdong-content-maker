@@ -511,3 +511,4 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .deck-editor-head { display:grid; gap:4px; }
 .deck-new-slide { display:grid; gap:8px; padding-top:8px; border-top:1px dashed var(--line); }
 .deck-new-slide input, .deck-new-slide textarea { width:100%; }
+.field-check { display:flex; align-items:center; gap:8px; font-size:14px; flex-basis:100%; }

@@ -68,7 +68,9 @@ export function createAssetLibrary(root=process.env.DATA_DIR??path.join(process.
       if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size===0||file.size>12*1024*1024)throw new MediaValidationError("JPG, PNG, WebP 사진을 12MB까지 등록할 수 있어요.");
       const bytes=Buffer.from(await file.arrayBuffer());
       let preview:Buffer;
-      try{preview=await sharp(bytes,{limitInputPixels:40_000_000}).rotate().resize(1400,1400,{fit:"inside",withoutEnlargement:true}).flatten({background:"#f5f1e8"}).jpeg({quality:88}).toBuffer();}
+      // 미리보기(카드에 쓰는 사진): 세로·정사각 사진은 긴 변 1400, 가로 사진은 가로 2160까지 둔다.
+      // 가로 사진은 표지+2장 파노라마(render/panorama.ts)에서 2160 폭으로 펼쳐지므로 늘리지 않아도 되게.
+      try{preview=await sharp(bytes,{limitInputPixels:40_000_000}).rotate().resize(2160,1400,{fit:"inside",withoutEnlargement:true}).flatten({background:"#f5f1e8"}).jpeg({quality:88}).toBuffer();}
       catch{throw new MediaValidationError("읽을 수 있는 이미지 파일을 골라 주세요. 최대 4천만 화소까지 지원해요.");}
       const original=await createMediaStore(root).saveOriginal(file);
       // 사진 품질(어두움·흔들림 등)은 원본으로 한 번 잰다. 측정이 실패해도 사진 등록은 막지 않는다.
