@@ -1,4 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
+import { textureLayer } from "../decor";
 import { grainLayer, svgLayer, textLayer, type CardRenderer, type Layer, type TextEmphasis, brandName } from "../render/primitives";
 import { registerPhoto } from "../render/audit";
 import { STORE_NAME } from "../slideLayout";
@@ -12,11 +13,28 @@ const BASE="#121110",EDGE_TEXT="#E8923A",SUB="#F4EFE4",DIM="#C9C2B6";
 const CHIP="#A24E17";
 const FX=100,FW=1080-FX*2,FOOT_TOP=1350-54;
 
+// 톱니 구멍(스프로킷): 필름에 뚫린 구멍이라 위 안쪽 가장자리는 필름 두께의 그늘로 어둡고, 아래 가장자리는 빛을 조금 받는다.
+// 세로 그라데이션 채움(위 진하게 → 아래 밝게) + 아래 가장자리 가는 밝은 선으로 얕은 안쪽 그림자를 낸다(흐림 필터 없이).
 function filmStrip():string {
-  let holes="";
-  for(let y=24;y<1350;y+=62)holes+=`<rect x="18" y="${y}" width="34" height="38" rx="6" fill="#2A2724"/><rect x="${1080-52}" y="${y}" width="34" height="38" rx="6" fill="#2A2724"/>`;
+  let holes=`<defs><linearGradient id="filmHole" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B0A09"/><stop offset=".35" stop-color="#211F1C"/><stop offset="1" stop-color="#302C28"/></linearGradient></defs>`;
+  const hole=(x:number,y:number)=>`<rect x="${x}" y="${y}" width="34" height="38" rx="6" fill="url(#filmHole)"/><path d="M${x+6} ${y+37}H${x+28}" stroke="#4A443D" stroke-width="2" stroke-linecap="round"/>`;
+  for(let y=24;y<1350;y+=62)holes+=hole(18,y)+hole(1080-52,y);
   return holes+`<path d="M70 0V1350M${1080-70} 0V1350" stroke="#2A2724" stroke-width="${MIN_STROKE}"/>`;
 }
+
+// 프레임 뒤 따뜻한 후광: 영사기 빛이 필름 프레임 둘레로 번지는 느낌. 프레임보다 조금 큰 타원에 반경 그라데이션
+// (가운데~70%는 .18, 바깥으로 0)을 깔아 프레임 테두리 밖으로만 은은하게 보인다. 큰 흐림 필터 대신 그라데이션이라 싸다.
+let haloId=0;
+function warmHalo(x:number,y:number,w:number,h:number):string {
+  const id=`filmHalo${haloId++}`;
+  return `<defs><radialGradient id="${id}" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFB46A" stop-opacity=".18"/><stop offset=".72" stop-color="#FFB46A" stop-opacity=".18"/><stop offset="1" stop-color="#FFB46A" stop-opacity="0"/></radialGradient></defs>`
+    +`<ellipse cx="${x+w/2}" cy="${y+h/2}" rx="${Math.round(w*.5/.72+40)}" ry="${Math.round(h*.5/.72+30)}" fill="url(#${id})"/>`;
+}
+
+// 필름 먼지(질감 자산 filmdust: 검은 바탕 + 밝은 먼지·긁힘)를 사진 칸 안에만 screen으로 얹는다.
+// 세기 .3: 가까이 보면 먼지·긁힘이 보이고, 폰 크기에서는 지저분하지 않은 선(.4 넘으면 사진이 뿌옇게 뜬다).
+// 질감을 사진 칸 크기로 덮어 맞추므로 같은 크기의 칸은 늘 같은 먼지(같은 입력 → 같은 그림). 파일이 없으면 null.
+const filmDust=(x:number,y:number,w:number,h:number,strength=.3)=>textureLayer("filmdust",{opacity:strength,blend:"screen",left:x,top:y,width:w,height:h});
 
 // 사진 위 자막용: 들어가는 가장 큰 크기와 균형 줄바꿈 폭은 공용 규칙(chooseTitleLayout)으로 고르고, 글자 둘레에 그림자를 깐다
 // (fitText는 그림자 옵션이 없다). 그림자 여백(사방 10px)은 높이 계산에서 뺀다.
@@ -88,7 +106,9 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
     const FH=Math.min(1100,floor-y-(teaser?teaser.info.height+36:16));
     const shot=shots[0];
     layers.push({input:await framePhoto(shot,FW,FH,leak,"strong"),left:FX,top:y});
-    deco+=`<rect x="${FX-6}" y="${y-6}" width="${FW+12}" height="${FH+12}" fill="none" stroke="#000" stroke-width="12"/>`;
+    const dust=await filmDust(FX,y,FW,FH);
+    if(dust)layers.push(dust);
+    deco+=warmHalo(FX,y,FW,FH)+`<rect x="${FX-6}" y="${y-6}" width="${FW+12}" height="${FH+12}" fill="none" stroke="#000" stroke-width="12"/>`;
     const stamp=await textLayer(frame,{size:40,color:"#FF9A3C",width:300,height:60,font:STYLE_FONTS.pixelBold});
     layers.push({input:await sharp(stamp.data).blur(.6).png().toBuffer(),left:FX+FW-stamp.info.width-30,top:y+60});
     // 표지 자막: 사진 아래쪽을 어둡게 깔고 그 위에 큰 제목을, 바로 밑에 작은 부제를 영화 자막처럼 얹는다.
@@ -125,7 +145,9 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
     const FH=two?Math.round((room-24)/2):Math.min(760,room);
     for(const [i,shot] of shots.entries()){
       layers.push({input:await framePhoto(shot,FW,FH,i?(leak==="left"?"right":"left"):leak,"light"),left:FX,top:y});
-      deco+=`<rect x="${FX-6}" y="${y-6}" width="${FW+12}" height="${FH+12}" fill="none" stroke="#000" stroke-width="12"/>`;
+      const dust=await filmDust(FX,y,FW,FH);
+      if(dust)layers.push(dust);
+      deco+=warmHalo(FX,y,FW,FH)+`<rect x="${FX-6}" y="${y-6}" width="${FW+12}" height="${FH+12}" fill="none" stroke="#000" stroke-width="12"/>`;
       // 옛 카메라 날짜 도장 자리에 장 번호(첫 사진에만).
       if(!i){
         const stamp=await textLayer(frame,{size:40,color:"#FF9A3C",width:300,height:60,font:STYLE_FONTS.pixelBold});
@@ -148,7 +170,7 @@ export const renderFilm:CardRenderer=async(inputs,slide,index,total)=>{
     const below=content.last?closingH+40:80;
     const FH=floor-y-below;
     deco+=`<defs><radialGradient id="filmLeak" cx="${leak==="left"?FX:FX+FW}" cy="${y+FH*.15}" r="${FW*.7}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FF7A1A" stop-opacity=".4"/><stop offset="1" stop-color="#FF7A1A" stop-opacity="0"/></radialGradient></defs>`
-      +`<rect x="${FX}" y="${y}" width="${FW}" height="${FH}" fill="#1B1917" stroke="#000" stroke-width="12"/><rect x="${FX}" y="${y}" width="${FW}" height="${FH}" fill="url(#filmLeak)"/>`;
+      +warmHalo(FX,y,FW,FH)+`<rect x="${FX}" y="${y}" width="${FW}" height="${FH}" fill="#1B1917" stroke="#000" stroke-width="12"/><rect x="${FX}" y="${y}" width="${FW}" height="${FH}" fill="url(#filmLeak)"/>`;
     const quoteMark=await textLayer("“",{size:220,color:EDGE_TEXT,width:200,height:260,font:STYLE_FONTS.serifHeavy});
     layers.push({input:quoteMark.data,left:FX+40,top:y+10});
     let quote:Layer,lines:Layer[]=[],blockH=0;

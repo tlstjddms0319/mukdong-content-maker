@@ -1,7 +1,7 @@
 import type { CarouselPlan, CarouselRole } from "./carousel";
 import { LAYOUT_VARIANTS, PaletteIdSchema, defaultCardLayout, normalizeCardLayout, type CardLayout, type DesignSpec, type PaletteId } from "./design";
 import { ThemeIdSchema } from "./themes";
-import { StyleIdSchema } from "./styleCatalog";
+import { CALM_WORDS, RESTRAINABLE_STYLES, StyleIdSchema, styleAffinity, type StyleId } from "./styleCatalog";
 import type { BodyFontId, TitleFontId } from "./typography";
 
 // 캐러셀마다 템플릿이 달라 보이게 하는 장치.
@@ -40,6 +40,15 @@ const EMOTIONAL_ROLES=new Set<CarouselRole>(["cover","mood","occasion"]);
 export const randomSeed=()=>Math.floor(Math.random()*2**31);
 const pick=<T,>(items:readonly T[],seed:number,offset=0)=>items[(seed+offset)%items.length];
 
+// 기본 템플릿(template)을 뺀 계열 중 글과 어울리는 것을 고른다. 피할 낱말이 더 많은(점수 음수) 계열은 빼고,
+// 남은 계열 중 점수가 가장 높은 무리(1점 차이까지)에서 시드로 하나. 낱말 하나 차이로 늘 같은 계열만 나오지 않게 무리로 고른다.
+export function pickFittingStyle(text:string,seed:number):StyleId {
+  const scored=StyleIdSchema.options.map(id=>({id,score:styleAffinity(id,text)})).filter(item=>item.score>=0);
+  if(!scored.length)return pick(StyleIdSchema.options,seed,7);
+  const best=Math.max(...scored.map(item=>item.score));
+  return pick(scored.filter(item=>item.score>=best-1).map(item=>item.id),seed,7);
+}
+
 export function diversifyCarouselDesign(plan:CarouselPlan,seed:number,options:{fallback?:boolean}={}):CarouselPlan {
   const fallback=options.fallback??false;
   // 기본 구성안은 색과 글꼴도 시드로 고른다. AI 구성안은 AI가 고른 색·글꼴을 그대로 둔다.
@@ -47,10 +56,16 @@ export function diversifyCarouselDesign(plan:CarouselPlan,seed:number,options:{f
   // 게시물 테마는 AI가 기본값(classic)을 그대로 냈거나 기본 구성안이면 시드로 고른다. 게시물마다 옷이 바뀐다.
   const theme=fallback||plan.design.theme==="classic"?pick(ThemeIdSchema.options,seed,5):plan.design.theme;
   // 스타일 계열도 같은 규칙: AI가 기본(template)을 그대로 냈거나 기본 구성안이면 게시물마다 다른 계열을 고른다.
-  const style=fallback||plan.design.style==="template"?pick(StyleIdSchema.options,seed,7):plan.design.style;
+  // 계열 친화도 표(B11)로 글에 어울리지 않는 계열(avoid)을 빼고, 어울리는 낱말이 많은 계열들 안에서 시드로 고른다.
+  const text=plan.slides.map(slide=>`${slide.headline} ${slide.points.join(" ")} ${slide.keywords.join(" ")}`).join(" ");
+  const style=fallback||plan.design.style==="template"?pickFittingStyle(text,seed):plan.design.style;
+  // 장식 세기: 격식 있는 글이면 calm. 장식이 많은 계열은 기본 구성안에서 세 게시물에 한 번꼴로 절제 변형을 섞는다.
+  // AI가 calm을 골랐으면 그대로 둔다.
+  const calmText=CALM_WORDS.some(word=>text.includes(word));
+  const tone=plan.design.tone==="calm"||calmText||(fallback&&RESTRAINABLE_STYLES.has(style)&&Math.floor(seed/8)%3===0)?"calm":"loud";
   const design:DesignSpec=fallback
-    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),style,theme,titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont}
-    :{...plan.design,style,theme};
+    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),style,theme,titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont,tone}
+    :{...plan.design,style,theme,tone};
   const accent=fallback?fontSet.accent:ACCENT_TITLE[design.titleFont];
   const everyFontAuto=plan.slides.every(slide=>slide.titleFont==="auto"&&slide.bodyFont==="auto");
 

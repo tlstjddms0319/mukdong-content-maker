@@ -33,6 +33,11 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
     ?await sharp(blurred).modulate({brightness}).png().toBuffer()
     :await sharp({create:{width:1080,height:1350,channels:3,background:"#141414"}}).png().toBuffer();
   const layers:OverlayOptions[]=[];
+  // 사진 없는 장: 단색 #141414만으로는 납작해 보여, 강조색 안개(옅은 원형 그라데이션)를 오른쪽 위와 왼쪽 아래에 깐다.
+  // 글자보다 먼저(맨 아래) 깔고 진하기를 .16 이하로 둬 흰 글자 대비를 거의 건드리지 않는다. 질감은 넣지 않는다(글자가 질감).
+  if(!blurred)layers.push(svgLayer(`<defs><radialGradient id="fogA"><stop offset="0" stop-color="${accent}" stop-opacity=".16"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient>`
+    +`<radialGradient id="fogB"><stop offset="0" stop-color="${accent}" stop-opacity=".09"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient></defs>`
+    +`<ellipse cx="900" cy="300" rx="620" ry="560" fill="url(#fogA)"/><ellipse cx="120" cy="1150" rx="520" ry="440" fill="url(#fogB)"/>`));
   const {before,hero,after}=splitHero(content.headline,content.keywords);
   // 핵심 낱말은 이미 강조색 덩어리다. 앞말·뒷말에 남은 다른 키워드(예: "막걸리")도 같은 강조색으로 이어 준다.
   const emphasis=emphasisOf(content,accent);
@@ -61,9 +66,9 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
   const reserve=closing?closing.height+40:0;
   const pointsAt=(size:number)=>Promise.all(content.points.slice(0,3).map(point=>textLayer(point,{size,color:"#F2F2F2",width:W-40,height:130,font:STYLE_FONTS.gothicLight,spacing:6})));
   const heightOf=(list:Layer[])=>list.reduce((sum,point)=>sum+point.info.height+16,0);
-  let points=await pointsAt(40);
-  for(const size of [36,32]){if(!closing||y+50+heightOf(points)+reserve<=1350-110)break;points=await pointsAt(size);}
-  if(content.teaser)points=[await textLayer(content.teaser,{size:27,color:"#F2F2F2",width:W-40,height:60,font:STYLE_FONTS.sansSemi,shadow:true})];
+  let points=await pointsAt(40),pointSize=40;
+  for(const size of [36,32]){if(!closing||y+50+heightOf(points)+reserve<=1350-110)break;points=await pointsAt(size);pointSize=size;}
+  if(content.teaser){points=[await textLayer(content.teaser,{size:27,color:"#F2F2F2",width:W-40,height:60,font:STYLE_FONTS.sansSemi,shadow:true})];pointSize=27;}
   const pointsH=heightOf(points);
   let py=Math.max(y+50,1350-110-pointsH-reserve);
   // 유령 글자: 제목과 요점 사이가 160px 넘게 비면 핵심 낱말을 강조색 14% 농도로 크게 깐다(검수 대상 글자가 아니라 흐려도 된다).
@@ -75,7 +80,11 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
     const faint=await sharp(ghost.data).ensureAlpha().linear([1,1,1,.14],[0,0,0,0]).png().toBuffer();
     layers.push({input:faint,left:M-10,top:y+30+Math.round((gapH-ghost.info.height)/2)});
   }
-  if(points.length)layers.push(svgLayer(`<rect x="${M}" y="${py}" width="8" height="${pointsH-16}" fill="${accent}"/>`));
+  // 세로 막대 위, 첫 요점의 첫 줄 높이에 강조색 점 하나: 막대가 "목록의 시작"을 가리키는 표지가 된다.
+  if(points.length){
+    const firstLine=Math.min(points[0].info.height,Math.round(pointSize*1.5));
+    layers.push(svgLayer(`<rect x="${M}" y="${py}" width="8" height="${pointsH-16}" fill="${accent}"/><circle cx="${M+4}" cy="${py+Math.round(firstLine/2)}" r="10" fill="${accent}"/>`));
+  }
   for(const point of points){layers.push({input:point.data,left:M+32,top:py});py+=point.info.height+16;}
   if(closing){
     // 명함: 포스터 문법대로 왼쪽 정렬. 가게 이름 위에 강조색 굵은 줄 하나.

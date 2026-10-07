@@ -47,7 +47,7 @@ describe("style families", () => {
 
   it("offers the families to the plan AI and lets the owner override", () => {
     expect(buildCarouselPlanPrompt({topic:"비 오는 날 홍어",slideCount:5})).toContain(styleCatalogText());
-    const recommended={palette:"warm" as const,style:"webtoon" as const,theme:"classic" as const,titleFont:"pretendard" as const,bodyFont:"pretendard" as const};
+    const recommended={palette:"warm" as const,style:"webtoon" as const,theme:"classic" as const,titleFont:"pretendard" as const,bodyFont:"pretendard" as const,tone:"loud" as const};
     expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"auto",style:"auto"}).style).toBe("webtoon");
     expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"auto",style:"neon"}).style).toBe("neon");
   });

@@ -96,10 +96,122 @@ export function cornerMarks(options:{inset:number;length:number;color:string;str
 }
 
 // 가장자리가 번진 부드러운 그림자. 카드·사진 뒤에 깐다. 필터 영역을 넉넉히 잡아야 번진 부분이 잘리지 않는다.
+// 그림자는 두 겹이다(계획서 B5): 넓고 옅게 퍼지는 주변광 그림자(ambient)와, 물체 바로 밑에 짧고 진하게 붙는
+// 주광 그림자(key). 한 겹만 있으면 종이가 공중에 뜬 것처럼 보이고, 두 겹이면 바닥에 놓인 두께가 생긴다.
+// 호출하는 쪽은 예전처럼 "번짐 정도(blur)와 진하기(opacity)" 하나만 넘기고, 두 겹의 비율은 여기서 정한다.
 export function softShadow(options:{x:number;y:number;width:number;height:number;rx?:number;blur?:number;opacity?:number;rotate?:number}):string {
-  const id=uid("shadow"),blur=options.blur??18,rx=options.rx??16;
+  const id=uid("shadow"),blur=options.blur??18,rx=options.rx??16,opacity=options.opacity??.22;
   const cx=options.x+options.width/2,cy=options.y+options.height/2;
-  return `<defs><filter id="${id}" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${blur}"/></filter></defs><rect x="${options.x}" y="${options.y}" width="${options.width}" height="${options.height}" rx="${rx}" fill="#000" fill-opacity="${options.opacity??.22}" filter="url(#${id})" transform="rotate(${options.rotate??0} ${round(cx)} ${round(cy)})"/>`;
+  // 호출부는 그림자를 물체보다 아래로(y+오프셋) 밀어 넘긴다. 주광 그림자는 그 오프셋을 절반쯤 되돌려 물체 밑에 붙인다.
+  const lift=Math.round(blur*.45);
+  const rect=(dy:number,filter:string,alpha:number)=>`<rect x="${options.x}" y="${options.y+dy}" width="${options.width}" height="${options.height}" rx="${rx}" fill="#000" fill-opacity="${round(alpha)}" filter="url(#${filter})"/>`;
+  return `<defs><filter id="${id}a" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${round(blur*1.5)}"/></filter>`
+    +`<filter id="${id}k" x="-15%" y="-15%" width="130%" height="130%"><feGaussianBlur stdDeviation="${round(Math.max(2,blur*.33))}"/></filter></defs>`
+    +`<g transform="rotate(${options.rotate??0} ${round(cx)} ${round(cy)})">${rect(0,`${id}a`,opacity*.72)}${rect(-lift,`${id}k`,Math.min(.9,opacity*1.15))}</g>`;
+}
+
+// 큰 그림자를 빠르게: softShadow(SVG 문자열)는 큰 카드(800px 이상)에서 흐림 필터 하나에 0.4~0.8초가 든다.
+// 그림자는 원래 흐릿하므로 1/4 해상도로 그린 뒤 키워도 차이가 보이지 않는다(약 70ms). 결과는 캐시해 같은 크기면 재사용한다.
+// SVG에 바로 resize를 걸면 sharp가 SVG를 목표 크기로 다시 그려 이득이 사라지므로, 작은 PNG로 먼저 굳힌 뒤 키운다.
+// 돌려주는 레이어는 그림자가 번질 여백(pad)까지 포함하되, 캔버스(기본 1080×1350) 밖으로 나가는 부분은 잘라 낸다.
+// sharp는 캔버스보다 큰 조각이나 캔버스 밖 좌표의 조각을 합성하지 못하고 오류를 내기 때문이다.
+export async function shadowLayer(options:{x:number;y:number;width:number;height:number;rx?:number;blur?:number;opacity?:number;rotate?:number;canvasWidth?:number;canvasHeight?:number}):Promise<OverlayOptions&{left:number;top:number}> {
+  const blur=options.blur??18,pad=Math.ceil(blur*4.5),scale=4;
+  const W=Math.round(options.width+pad*2),H=Math.round(options.height+pad*2);
+  const key=`shadow:${Math.round(options.width)}x${Math.round(options.height)}:${options.rx??16}:${blur}:${options.opacity??.22}:${options.rotate??0}`;
+  const input=await cachedLayer(key,async()=>{
+    const w=Math.ceil(W/scale),h=Math.ceil(H/scale);
+    // 작은 캔버스 안에서 같은 모양(좌표·흐림 모두 1/scale)을 그린다.
+    const body=softShadow({x:pad/scale,y:pad/scale,width:options.width/scale,height:options.height/scale,rx:(options.rx??16)/scale,blur:blur/scale,opacity:options.opacity,rotate:options.rotate});
+    const small=await sharp(Buffer.from(`<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`)).png().toBuffer();
+    return sharp(small).resize(W,H,{kernel:"cubic"}).png().toBuffer();
+  });
+  const left=Math.round(options.x-pad),top=Math.round(options.y-pad);
+  const canvasW=options.canvasWidth??1080,canvasH=options.canvasHeight??1350;
+  // 캔버스와 겹치는 부분만 남긴다. 완전히 밖이면 1×1 투명 조각.
+  const x0=Math.max(0,left),y0=Math.max(0,top),x1=Math.min(canvasW,left+W),y1=Math.min(canvasH,top+H);
+  if(x1<=x0||y1<=y0)return {input:{create:{width:1,height:1,channels:4,background:{r:0,g:0,b:0,alpha:0}}},left:0,top:0};
+  if(x0===left&&y0===top&&x1===left+W&&y1===top+H)return {input,left,top};
+  const clipped=await sharp(input).extract({left:x0-left,top:y0-top,width:x1-x0,height:y1-y0}).png().toBuffer();
+  return {input:clipped,left:x0,top:y0};
+}
+
+// 접촉 그림자: 물체(접시·마스코트·스티커)가 바닥에 닿은 자리에 깔리는 납작한 타원 그림자.
+// 물체 아래 가운데(cx, 바닥 y)에 두면 "떠 있는 오림"이 "놓인 물건"이 된다.
+export function contactShadow(options:{cx:number;cy:number;rx:number;ry?:number;opacity?:number;blur?:number}):string {
+  const id=uid("contact"),ry=options.ry??Math.max(6,Math.round(options.rx*.16)),blur=options.blur??Math.max(4,Math.round(ry*.6));
+  return `<defs><filter id="${id}" x="-40%" y="-200%" width="180%" height="500%"><feGaussianBlur stdDeviation="${blur}"/></filter></defs>`
+    +`<ellipse cx="${round(options.cx)}" cy="${round(options.cy)}" rx="${round(options.rx)}" ry="${round(ry)}" fill="#000" fill-opacity="${options.opacity??.32}" filter="url(#${id})"/>`;
+}
+
+// 안쪽 그림자: 창(아치·액자·폴라로이드) 안쪽 가장자리를 어둡게 해 사진이 틀 "안으로" 들어가 보이게 한다.
+// 사진 위에 얹는 SVG 조각이다. 창 바깥을 덮는 큰 링(evenodd)을 번지게 한 뒤 창 모양으로 잘라(clipPath) 안쪽 번짐만 남긴다.
+// feComposite를 쓰지 않는 이유: librsvg에서 큰 캔버스의 composite가 느리고 경계가 계단지는 일이 있었다.
+export function innerShadow(options:{x:number;y:number;width:number;height:number;rx?:number;blur?:number;opacity?:number;color?:string;dy?:number;path?:string}):string {
+  const id=uid("inner"),blur=options.blur??12,rx=options.rx??0,pad=blur*4,dy=options.dy??Math.round(blur*.4);
+  const {x,y,width:w,height:h}=options;
+  // 창 모양: 직접 넘긴 path(아치 등)가 있으면 그것, 없으면 둥근 사각.
+  const shape=options.path??`M${x+rx} ${y}H${x+w-rx}${rx?`A${rx} ${rx} 0 0 1 ${x+w} ${y+rx}`:""}V${y+h-rx}${rx?`A${rx} ${rx} 0 0 1 ${x+w-rx} ${y+h}`:""}H${x+rx}${rx?`A${rx} ${rx} 0 0 1 ${x} ${y+h-rx}`:""}V${y+rx}${rx?`A${rx} ${rx} 0 0 1 ${x+rx} ${y}`:""}Z`;
+  const outer=`M${x-pad} ${y-pad}H${x+w+pad}V${y+h+pad}H${x-pad}Z`;
+  return `<defs><clipPath id="${id}c"><path d="${shape}"/></clipPath><filter id="${id}f" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${blur}"/></filter></defs>`
+    +`<g clip-path="url(#${id}c)"><path d="${outer}${shape}" transform="translate(0 ${dy})" fill-rule="evenodd" fill="${options.color??"#000"}" fill-opacity="${options.opacity??.45}" filter="url(#${id}f)"/></g>`;
+}
+
+// ── 레이어 캐시(계획서 '캐시 전역 상한') ─────────────────────────────────────────────────────
+// 계열마다 따로 두던 Map 캐시(벽·칠판·종이·질감·그림자)는 합치면 상한이 없어 Render 무료 플랜(512MB)에서 위험하다.
+// 이 함수 하나로 모아 전체 크기 48MB·24항목을 넘으면 가장 오래 안 쓴 항목부터 버린다(LRU).
+// Map은 넣은 순서를 기억하므로, 꺼낼 때 지웠다가 다시 넣으면 "가장 최근에 쓴 것"이 맨 뒤로 간다.
+const LAYER_CACHE_BYTES=48*1024*1024,LAYER_CACHE_ITEMS=24;
+const layerCache=new Map<string,{value:Promise<Buffer>;bytes:number}>();
+let layerCacheBytes=0;
+export async function cachedLayer(key:string,build:()=>Promise<Buffer>):Promise<Buffer> {
+  const hit=layerCache.get(key);
+  if(hit){layerCache.delete(key);layerCache.set(key,hit);return hit.value;}
+  const value=build();
+  const entry={value,bytes:0};
+  layerCache.set(key,entry);
+  try{
+    const buffer=await value;
+    entry.bytes=buffer.length;layerCacheBytes+=buffer.length;
+    // 상한을 넘으면 앞(가장 오래된 것)부터 버린다. 방금 넣은 항목은 남긴다.
+    for(const [oldKey,old] of layerCache){
+      if(layerCacheBytes<=LAYER_CACHE_BYTES&&layerCache.size<=LAYER_CACHE_ITEMS)break;
+      if(oldKey===key)continue;
+      layerCache.delete(oldKey);layerCacheBytes-=old.bytes;
+    }
+    return buffer;
+  }catch(error){layerCache.delete(key);throw error;}
+}
+// 테스트용: 지금 캐시 상태.
+export const layerCacheStats=()=>({items:layerCache.size,bytes:layerCacheBytes});
+
+// ── 질감 자산(계획서 B6) ──────────────────────────────────────────────────────────────────
+// scripts/bake-textures.mjs가 미리 구워 둔 1080×1350 webp(한지·벽돌·나무·크라프트·분필 가루·리넨·필름 먼지·벨벳)를
+// 카드 위에 blend로 얹는다. 매번 feTurbulence를 돌리던 것(0.4~3.5초)이 파일 읽기 한 번(수십 ms)으로 줄어든다.
+// 파일이 없으면 null을 돌려주고, 호출하는 쪽은 지금까지의 SVG 질감을 그대로 그린다(폴백).
+export const TEXTURES=["hanji","brick","wood","kraft","chalkdust","linen","filmdust","velvet"] as const;
+export type TextureName=typeof TEXTURES[number];
+const TEXTURE_DIR=path.join(process.cwd(),"assets/design/textures");
+export const textureFile=(name:TextureName)=>path.join(TEXTURE_DIR,`${name}.webp`);
+export async function textureLayer(name:TextureName,options:{opacity?:number;blend?:OverlayOptions["blend"];left?:number;top?:number;width?:number;height?:number;tint?:string}={}):Promise<OverlayOptions|null> {
+  const width=Math.round(options.width??1080),height=Math.round(options.height??1350),opacity=options.opacity??.3;
+  const left=Math.round(options.left??0),top=Math.round(options.top??0);
+  try{await access(textureFile(name));}catch{return null;}
+  const key=`texture:${name}:${width}x${height}:${opacity}:${options.tint??""}`;
+  const blend=options.blend??"multiply";
+  const input=await cachedLayer(`${key}:${blend}`,async()=>{
+    // 원본(1080×1350)을 자리 크기로 덮어 자르고, tint를 주면 회색 질감을 그 색으로 물들인다.
+    // 세기(opacity)는 알파로 낮추지 않고 "아무 변화도 없는 색"과 미리 섞어 불투명하게 만든다.
+    // 반투명 PNG를 multiply로 얹으면 libvips 계산이 어긋나 질감 100%보다도 어둡게 나왔기 때문이다(한지 .3 → 평균 188, 기대 235).
+    // 변화 없는 색: multiply는 흰색(255), screen은 검정(0), soft-light·overlay는 회색(128).
+    let image=sharp(textureFile(name)).resize(width,height,{fit:"cover"});
+    if(options.tint)image=image.tint(options.tint);
+    const {data,info}=await image.removeAlpha().raw().toBuffer({resolveWithObject:true});
+    const neutral=blend==="screen"||blend==="lighten"?0:blend==="multiply"||blend==="darken"?255:128;
+    for(let i=0;i<data.length;i++)data[i]=Math.round(data[i]*opacity+neutral*(1-opacity));
+    return sharp(data,{raw:{width:info.width,height:info.height,channels:3}}).png().toBuffer();
+  });
+  return {input,left,top,blend};
 }
 
 // 종이 질감(필름 그레인). feTurbulence 잡음을 회색으로 바꿔 soft-light로 겹치면 밝기는 거의 그대로이고 결만 생긴다.
@@ -118,7 +230,10 @@ export function grainLayer(options:{opacity?:number;width?:number;height?:number
 // 마스코트(홍어 캐릭터) 레이어. 자산 파일이 없으면 null을 돌려주고 카드는 마스코트 없이 그려진다.
 // 포즈별 투명 webp는 scripts/extract-mascot.mjs가 캐릭터 스티커 시트에서 오려 만든다.
 export const MASCOT_POSES=["hello","curious","tip","wow","love","bye"] as const;
-export type MascotPose=typeof MASCOT_POSES[number];
+// 4단계(B10)에 hello를 참고해 다시 그린 같은 캐릭터의 포즈(scripts/extract-stickers.mjs로 시트에서 오림).
+// 자산 파일이 없으면 mascotLayer가 hello로 대신 그리므로, 이 포즈를 불러도 카드가 깨지지 않는다.
+export const EXTRA_POSES=["eating","cheers","point","think","rain","ok"] as const;
+export type MascotPose=typeof MASCOT_POSES[number]|typeof EXTRA_POSES[number];
 const MASCOT_DIR=path.join(process.cwd(),"assets/design/mascot");
 export const mascotFile=(pose:MascotPose)=>path.join(MASCOT_DIR,`${pose}.webp`);
 export const MASCOT_FILE=mascotFile("hello");
@@ -151,4 +266,32 @@ export async function mascotLayer(options:{width:number;left:number;top:number;p
   const top=anchor.startsWith("bottom")?options.top-mascot.info.height:options.top;
   // 말풍선이 캐릭터 옆에 붙고 꼬리가 캐릭터를 가리키도록, 그려진 크기와 위치를 함께 돌려준다.
   return {input:mascot.data,left:Math.round(left),top:Math.round(top),width:mascot.info.width,height:mascot.info.height};
+}
+
+// 장 역할에 어울리는 마스코트 포즈(계획서 B10). 계열은 이 표를 따르되, 자리가 좁거나 계열 성격상 다른 포즈가 낫다면 직접 고른다.
+export const ROLE_POSES:Record<string,MascotPose>={
+  cover:"hello",overview:"curious",detail:"eating","how-to":"tip",pairing:"cheers",process:"point",
+  occasion:"cheers",mood:"rain",visit:"ok",cta:"bye",
+};
+
+// 소품 스티커(홍어 한 점·막걸리 사발·묵은지·수육·젓가락·빗방울·김). 마스코트와 같은 그림체의 투명 webp다.
+// 파일이 없으면 null(소품 없이 그린다). 지시선 끝 아이콘, 간판 양옆 장식, 글자 장 빈자리 채우기에 쓴다.
+export const PROPS=["skate","makgeolli","kimchi","suyuk","chopsticks","raindrop","gim"] as const;
+export type PropName=typeof PROPS[number];
+const PROP_DIR=path.join(process.cwd(),"assets/design/props");
+export const propFile=(name:PropName)=>path.join(PROP_DIR,`${name}.webp`);
+export async function propLayer(name:PropName,options:{width:number;left:number;top:number;rotate?:number;maxHeight?:number;anchor?:"top-left"|"center"|"bottom-left"|"bottom-right"|"top-right"}):Promise<(OverlayOptions&{left:number;top:number;width:number;height:number})|null> {
+  try{await access(propFile(name));}catch{return null;}
+  const key=`prop:${name}:${options.width}:${options.maxHeight??0}:${options.rotate??0}`;
+  const buffer=await cachedLayer(key,async()=>{
+    let image=sharp(propFile(name)).resize({width:Math.round(options.width),...(options.maxHeight?{height:Math.floor(options.maxHeight),fit:"inside" as const}:{})});
+    if(options.rotate)image=sharp(await image.png().toBuffer()).rotate(options.rotate,{background:{r:0,g:0,b:0,alpha:0}});
+    return image.png().toBuffer();
+  });
+  const meta=await sharp(buffer).metadata();
+  const width=meta.width??options.width,height=meta.height??options.width;
+  const anchor=options.anchor??"top-left";
+  const left=anchor==="center"?options.left-width/2:anchor.endsWith("right")?options.left-width:options.left;
+  const top=anchor==="center"?options.top-height/2:anchor.startsWith("bottom")?options.top-height:options.top;
+  return {input:buffer,left:Math.round(left),top:Math.round(top),width,height};
 }

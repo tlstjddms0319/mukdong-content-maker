@@ -4,6 +4,8 @@ import { registerPhoto } from "../render/audit";
 import { brandName, svg, svgLayer, textLayer, croppedPhoto, finishPhoto, type CardRenderer, type Layer } from "../render/primitives";
 import { MIN_STROKE, STYLE_FONTS, closingBlock, contentOf, emphasisOf, fitText, nextCue, snap } from "./shared";
 import { seeded } from "./handDrawn";
+import { access } from "node:fs/promises";
+import { cachedLayer, innerShadow, propLayer, textureFile } from "../decor";
 
 // 막걸리·전통주 병 라벨: 크림색 종이에 이중 테두리 액자와 모서리 꽃무늬, 맨 위 진홍 리본 속 가게 이름,
 // 그 아래 자간 넓은 한글 눈썹 글자(묵동 · 홍어 · 막걸리). 사진은 황금 톱니 링을 두른 원형 메달(표지·비교 장) 또는 아치 창(본문 장)에 넣고,
@@ -26,15 +28,63 @@ const diamond=(x:number,y:number,r:number,fill:string)=>`<path d="M${x} ${y-r}L$
 // 네 갈래 별(메달 위 ✦ 장식).
 const star=(x:number,y:number,r:number,fill:string)=>`<path d="M${x} ${y-r}Q${x} ${y} ${x+r} ${y}Q${x} ${y} ${x} ${y+r}Q${x} ${y} ${x-r} ${y}Q${x} ${y} ${x} ${y-r}Z" fill="${fill}"/>`;
 
-// 종이 바탕: 가는 종이 결(고주파 잡음) + 큰 얼룩(저주파) + 가장자리 바램. 그 위에 이중 테두리 액자와 모서리 장식.
-function paper(seed:number):string {
+// 종이 바탕: 큰 얼룩(저주파 잡음) + 가장자리 바램 + 종이 결. 장마다 얼룩 모양이 조금 달라 보이도록 seed를 쓰지만,
+// 예전처럼 카드마다 전면 feTurbulence 두 번(약 1.5초)을 돌리지 않고 seed를 6가지로 묶어 한 번 구운 PNG를 전역 캐시에서 다시 쓴다.
+// 종이 결은 미리 구운 리넨 질감(multiply, 옅게)이 맡고, 질감 파일이 없으면 예전 SVG 잡음 결을 함께 굽는다(폴백).
+const PAPER_SEEDS=6;
+function paperSvg(seed:number,withGrain:boolean):string {
   return `<defs>`
     +`<filter id="lbl-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="${seed}"/><feColorMatrix values="0 0 0 0 .42  0 0 0 0 .30  0 0 0 0 .14  0 0 0 .11 0"/></filter>`
     +`<filter id="lbl-mottle" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".008" numOctaves="2" seed="${seed+3}"/><feColorMatrix values="0 0 0 0 .55  0 0 0 0 .40  0 0 0 0 .20  0 0 0 .14 0"/></filter>`
-    +`<filter id="lbl-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="9"/></filter>`
     +`<radialGradient id="lbl-age" cx="50%" cy="50%" r="75%"><stop offset="55%" stop-color="${FRAME}" stop-opacity="0"/><stop offset="100%" stop-color="${FRAME}" stop-opacity=".15"/></radialGradient>`
-    +`</defs>`
-    +`<rect width="1080" height="1350" filter="url(#lbl-mottle)"/><rect width="1080" height="1350" filter="url(#lbl-grain)"/><rect width="1080" height="1350" fill="url(#lbl-age)"/>`
+    +`</defs><rect width="1080" height="1350" fill="${PAPER}"/>`
+    +`<rect width="1080" height="1350" filter="url(#lbl-mottle)"/>${withGrain?`<rect width="1080" height="1350" filter="url(#lbl-grain)"/>`:""}<rect width="1080" height="1350" fill="url(#lbl-age)"/>`;
+}
+// 질감을 흰색 쪽으로 섞은 불투명 그림(multiply용). 반투명 PNG를 multiply로 얹으면 libvips에서 기대보다 훨씬 어둡게 나와
+// 공용 textureLayer 대신 이렇게 섞는다. 파일이 없으면 null.
+async function flatTexture(name:"linen"|"kraft",opacity:number):Promise<Buffer|null> {
+  try{await access(textureFile(name));}catch{return null;}
+  // 여섯 가지 종이가 같은 질감을 쓰므로 섞은 질감도 한 번만 만든다.
+  return cachedLayer(`label:texture:${name}:${opacity}`,()=>sharp(textureFile(name)).resize(1080,1350,{fit:"cover"}).removeAlpha().linear(opacity,255*(1-opacity)).png({compressionLevel:1}).toBuffer());
+}
+function paperLayer(seed:number):Promise<Buffer> {
+  const slot=seed%PAPER_SEEDS+1;
+  return cachedLayer(`label:paper:v1:${slot}`,async()=>{
+    const texture=await flatTexture("linen",.35);
+    if(!texture)return sharp(Buffer.from(`<svg width="1080" height="1350" xmlns="http://www.w3.org/2000/svg">${paperSvg(slot*13,true)}</svg>`)).png({compressionLevel:1}).toBuffer();
+    // 결을 질감이 맡으면 남는 건 저주파 얼룩·바램뿐이라 1/4 크기로 그려 키워도 똑같다(잡음 필터 시간이 1/16).
+    // SVG 입력에 바로 resize를 걸면 sharp가 목표 크기로 다시 그리므로, 작은 PNG로 먼저 굳힌다.
+    const small=await sharp(Buffer.from(`<svg width="270" height="338" viewBox="0 0 1080 1350" xmlns="http://www.w3.org/2000/svg">${paperSvg(slot*13,false)}</svg>`)).png().toBuffer();
+    return sharp(small).resize(1080,1350,{fit:"fill"}).composite([{input:texture,blend:"multiply"}]).png({compressionLevel:1}).toBuffer();
+  });
+}
+// 흐린 그림자 SVG 조각을 1/4 해상도로 그려 제자리 크기로 키운 레이어. 큰 흐림 필터는 librsvg에서 400ms 가까이 들지만
+// 흐린 그림은 저해상도로 그려 키워도 똑같이 부드럽다(1/16 픽셀). clip을 주면 키운 뒤 원래 해상도로 창 모양을 또렷하게 자른다.
+async function lowResLayer(body:string,x:number,y:number,w:number,h:number,clip?:string):Promise<OverlayOptions> {
+  const X=Math.floor(x),Y=Math.floor(y),Wd=Math.ceil(w),Hd=Math.ceil(h);
+  // SVG를 먼저 작은 PNG로 굳힌 뒤 키운다. SVG 입력에 바로 resize를 걸면 sharp가 SVG를 목표 크기로 다시 그려 이득이 사라진다.
+  const small=await sharp(Buffer.from(`<svg width="${Math.ceil(Wd/4)}" height="${Math.ceil(Hd/4)}" viewBox="${X} ${Y} ${Wd} ${Hd}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`)).png({compressionLevel:1}).toBuffer();
+  let image=sharp(small).resize(Wd,Hd,{fit:"fill"});
+  if(clip)image=image.composite([{input:Buffer.from(`<svg width="${Wd}" height="${Hd}" viewBox="${X} ${Y} ${Wd} ${Hd}" xmlns="http://www.w3.org/2000/svg"><path d="${clip}" fill="#fff"/></svg>`),blend:"dest-in"}]);
+  return {input:await image.png({compressionLevel:1}).toBuffer(),left:X,top:Y};
+}
+// 창 안쪽 그림자(공용 innerShadow)를 저해상도로: 공용 조각의 clip-path는 떼고, 자르기는 lowResLayer가 원래 해상도로 한다.
+const fastInnerShadow=(x:number,y:number,w:number,h:number,path:string,blur:number,opacity:number)=>
+  lowResLayer(innerShadow({x,y,width:w,height:h,path,blur,opacity}).replace(/ clip-path="url\(#[^)]*\)"/,""),x,y,w,h,path);
+// 바닥 그림자(메달·아치 창 뒤): 흐림 반경만큼 여유를 두고 저해상도로.
+const SOFT=`<filter id="lbl-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="9"/></filter>`;
+const medalShadow=(cx:number,cy:number,R:number,s:number)=>{const r=R+26*s,pad=40;
+  return lowResLayer(`${SOFT}<circle cx="${cx}" cy="${cy+10}" r="${r}" fill="${BODY}" opacity=".16" filter="url(#lbl-soft)"/>`,cx-r-pad,cy+10-r-pad,(r+pad)*2,(r+pad)*2);};
+const archShadow=(x:number,y:number,w:number,h:number)=>{const pad=40;
+  return lowResLayer(`${SOFT}<path d="${archPath(x,y+8,w,h)}" fill="${BODY}" opacity=".16" filter="url(#lbl-soft)"/>`,x-pad,y+8-pad,w+pad*2,h+pad*2);};
+// 종이 위 액자: 이중 테두리와 모서리 장식. 메달 링·리본에 쓰는 그라데이션도 여기서 정의한다.
+function frameSvg():string {
+  return `<defs>`
+    // 메달 금 링의 금속 빛: 45도로 밝음→금→어두움→금→밝음. 링 상자 기준이라 크기가 달라도 같은 빛을 받는다.
+    +`<linearGradient id="lbl-metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E6CB82"/><stop offset=".3" stop-color="${GOLD}"/><stop offset=".55" stop-color="${GOLD_DEEP}"/><stop offset=".78" stop-color="${GOLD}"/><stop offset="1" stop-color="#E6CB82"/></linearGradient>`
+    // 리본 띠: 위가 조금 밝고 아래로 갈수록 짙어지는 세로 그라데이션(천이 둥글게 휜 느낌). 흰 글자 대비 6:1 이상 유지.
+    +`<linearGradient id="lbl-ribbon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B0352D"/><stop offset=".55" stop-color="${RIBBON}"/><stop offset="1" stop-color="#84221D"/></linearGradient>`
+    +`<linearGradient id="lbl-tail" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${RIBBON_DARK}"/><stop offset="1" stop-color="#5E1814"/></linearGradient></defs>`
     +`<rect x="${OUTER}" y="${OUTER}" width="${1080-OUTER*2}" height="${1350-OUTER*2}" fill="none" stroke="${FRAME}" stroke-width="6"/>`
     +`<rect x="${INNER}" y="${INNER}" width="${1080-INNER*2}" height="${1350-INNER*2}" fill="none" stroke="${FRAME}" stroke-width="${MIN_STROKE}" opacity=".85"/>`
     +corners();
@@ -55,11 +105,15 @@ function ribbon(cx:number,cy:number,w:number,h:number):string {
   const x0=cx-w/2,x1=cx+w/2,tail=48,drop=10,yb=cy+h/2;
   const tails=([-1,1] as const).map(dir=>{
     const near=dir<0?x0+16:x1-16,far=dir<0?x0-tail:x1+tail,notch=far-dir*18,y0=cy-h/2+drop,y1=yb+drop;
-    return `<polygon points="${near},${y0} ${far},${y0} ${notch},${cy+drop} ${far},${y1} ${near},${y1}" fill="${RIBBON_DARK}"/>`;
+    return `<polygon points="${near},${y0} ${far},${y0} ${notch},${cy+drop} ${far},${y1} ${near},${y1}" fill="url(#lbl-tail)"/>`;
   }).join("");
-  return tails
+  // 접힘 그림자: 띠 양 끝 바로 바깥, 꼬리가 띠 뒤로 들어가는 자리에 짧고 진한 그늘(띠가 꼬리 위로 접혀 올라온 두께).
+  const fold=([-1,1] as const).map(dir=>{const ex=dir<0?x0:x1,id=`lbl-fold${dir<0?"l":"r"}`;
+    return `<linearGradient id="${id}" x1="${dir<0?1:0}" y1="0" x2="${dir<0?0:1}" y2="0"><stop offset="0" stop-color="#2A0806" stop-opacity=".55"/><stop offset="1" stop-color="#2A0806" stop-opacity="0"/></linearGradient>`
+      +`<rect x="${dir<0?ex-14:ex}" y="${cy-h/2+drop}" width="14" height="${h}" fill="url(#${id})"/>`;}).join("");
+  return tails+fold
     +`<polygon points="${x0},${yb} ${x0+16},${yb} ${x0+16},${yb+drop}" fill="${RIBBON_FOLD}"/><polygon points="${x1},${yb} ${x1-16},${yb} ${x1-16},${yb+drop}" fill="${RIBBON_FOLD}"/>`
-    +`<rect x="${x0}" y="${cy-h/2}" width="${w}" height="${h}" fill="${RIBBON}"/>`
+    +`<rect x="${x0}" y="${cy-h/2}" width="${w}" height="${h}" fill="url(#lbl-ribbon)"/>`
     +`<rect x="${x0+5}" y="${cy-h/2+5}" width="${w-10}" height="${h-10}" fill="none" stroke="${GOLD}" stroke-width="${MIN_STROKE}" opacity=".8"/>`;
 }
 // 제목 아래 장식선: 가는 두 줄(아래 줄은 짧고 옅게) 사이를 비우고 가운데 붉은 마름모.
@@ -78,14 +132,13 @@ const medalExtent=(R:number,s:number)=>Math.round(R+42*s);
 function medalUnder(cx:number,cy:number,R:number,s:number):string {
   const teeth=Math.round(44+R/8);
   const points=Array.from({length:teeth*2},(_,i)=>{const a=(Math.PI*i)/teeth,k=i%2?R+16*s:R+26*s;return `${(cx+Math.cos(a)*k).toFixed(1)},${(cy+Math.sin(a)*k).toFixed(1)}`;}).join(" ");
-  return `<circle cx="${cx}" cy="${cy+10}" r="${R+26*s}" fill="${BODY}" opacity=".16" filter="url(#lbl-soft)"/>`
-    +`<circle cx="${cx}" cy="${cy}" r="${R+40*s}" fill="none" stroke="${GOLD_DEEP}" stroke-width="${3*s}" stroke-dasharray="1 ${9*s}" stroke-linecap="round" opacity=".9"/>`
-    +`<polygon points="${points}" fill="${GOLD}"/>`
+  return `<circle cx="${cx}" cy="${cy}" r="${R+40*s}" fill="none" stroke="${GOLD_DEEP}" stroke-width="${3*s}" stroke-dasharray="1 ${9*s}" stroke-linecap="round" opacity=".9"/>`
+    +`<polygon points="${points}" fill="url(#lbl-metal)"/>`
     +`<circle cx="${cx}" cy="${cy}" r="${R+14*s}" fill="${PAPER_LIGHT}" stroke="${FRAME}" stroke-width="${MIN_STROKE}"/>`;
 }
 function medalOver(cx:number,cy:number,R:number,s:number):string {
   return `<circle cx="${cx}" cy="${cy}" r="${R+1.25}" fill="none" stroke="${FRAME}" stroke-width="${MIN_STROKE}"/>`
-    +`<circle cx="${cx}" cy="${cy}" r="${R+6.5*s}" fill="none" stroke="${GOLD}" stroke-width="${9*s}"/>`
+    +`<circle cx="${cx}" cy="${cy}" r="${R+6.5*s}" fill="none" stroke="url(#lbl-metal)" stroke-width="${9*s}"/>`
     +`<circle cx="${cx}" cy="${cy}" r="${R+12*s}" fill="none" stroke="${FRAME}" stroke-width="${MIN_STROKE}"/>`;
 }
 // 메달 속 사진: 원형으로 자른다. 예전의 탈채도(.92)는 홍어 살을 탁하게 만들어 뺐다(종이 느낌은 테두리·질감이 맡는다).
@@ -104,9 +157,9 @@ async function archPhoto(input:Buffer,width:number,height:number):Promise<Buffer
   return shaped;
 }
 // 아치 창 테두리: 황금 굵은 선 + 바깥 가는 갈색 선(이중 테두리). 꼭대기 장식은 바로 위 제목 장식선의 마름모와 겹쳐 보여 두지 않는다.
-function archFrame(x:number,y:number,w:number,h:number):{under:string;over:string} {
+// 바닥 그림자(archShadow)와 창 안쪽 그림자는 저해상도 레이어로 따로 얹는다.
+function archFrame(x:number,y:number,w:number,h:number):{over:string} {
   return {
-    under:`<path d="${archPath(x,y+8,w,h)}" fill="${BODY}" opacity=".16" filter="url(#lbl-soft)"/>`,
     over:`<path d="${archPath(x,y,w,h)}" fill="none" stroke="${GOLD}" stroke-width="6"/><path d="${archPath(x-9,y-9,w+18,h+18)}" fill="none" stroke="${FRAME}" stroke-width="${MIN_STROKE}"/>`,
   };
 }
@@ -119,7 +172,9 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   const rand=seeded(index*31+(slide.variant??0));
   const layers:OverlayOptions[]=[];
-  let deco=paper(Math.floor(rand()*90)+1),over="";
+  const paperSeed=Math.floor(rand()*90)+1;
+  let deco=frameSvg(),over="";
+  const shadows:OverlayOptions[]=[];     // 종이와 장식 사이에 까는 바닥 그림자(메달·창)
   const shots=inputs.slice(0,2);
   const emphasis=emphasisOf(content,EMPHASIS);
 
@@ -129,6 +184,11 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
   const ribbonCy=INNER+36+ribbonH/2;
   deco+=ribbon(540,ribbonCy,ribbonText.info.width+104,ribbonH);
   layers.push({input:ribbonText.data,left:540-ribbonText.info.width/2,top:ribbonCy-ribbonText.info.height/2});
+  // 리본 양옆 막걸리 사발: 소품 그림이 있을 때만 리본 꼬리 바깥 빈자리에 얹는다(없으면 아무것도 예약하지 않는다).
+  // 높이는 리본 띠 안으로 제한해 아래 눈썹 글자 줄을 침범하지 않는다.
+  const ribbonHalf=(ribbonText.info.width+104)/2+48;
+  const props=await Promise.all(([-1,1] as const).map(dir=>propLayer("makgeolli",{width:64,maxHeight:ribbonH+8,left:540+dir*(ribbonHalf+52),top:ribbonCy+4,anchor:"center"})));
+  const propOverlays=props.filter((prop):prop is NonNullable<typeof prop>=>!!prop);
   const eyebrowSize=26;
   const eyebrow=await textLayer(EYEBROW_TEXT,{size:eyebrowSize,color:EYEBROW,width:960,height:60,font:STYLE_FONTS.serifHeavy,align:"centre",letterSpacing:eyebrowSize*.32});
   const eyebrowTop=ribbonCy+ribbonH/2+10+20;
@@ -178,7 +238,7 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
     const R=Math.max(170,Math.min(330,Math.floor((room-fixed)/2)));
     let y=top+Math.max(0,Math.floor((room-fixed-R*2)/2));
     const cy=y+ring+R;
-    deco+=medalUnder(540,cy,R,s);
+    deco+=medalUnder(540,cy,R,s);shadows.push(await medalShadow(540,cy,R,s));
     layers.push({input:await medalPhoto(shots[0],R,1.2),left:540-R,top:cy-R});
     over+=medalOver(540,cy,R,s);
     y=cy+R+ring+afterMedal;
@@ -218,9 +278,11 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
       const block=titleBlock+PH+(points.length?stackHeight(points,gap)+34:0);
       let y=placeTitle(y0+Math.max(0,Math.floor((avail-block)/2)));
       const x=540-PW/2;
-      const frame=archFrame(x,y,PW,PH);
-      deco+=frame.under;over+=frame.over;
+      over+=archFrame(x,y,PW,PH).over;
+      shadows.push(await archShadow(x,y,PW,PH));
       layers.push({input:await archPhoto(shots[0],PW,PH),left:x,top:y});
+      // 창 안쪽 그림자(아치 모양): 사진이 라벨 종이 "안으로" 파인 창 너머에 있는 것처럼 보이게.
+      layers.push(await fastInnerShadow(x,y,PW,PH,archPath(x,y,PW,PH),12,.42));
       y+=PH+34;
       for(const point of points){
         deco+=diamond(M+14,y+24,9,RIBBON);
@@ -247,7 +309,7 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
       let y=placeTitle(y0+Math.max(0,Math.floor((avail-block)/2)));
       const cy=y+ext,centers=[540-ext-18,540+ext+18];
       for(const [i,shot] of shots.entries()){
-        deco+=medalUnder(centers[i],cy,R,s);
+        deco+=medalUnder(centers[i],cy,R,s);shadows.push(await medalShadow(centers[i],cy,R,s));
         layers.push({input:await medalPhoto(shot,R),left:centers[i]-R,top:cy-R});
         over+=medalOver(centers[i],cy,R,s);
         layers.push({input:tags[i].data,left:centers[i]-tags[i].info.width/2,top:cy+ext+16});
@@ -315,7 +377,7 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
     over+=cue.arrow(cueX,cueY);
   }
 
-  layers.unshift(svgLayer(deco));
+  layers.unshift({input:await paperLayer(paperSeed),left:0,top:0},...shadows,svgLayer(deco),...propOverlays);
   layers.push(svgLayer(over));
   return sharp({create:{width:1080,height:1350,channels:3,background:PAPER}}).composite(snap(layers)).jpeg({quality:92}).toBuffer();
 };

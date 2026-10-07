@@ -2,8 +2,9 @@ import sharp, { type OverlayOptions } from "sharp";
 import type { CarouselSlidePlan } from "../carousel";
 import { STORE_NAME } from "../slideLayout";
 import { inkOn, mutedOn, readableOn } from "../design";
-import { CONTENT, FONTS, MARGIN, META, brandName, canvas, cleanPoints, croppedPhoto, currentVariant, grainLayer, pointLayers, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, type CardRenderer, type Layer } from "./primitives";
+import { CONTENT, FONTS, MARGIN, META, brandName, canvas, cleanPoints, croppedPhoto, currentTheme, currentVariant, grainLayer, pointLayers, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, type CardRenderer, type Layer } from "./primitives";
 import { MIN_STROKE, closingBlock, emphasisOf, fitText, nextCue, teaserText } from "../styles/shared";
+import { contactShadow, shadowLayer, textureLayer, type TextureName } from "../decor";
 
 // 추가 레이아웃 8종: 잡지 편집형, 반반 분할, 폴라로이드, 영수증, 체크리스트, 타임라인, 큰 글자 포스터, 원형 사진.
 // 모두 같은 원칙을 따른다. ① 글자 레이어를 먼저 그려 높이를 잰다 ② 남는 높이에 맞춰 사진·간격을 정한다
@@ -118,6 +119,67 @@ export async function footerPlan(slide:CarouselSlidePlan,index:number,total:numb
   return {extra,layers};
 }
 
+// ── 테마별 바탕 질감(4단계 B6) ─────────────────────────────────────────────────────────────
+// 손글씨 노트는 리넨, 레트로 메뉴판은 크라프트 종이 결을 바탕(canvas) 위·모든 글자 아래에 아주 옅게 깐다.
+// 잡지·미니멀·포스터는 "깨끗한 인쇄면"이 문법이라 질감을 넣지 않는다(classic은 지금처럼 그레인만).
+// 질감 파일이 없으면 null이 되어 예전처럼 그레인만 남는다(폴백). 이 레이어는 layers 맨 앞에 넣어야 사진·글자를 물들이지 않는다.
+const THEME_TEXTURE:Partial<Record<ReturnType<typeof currentTheme>,{name:TextureName;opacity:number}>>={
+  notebook:{name:"linen",opacity:.14},
+  retro:{name:"kraft",opacity:.2},
+};
+export async function themeTexture():Promise<OverlayOptions|null> {
+  const pick=THEME_TEXTURE[currentTheme()];
+  return pick?textureLayer(pick.name,{opacity:pick.opacity}):null;
+}
+// 템플릿 레이아웃이 쓰는 바탕 캔버스: 테마 질감을 맨 아래에 끼운 뒤 canvas로 그린다.
+export async function texturedCanvas(background:string,layers:OverlayOptions[]):Promise<Buffer> {
+  const texture=await themeTexture();
+  return canvas(background,texture?[texture,...layers]:layers);
+}
+
+// 사진 창 안쪽 그림자(얕게): 사진이 틀 "안으로" 살짝 들어가 보이게 한다. 진하면 음식 가장자리가 지저분해져 .2~.3 안에서 쓴다.
+// decor.innerShadow(큰 가우스 번짐)는 900×860 창 하나에 200ms 가까이 들어 프레임 장 렌더 예산(+150ms)을 넘는다.
+// 템플릿의 창은 모두 직각 사각형이라, 네 변에 안쪽으로 옅어지는 선형 그라데이션 띠를 깔아 같은 모양을 거의 공짜로 만든다.
+// 빛이 위에서 온다고 보고 위 변을 조금 진하고 깊게, 아래 변은 옅게 둔다. 모서리는 두 띠가 겹쳐 자연스럽게 더 어두워진다.
+let wellId=0;
+export function photoWell(x:number,y:number,width:number,height:number,options:{depth?:number;opacity?:number}={}):string {
+  const id=`well${wellId++}`,d=options.depth??26,o=options.opacity??.26;
+  const grad=(key:string,x1:number,y1:number,x2:number,y2:number,alpha:number)=>`<linearGradient id="${id}${key}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"><stop offset="0" stop-color="#000" stop-opacity="${(alpha).toFixed(3)}"/><stop offset=".45" stop-color="#000" stop-opacity="${(alpha*.35).toFixed(3)}"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>`;
+  const top=Math.round(d*1.3);
+  return `<defs>${grad("t",0,0,0,1,o*1.25)}${grad("b",0,1,0,0,o*.6)}${grad("l",0,0,1,0,o)}${grad("r",1,0,0,0,o)}</defs>`
+    +`<rect x="${x}" y="${y}" width="${width}" height="${top}" fill="url(#${id}t)"/><rect x="${x}" y="${y+height-d}" width="${width}" height="${d}" fill="url(#${id}b)"/>`
+    +`<rect x="${x}" y="${y}" width="${d}" height="${height}" fill="url(#${id}l)"/><rect x="${x+width-d}" y="${y}" width="${d}" height="${height}" fill="url(#${id}r)"/>`;
+}
+
+// 큰 카드·사진 뒤 그림자. SVG 흐림(softShadow)은 큰 판 하나에 0.4~0.8초가 들어, 1/4 해상도로 굽고 캐시하는 shadowLayer를 쓴다.
+// 단 잡지·미니멀(옅게)·포스터(딱딱한 그림자)는 THEME_KITS가 그림자 모양을 바꾸므로 그 테마에서는 테마 함수(softShadow)를 그대로 쓴다.
+const FAST_SHADOW_THEMES=new Set(["classic","notebook","retro"]);
+// shadowLayer는 번짐 여백까지 포함한 판이라 화면(1080×1350)보다 크거나 바깥으로 삐져나올 수 있다.
+// sharp composite는 바탕보다 큰 그림·음수 좌표를 받지 않으므로 화면 안쪽만 잘라 낸다.
+const clipCache=new Map<string,Promise<OverlayOptions>>();
+async function clipToCanvas(layer:OverlayOptions&{left:number;top:number}):Promise<OverlayOptions> {
+  const input=layer.input as Buffer;
+  const meta=await sharp(input).metadata();
+  const w=meta.width!,h=meta.height!;
+  const x0=Math.max(0,layer.left),y0=Math.max(0,layer.top),x1=Math.min(1080,layer.left+w),y1=Math.min(1350,layer.top+h);
+  if(x0===layer.left&&y0===layer.top&&x1===layer.left+w&&y1===layer.top+h)return layer;
+  if(x1<=x0||y1<=y0)return svgLayer("");
+  const key=`${w}x${h}:${layer.left}:${layer.top}:${input.length}`;
+  if(!clipCache.has(key)){
+    if(clipCache.size>32)clipCache.clear();
+    clipCache.set(key,sharp(input).extract({left:x0-layer.left,top:y0-layer.top,width:x1-x0,height:y1-y0}).png().toBuffer().then(cut=>({input:cut,left:x0,top:y0})));
+  }
+  return clipCache.get(key)!;
+}
+export async function cardShadow(options:Parameters<typeof softShadow>[0]):Promise<OverlayOptions> {
+  return FAST_SHADOW_THEMES.has(currentTheme())?clipToCanvas(await shadowLayer(options)):svgLayer(softShadow(options));
+}
+
+// 마스코트가 바닥에 닿는 자리의 납작한 그림자. 마스코트 레이어보다 먼저 깔아야 발 밑으로 들어간다.
+// 그림 아래 끝에는 투명 여백이 조금 있어 발바닥 높이를 4% 올려 잡는다.
+export const mascotContact=(mascot:{left:number;top:number;width:number;height:number},opacity=.24)=>
+  contactShadow({cx:mascot.left+mascot.width/2,cy:mascot.top+mascot.height*.96,rx:mascot.width*.34,ry:Math.max(6,Math.round(mascot.width*.045)),opacity});
+
 // 11. 잡지 편집형: 위쪽 가득 찬 사진, 아래 작은 머리글(키워드)·큰 제목·가는 선·본문 문단.
 // 표지는 제목 아래 부제, 마지막 장은 바닥글 위에 가게 명함. 둘 다 사진 높이에서 자리를 뺀다.
 const composeMagazine:CardRenderer=async(inputs,slide,index,total,palette)=>{
@@ -150,7 +212,7 @@ const composeMagazine:CardRenderer=async(inputs,slide,index,total,palette)=>{
   if(closing)layers.push(...closing.place(540,FOOTER_TOP-foot.extra-30-closing.height));
   layers.push(svgLayer(sparkles([[1080-MARGIN-10,PHOTO_H+52,14]],palette.accent)));
   layers.push(...foot.layers,await grainLayer({opacity:.12}));
-  return canvas(palette.paper,layers);
+  return texturedCanvas(palette.paper,layers);
 };
 
 // 12. 반반 분할: 화면 반쪽은 세로 사진, 반쪽은 제목·요점. 변형 1은 사진이 오른쪽에 온다.
@@ -191,7 +253,7 @@ const composeSplit:CardRenderer=async(inputs,slide,index,total,palette)=>{
   // 사진과 글 사이 경계에 테이프 한 조각.
   layers.push(svgLayer(washiTape({x:HALF-90,y:120,width:180,color:palette.highlight,angle:photoRight?8:-8,opacity:.82})));
   layers.push(...foot.layers,await grainLayer());
-  return canvas(palette.paper,layers);
+  return texturedCanvas(palette.paper,layers);
 };
 
 // 13. 폴라로이드: 위에 제목, 가운데 기울어진 폴라로이드 두 장(아래 흰 여백에 손글씨 메모), 아래 요점.
@@ -215,7 +277,8 @@ const composePolaroid:CardRenderer=async(inputs,slide,index,total,palette)=>{
     const W=SIDE+BORDER*2,H=SIDE+BORDER+CAPTION;
     const note=caption?await textLayer(caption,{size:34,color:"#2a2a2a",width:W-36,height:56,font:FONTS.bold,align:"centre"}):null;
     return sharp({create:{width:W,height:H,channels:4,background:"#fffdf8"}})
-      .composite([{input:await croppedPhoto(photo,SIDE,SIDE,0),left:BORDER,top:BORDER},...(note?[{input:note.data,left:Math.round((W-note.info.width)/2),top:SIDE+BORDER+Math.round((CAPTION-note.info.height)/2)}]:[])])
+      // 사진 칸 안쪽 가장자리를 얕게 어둡게 해 흰 테두리 "안에 끼운" 인화지처럼 보이게 한다.
+      .composite([{input:await croppedPhoto(photo,SIDE,SIDE,0),left:BORDER,top:BORDER},{input:svg(W,H,photoWell(BORDER,BORDER,SIDE,SIDE,{opacity:.22,depth:18})),left:0,top:0},...(note?[{input:note.data,left:Math.round((W-note.info.width)/2),top:SIDE+BORDER+Math.round((CAPTION-note.info.height)/2)}]:[])])
       .png().toBuffer();
   };
   const cards=[
@@ -227,7 +290,7 @@ const composePolaroid:CardRenderer=async(inputs,slide,index,total,palette)=>{
   for(const card of cards){
     const tilted=await sharp(card.image).rotate(card.angle,{background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer({resolveWithObject:true});
     const meta=await sharp(card.image).metadata();
-    layers.push(svgLayer(softShadow({x:card.x+8,y:card.y+16,width:meta.width!,height:meta.height!,rx:4,blur:14,opacity:.22,rotate:card.angle})));
+    layers.push(await cardShadow({x:card.x+8,y:card.y+16,width:meta.width!,height:meta.height!,rx:4,blur:14,opacity:.22,rotate:card.angle}));
     layers.push({input:tilted.data,left:card.x,top:card.y});
     layers.push(svgLayer(washiTape({x:card.x+Math.round(tilted.info.width/2)-80,y:card.y-14,width:160,color:palette.highlight,angle:card.angle*-1.2,opacity:.8})));
     photosBottom=Math.max(photosBottom,card.y+tilted.info.height);
@@ -236,7 +299,7 @@ const composePolaroid:CardRenderer=async(inputs,slide,index,total,palette)=>{
   if(closing)layers.push(...closing.place(540,FOOTER_TOP-foot.extra-30-closing.height));
   layers.push(svgLayer(sparkles([[1080-MARGIN-20,MARGIN+20,16]],palette.accent)));
   layers.push(...foot.layers,await grainLayer());
-  return canvas(palette.soft,layers);
+  return texturedCanvas(palette.soft,layers);
 };
 
 // 14. 영수증·메뉴판: 사진 없이 가운데 영수증 종이. 가게 이름, 점선, 제목, 번호 매긴 항목, 항목 수 합계, 바코드.
@@ -269,7 +332,7 @@ const composeReceipt:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   for(let x=X+W;x>X;x-=26)zig+=`L${x-13} ${Y+H+14}L${Math.max(X,x-26)} ${Y+H}`;
   zig+="Z";
   let cursor=Y+PAD;
-  const layers:OverlayOptions[]=[svgLayer(softShadow({x:X,y:Y+10,width:W,height:H,rx:4,blur:16,opacity:.18})+`<path d="${zig}" fill="#fffdf8"/>`)];
+  const layers:OverlayOptions[]=[await cardShadow({x:X,y:Y+10,width:W,height:H,rx:4,blur:16,opacity:.18}),svgLayer(`<path d="${zig}" fill="#fffdf8"/>`)];
   layers.push({input:shop.data,left:X+Math.round((W-shop.info.width)/2),top:cursor});cursor+=shop.info.height+14;
   let svgBody=dashed(cursor);cursor+=16;
   layers.push({input:title.data,left:X+Math.round((W-title.info.width)/2),top:cursor});cursor+=title.info.height+20;
@@ -289,7 +352,7 @@ const composeReceipt:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   layers.push(svgLayer(svgBody+sparkles([[X-30,Y+40,16],[X+W+28,Y+H-60,12]],palette.accent)));
   if(closing)layers.push(...closing.place(540,FOOTER_TOP-foot.extra-30-closing.height));
   layers.push(...foot.layers,await grainLayer());
-  return canvas(palette.soft,layers);
+  return texturedCanvas(palette.soft,layers);
 };
 
 // 15. 체크리스트: 스프링 수첩 위에 제목과 체크 상자 목록, 오른쪽 아래에 키워드 포스트잇.
@@ -309,7 +372,7 @@ const composeChecklist:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   const extra=Math.max(0,Math.min(60,Math.floor((H-PAD*2-60-contentHeight)/Math.max(1,items.length))));
   let rings="";
   for(let x=X+70;x<X+W-40;x+=74)rings+=`<rect x="${x}" y="${Y-26}" width="16" height="52" rx="8" fill="${palette.ink}" fill-opacity=".7"/>`;
-  const layers:OverlayOptions[]=[svgLayer(softShadow({x:X,y:Y+10,width:W,height:H,rx:18,blur:16,opacity:.18})+`<rect x="${X}" y="${Y}" width="${W}" height="${H}" rx="18" fill="#fffdf8"/>`+rings)];
+  const layers:OverlayOptions[]=[await cardShadow({x:X,y:Y+10,width:W,height:H,rx:18,blur:16,opacity:.18}),svgLayer(`<rect x="${X}" y="${Y}" width="${W}" height="${H}" rx="18" fill="#fffdf8"/>`+rings)];
   let cursor=Y+PAD+20;
   layers.push({input:headline.data,left:X+PAD,top:cursor});cursor+=headline.info.height+40;
   let boxes="";
@@ -331,7 +394,7 @@ const composeChecklist:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   }
   if(closing)layers.push(...closing.place(540,FOOTER_TOP-foot.extra-30-closing.height));
   layers.push(...foot.layers,await grainLayer());
-  return canvas(palette.paper,layers);
+  return texturedCanvas(palette.paper,layers);
 };
 
 // 16. 타임라인: 위에 머리글·제목, 왼쪽 세로 선 위에 번호 점, 오른쪽에 각 단계. 남는 높이는 단계 사이로 나눈다.
@@ -367,7 +430,7 @@ const composeTimeline:CardRenderer=async(_inputs,slide,index,total,palette)=>{
   // 번호 점(svg)은 숫자 레이어보다 먼저 깔려야 하므로 맨 앞에 넣었다.
   if(closing)layers.push(...closing.place(540,FOOTER_TOP-foot.extra-30-closing.height));
   layers.push(...foot.layers,await grainLayer());
-  return canvas(palette.soft,layers);
+  return texturedCanvas(palette.soft,layers);
 };
 
 // 17. 큰 글자 포스터: 화면을 채우는 큰 제목, 오른쪽 아래 둥근 사진, 왼쪽 아래 요점.
@@ -394,6 +457,8 @@ const composePoster:CardRenderer=async(inputs,slide,index,total,palette)=>{
     {input:headline.data,left:MARGIN,top:titleTop},
     svgLayer(`<path d="M${MARGIN} ${ruleY}H${MARGIN+180}" stroke="${palette.accent}" stroke-width="10"/>`
       +ring({cx:CX,cy:CY,r:D/2+18,color:palette.accent,strokeWidth:4,dashed:true,opacity:.6})+sparkles([[CX-D/2-20,CY-D/2+10,20]],palette.highlight)),
+    // 원형 사진 뒤 두 겹 그림자(주변광+주광 두 겹). 원이 종이 위에 "놓인" 두께가 생긴다.
+    await cardShadow({x:CX-D/2,y:CY-D/2+14,width:D,height:D,rx:D/2,blur:18,opacity:.22}),
     {input:await croppedPhoto(inputs[0],D,D,0,{circle:true}),left:CX-D/2,top:CY-D/2},
   ];
   if(subline)layers.push({input:subline.data,left:MARGIN,top:ruleY+28});
@@ -401,7 +466,7 @@ const composePoster:CardRenderer=async(inputs,slide,index,total,palette)=>{
   if(points){const placed=await pointLayers(lines,closingTop-(closing?30:0)-points.bottom,{width:COL,color:ink,markerColor:palette.accent,size:POINT});layers.push(...placed.layers);}
   if(closing)layers.push(...closing.place(MARGIN+COL/2,closingTop));
   layers.push(...foot.layers,await grainLayer());
-  return canvas(palette.paper,layers);
+  return texturedCanvas(palette.paper,layers);
 };
 
 // 18. 원형 사진: 가운데 큰 원형 사진(점선 고리), 아래 가운데 정렬 제목과 요점.
@@ -423,8 +488,8 @@ const composeCircle:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const D=2*Math.round(Math.max(closing?320:400,Math.min(660,bottom-TOP-50-textHeight))/2);
   const cx=540,cy=TOP+D/2;
   const layers:OverlayOptions[]=[
-    svgLayer(ring({cx,cy,r:D/2+22,color:palette.accent,strokeWidth:4,dashed:true,opacity:.5})+sparkles([[cx+D/2+10,cy-D/2+30,20],[cx-D/2-14,cy+D/2-40,13]],palette.accent)
-      +softShadow({x:cx-D/2,y:cy-D/2+14,width:D,height:D,rx:D/2,blur:18,opacity:.2})),
+    svgLayer(ring({cx,cy,r:D/2+22,color:palette.accent,strokeWidth:4,dashed:true,opacity:.5})+sparkles([[cx+D/2+10,cy-D/2+30,20],[cx-D/2-14,cy+D/2-40,13]],palette.accent)),
+    await cardShadow({x:cx-D/2,y:cy-D/2+14,width:D,height:D,rx:D/2,blur:18,opacity:.22}),
     {input:await croppedPhoto(inputs[0],D,D,0,{circle:true}),left:cx-D/2,top:TOP},
     {input:headline.data,left:Math.round((1080-headline.info.width)/2),top:TOP+D+50},
   ];
@@ -433,7 +498,7 @@ const composeCircle:CardRenderer=async(inputs,slide,index,total,palette)=>{
   if(lines.length){const points=await pointLayers(lines,cursor+30,{align:"centre",color:ink,markerColor:palette.accent,size:POINT});layers.push(...points.layers);}
   if(closing)layers.push(...closing.place(540,FOOTER_TOP-foot.extra-30-closing.height));
   layers.push(...foot.layers,await grainLayer());
-  return canvas(palette.soft,layers);
+  return texturedCanvas(palette.soft,layers);
 };
 
 export const EXTRA_RENDERERS={

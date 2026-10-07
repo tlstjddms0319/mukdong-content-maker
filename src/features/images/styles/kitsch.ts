@@ -1,6 +1,8 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { croppedPhoto, svgLayer, textLayer, type CardRenderer, brandHandle, brandName, type Font, type Layer, type TextEmphasis } from "../render/primitives";
+import { croppedPhoto, currentTone, svgLayer, textLayer, type CardRenderer, brandHandle, brandName, type Font, type Layer, type TextEmphasis } from "../render/primitives";
+import { contactShadow, mascotLayer } from "../decor";
 import { registerPhoto } from "../render/audit";
+import { seeded } from "./handDrawn";
 import { STYLE_FONTS, chooseTitleLayout, closingBlock, contentOf, cutoutPhoto, emphasisOf, fitOutlined, fitText, nextCue, rotated , snap, stickerize } from "./shared";
 
 // B급 감성·하이퍼 키치: 그림판 무지개 그라데이션 바탕, 빨강·노랑 외곽선 글자가 화면을 꽉 채우고,
@@ -18,9 +20,22 @@ function rainbow(angle:number):string {
   return `<defs><linearGradient id="rb" gradientTransform="rotate(${angle} .5 .5)">${stops}</linearGradient></defs><rect width="1080" height="1350" fill="url(#rb)"/>`;
 }
 // 톱니 별 딱지(가장자리가 뾰족한 폭발 모양).
-function burst(cx:number,cy:number,rx:number,ry:number,fill:string,teeth=22):string {
+// angle: 안의 외침 글자와 같은 각도로 돌린다(예전엔 글자만 기울고 톱니는 똑바로 서 있어 따로 노는 스티커처럼 보였다).
+function burst(cx:number,cy:number,rx:number,ry:number,fill:string,angle=0,teeth=22):string {
   const points=Array.from({length:teeth*2},(_,i)=>{const a=(Math.PI*i)/teeth,k=i%2?.74:1;return `${Math.round(cx+Math.cos(a)*rx*k)},${Math.round(cy+Math.sin(a)*ry*k)}`;}).join(" ");
-  return `<polygon points="${points}" fill="${fill}" stroke="#111" stroke-width="6" stroke-linejoin="round"/>`;
+  return `<polygon points="${points}" fill="${fill}" stroke="#111" stroke-width="6" stroke-linejoin="round" transform="rotate(${angle} ${cx} ${cy})"/>`;
+}
+// 사진 뒤 햇살: 따뜻한 세 색(노랑·주황·다홍) 부채꼴을 번갈아 돌리고, 바깥은 원형 그라데이션 마스크로 녹여 무지개 바탕과 섞이게 한다.
+// "짜잔!" 하고 음식을 내미는 B급 광고 문법. 사진 뒤에만 깔리므로 글자 대비에는 닿지 않는다.
+function sunburst(cx:number,cy:number,r:number):string {
+  const colors=["#FFE600","#FF8A00","#FF3D2E"],N=24;
+  let rays="";
+  for(let i=0;i<N;i++){
+    const a0=(Math.PI*2*i)/N,a1=(Math.PI*2*(i+1))/N;
+    rays+=`<path d="M${cx} ${cy}L${Math.round(cx+Math.cos(a0)*r)} ${Math.round(cy+Math.sin(a0)*r)}L${Math.round(cx+Math.cos(a1)*r)} ${Math.round(cy+Math.sin(a1)*r)}Z" fill="${colors[i%3]}"/>`;
+  }
+  return `<defs><radialGradient id="sunFade" cx="${cx}" cy="${cy}" r="${r}" gradientUnits="userSpaceOnUse"><stop offset=".55" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient><mask id="sunMask"><rect width="1080" height="1350" fill="url(#sunFade)"/></mask></defs>`
+    +`<g mask="url(#sunMask)" opacity=".9">${rays}</g>`;
 }
 // 키치 전용 사진 톤: 무지개 바탕에 지지 않게 채도 1.12, 대비를 살짝(1.05배, −6) 올린다.
 // 선명화는 finishPhoto가 이미 했으므로 다시 걸지 않는다. 알파(누끼 가장자리)는 원본 값을 그대로 다시 써 넣는다.
@@ -46,28 +61,51 @@ async function edgeTouch(cut:{data:Buffer;width:number;height:number}):Promise<n
 }
 // 반짝이 별(네 갈래).
 const twinkle=(x:number,y:number,r:number)=>`<path d="M${x} ${y-r}Q${x} ${y} ${x+r} ${y}Q${x} ${y} ${x} ${y+r}Q${x} ${y} ${x-r} ${y}Q${x} ${y} ${x} ${y-r}Z" fill="#fff"/>`;
+// 반짝이 흩뿌리기: 장마다 자리가 달라지게 seed로 뽑되, 글자가 몰리는 가운데 띠를 피해 좌우 가장자리 띠(폭 150)에만 둔다.
+// 같은 장은 늘 같은 자리(같은 입력 → 같은 그림).
+function twinkles(seed:number,count:number):string {
+  const rand=seeded(seed);
+  return Array.from({length:count},(_,i)=>{
+    const x=Math.round(i%2?930+rand()*110:40+rand()*110),y=Math.round(220+rand()*940),r=Math.round(14+rand()*22);
+    return twinkle(x,y,r);
+  }).join("");
+}
 
 // 외곽선 제목 + 핵심어 강조. 공용 fitOutlined는 강조를 받지 않아 같은 방식(16방향 외곽선 + 그림자)으로 여기서 그린다.
 // 맨 위 채움 글자에만 강조색을 넣는다(외곽선·그림자는 한 색이라 강조어도 같은 빨간 테두리를 두른다).
 const KITSCH_EMPH="#7CF6FF"; // 하늘색: 빨간 외곽선(#E8001C) 대비 3.8:1, 노랑·흰 채움과도 색이 확 갈린다.
+// 돌출 그림자(extrude): 외곽선까지 합친 글자 실루엣을 검은색으로 오른쪽 아래 1px씩 EXTRUDE번 겹쳐 찍어 두께를 만든다.
+// 예전 "한 번 밀어 찍은 그림자"보다 글자가 화면에서 튀어나온 블록처럼 보인다. 실루엣은 외곽선 버퍼를 한 번 합친 것이라
+// 겹쳐 찍어도 합성은 8번뿐이다. 맨 위 채움 글자는 textLayer(Pango) 버퍼 그대로 얹어 검수가 글자를 본다.
+const EXTRUDE=8;
 async function shoutTitle(value:string,options:{sizes:number[];maxHeight:number;width:number;font:Font;fill:string;stroke:string;strokeWidth:number;shadow:string;emphasis?:TextEmphasis}):Promise<Layer> {
-  const s=options.strokeWidth,shadowOffset=Math.round(s*1.6);
+  const s=options.strokeWidth,shadowOffset=EXTRUDE;
   const layout=await chooseTitleLayout(value,{sizes:options.sizes,width:options.width,maxHeight:options.maxHeight-s*2-shadowOffset,font:options.font,align:"centre",spacing:size=>Math.round(size*.1)});
   const style={size:layout.size,width:layout.width,height:4000,font:options.font,align:"centre" as const,spacing:Math.round(layout.size*.1)};
   const fill=await textLayer(layout.text,{...style,color:options.fill,emphasis:options.emphasis});
   const stroke=await textLayer(layout.text,{...style,color:options.stroke});
-  const shade=await textLayer(layout.text,{...style,color:options.shadow});
   const ring=Array.from({length:16},(_,i)=>{const a=(Math.PI*2*i)/16;return [Math.round(Math.cos(a)*s),Math.round(Math.sin(a)*s)];});
+  const W=fill.info.width+s*2,H=fill.info.height+s*2;
+  // 외곽선 실루엣(16방향으로 찍은 테두리)을 한 버퍼로 합친다.
+  const outline=await sharp({create:{width:W,height:H,channels:4,background:{r:0,g:0,b:0,alpha:0}}})
+    .composite(ring.map(([dx,dy])=>({input:stroke.data,left:s+dx,top:s+dy}))).png().toBuffer();
+  const alpha=await sharp(outline).extractChannel(3).toBuffer();
+  const shade=await sharp({create:{width:W,height:H,channels:3,background:options.shadow}}).joinChannel(alpha).png().toBuffer();
   const layers:OverlayOptions[]=[
-    ...ring.map(([dx,dy])=>({input:shade.data,left:s+dx+shadowOffset,top:s+dy+shadowOffset})),
-    ...ring.map(([dx,dy])=>({input:stroke.data,left:s+dx,top:s+dy})),
+    ...Array.from({length:shadowOffset},(_,i)=>({input:shade,left:shadowOffset-i,top:shadowOffset-i})),
+    {input:outline,left:0,top:0},
     {input:fill.data,left:s,top:s},
   ];
-  return sharp({create:{width:fill.info.width+s*2+shadowOffset,height:fill.info.height+s*2+shadowOffset,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).composite(layers).png().toBuffer({resolveWithObject:true});
+  return sharp({create:{width:W+shadowOffset,height:H+shadowOffset,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).composite(layers).png().toBuffer({resolveWithObject:true});
 }
 // 전광판(LED) 판: 검은 둥근 판 둘레에 노란 전구 점을 일정 간격으로 찍는다. 부제·예고 띠·가게 명함이 같은 판을 쓴다.
 function ledBoard(x:number,y:number,w:number,h:number,bulbs:boolean):string {
-  let svg=`<rect x="${x+6}" y="${y+6}" width="${w}" height="${h}" rx="14" fill="#000" fill-opacity=".55"/><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="#111111" stroke="#FFE600" stroke-width="4"/>`;
+  // 판 면에 옅은 도트 격자(꺼진 LED 알): 검은 판이 그냥 검은 상자가 아니라 전광판으로 읽힌다.
+  // 도트는 아주 옅게(.1) 두어 위에 얹는 도트 글자 대비를 떨어뜨리지 않는다.
+  const id=`led${x}x${y}`;
+  let svg=`<defs><pattern id="${id}" x="${x}" y="${y}" width="9" height="9" patternUnits="userSpaceOnUse"><circle cx="4.5" cy="4.5" r="2" fill="#FFE600" fill-opacity=".1"/></pattern></defs>`
+    +`<rect x="${x+6}" y="${y+6}" width="${w}" height="${h}" rx="14" fill="#000" fill-opacity=".55"/><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="#111111" stroke="#FFE600" stroke-width="4"/>`
+    +`<rect x="${x+4}" y="${y+4}" width="${w-8}" height="${h-8}" rx="11" fill="url(#${id})"/>`;
   if(!bulbs)return svg;
   const step=28,inset=11;
   const nx=Math.max(2,Math.round((w-inset*2)/step)),ny=Math.max(1,Math.round((h-inset*2)/step));
@@ -81,13 +119,16 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
   const v=(index-1+(slide.variant??0));
   const M=50,W=1080-M*2;
   const layers:OverlayOptions[]=[];
-  let deco=rainbow([20,110,160,65][v%4])+[[120,260,26],[960,200,34],[90,980,22],[1000,1080,30],[880,620,18]].map(([x,y,r])=>twinkle(x,y,r)).join("");
+  const calm=currentTone()==="calm";
+  // 절제 변형: 반짝이를 둘만, 사진 뒤 햇살은 생략(무지개 바탕·외침 딱지·외곽선 제목은 계열 정체성이라 그대로).
+  let deco=rainbow([20,110,160,65][v%4])+twinkles(index*13+(slide.variant??0),calm?2:6);
   // 맨 위 외침 딱지.
   const shout=content.cover?COVER_SHOUT:SHOUTS[(index-2+SHOUTS.length)%SHOUTS.length];
   const shoutText=await fitOutlined(shout,{sizes:[56,48,42],maxHeight:150,width:560,font:STYLE_FONTS.heavy,fill:"#FF1F1F",stroke:"#FFFFFF",strokeWidth:5,align:"centre"});
   const bx=content.cover?540:760,by=content.cover?150:140,brx=Math.max(220,shoutText.info.width/2+70),bry=Math.max(100,shoutText.info.height/2+50);
-  deco+=burst(bx+8,by+10,brx,bry,"#111")+burst(bx,by,brx,bry,"#FFE600");
-  const shoutTilt=await rotated(shoutText.data,content.cover?-4:8);
+  const shoutAngle=content.cover?-4:8;
+  deco+=burst(bx+8,by+10,brx,bry,"#111",shoutAngle)+burst(bx,by,brx,bry,"#FFE600",shoutAngle);
+  const shoutTilt=await rotated(shoutText.data,shoutAngle);
   const footerTop=1350-90;
   // 아래 경계(floor): 표지는 예고 띠(전광판 한 줄), 마지막 장은 가게 명함 전광판 몫을 바닥 띠 위에 예약한다.
   // 사진·요점은 이 경계 위에서 끝난다.
@@ -163,10 +204,11 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
       registerPhoto(tilt.data);
       // 칸 가운데에 둔다(스티커가 칸보다 작을 때 위아래 빈 띠가 한쪽에 몰리지 않게).
       const top=Math.round(slotTop+Math.max(0,(slotBottom-slotTop-tilt.info.height)/2));
+      if(!calm)deco+=sunburst(540,top+tilt.info.height/2,Math.max(tilt.info.width,tilt.info.height)*.68);
       layers.push({input:tilt.data,left:Math.round((1080-tilt.info.width)/2),top});
       y=top+tilt.info.height;
     }else{
-      let photoBottom=y;
+      let photoBottom=y,rowWidth=0;
       const PH=Math.round(Math.max(closing?220:300,Math.min(560,avail))),PW=shots.length>1?440:Math.round(PH*1.25);
       for(const [i,shot] of shots.entries()){
         const photo=await kitschTone(await croppedPhoto(shot,PW,PH,0));
@@ -184,11 +226,25 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
         const left=shots.length>1?(i?1080-M-tilt.info.width+10:M-10):Math.round((1080-tilt.info.width)/2);
         layers.push({input:tilt.data,left,top:y+(i?30:0)});
         photoBottom=Math.max(photoBottom,y+(i?30:0)+tilt.info.height);
+        rowWidth=shots.length>1?1080-M*2:tilt.info.width;
       }
+      // 햇살은 액자(한 장이면 그 가운데, 두 장이면 두 장 사이) 뒤에 깐다.
+      if(!calm)deco+=sunburst(540,(y+photoBottom)/2,Math.max(rowWidth,photoBottom-y)*.62);
       y=photoBottom;
     }
   }
-  let py=hasPhoto?Math.max(y,floor-boxesH-10):Math.max(y+20,Math.round((y+floor-boxesH)/2));
+  // 글자 장에 요점을 다 놓고도 260px 넘게 비면 홍어 마스코트(가리키는 포즈, 없으면 인사 포즈)를 요점 아래 오른쪽에 세운다.
+  // 요점 덩어리와 마스코트를 한 묶음으로 보고 세로 가운데에 둔다. 마스코트는 남는 높이에 맞춰 줄고, 200px도 안 되면 뺀다.
+  const free=hasPhoto?0:floor-y-20-boxesH;
+  const mascot=free>260?await mascotLayer({width:300,pose:"point",left:1080-M-20,top:0,anchor:"top-right",maxHeight:free-24,minHeight:200}):null;
+  const blockH=boxesH+(mascot?mascot.height+8:0);
+  let py=hasPhoto?Math.max(y,floor-boxesH-10):Math.max(y+20,Math.round((y+floor-blockH)/2));
+  if(mascot){
+    const top=py+boxesH+8;
+    // 발밑 접촉 그림자로 마스코트가 바탕 위에 "서 있게" 한다(바탕이라 deco에 깔린다).
+    deco+=contactShadow({cx:mascot.left+mascot.width/2,cy:top+mascot.height-10,rx:mascot.width*.36,opacity:.35});
+    layers.push({...mascot,top});
+  }
   for(const [i,box] of boxes.entries()){
     // 상자는 번갈아 80px씩만 들여 써서 지그재그 느낌은 살리되 읽는 흐름은 왼쪽에서 오른쪽으로 이어지게 한다.
     const w=box.info.width+44,h=box.info.height+28,x=i%2?Math.min(1080-M-w,M+80):M;

@@ -1,5 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { brandName, finishPhoto, svgLayer, textLayer, type CardRenderer, type Font, type Layer } from "../render/primitives";
+import { brandName, currentTone, finishPhoto, svgLayer, textLayer, type CardRenderer, type Font, type Layer } from "../render/primitives";
+import { cachedLayer, innerShadow, shadowLayer, textureLayer } from "../decor";
 import { registerPhoto, registerText } from "../render/audit";
 import { HANDWRITING_MIN_SIZE, MIN_STROKE, STYLE_FONTS, closingBlock, contentOf, emphasisOf, fitText, nextCue, rotated, snap } from "./shared";
 import { handArrow, handStar, seeded, squiggle, wobblyLine } from "./handDrawn";
@@ -12,18 +13,84 @@ const BOARD="#1F2B25",CHALK="#F3F0E6",DIM="#B9B8AE";
 const BRICK="#B5472F";
 const COLORS=["#F6E27A","#F4A9BC","#9DD4EA","#B8E39A"];
 
-// 칠판 면: 분필 가루(옅은 흰 얼룩)와 지우개 자국, 나무 액자(결 무늬)와 안쪽 그늘.
-function board(seed:number):string {
-  const rand=seeded(seed);
-  let smudges="";
-  for(let i=0;i<7;i++)smudges+=`<ellipse cx="${100+rand()*880}" cy="${120+rand()*1110}" rx="${120+rand()*200}" ry="${30+rand()*60}" fill="#FFFFFF" opacity="${.025+rand()*.03}" transform="rotate(${(rand()-.5)*30} 540 675)"/>`;
-  let grain="";
-  // 나무결: 1px 선은 폰에서 사라지므로 MIN_STROKE 두께로 5줄만 긋는다.
-  for(let i=0;i<5;i++){const off=6+i*6;grain+=`<path d="M0 ${off}H1080M0 ${1350-off}H1080M${off} 0V1350M${1080-off} 0V1350" stroke="#5C3E24" stroke-width="${MIN_STROKE}" opacity="${.2+rand()*.25}"/>`;}
-  return `<defs><filter id="dust"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="${seed}"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .06 0"/></filter><filter id="sm"><feGaussianBlur stdDeviation="30"/></filter></defs>`
-    +`<rect width="1080" height="1350" filter="url(#dust)"/><g filter="url(#sm)">${smudges}</g>`
-    +`<rect x="0" y="0" width="1080" height="1350" fill="none" stroke="#7A5534" stroke-width="64"/>${grain}`
-    +`<rect x="32" y="32" width="1016" height="1286" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="10"/>`;
+// 칠판 면 + 나무 액자. 한 묶음의 카드는 "같은 칠판"이라 무늬 seed를 장 번호가 아니라 variant로 정하고,
+// 통째로 JPEG 한 장에 구워 cachedLayer에 둔다. 2장째부터는 분필 가루 잡음·번진 얼룩·나무결을 다시 그리지 않는다(장당 1초 남짓 절약).
+const FRAME=38;
+// 부드러운 것(번진 얼룩·안쪽 그늘)은 1/4 크기로 그린 뒤 키운다. 큰 흐림 필터는 librsvg에서 넓이에 비례해
+// 느려(사진 그림자 하나에 600ms 남짓) 4배 줄이면 16배 빨라지고, 원래 흐린 그림이라 키워도 차이가 안 보인다.
+const LOW=4;
+async function lowRes(body:string):Promise<Buffer> {
+  const w=1080/LOW,h=Math.ceil(1350/LOW);
+  const small=Buffer.from(`<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg"><g transform="scale(${1/LOW})">${body}</g></svg>`);
+  return sharp(await sharp(small).png().toBuffer()).resize(1080,1350,{fit:"fill"}).png().toBuffer();
+}
+async function boardLayer(seed:number):Promise<Buffer> {
+  return cachedLayer(`chalkboard-board:${seed}`,async()=>{
+    const rand=seeded(seed);
+    let smudges="";
+    for(let i=0;i<7;i++)smudges+=`<ellipse cx="${100+rand()*880}" cy="${120+rand()*1110}" rx="${120+rand()*200}" ry="${30+rand()*60}" fill="#FFFFFF" opacity="${.025+rand()*.03}" transform="rotate(${(rand()-.5)*30} 540 675)"/>`;
+    // 분필 가루 잡음은 알갱이가 고와서 원래 크기로, 번진 얼룩은 1/4 크기로 그린다.
+    const face=`<defs><filter id="dust"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="${seed}"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .06 0"/></filter></defs>`
+      +`<rect width="1080" height="1350" filter="url(#dust)"/>`;
+    const layers:OverlayOptions[]=[svgLayer(face),{input:await lowRes(`<defs><filter id="sm"><feGaussianBlur stdDeviation="30"/></filter></defs><g filter="url(#sm)">${smudges}</g>`),left:0,top:0}];
+    // 분필 가루 질감(검은 바탕 + 밝은 가루)을 screen으로 옅게: 지우개로 문지른 뒤 남은 뿌연 자국.
+    const dust=await textureLayer("chalkdust",{opacity:.22,blend:"screen",left:FRAME,top:FRAME,width:1080-FRAME*2,height:1350-FRAME*2});
+    if(dust)layers.push(dust);
+    // 액자 안쪽 그늘: 칠판 면이 나무 틀보다 한 단 들어가 있어 틀 안쪽 가장자리에 그늘이 진다(위쪽이 조금 더 진하다).
+    layers.push({input:await lowRes(innerShadow({x:FRAME,y:FRAME,width:1080-FRAME*2,height:1350-FRAME*2,blur:14,opacity:.6,dy:6})),left:0,top:0});
+    layers.push(...await frameLayers(seed));
+    return sharp({create:{width:1080,height:1350,channels:3,background:BOARD}}).composite(layers).jpeg({quality:90}).toBuffer();
+  });
+}
+// 나무 액자: 위·아래·왼쪽·오른쪽 네 쪽을 45° 사다리꼴로 잘라 모서리에서 사선으로 맞붙인다(진짜 액자 이음).
+// 결은 쪽마다 길이 방향: 위·아래는 가로결, 왼쪽·오른쪽은 가로결을 90° 돌려 세로결. 나무 질감 자산(wood.webp)이 있으면
+// 그것을 쪽 모양으로 잘라 쓰고, 없으면 SVG로 늘린 잡음(가로로 길게 늘인 feTurbulence) 결을 그린다.
+// 그 위에 베벨(바깥 위·왼쪽 밝은 띠, 안쪽 아래·오른쪽 어두운 띠)과 이음선을 얹어 두께를 낸다.
+async function frameLayers(seed:number):Promise<OverlayOptions[]> {
+  const F=FRAME,W=1080,H=1350;
+  const sides={
+    top:`M0 0H${W}L${W-F} ${F}H${F}Z`,
+    bottom:`M0 ${H}H${W}L${W-F} ${H-F}H${F}Z`,
+    left:`M0 0L${F} ${F}V${H-F}L0 ${H}Z`,
+    right:`M${W} 0L${W-F} ${F}V${H-F}L${W} ${H}Z`,
+  };
+  const mask=(d:string,w:number,h:number,dx=0,dy=0)=>Buffer.from(`<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg"><path d="${d}" transform="translate(${-dx} ${-dy})" fill="#fff"/></svg>`);
+  const wood=await textureLayer("wood",{opacity:1,blend:"over"});
+  const layers:OverlayOptions[]=[];
+  // 바탕 나무색(조금씩 다른 두 톤: 가로 쪽이 빛을 더 받아 밝다).
+  let base=`<path d="${sides.top}" fill="#80593A"/><path d="${sides.bottom}" fill="#6E4C30"/><path d="${sides.left}" fill="#76532F"/><path d="${sides.right}" fill="#6A482C"/>`;
+  if(!wood){
+    // 폴백 결: 가로로 길게 늘인 잡음(baseFrequency x는 작게, y는 크게)을 쪽 모양으로 잘라 multiply. 세로 쪽은 같은 필터를 90° 돌린다.
+    const grain=(id:string,fx:number,fy:number)=>`<filter id="${id}" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="${fx} ${fy}" numOctaves="3" seed="${seed}"/><feColorMatrix values="0 0 0 0 .2  0 0 0 0 .12  0 0 0 0 .05  0 0 0 1.4 -.45"/></filter>`;
+    base+=`<defs>${grain("gh",.004,.32)}${grain("gv",.32,.004)}<clipPath id="ch"><path d="${sides.top}"/><path d="${sides.bottom}"/></clipPath><clipPath id="cv"><path d="${sides.left}"/><path d="${sides.right}"/></clipPath></defs>`
+      +`<g clip-path="url(#ch)"><rect width="${W}" height="${F}" filter="url(#gh)"/><rect y="${H-F}" width="${W}" height="${F}" filter="url(#gh)"/></g>`
+      +`<g clip-path="url(#cv)"><rect width="${F}" height="${H}" filter="url(#gv)"/><rect x="${W-F}" width="${F}" height="${H}" filter="url(#gv)"/></g>`;
+  }
+  layers.push(svgLayer(base));
+  if(wood){
+    // 질감 자산은 가로결이라 위·아래는 띠를 잘라 그대로, 왼쪽·오른쪽은 띠를 90° 돌려 붙인다. 돌린 띠도 캐시한다.
+    const source=wood.input as Buffer;
+    const strip=async(top:number,length:number)=>sharp(source).resize(1080,1350,{fit:"cover"}).extract({left:0,top,width:Math.min(1080,length),height:F}).png().toBuffer();
+    const vertical=await cachedLayer(`chalkboard-wood-v:${F}`,async()=>{
+      const long=await sharp(source).resize(H,Math.round(H*1350/1080),{fit:"cover"}).extract({left:0,top:200,width:H,height:F}).png().toBuffer();
+      return sharp(long).rotate(90).png().toBuffer();
+    });
+    const piece=async(input:Buffer,d:string,left:number,top:number,w:number,h:number)=>({input:await sharp(input).ensureAlpha().composite([{input:mask(d,w,h,left,top),blend:"dest-in"}]).png().toBuffer(),left,top,blend:"multiply" as const});
+    layers.push(
+      await piece(await strip(120,W),sides.top,0,0,W,F),
+      await piece(await strip(700,W),sides.bottom,0,H-F,W,F),
+      await piece(vertical,sides.left,0,0,F,H),
+      await piece(await sharp(vertical).flop().png().toBuffer(),sides.right,W-F,0,F,H),
+    );
+  }
+  // 베벨과 45° 이음선. 바깥 가장자리는 밝게, 칠판 쪽 안쪽 가장자리는 어둡게 그어 틀이 둥글게 깎인 것처럼 보이게 한다.
+  layers.push(svgLayer(
+    `<path d="M2 ${H-2}V2H${W-2}" fill="none" stroke="#C99A6B" stroke-opacity=".55" stroke-width="4"/>`
+    +`<path d="M${W-2} 2V${H-2}H2" fill="none" stroke="#2A1A0E" stroke-opacity=".5" stroke-width="4"/>`
+    +`<path d="M${F} ${H-F}V${F}H${W-F}" fill="none" stroke="#2A1A0E" stroke-opacity=".6" stroke-width="5"/>`
+    +`<path d="M${W-F} ${F}V${H-F}H${F}" fill="none" stroke="#C99A6B" stroke-opacity=".35" stroke-width="4"/>`
+    +`<path d="M0 0L${F} ${F}M${W} 0L${W-F} ${F}M0 ${H}L${F} ${H-F}M${W} ${H}L${W-F} ${H-F}" stroke="#2A1A0E" stroke-opacity=".7" stroke-width="${MIN_STROKE}"/>`));
+  return layers;
 }
 // 분필 질감: 글자 레이어에 거친 알갱이 마스크를 곱해(dest-in) 획이 군데군데 긁힌 분필 글씨처럼 만든다.
 // 새 버퍼는 자동 검수가 모르는 버퍼이므로 같은 크기·색·크기 정보로 다시 등록해 넘침·겹침·대비 검사가 이어지게 한다.
@@ -40,13 +107,30 @@ function curl(cx:number,cy:number,r:number,flipX:number,flipY:number):string {
   return `M${p(0)} `+Array.from({length:14},(_,i)=>`L${p((i+1)/14)}`).join(" ");
 }
 
+// 둥근 자석: 아래로 짧은 그늘(종이에 떨어진 그림자) → 색 몸통(위가 밝고 아래가 진한 구) → 왼쪽 위 반사광 두 점.
+// 납작한 원 하나일 때보다 "도톰한 자석이 사진을 누르고 있는" 느낌이 난다.
+function magnetSvg(cx:number,cy:number,color:string):string {
+  return `<defs><radialGradient id="mg" cx="38%" cy="32%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".35"/></radialGradient>`
+    +`<filter id="ms" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter></defs>`
+    +`<ellipse cx="${cx+3}" cy="${cy+6}" rx="20" ry="17" fill="#000" opacity=".35" filter="url(#ms)"/>`
+    +`<circle cx="${cx}" cy="${cy}" r="20" fill="${color}"/><circle cx="${cx}" cy="${cy}" r="20" fill="url(#mg)"/>`
+    +`<ellipse cx="${cx-7}" cy="${cy-8}" rx="6" ry="4" fill="#fff" opacity=".8" transform="rotate(-30 ${cx-7} ${cy-8})"/><circle cx="${cx+8}" cy="${cy+9}" r="2" fill="#fff" opacity=".35"/>`;
+}
+// 기울인 자석 사진 밑 그림자: 사진 틀 크기(회전 전)와 각도를 받아 같은 각도로 돌린 두 겹 그림자(decor softShadow)를 깐다.
+// 칠판에 바짝 붙은 종이라 오프셋은 작게(8px), 진하기는 어두운 칠판 위에서도 보이게 .5.
+async function pinShadow(left:number,top:number,layer:Layer,frameW:number,frameH:number,angle:number):Promise<OverlayOptions> {
+  const cx=left+layer.info.width/2,cy=top+layer.info.height/2;
+  // 공용 shadowLayer: 1/4 크기로 그려 키우고 캐시한다(원래 크기 SVG 흐림은 600ms 남짓).
+  return shadowLayer({x:Math.round(cx-frameW/2),y:Math.round(cy-frameH/2)+8,width:frameW,height:frameH,rx:4,blur:12,opacity:.5,rotate:angle});
+}
+
 // 자석으로 붙인 사진: 흰 테두리 + 기울기 + 위쪽 둥근 자석. 틀이 더하는 높이(PIN_FRAME)는 테두리 2개 + 자석 자리 30.
 const PIN_B=16,PIN_FRAME=PIN_B*2+30;
 async function pinnedPhoto(input:Buffer,width:number,height:number,angle:number,magnet:string):Promise<Layer> {
   const W=Math.round(width),H=Math.round(height),B=PIN_B;
   const photo=await finishPhoto(input,W,H);
   const framed=await sharp({create:{width:W+B*2,height:H+PIN_FRAME,channels:4,background:"#FBFAF6"}})
-    .composite([{input:photo,left:B,top:B},{input:Buffer.from(`<svg width="${W+B*2}" height="${H+PIN_FRAME}" xmlns="http://www.w3.org/2000/svg"><circle cx="${(W+B*2)/2}" cy="14" r="20" fill="${magnet}"/><circle cx="${(W+B*2)/2-6}" cy="8" r="6" fill="#fff" opacity=".6"/></svg>`),left:0,top:0}]).png().toBuffer();
+    .composite([{input:photo,left:B,top:B},{input:Buffer.from(`<svg width="${W+B*2}" height="${H+PIN_FRAME}" xmlns="http://www.w3.org/2000/svg">${magnetSvg((W+B*2)/2,14,magnet)}</svg>`),left:0,top:0}]).png().toBuffer();
   // 기울인 부품(대부분이 사진)을 캔버스에 놓으므로 자동 검수가 사진 면적으로 세도록 등록한다.
   const layer=await rotated(framed,angle);
   registerPhoto(layer.data);
@@ -70,8 +154,12 @@ export const renderChalkboard:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   const rand=seeded(index*31+(slide.variant??0));
   const accent=COLORS[(index-1)%COLORS.length];
+  const calm=currentTone()==="calm";
   const layers:OverlayOptions[]=[];
-  let deco=board(index*17+3);
+  const boardImage=await boardLayer(3+(slide.variant??0)*17);
+  // 칠판 바로 위·글자 아래에 깔 레이어(사진 그림자). 글자 위에 그림자가 덮이지 않게 맨 앞으로 보낸다.
+  const under:OverlayOptions[]=[];
+  let deco="";
   const M=110,W=1080-M*2,footerTop=1350-110;
   // 마지막 장: 아래에 분필 점선으로 두른 가게 명함. 표지: 바닥글 위 예고 줄. 둘 다 높이를 먼저 예약하고(bottom) 사진·요점을 그 위에 맞춘다.
   const closing=content.last?await closingBlock({width:W-80,color:CHALK,accent:BRICK,font:STYLE_FONTS.comic}):null;
@@ -125,8 +213,10 @@ export const renderChalkboard:CardRenderer=async(inputs,slide,index,total)=>{
   const titleLeft=540-title.info.width/2,titleRight=540+title.info.width/2;
   const leftX=Math.max(88,titleLeft-34),rightX=Math.min(992,titleRight+34);
   const leftY=titleLeft-34<88?y-26:y+30,rightY=titleRight+34>992?y+title.info.height+18:y+title.info.height-20;
-  deco+=`<path d="${handStar(leftX,leftY,20,rand)}" fill="none" stroke="${COLORS[(index)%COLORS.length]}" stroke-width="4" stroke-linejoin="round"/>`
+  // 절제 변형은 별을 그리지 않는다(무늬값은 같은 순서로 소비해 아래 손선 모양이 loud와 같게 유지).
+  const stars=`<path d="${handStar(leftX,leftY,20,rand)}" fill="none" stroke="${COLORS[(index)%COLORS.length]}" stroke-width="4" stroke-linejoin="round"/>`
     +`<path d="${handStar(rightX,rightY,17,rand)}" fill="none" stroke="${COLORS[(index+1)%COLORS.length]}" stroke-width="4" stroke-linejoin="round"/>`;
+  if(!calm)deco+=stars;
   y+=title.info.height+16;
   deco+=`<path d="${wobblyLine(540-Math.min(title.info.width,700)/2,y,540+Math.min(title.info.width,700)/2,y+3,rand,3,7)}" stroke="${CHALK}" stroke-width="5" fill="none" stroke-linecap="round" opacity=".75"/>`;
   y+=TITLE_RULE-16;
@@ -134,7 +224,7 @@ export const renderChalkboard:CardRenderer=async(inputs,slide,index,total)=>{
   // 글자 장: 액자 안쪽에 분필로 그은 점선 틀과 네 구석 소용돌이로 메뉴판처럼 꾸민다.
   if(!shots.length)deco+=`<path d="${wobblyLine(72,72,1008,72,rand,2,10)} ${wobblyLine(1008,72,1008,1278,rand,2,12)} ${wobblyLine(1008,1278,72,1278,rand,2,10)} ${wobblyLine(72,1278,72,72,rand,2,12)}" stroke="${CHALK}" stroke-width="3" fill="none" stroke-dasharray="14 10" opacity=".55"/>`
     // 아래 구석 소용돌이는 바닥글·넘겨 보기 줄과 겹치므로 명함이 있는 마지막 장에만 둔다.
-    +[[110,110,1,1],[970,110,-1,1],...(closing?[[110,1240,1,-1],[970,1240,-1,-1]]:[])].map(([x,y,fx,fy])=>`<path d="${curl(x,y,26,fx,fy)}" stroke="${COLORS[(index+x)%COLORS.length]}" stroke-width="4" fill="none" stroke-linecap="round" opacity=".85"/>`).join("");
+    +(calm?[]:[[110,110,1,1],[970,110,-1,1],...(closing?[[110,1240,1,-1],[970,1240,-1,-1]]:[])]).map(([x,y,fx,fy])=>`<path d="${curl(x,y,26,fx,fy)}" stroke="${COLORS[(index+x)%COLORS.length]}" stroke-width="4" fill="none" stroke-linecap="round" opacity=".85"/>`).join("");
   if(shots.length){
     // 사진 높이는 "머리말·제목 아래 ~ 요점 위" 남는 높이에서 역산한다. 기울인 자석 사진의 틀(테두리·자석 자리·회전 여유)을 뺀다.
     const room=bottom-y-(pointsH?pointsH+40:0)-30;
@@ -147,6 +237,10 @@ export const renderChalkboard:CardRenderer=async(inputs,slide,index,total)=>{
       for(const [i,shot] of shots.entries()){
         const pinned=await pinnedPhoto(shot,PW,PH,i?3:-3,COLORS[(index+i)%COLORS.length]);
         const left=i?540-OVERLAP/2:540+OVERLAP/2-pinned.info.width,top=y+(i?DROP:0);
+        // 두 장이 겹치므로 그림자는 사진 레이어 바로 앞에 따로 얹는다(둘째 사진 그림자가 첫째 사진 위에 드리워지게).
+        // 첫째 그림자는 칠판 바로 위(글자 아래)에, 둘째는 첫째 사진 위에 드리워야 하므로 사진 바로 앞에.
+        const shade=await pinShadow(left,top,pinned,PW+PIN_B*2,PH+PIN_FRAME,i?3:-3);
+        if(i)layers.push(shade);else under.push(shade);
         layers.push({input:pinned.data,left,top});
         placed.push({left,top,width:pinned.info.width,height:pinned.info.height});
       }
@@ -167,7 +261,9 @@ export const renderChalkboard:CardRenderer=async(inputs,slide,index,total)=>{
       while(PH>MIN_PH-60&&tiltedH(PH)>fitRoom)PH-=4;
       const PW=widthOf(PH);
       const pinned=await pinnedPhoto(shots[0],PW,PH,angle,COLORS[(index+2)%COLORS.length]);
-      layers.push({input:pinned.data,left:Math.round((1080-pinned.info.width)/2),top:y});
+      const left=Math.round((1080-pinned.info.width)/2);
+      under.push(await pinShadow(left,y,pinned,PW+PIN_B*2,PH+PIN_FRAME,angle));
+      layers.push({input:pinned.data,left,top:y});
       y+=pinned.info.height+20;
     }
   }
@@ -222,6 +318,6 @@ export const renderChalkboard:CardRenderer=async(inputs,slide,index,total)=>{
       layers.push({input:cue.label.data,left:qx,top:qy});
     }
   }
-  layers.unshift(svgLayer(deco));
-  return sharp({create:{width:1080,height:1350,channels:3,background:BOARD}}).composite(snap(layers)).jpeg({quality:92}).toBuffer();
+  layers.unshift(svgLayer(deco),...under);
+  return sharp(boardImage).composite(snap(layers)).jpeg({quality:92}).toBuffer();
 };

@@ -1,6 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { STORE_NAME } from "../slideLayout";
 import { brandName, finishPhoto, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
+import { photoWell as edgeWell } from "../render/extraLayouts";
 import { STYLE_FONTS, brandSeal, closingBlock, contentOf, emphasisOf, fitText, nextCue, snap } from "./shared";
 
 // 모던 그리드(스위스 포스터·바우하우스): 흰 바탕을 굵은 검은 선으로 칸을 나누고 모든 요소를 칸에 꼭 맞춘다.
@@ -30,7 +31,11 @@ const COVER_TITLE_SIZES=[112,100,88,80];
 const cell=(contentHeight:number,pad=PAD)=>contentHeight+pad*2+T;
 const rect=(x:number,y:number,w:number,h:number,fill:string)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/>`;
 // 칸을 가득 채우는 사진. 선 중심에서 선 중심까지 덮게 잘라 두고 선을 그 위에 얹으므로 사진과 선 사이에 틈이 생기지 않는다.
+// 색은 finishPhoto의 음식 보정(선명화)만 거치고 탈채도는 하지 않는다(흰·검정·빨강 격자 안에서 음식 색이 유일한 따뜻한 색).
 const photoCell=(input:Buffer,x0:number,y0:number,x1:number,y1:number):Promise<Buffer>=>finishPhoto(input,x1-x0,y1-y0);
+// 사진 칸 안쪽 가장자리에 아주 얕은 그림자: 굵은 선이 사진을 "누르고" 있는 인쇄면처럼 보이게 한다.
+// 격자 문법(평면·직각)을 깨지 않게 깊이를 얕게(18), 진하기를 낮게(.24) 둔다. 선 안쪽(T/2)부터 깐다. 흰 바탕에는 질감을 넣지 않는다.
+const photoWell=(x0:number,y0:number,x1:number,y1:number)=>edgeWell(x0+T/2,y0+T/2,x1-x0-T,y1-y0-T,{depth:18,opacity:.24});
 
 // 표지 머리 줄 높이와 제목 크기 고르기. 사진 칸(MIN_COVER_PHOTO)을 먼저 떼고 남는 높이가 제목 칸이다.
 // 머리 줄이 큰 것부터 보며 제목이 88px 이상으로 들어가면 그 조합을, 끝까지 안 되면 80px로 들어가는 가장 큰 머리 줄을 쓴다.
@@ -65,7 +70,8 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
   const content=contentOf(slide,inputs,index,total);
   const shots=inputs.slice(0,2);
   // under: 선 아래 깔리는 색면(빨간 네모). over: 사진 위에 얹는 검은 선과 라벨 네모.
-  let under="",over="";
+  // wells: 사진 칸 안쪽 그림자(사진 위, 선 아래).
+  let under="",over="",wells="";
   const photos:OverlayOptions[]=[],texts:OverlayOptions[]=[];
   // 선은 중심 좌표로 그린다. 가로·세로 선이 만나는 자리는 양 끝을 T/2씩 늘려 모서리가 비지 않게 한다.
   const hline=(y:number,x0=X0,x1=X1)=>{over+=rect(x0-T/2,y-T/2,x1-x0+T,T,INK);};
@@ -173,7 +179,7 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
   // ── 가운데: 장 종류에 따라 다르게 ──
   if(content.kind==="cover"){
     // 표지: 제목 아래 남은 칸 전체를 사진이 가득 채운다(제목이 짧을수록 사진이 커진다).
-    photos.push({input:await photoCell(shots[0],X0,yTitle,X1,yBottom),left:X0,top:yTitle});
+    photos.push({input:await photoCell(shots[0],X0,yTitle,X1,yBottom),left:X0,top:yTitle});wells+=photoWell(X0,yTitle,X1,yBottom);
   }else if(content.kind==="text"){
     // 글자만 있는 장: 제목 아래 빨간 가로 막대 하나, 그 아래 요점 행들이 남은 높이를 고르게 나눠 꽉 채운다.
     const points=content.points.slice(0,4);
@@ -217,14 +223,14 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
       vline(xMid,yTitle,yRows);
       for(const [i,shot] of shots.entries()){
         const x0=i?xMid:X0,x1=i?X1:xMid;
-        photos.push({input:await photoCell(shot,x0,yTitle,x1,yRows),left:x0,top:yTitle});
+        photos.push({input:await photoCell(shot,x0,yTitle,x1,yRows),left:x0,top:yTitle});wells+=photoWell(x0,yTitle,x1,yRows);
         const S=72,sx=x0+T/2,sy=yTitle+T/2;
         over+=rect(sx,sy,S,S,RED);
         const label=await textLayer(i?"B":"A",{size:44,color:PAPER,width:S,height:S,font:STYLE_FONTS.mono,align:"centre",spacing:0});
         centre(label,sx,sy,sx+S,sy+S);
       }
     }else{
-      photos.push({input:await photoCell(shots[0],X0,yTitle,X1,yRows),left:X0,top:yTitle});
+      photos.push({input:await photoCell(shots[0],X0,yTitle,X1,yRows),left:X0,top:yTitle});wells+=photoWell(X0,yTitle,X1,yRows);
     }
     if(rows.length)vline(X0+NUM_W,yRows,yBottom);
     let y=yRows;
@@ -243,6 +249,6 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
   put(title,left,titleTop);
   if(subH&&subline)put(subline,left,titleTop+title.info.height+14);
 
-  const layers:OverlayOptions[]=[svgLayer(under),...photos,svgLayer(over),...texts];
+  const layers:OverlayOptions[]=[svgLayer(under),...photos,svgLayer(wells+over),...texts];
   return sharp({create:{width:1080,height:1350,channels:3,background:PAPER}}).composite(snap(layers)).jpeg({quality:92}).toBuffer();
 };
