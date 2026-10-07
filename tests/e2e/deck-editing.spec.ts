@@ -34,5 +34,6 @@ test("removes and adds slides in a finished carousel", async ({ page }) => {
   await expect(thumbList).toHaveCount(start, { timeout: 60_000 });
   await expect(page.getByRole("button", { name: "이 캐러셀 사용" })).toBeEnabled({ timeout: 60_000 });
   await page.getByRole("button", { name: "이 캐러셀 사용" }).click();
-  await expect(page.getByText(`선택한 이미지 ${start}장이 저장되어 있어요.`)).toBeVisible();
+  // 맨 뒤 가게 홍보 카드까지 한 장 더 저장된다.
+  await expect(page.getByText(`선택한 이미지 ${start+1}장이 저장되어 있어요.`)).toBeVisible();
 });

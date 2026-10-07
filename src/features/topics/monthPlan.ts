@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { StoredStyleIdSchema, StyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
 import { TopicSuggestionSchema, type TopicSuggestion } from "./schema";
+import { isOtherMenuTopic } from "./service";
 
 // 한 달 콘텐츠 기획. 한 달 안의 게시일(기본: 매주 화·금)을 정하고, 주마다 그 주 날짜의 시즌을 반영한 추천 주제를
 // 게시일에 나눠 담는다. 주제를 고르는 일(AI·준비된 주제)은 라우트가 하고, 여기는 날짜·배치·계열 순환만 맡는다(순수 함수).
@@ -43,11 +44,17 @@ export function groupByWeek(dates:string[]):string[][] {
 }
 
 // 그 주의 추천 주제 3개 가운데 게시일 수만큼 고른다. 시즌 주제를 먼저, 그다음 홍어를 직접 다루는 주제(셋째 칸), 나머지 순.
+// 두 개 이상 고를 때 모두 홍어회·삼합이면 마지막 하나를 다른 메뉴(과메기·미나리전·막걸리 등) 주제로 바꾼다.
 // 이미 이번 달에 쓴 제목은 건너뛴다.
 export function pickWeekTopics(topics:TopicSuggestion[],count:number,used:Set<string>):TopicSuggestion[] {
   const key=(title:string)=>title.replace(/[\s?!.,]/g,"");
-  const ranked=[...topics].sort((a,b)=>score(b)-score(a));
-  return ranked.filter(topic=>!used.has(key(topic.title))).slice(0,count);
+  const ranked=[...topics].sort((a,b)=>score(b)-score(a)).filter(topic=>!used.has(key(topic.title)));
+  const picked=ranked.slice(0,count);
+  if(picked.length>=2&&!picked.some(isOtherMenuTopic)){
+    const other=ranked.slice(count).find(isOtherMenuTopic);
+    if(other)picked[picked.length-1]=other;
+  }
+  return picked;
   function score(topic:TopicSuggestion){return (topic.season?2:0)+(/홍어|삼합/.test(topic.title)?1:0);}
 }
 

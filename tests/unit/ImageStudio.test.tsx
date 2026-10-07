@@ -7,7 +7,8 @@ const plan={slideCount:3,styleAnchor:"따뜻한 흰 그릇과 나무 테이블�
 describe("ImageStudio carousel",()=>{
   it("uses the clean selected cover as a reference and can replace only one slide",async()=>{
     let slideCalls=0;
-    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:{ok:true,json:async()=>{
+    // 맨 뒤 가게 홍보 카드는 따로 그리므로 장 번호(slide-N)를 세지 않는다.
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/plan"?{ok:true,json:async()=>({plan})}:url==="/api/images/store-card"?{ok:true,json:async()=>({image:"store"})}:{ok:true,json:async()=>{
       const body=JSON.parse(String(init?.body));
       return body.count===2?{images:["cover-1","cover-2"],referenceImages:["clean-cover-1","clean-cover-2"]}:{images:[`slide-${++slideCalls}`]};
     }});
@@ -22,8 +23,8 @@ describe("ImageStudio carousel",()=>{
     fireEvent.click(screen.getByRole("button",{name:"이 장만 다시 만들기"}));
     await waitFor(()=>expect(screen.getByRole("button",{name:"이 캐러셀 사용"})).toBeEnabled());
     fireEvent.click(screen.getByRole("button",{name:"이 캐러셀 사용"}));
-    expect(approve).toHaveBeenCalledWith([expect.objectContaining({preview:"cover-2"}),expect.objectContaining({preview:"slide-3"}),expect.objectContaining({preview:"slide-2"})]);
-    expect(JSON.parse(String(request.mock.calls.at(-1)![1]?.body)).refinement).toBe("빛을 부드럽게 하고 접시 주변 여백을 넓혀 주세요");
+    expect(approve).toHaveBeenCalledWith([expect.objectContaining({preview:"cover-2"}),expect.objectContaining({preview:"slide-3"}),expect.objectContaining({preview:"slide-2"}),expect.objectContaining({preview:"store"})]);
+    expect(JSON.parse(String(request.mock.calls.filter(([url])=>url==="/api/images/generate").at(-1)![1]?.body)).refinement).toBe("빛을 부드럽게 하고 접시 주변 여백을 넓혀 주세요");
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:false,json:async()=>({message:"이미지를 만들 수 없어요."})}));
     fireEvent.click(screen.getByRole("button",{name:"이 장만 다시 만들기"}));
     expect(await screen.findByRole("alert")).toHaveTextContent("이미지를 만들 수 없어요.");
@@ -61,7 +62,7 @@ describe("ImageStudio carousel",()=>{
     await screen.findByRole("button",{name:"이 캐러셀 사용"}); fireEvent.click(screen.getByRole("button",{name:"이 캐러셀 사용"}));
     const bodies=request.mock.calls.map(([,init])=>JSON.parse(String((init as RequestInit).body))).filter((body)=>body.slide);
     expect(JSON.parse(String((request.mock.calls[0][1] as RequestInit).body))).toMatchObject({topic:"새 주제",slideCount:3});
-    expect(bodies).toMatchObject([{count:2,slideIndex:1,slideTotal:3,slide:{role:"cover"}},{count:1,slideIndex:2,slide:{role:"how-to"}},{count:1,slideIndex:3,slide:{role:"visit"}}]);
+    expect(bodies).toMatchObject([{count:2,slideIndex:1,slideTotal:4,storeCard:true,slide:{role:"cover"}},{count:1,slideIndex:2,slide:{role:"how-to"}},{count:1,slideIndex:3,slide:{role:"visit"}}]);
     expect(JSON.stringify(bodies)).not.toContain("홍어 삼합"); expect(approve).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({role:"cover"}),expect.objectContaining({role:"visit"})]));
   });
   it("shows the completed carousel in order before explicit approval",async()=>{

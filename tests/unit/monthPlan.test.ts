@@ -26,6 +26,9 @@ describe("month plan helpers", () => {
     const picked=pickWeekTopics([topic("같은 회인데 왜 다를까?"),topic("홍어는 왜 수육이랑 먹을까?"),topic("김장날엔 왜 수육을 삶을까?","김장철")],2,new Set());
     expect(picked.map(item=>item.title)).toEqual(["김장날엔 왜 수육을 삶을까?","홍어는 왜 수육이랑 먹을까?"]);
     expect(pickWeekTopics([topic("홍어는 왜 수육이랑 먹을까?")],1,new Set(["홍어는왜수육이랑먹을까"]))).toEqual([]);
+    // 두 개를 고를 때 둘 다 홍어회·삼합이면 하나를 다른 메뉴 주제로 바꾼다.
+    const varied=pickWeekTopics([topic("과메기는 왜 찬바람이 불면 찾을까?"),topic("홍어는 왜 수육이랑 먹을까?"),topic("김장날엔 왜 수육을 삶을까?","김장철")],2,new Set());
+    expect(varied.map(item=>item.title)).toEqual(["김장날엔 왜 수육을 삶을까?","과메기는 왜 찬바람이 불면 찾을까?"]);
   });
 
   it("rotates design families without repeating one back to back", () => {

@@ -410,6 +410,47 @@ describe("hongeo stays the hero", () => {
   });
 });
 
+describe("the topic's menu is the hero", () => {
+  const brief=(topic:string,headline?:string,points:string[]=[])=>({topic,count:1,aspectRatio:"4:5" as const,slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 조명",
+    ...(headline?{slide:{role:"detail" as const,subline:"",headline,points,visualPrompt:"접시 위 음식을 낮은 각도에서 가까이",textPosition:"top" as const,layout:"frame" as const,keywords:[],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0}}:{})});
+  it("makes gwamegi the hero of a gwamegi topic and leaves the skate out", () => {
+    const prompt=buildImagePrompt(brief("과메기는 왜 찬바람이 불면 찾을까?"));
+    expect(prompt).toContain("주인공은 과메기다");
+    expect(prompt).toContain("gwamegi");
+    expect(prompt).toContain("Do not add skate slices");
+    expect(prompt).not.toContain("주인공은 홍어");
+    expect(prompt).not.toContain("The fermented skate is the hero");
+    expect(prompt).not.toContain("통째 생선으로 그리지 않는다");
+    expect(prompt).not.toContain("Skate texture:");
+  });
+  it("follows the slide copy: a minari-jeon slide in a makgeolli topic shows the pancake", () => {
+    const prompt=buildImagePrompt(brief("막걸리 한 잔엔 어떤 안주가 어울릴까?","미나리전 한 장을 곁들여요",["노릇한 반죽 사이로 미나리가 보여요"]));
+    expect(prompt).toContain("주인공은 미나리전이다");
+    expect(prompt).toContain("minari-jeon");
+    expect(prompt).toContain("미나리전이 보이는 모습");
+    expect(prompt).not.toContain("The fermented skate is the hero");
+  });
+  it("draws hongeo aetang as a hot soup, not sliced sashimi", () => {
+    const prompt=buildImagePrompt(brief("홍어애탕은 어떤 국물일까?"));
+    expect(prompt).toContain("홍어애탕 장면은 뚝배기");
+    expect(prompt).toContain("주인공은 홍어애탕이다");
+    expect(prompt).not.toContain("Show the skate only as sliced pieces");
+    expect(prompt).not.toContain("숙성 홍어 날개 살을 얇고 불규칙하게");
+    expect(prompt).not.toContain("Skate texture:");
+  });
+  it("keeps the skate combinations out of a gwamegi slide's must-show line", () => {
+    const prompt=buildImagePrompt(brief("과메기는 왜 찬바람이 불면 찾을까?","과메기 한 점을 김치에 올려 싸요",["막걸리 한 잔을 곁들여요"]));
+    expect(prompt).toContain("과메기가 보이는 모습");
+    expect(prompt).toContain("bowl of milky makgeolli");
+    expect(prompt).not.toContain("a skate slice wrapped");
+  });
+  it("does not pull boiled pork and kimchi into a plain hongeo scene", () => {
+    const prompt=buildImagePrompt(brief("홍어의 톡 쏘는 향은 어디서 올까?"));
+    expect(prompt).toContain("주인공은 홍어");
+    expect(prompt).toContain("장면 설명에 없는 수육·묵은지를 새로 넣지 않는다");
+  });
+});
+
 describe("appetizing photo direction (A9)", () => {
   const brief={topic:"홍어회",count:1,aspectRatio:"4:5" as const,slideIndex:1,slideTotal:5,styleAnchor:"따뜻한 색온도"};
   it("asks for glossy texture, warm side light, Korean props only, at a sane length", () => {

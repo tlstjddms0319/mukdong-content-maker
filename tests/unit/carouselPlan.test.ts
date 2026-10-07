@@ -128,12 +128,13 @@ describe("carousel planning", () => {
     expect(prompt).toContain("기존 이미지 설명: 없음");
     expect(prompt).toContain("가격, 원산지, 영업시간, 매장 정보");
     expect(prompt).toContain("음식 사진 장면");
-    // 장면 설명을 쓸 때 홍어가 주인공이고 수육·묵은지는 조연이라는 규칙이 들어간다.
-    expect(prompt).toContain("홍어가 주인공입니다");
+    // 홍어 주제면 장면·글 모두 홍어가 주인공이고, 다른 음식은 글이 말할 때만 조연으로 쓴다.
+    expect(prompt).toContain("주제의 메뉴(홍어)가 주인공입니다");
     expect(prompt).toContain("조연");
-    // 글에서도 홍어가 문장을 이끌고, 비교 장은 사진에서 보이는 차이만 쓴다.
-    expect(prompt).toContain("[홍어 중심]");
-    expect(prompt).toContain("수육이나 묵은지로 시작하는 요점");
+    expect(prompt).toContain("[주인공 메뉴: 홍어]");
+    expect(prompt).toContain("곁들임으로 시작하는 요점");
+    // 주제에 삼합이 없으면 삼합 구성을 끌어오지 않는다.
+    expect(prompt).toContain("이 주제에는 삼합이 없으니 수육·묵은지·삼합을 꺼내지 마세요");
     expect(prompt).toContain("[비교 장]");
     expect(prompt).toContain("코 모양, 몸 전체 생김새처럼 썬 회 사진에 나오지 않는 차이는 쓰지 마세요");
   });
@@ -190,6 +191,45 @@ describe("carousel planning", () => {
     expect(createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:3}).styleAnchor).toContain("실제 음식 사진 질감");
   });
 
+});
+
+describe("the topic's menu is the hero", () => {
+  it("makes gwamegi the hero of a gwamegi topic without pulling in hongeo or samhap", () => {
+    const prompt=buildCarouselPlanPrompt({topic:"과메기는 왜 찬바람이 불면 찾을까?",slideCount:5});
+    expect(prompt).toContain("[주인공 메뉴: 과메기]");
+    expect(prompt).toContain("주제의 메뉴(과메기)가 주인공입니다");
+    expect(prompt).toContain("홍어·삼합을 억지로 끌어오지 마세요");
+    expect(prompt).toContain("수육·묵은지·삼합을 꺼내지 마세요");
+    expect(prompt).not.toContain("[주인공 메뉴: 홍어]");
+    expect(prompt).not.toContain("묵은지에 싼 홍어 한 점");
+  });
+
+  it("keeps samhap only when the topic asks for it", () => {
+    const prompt=buildCarouselPlanPrompt({topic:"홍어는 왜 수육이랑 먹을까?",slideCount:5});
+    expect(prompt).toContain("[주인공 메뉴: 홍어]");
+    expect(prompt).not.toContain("이 주제에는 삼합이 없으니");
+  });
+
+  it("writes the fallback copy, scenes and keywords around the topic's menu", () => {
+    const plan=createFallbackCarouselPlan({topic:"미나리전엔 왜 막걸리가 생각날까?",slideCount:7});
+    const scenes=plan.slides.map(slide=>slide.visualPrompt).join(" ");
+    expect(scenes).toContain("미나리전");
+    expect(scenes).not.toMatch(/홍어|수육|묵은지/);
+    expect(plan.slides[0].keywords).toContain("미나리전");
+    expect(plan.slides.map(slide=>[slide.headline,...slide.points].join(" ")).join(" ")).not.toMatch(/홍어|삼합/);
+    // 홍어 주제의 준비된 구성안도 삼합(수육·묵은지)을 기본으로 끌어오지 않는다.
+    const hongeo=createFallbackCarouselPlan({topic:"홍어의 톡 쏘는 향은 어디서 올까?",slideCount:10});
+    expect(hongeo.slides.map(slide=>slide.visualPrompt).join(" ")).not.toMatch(/수육|묵은지|삼합/);
+    expect(hongeo.slides[0].keywords).toContain("홍어");
+  });
+
+  it("rebuilds a scene from the copy around the topic's menu", () => {
+    const base=createFallbackCarouselPlan({topic:"과메기는 왜 찬바람이 불면 찾을까?",slideCount:3});
+    const slide={...base.slides[1],headline:"과메기 한 점에 막걸리 한 잔 곁들여요",points:["사발에 막걸리를 따라요"]};
+    const limited=limitChopstickScenes({...base,slides:[base.slides[0],{...slide,visualPrompt:"젓가락으로 과메기를 집어 든 손"},{...slide,visualPrompt:"젓가락으로 과메기 한 점을 집어 든 손"}]},"과메기는 왜 찬바람이 불면 찾을까?");
+    expect(limited.slides[2].visualPrompt).toContain("과메기 접시 옆 사발에 막걸리를 따르는 순간");
+    expect(limited.slides[2].visualPrompt).not.toContain("홍어");
+  });
 });
 
 describe("chopstick scenes", () => {

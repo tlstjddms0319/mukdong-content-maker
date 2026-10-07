@@ -43,6 +43,8 @@ test("creates, saves, previews, and exports a five-slide carousel without live p
     const slideIndex = Number(request.slideIndex);
     await route.fulfill({ json: { images: count === 2 ? [dataUrl(1), dataUrl(2)] : [dataUrl(slideIndex + 10)], source:"ai-generated" } });
   });
+  // 맨 뒤 가게 홍보 카드(무료 렌더)도 고정 이미지로 돌려준다.
+  await page.route("**/api/images/store-card", route => route.fulfill({ json: { image:dataUrl(99) } }));
   await page.route("**/api/drafts", async route => {
     if (route.request().method() === "POST") draftRequests.push(route.request().postDataJSON() as Record<string, unknown>);
     await route.fulfill({ json: { saved:true } });
@@ -114,16 +116,17 @@ test("creates, saves, previews, and exports a five-slide carousel without live p
   await page.screenshot({ path:testInfo.outputPath(`${testInfo.project.name}-generated-carousel.png`), fullPage:true });
 
   await page.getByRole("button", { name:"이 캐러셀 사용" }).click();
-  await expect(page.getByText("이미지 5장을 저장했어요.")).toBeVisible();
+  // 내용 5장 + 맨 뒤 가게 홍보 카드 1장.
+  await expect(page.getByText("이미지 6장을 저장했어요.")).toBeVisible();
   expect(draftRequests).toHaveLength(1);
   expect(draftRequests[0].image_brief).toBe(imageBrief);
   expect(draftRequests[0].content_brief).toBe(contentBrief);
   const saved = draftRequests[0] as { media_candidates:Array<{ id:string; purpose:string; file_id:string }>; selected_media_ids:string[]; selected_media_id:string };
-  expect(saved.media_candidates).toHaveLength(5);
+  expect(saved.media_candidates).toHaveLength(6);
   expect(saved.selected_media_ids).toEqual(saved.media_candidates.map(media => media.id));
   expect(saved.selected_media_id).toBe(saved.selected_media_ids[0]);
-  expect(saved.media_candidates.map(media => media.purpose)).toEqual(roles.map(role => `instagram-${role}`));
-  expect(saved.media_candidates.map(media => media.file_id)).toEqual(expectedSlides);
+  expect(saved.media_candidates.map(media => media.purpose)).toEqual([...roles.map(role => `instagram-${role}`), "instagram-slide"]);
+  expect(saved.media_candidates.map(media => media.file_id)).toEqual([...expectedSlides, dataUrl(99)]);
 
   await page.getByRole("button", { name:"문안 만들기" }).click();
   await expect(page.getByLabel("게시물 문안")).toHaveValue(/AI 연출 이미지/);
@@ -132,11 +135,11 @@ test("creates, saves, previews, and exports a five-slide carousel without live p
   await page.screenshot({path:testInfo.outputPath(`${testInfo.project.name}-copy-quality.png`),fullPage:true});
   await page.getByRole("button", { name:"최종 화면 보기" }).click();
   await expect(page.getByText("게시하기 전에")).toBeVisible();
-  await expect(page.getByText("1 / 5")).toBeVisible();
-  await expect(page.getByRole("button", { name:/슬라이드 [1-5] 보기/ })).toHaveCount(5);
+  await expect(page.getByText("1 / 6")).toBeVisible();
+  await expect(page.getByRole("button", { name:/슬라이드 [1-6] 보기/ })).toHaveCount(6);
   await expect(page.getByLabel("피드 대표 이미지")).toHaveCSS("background-image", new RegExp(dataUrl(2).replace(/[+?^${}()|[\]\\]/g, "\\$&")));
-  await page.getByRole("button", { name:"슬라이드 5 보기" }).click();
-  await expect(page.getByText("5 / 5")).toBeVisible();
+  await page.getByRole("button", { name:"슬라이드 6 보기" }).click();
+  await expect(page.getByText("6 / 6")).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name:"전체 묶음 받기" }).click();

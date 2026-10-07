@@ -2,7 +2,7 @@
 import { useId, useRef, useState } from "react";
 import Image from "next/image";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH } from "@/features/images/carousel";
-import { MAX_DECK_SLIDES, activeSlideIndex, addSlide, removeSlide, slideTextProblem, uploadSlidePhoto, type GenerationState, type NewSlideSource, type StudioPhoto } from "@/features/images/generationStore";
+import { MAX_DECK_SLIDES, activeSlideIndex, addSlide, removeSlide, setStoreCardIncluded, slideTextProblem, storeCardOn, uploadSlidePhoto, type GenerationState, type NewSlideSource, type StudioPhoto } from "@/features/images/generationStore";
 
 // "장 고치기": 완성된 캐러셀(또는 저장된 초안을 다시 연 것)에서 장을 빼거나 새 장을 끼워 넣는다.
 // AI 캐러셀과 실제 사진 캐러셀이 함께 쓴다. 상태와 다시 그리기는 generationStore(removeSlide·addSlide)가 맡는다.
@@ -61,6 +61,12 @@ export function DeckEditor({state}:{state:GenerationState}){
       <button type="button" className="button secondary" disabled={busy||full} aria-expanded={open} onClick={()=>setOpen(value=>!value)}>{full?`${MAX_DECK_SLIDES}장이 가득 찼어요`:open?"새 장 넣기 닫기":`${active+1}번 장 뒤에 새 장 넣기`}</button>
     </div>
     {active===0&&<p className="field-help">표지는 뺄 수 없어요. 다른 장을 고르면 뺄 수 있어요.</p>}
+    {plan&&<div className="deck-store-card">
+      <label><input type="checkbox" checked={state.storeCard.include} disabled={busy} onChange={event=>void setStoreCardIncluded(event.target.checked)}/> 맨 뒤에 가게 홍보 카드 붙이기 (무료)</label>
+      {storeCardOn(state)&&(state.storeCard.image?.preview
+        ?<Image src={state.storeCard.image.preview} alt="맨 뒤 가게 홍보 카드 미리보기" width={108} height={135} unoptimized/>
+        :<span className="field-help">홍보 카드를 그리는 중…</span>)}
+    </div>}
     {open&&!full&&<div className="deck-new-slide">
       <div className="option-picker" role="group" aria-label="새 장 만들기 방식">
         <span>새 장</span>

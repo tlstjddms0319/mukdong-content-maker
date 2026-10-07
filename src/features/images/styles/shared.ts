@@ -5,7 +5,7 @@ import { STORE_NAME } from "../slideLayout";
 import { rolesForCount, type CarouselSlidePlan } from "../carousel";
 import { noteAudit } from "../render/audit";
 import { seeded } from "./handDrawn";
-import { brandHandle, cleanPoints, currentRemoteCutout, finishPhoto, textLayer, type TextEmphasis, type Font, type Layer } from "../render/primitives";
+import { brandHandle, cleanPoints, currentRemoteCutout, currentStoreCard, finishPhoto, textLayer, type TextEmphasis, type Font, type Layer } from "../render/primitives";
 
 // 스타일 계열(styles/*.ts)이 함께 쓰는 도구. 계열마다 고유한 글꼴·색을 쓰므로 여기의 글꼴은 사용자가 고른 제목·본문 글꼴로
 // 바뀌지 않는다(render/primitives의 FONTS 역할 객체가 아니라서 resolveFont가 그대로 둔다).
@@ -50,7 +50,7 @@ export type StyleContent={
 export function contentOf(slide:CarouselSlidePlan,inputs:Buffer[],index:number,total:number):StyleContent {
   const cover=slide.role==="cover";
   return {
-    headline:slide.headline.replace(/\s+/g," ").trim(),subline:cover?(slide.subline??"").replace(/\s+/g," ").trim():"",teaser:cover?teaserText(total):"",
+    headline:slide.headline.replace(/\s+/g," ").trim(),subline:cover?(slide.subline??"").replace(/\s+/g," ").trim():"",teaser:cover?teaserText(total,currentStoreCard()):"",
     points:cleanPoints(slide.points),keywords:slide.keywords,index,total,cover,last:index===total,
     kind:cover?"cover":inputs.length>=2?"photos":inputs.length===1?"photo":"text",
   };
@@ -60,11 +60,13 @@ export function contentOf(slide:CarouselSlidePlan,inputs:Buffer[],index:number,t
 // 장 역할의 짧은 이름. 표지 예고 띠에 "이 뒤에 무엇이 나오는지"로 쓴다.
 const ROLE_LABELS:Record<string,string>={overview:"한 상 미리보기",detail:"가까이 보기","how-to":"먹는 법",pairing:"곁들임",process:"준비 과정",occasion:"함께 먹기",mood:"분위기",visit:"방문 전 확인",cta:"마무리"};
 // 표지 예고 띠 글. 구성안 장 수(3/5/7/10)면 역할 순서표에서 뒤 장 이름을 최대 3개, 장을 고친 캐러셀이면 장 수만.
-export function teaserText(total:number):string {
-  if(total!==3&&total!==5&&total!==7&&total!==10)return total>1?`넘겨 보세요 — ${total}장`:"";
+export function teaserText(total:number,storeCard=false):string {
+  // 홍보 카드가 붙으면 내용 장의 역할 순서는 그 한 장을 뺀 수로 본다(띠에 적는 장 수는 전체 그대로).
+  const content=storeCard?total-1:total;
+  if(content!==3&&content!==5&&content!==7&&content!==10)return total>1?`넘겨 보세요 — ${total}장`:"";
   // 보는 사람이 가장 궁금해하는 순서(먹는 법 → 곁들임 → 방문 전 확인 → 나머지)로 3개를 고르고, 띠에는 장 순서대로 적는다.
   const PRIORITY=["how-to","pairing","visit","detail","overview","occasion","process","mood","cta"];
-  const roles=rolesForCount(total).slice(1);
+  const roles=rolesForCount(content).slice(1);
   const picked=new Set([...roles].sort((a,b)=>PRIORITY.indexOf(a)-PRIORITY.indexOf(b)).slice(0,3));
   const shown=roles.filter(role=>picked.has(role)).map(role=>ROLE_LABELS[role]).filter(Boolean);
   return `${shown.join(" · ")} — ${total}장`;

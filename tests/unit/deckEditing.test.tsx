@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
 import { ImageBriefSchema } from "@/features/images/schema";
-import { addLibraryPhoto, addSlide, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
+import { addLibraryPhoto, addSlide, approvedDeck, postTotal, setStoreCardIncluded, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
 
 const photo=(n:number)=>`data:image/jpeg;base64,PHOTO${n}`;
 const card=(n:number)=>`data:image/jpeg;base64,CARD${n}`;
@@ -15,6 +15,8 @@ async function builtDeck(){
   let n=0;
   vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
     if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
+    // 맨 뒤 가게 홍보 카드는 따로 그린다(내용 장 요청 목록에는 세지 않는다).
+    if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
     bodies.push(JSON.parse(String(init?.body)));
     return {ok:true,json:async()=>({images:[card(++n)],source:"photo"})};
   }));
@@ -41,8 +43,8 @@ describe("deck editing", () => {
     expect(state.plan!.slides.map(slide=>slide.headline)).not.toContain(removedHeadline);
     expect(deckTotal(state)).toBe(4);
     expect(deckComplete(state)).toBe(true);
-    // 남은 4장을 모두 "n / 4"로 다시 그린다. 고친 캐러셀 표시(deckEdited)를 함께 보낸다.
-    expect(bodies.map(body=>[body.slideIndex,body.slideTotal,body.deckEdited])).toEqual([[1,4,true],[2,4,true],[3,4,true],[4,4,true]]);
+    // 남은 4장을 모두 "n / 5"(맨 뒤 홍보 카드 포함)로 다시 그린다. 고친 캐러셀 표시(deckEdited)를 함께 보낸다.
+    expect(bodies.map(body=>[body.slideIndex,body.slideTotal,body.deckEdited])).toEqual([[1,5,true],[2,5,true],[3,5,true],[4,5,true]]);
     expect(state.phase).toBe("idle");
     expect(state.approved).toBe(false);
   });
@@ -65,10 +67,10 @@ describe("deck editing", () => {
     expect(state.photos.map(item=>item.id)).toContain("p9");
     expect(state.photoAssignment[2]).toEqual([state.photos.findIndex(item=>item.id==="p9")]);
     expect(state.activeSlide).toBe(2);
-    // 첫 요청이 새 장(3번째 자리, 새 사진), 이어서 나머지 5장을 "n / 6"으로 다시 그린다.
-    expect(bodies[0]).toMatchObject({slideIndex:3,slideTotal:6,deckEdited:true,photos:[photo(9)]});
+    // 첫 요청이 새 장(3번째 자리, 새 사진), 이어서 나머지 5장을 "n / 7"(맨 뒤 홍보 카드 포함)로 다시 그린다.
+    expect(bodies[0]).toMatchObject({slideIndex:3,slideTotal:7,deckEdited:true,storeCard:true,photos:[photo(9)]});
     expect(bodies.slice(1).map(body=>body.slideIndex)).toEqual([1,2,4,5,6]);
-    expect(bodies.every(body=>body.slideTotal===6)).toBe(true);
+    expect(bodies.every(body=>body.slideTotal===7)).toBe(true);
   });
 
   it("adds a text-only card without photos", async () => {
@@ -82,7 +84,7 @@ describe("deck editing", () => {
   it("reads what the owner typed as a request and lets the AI write the card copy and scene", async () => {
     // 사장님이 겪은 사례: 요청 문장이 카드에 그대로 찍히고 사진은 늘 젓가락으로 홍어를 든 장면이었다.
     const {hook,bodies}=await builtDeck();
-    const base=(globalThis.fetch as ReturnType<typeof vi.fn>).getMockImplementation()!;
+    const base=(globalThis.fetch as unknown as ReturnType<typeof vi.fn>).getMockImplementation() as (url:string,init?:RequestInit)=>unknown;
     vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
       if(url==="/api/images/slide"){
         bodies.push({slideRequest:JSON.parse(String(init?.body))});
@@ -124,5 +126,25 @@ describe("image request schema for edited decks", () => {
   it("still checks the role order for untouched decks", () => {
     expect(ImageBriefSchema.safeParse({...base,slideIndex:3,slideTotal:5}).success).toBe(false);
     expect(ImageBriefSchema.safeParse({...base,slideIndex:2,slideTotal:5}).success).toBe(true);
+  });
+});
+
+describe("store promo card", () => {
+  afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
+  it("adds the store card at the end of the approved deck and numbers content cards n / total+1", async () => {
+    const {hook}=await builtDeck();
+    await waitFor(()=>expect(hook.result.current.storeCard.image).toBeDefined());
+    const state=hook.result.current;
+    expect(postTotal(state)).toBe(6);
+    expect(approvedDeck(state)).toHaveLength(6);
+    expect(approvedDeck(state).at(-1)!.preview).toBe(card(900));
+  });
+  it("can be switched off, which renumbers the content cards back to n / total", async () => {
+    const {hook,bodies}=await builtDeck();
+    await act(async()=>{await setStoreCardIncluded(false);});
+    const state=hook.result.current;
+    expect(approvedDeck(state)).toHaveLength(5);
+    expect(bodies.length).toBeGreaterThan(0);
+    expect(bodies.every(body=>body.slideTotal===5&&!body.storeCard)).toBe(true);
   });
 });

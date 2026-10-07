@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { josa, mainMenuOf } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims } from "@/features/guard/service";
 
@@ -66,6 +67,13 @@ export function reviewSchema(count:number){
 }
 export type PlanReview=z.infer<ReturnType<typeof reviewSchema>>;
 
+// 편집 기준 3번: 주제의 메뉴가 주인공. 홍어 주제일 때만 홍어를 주어로, 과메기·미나리전 같은 주제면 그 메뉴를 주어로 쓴다.
+function heroLine(topic:string):string {
+  const menu=mainMenuOf(topic);
+  if(!menu||menu.id==="hongeo-hoe")return `주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰고, 곁들임은 곁들이는 말로만 넣으세요.${/삼합|수육|묵은지/.test(topic)?"":" 주제에 없는 삼합(수육·묵은지)을 새로 넣지 마세요."}`;
+  return `주어와 첫 동작은 주제의 메뉴인 ${josa(menu.short,"으로","로")} 쓰고, 다른 음식은 곁들이는 말로만 넣으세요. 홍어·삼합을 억지로 끌어오지 마세요.`;
+}
+
 export function buildPlanReviewPrompt(plan:CarouselPlan,topic:string,issues:SlideCopyIssue[]):string {
   const slides=plan.slides.map((slide,i)=>({slide:i+1,role:slide.role,headline:slide.headline,points:slide.points}));
   const found=issues.length?issues.map(issue=>`- ${issue.slide}번 장 ${issue.field==="headline"?"제목":"요점"}: ${issue.message}`).join("\n"):"- 자동 검사에서 찾은 문제는 없습니다. 아래 기준으로 흐름과 표현만 다듬으세요.";
@@ -78,7 +86,7 @@ ${found}
 [편집 기준]
 1. 각 장은 앞 장이 남긴 궁금증에 답하고 다음 장으로 이어집니다. 장끼리 같은 말이나 같은 정보를 반복하지 마세요.
 2. 제목은 12~30자의 해요체 문장이나 질문 하나, 요점은 12~28자의 해요체 완결 문장입니다. 명사로 끝나는 슬로건, 광고 상투어, 느낌표 남발은 쓰지 마세요.
-3. 주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰고, 수육·묵은지·막걸리는 곁들이는 말로만 넣으세요.
+3. ${heroLine(topic)}
 4. "입안의 리듬" 같은 추상적 비유 대신 눈이나 입으로 확인할 수 있는 구체적 관찰(색, 결, 식감, 먹는 순서)로 쓰세요.
 5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.
 6. 문제가 없는 장은 그대로 두세요. 장 수, 장 순서, 장마다 요점 개수(표지는 빈 배열)는 바꾸지 마세요. 표지의 points는 빈 배열입니다.

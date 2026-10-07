@@ -32,6 +32,14 @@ describe("AI cover check", () => {
     expect(expectedFoodFrom("비 오는 날","홍어전 한 접시").name).toBe("홍어전");
     expect(expectedFoodFrom("홍어 삼합").name).toBe("삼합");
     expect(expectedFoodFrom("오늘의 이야기").name).toBe("홍어");
+    // 사장님이 알려 준 다른 메뉴도 기대 음식으로 알아본다.
+    expect(expectedFoodFrom("과메기는 왜 찬바람이 불면 찾을까?").name).toBe("과메기");
+    expect(expectedFoodFrom("비 오는 날","미나리전 한 장").name).toBe("미나리전");
+    expect(expectedFoodFrom("홍어애탕은 어떤 국물일까?").name).toBe("홍어애탕");
+    expect(expectedFoodFrom("새콤한 홍어무침").name).toBe("홍어무침");
+    expect(expectedFoodFrom("배다리 막걸리 한 잔").name).toBe("막걸리");
+    expect(expectedFoodFrom("과메기는 왜 찬바람이 불면 찾을까?").description).toContain("과메기(");
+    expect(coverWarnings({...GOOD,looksLikeSkate:false},"미나리전")).toEqual(["미나리전으로 안 보임"]);
     const request=vi.fn(async()=>reply({...GOOD,looksLikeSkate:false}));
     const [check]=(await checkCoverCandidates([await image()],{apiKey:"key",fetch:asFetch(request),expectedFood:expectedFoodFrom("홍어전")}))!;
     expect(bodyOf(request).contents[0].parts[0].text).toContain("홍어전(");
