@@ -20,7 +20,7 @@ describe("title and body fonts", () => {
   });
 
   it("fills missing fonts with the default and still sends a strict schema to providers", () => {
-    expect(DesignSpecSchema.parse({palette:"sea"})).toEqual({palette:"sea",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud"});
+    expect(DesignSpecSchema.parse({palette:"sea"})).toEqual({palette:"sea",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none"});
     expect(()=>DesignSpecSchema.parse({palette:"sea",titleFont:"comic"})).toThrow();
     // 기본값이 있는 필드도 출력 스키마에서는 필수라 엄격 JSON 스키마 변환이 실패하지 않는다.
     expect(()=>toStrictJsonSchema(CarouselPlanSchema)).not.toThrow();
@@ -35,10 +35,10 @@ describe("title and body fonts", () => {
   });
 
   it("lets the owner override only the font they picked", () => {
-    const recommended={palette:"night" as const,style:"template" as const,theme:"classic" as const,titleFont:"batang" as const,bodyFont:"batang" as const,tone:"loud" as const};
+    const recommended={palette:"night" as const,style:"template" as const,theme:"classic" as const,titleFont:"batang" as const,bodyFont:"batang" as const,tone:"loud" as const,season:"none" as const};
     expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto"})).toEqual(recommended);
-    expect(effectiveDesign(recommended,{titleFont:"jua",bodyFont:"auto"})).toEqual({palette:"night",style:"template",theme:"classic",titleFont:"jua",bodyFont:"batang",tone:"loud"});
-    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"dodum"})).toEqual({palette:"night",style:"template",theme:"classic",titleFont:"batang",bodyFont:"dodum",tone:"loud"});
+    expect(effectiveDesign(recommended,{titleFont:"jua",bodyFont:"auto"})).toEqual({palette:"night",style:"template",theme:"classic",titleFont:"jua",bodyFont:"batang",tone:"loud",season:"none"});
+    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"dodum"})).toEqual({palette:"night",style:"template",theme:"classic",titleFont:"batang",bodyFont:"dodum",tone:"loud",season:"none"});
   });
 
   it("draws the chosen fonts and keeps concurrent cards from mixing them", async () => {

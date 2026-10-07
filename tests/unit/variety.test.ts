@@ -51,7 +51,7 @@ describe("carousel variety", () => {
 
   it("gives emotional slides an accent title font when the AI picked none per slide", () => {
     const base=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:5});
-    const plan=diversifyCarouselDesign({...base,design:{palette:"warm",style:"template",theme:"magazine",titleFont:"plex",bodyFont:"plex",tone:"loud"}},1);
+    const plan=diversifyCarouselDesign({...base,design:{palette:"warm",style:"template",theme:"magazine",titleFont:"plex",bodyFont:"plex",tone:"loud",season:"none"}},1);
     expect(plan.slides[0].titleFont).toBe("batang");
     expect(plan.slides[2].titleFont).toBe("auto");
     expect(resolveSlideFonts(plan.design,plan.slides[0])).toEqual({titleFont:"batang",bodyFont:"plex"});

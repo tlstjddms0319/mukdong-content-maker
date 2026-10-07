@@ -256,6 +256,40 @@ const CLASSIC:ThemeKit={
   photoRadius:requested=>requested,photoStroke:()=>null,grainOpacity:requested=>requested,background:none,photoOverlay:none,
 };
 
+// 조각보: 전통 색(홍·치자·송록·쪽·분홍·미색) 천 조각을 이어 붙인 테두리와 바느질 선.
+// 천 조각은 화면 가장자리 띠(34px)에만 두고 안쪽은 비워 글자 대비를 해치지 않는다. 조각 길이는 장마다(variant) 조금씩 다르다.
+const JOGAK=["#B8463A","#D9A441","#5E7F5A","#34557A","#C9849A","#E8DCC4"];
+const JOGAK_BAND=34;
+function jogakFrame(opacity:number,seam:string):string {
+  const shift=currentVariant()*2;
+  let out="";
+  // 한 변을 길이가 다른 조각으로 나눈다. 색은 이웃끼리 겹치지 않게 차례로, 시작 색은 변마다 다르게.
+  const edge=(length:number,start:number,draw:(at:number,size:number,color:string)=>string)=>{
+    const sizes=[150,96,188,120,72,164,110,136];
+    for(let at=0,i=0;at<length;i++){
+      const size=Math.min(sizes[(i+shift)%sizes.length],length-at);
+      out+=draw(at,size,JOGAK[(i+start+shift)%JOGAK.length]);
+      at+=size;
+    }
+  };
+  const rect=(x:number,y:number,w:number,h:number,color:string)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${color}" fill-opacity="${opacity}"/><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${seam}" stroke-opacity=".7" stroke-width="2"/>`;
+  edge(1080,0,(at,size,color)=>rect(at,0,size,JOGAK_BAND,color));
+  edge(1080,3,(at,size,color)=>rect(at,1350-JOGAK_BAND,size,JOGAK_BAND,color));
+  edge(1350-JOGAK_BAND*2,1,(at,size,color)=>rect(0,JOGAK_BAND+at,JOGAK_BAND,size,color));
+  edge(1350-JOGAK_BAND*2,4,(at,size,color)=>rect(1080-JOGAK_BAND,JOGAK_BAND+at,JOGAK_BAND,size,color));
+  return out;
+}
+// 바느질 선(점선). 천 띠 안쪽을 한 바퀴 두른다.
+const stitch=(inset:number,color:string,opacity:number)=>`<rect x="${inset}" y="${inset}" width="${1080-inset*2}" height="${1350-inset*2}" fill="none" stroke="${color}" stroke-opacity="${opacity}" stroke-width="2.5" stroke-dasharray="12 9" stroke-linecap="round"/>`;
+// 색동 띠: 마스킹 테이프 대신. 길이 방향으로 다섯 색 줄.
+const saekdongTape:typeof decor.washiTape=options=>{
+  const h=options.height??44,stripe=h/5,cx=options.x+options.width/2,cy=options.y+h/2;
+  const colors=["#D94B3D","#F2C14E","#4E9A5B","#3B6FB6","#E58FB0"];
+  return `<g transform="rotate(${options.angle??0} ${cx} ${cy})" opacity="${options.opacity??.92}">${colors.map((color,i)=>`<rect x="${options.x}" y="${(options.y+i*stripe).toFixed(1)}" width="${options.width}" height="${stripe.toFixed(1)}" fill="${color}"/>`).join("")}</g>`;
+};
+// 매듭 장식: 반짝이 대신 네 잎 매듭(마름모 둘을 겹친 꽃).
+const knots=(points:ReadonlyArray<readonly [number,number,number]>,color:string,opacity=1)=>points.map(([x,y,s])=>{const r=s*.75;return `<path d="M${x} ${y-r}L${x+r*.45} ${y}L${x} ${y+r}L${x-r*.45} ${y}Z" fill="${color}" fill-opacity="${opacity}"/><path d="M${x-r} ${y}L${x} ${y+r*.45}L${x+r} ${y}L${x} ${y-r*.45}Z" fill="${color}" fill-opacity="${opacity*.75}"/><circle cx="${x}" cy="${y}" r="${(r*.18).toFixed(1)}" fill="#F2C14E"/>`;}).join("");
+
 const THEME_KITS:Record<ThemeId,ThemeKit>={
   classic:CLASSIC,
   // 잡지: 장식을 걷어내고 가는 선과 여백으로만 정리한다. 사진은 각지게, 밑줄은 곧은 한 줄.
@@ -306,6 +340,14 @@ const THEME_KITS:Record<ThemeId,ThemeKit>={
       +diamonds([[26,26,14],[1054,26,14],[26,1324,14],[1054,1324,14]],palette.accent),
     photoOverlay:palette=>`<rect x="26" y="26" width="1028" height="1298" fill="none" stroke="${palette.highlight}" stroke-opacity=".9" stroke-width="4"/><rect x="38" y="38" width="1004" height="1274" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.5"/>`
       +diamonds([[26,26,14],[1054,26,14],[26,1324,14],[1054,1324,14]],palette.highlight),
+  },
+  jogakbo:{...CLASSIC,
+    washiTape:saekdongTape,sparkles:knots,dotGrid:none,
+    // 밑줄은 바느질 땀(점선 한 줄).
+    wavyUnderline:options=>`<path d="M${options.x} ${options.y}H${options.x+options.width}" stroke="${options.color}" stroke-opacity="${options.opacity??1}" stroke-width="${Math.max(3,(options.strokeWidth??5)*.7)}" stroke-dasharray="14 9" stroke-linecap="round"/>`,
+    photoRadius:requested=>requested?Math.min(requested,10):0,grainOpacity:requested=>Math.max(requested,.16),
+    background:(palette,surface)=>jogakFrame(isLight(surface)?.82:.7,isLight(surface)?"#FFFFFF":palette.ink)+stitch(JOGAK_BAND+12,isLight(surface)?palette.accent:"#FFFFFF",.5),
+    photoOverlay:()=>jogakFrame(.92,"#FFFFFF")+stitch(JOGAK_BAND+12,"#FFFFFF",.7),
   },
 };
 const kit=()=>THEME_KITS[currentTheme()];

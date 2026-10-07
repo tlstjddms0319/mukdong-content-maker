@@ -1,5 +1,5 @@
 // 모든 디자인 계열과 템플릿 레이아웃을 까다로운 문안·밝은/어두운 사진으로 그려 자동 검수(render/audit.ts) 결과를 모은다.
-// 실행: node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/audit-cards.mjs [--verbose] [--style=계열] [--handle=계정] [--area]
+// 실행: node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/audit-cards.mjs [--verbose] [--style=계열] [--handle=계정] [--theme=테마] [--area]
 // 문제(issues)와 따로 경고(장식 겹침·빈 띠·표지 사진 면적·사진 품질)를 계열별로 센다. 경고는 실패로 치지 않는다(다음 개선 목록).
 // 식욕 점수(Gemini 비전)는 scripts/appetite-bench.mjs가 따로 잰다.
 import sharp from "sharp";
@@ -14,6 +14,8 @@ const verbose=process.argv.includes("--verbose");
 const only=process.argv.find(arg=>arg.startsWith("--style="))?.slice(8);
 // --handle=계정 : 브랜드 키트 계정을 바닥글에 넣고 검수(긴 계정에서도 넘치지 않는지).
 const brandHandle=process.argv.find(arg=>arg.startsWith("--handle="))?.slice(9)??"";
+// --theme=테마 : 템플릿 게시물 테마(themes.ts)를 바꿔 검수(예: 조각보 테두리가 글자와 부딪히지 않는지).
+const theme=process.argv.find(arg=>arg.startsWith("--theme="))?.slice(8);
 const sample=name=>readFile(`assets/design/samples/${name}.jpg`);
 const dark=await sample("hands-makgeolli"),bright=await sample("studio-hongeo"),busy=await sample("table-topdown");
 const white=await sharp({create:{width:900,height:1100,channels:3,background:"#f4f2ee"}}).jpeg().toBuffer();
@@ -51,7 +53,7 @@ const flagsOf=photo=>{if(!qualityCache.has(photo))qualityCache.set(photo,photoQu
 for(const c of cases){
   const slide={...base,...c.copy,subline:c.role==="cover"?c.copy.subline:"",role:c.role,layout:c.layout,variant:c.variant,points:c.role==="cover"?[]:c.copy.points};
   const index=c.role==="cover"?1:c.role==="visit"?5:2;
-  const {report}=await composeSlideCard(c.photos.slice(0,Math.max(1,photosNeeded(c.layout))),slide,index,5,"card",{palette:"warm",style:c.style},{contrast:true,brandHandle});
+  const {report}=await composeSlideCard(c.photos.slice(0,Math.max(1,photosNeeded(c.layout))),slide,index,5,"card",{palette:"warm",style:c.style,...(theme?{theme}:{})},{contrast:true,brandHandle});
   const key=`${c.style}/${c.style==="template"?c.layout:"*"}`;
   if(report.metrics.shrinks)measured.shrinks[key]=(measured.shrinks[key]??0)+report.metrics.shrinks;
   if(report.metrics.orphans)measured.orphans[key]=(measured.orphans[key]??0)+report.metrics.orphans;

@@ -37,7 +37,7 @@ describe("template gallery", () => {
     const prompt=buildCarouselPlanPrompt({topic:"비 오는 날 홍어",slideCount:5});
     for(const layout of ["magazine","split","polaroid","receipt","checklist","timeline","poster","circle"] as const)expect(prompt).toContain(`${layout}(${CARD_LAYOUTS[layout].label}`);
     expect(prompt).toContain(themeCatalogText());
-    const recommended={palette:"warm" as const,style:"template" as const,theme:"magazine" as const,titleFont:"plex" as const,bodyFont:"plex" as const,tone:"loud" as const};
+    const recommended={palette:"warm" as const,style:"template" as const,theme:"magazine" as const,titleFont:"plex" as const,bodyFont:"plex" as const,tone:"loud" as const,season:"none" as const};
     expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"auto"})).toEqual(recommended);
     expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"retro"}).theme).toBe("retro");
   });

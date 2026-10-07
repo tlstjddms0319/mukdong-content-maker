@@ -10,6 +10,7 @@ import { CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, brandName, cleanPoints,
 import { BODY_TITLE, COVER_TITLE, EXTRA_RENDERERS, POINT, closingPlan, fillerProp, fillerProps, counterLayer, cueAt, footerPlan, isCover, isLast, cardShadow, mascotContact, photoWell, slideTitle, sublineLayer, teaserLayer, texturedCanvas } from "./render/extraLayouts";
 import { ROLE_POSES, type MascotPose } from "./decor";
 import { STYLE_RENDERERS } from "./styles";
+import { addSeasonMotif } from "./render/seasonLayer";
 import { MIN_STROKE } from "./styles/shared";
 
 // 공용 그리기 도구는 render/primitives.ts에 있다. 테스트와 다른 화면이 쓰던 이름은 여기서도 그대로 내보낸다.
@@ -745,5 +746,6 @@ export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlide
     if(attempt===2||points.length<=1){console.warn(`[cards] ${index}번 장 자동 검수 문제가 남았어요:`,report.issues.map(describeIssue).join(" / "));break;}
     current={...current,points:points.slice(0,-1)};
   }
-  return {image:best!.image,report:best!.report};
+  // 계절 소품(design.season)은 검수가 찾은 글자·사진 자리를 피해 빈 자리에만 얹는다(render/seasonLayer.ts).
+  return {image:await addSeasonMotif(best!.image,best!.report,design?.season,index),report:best!.report};
 }

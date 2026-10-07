@@ -1,6 +1,7 @@
 import type { CarouselPlan, CarouselRole } from "./carousel";
 import { LAYOUT_VARIANTS, PaletteIdSchema, defaultCardLayout, normalizeCardLayout, type CardLayout, type DesignSpec, type PaletteId } from "./design";
 import { ThemeIdSchema } from "./themes";
+import { suggestSeasonMotif } from "./seasonMotif";
 import { CALM_WORDS, RESTRAINABLE_STYLES, StyleIdSchema, styleAffinity, type StyleId } from "./styleCatalog";
 import type { BodyFontId, TitleFontId } from "./typography";
 
@@ -64,7 +65,8 @@ export function diversifyCarouselDesign(plan:CarouselPlan,seed:number,options:{f
   const calmText=CALM_WORDS.some(word=>text.includes(word));
   const tone=plan.design.tone==="calm"||calmText||(fallback&&RESTRAINABLE_STYLES.has(style)&&Math.floor(seed/8)%3===0)?"calm":"loud";
   const design:DesignSpec=fallback
-    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),style,theme,titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont,tone}
+    // 계절 소품: 기본 구성안은 글의 낱말과 지금 시기의 행사로 고른다(애매하면 없음). AI 구성안은 AI가 고른 값을 쓴다.
+    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),style,theme,titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont,tone,season:suggestSeasonMotif(text)}
     :{...plan.design,style,theme,tone};
   const accent=fallback?fontSet.accent:ACCENT_TITLE[design.titleFont];
   const everyFontAuto=plan.slides.every(slide=>slide.titleFont==="auto"&&slide.bodyFont==="auto");
