@@ -4,6 +4,7 @@ import { CardLayoutSchema, DesignSpecSchema, DEFAULT_DESIGN, defaultCardLayout, 
 import { SlideBodyFontSchema, SlideTitleFontSchema } from "./typography";
 import { diversifyCarouselDesign } from "./variety";
 import { MENU_BY_ID, heroMenu, josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
+import { SKATE_TABLE, copyMentionsSkate, foodFreeAnchor, isOtherMenu } from "./sceneFoods";
 
 export const CarouselPlanInputSchema=z.object({
   topic:z.string().trim().min(1).max(200),
@@ -192,7 +193,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     // 장면 다양성: 같은 접시를 거리만 바꿔 다섯 번 찍지 않도록, 장면 유형과 사람 요소를 장마다 다르게 배정한다.
     `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 각 visualPrompt에는 그 장의 글이 말하는 대상과 동작을 구체적으로 적으세요(예: ${sceneExamples(menu)}). 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도), 위에서 본 상차림, 접시 위 질감(매크로), 곁들임과 함께 놓인 조합, 막걸리와 함께 놓인 식탁, 준비 과정, 함께 먹는 식탁(여러 손과 잔, 뒷모습). "젓가락으로 한 점을 집어 든" 장면은 한 게시물에 최대 한 장만 쓰고, 나머지 장은 접시·그릇·식탁 위에 놓인 모습으로 쓰세요. 손·잔·뒷모습 같은 사람 요소는 글이 먹는 동작이나 함께하는 자리를 말할 때만 넣고, 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 음식이 나오는 모든 장면에서 주제의 메뉴(${menu&&menu.id!=="hongeo-hoe"?menu.short:"홍어"})가 주인공입니다. visualPrompt에 그 메뉴를 가장 크고 앞에, 초점이 맞게 둔다고 명시하고, 다른 음식·술은 글이 말할 때만 작게 곁들여지는 조연으로 쓰세요. 집어 올리는 한입도 주인공 메뉴여야 합니다.`,
     `[디자인] ${designCatalogText()}`,
-    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone)를 두고(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud), 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
+    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})만 쓰고 음식 이름은 쓰지 마세요(모든 장에 똑같이 붙으므로, 음식은 각 장 visualPrompt에만). 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone)를 두고(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud), 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
   ].join("\n");
 }
 
@@ -232,6 +233,18 @@ export function limitChopstickScenes(plan:CarouselPlan,topic:string):CarouselPla
   })};
 }
 
+// 장면이 그 게시물의 메뉴를 벗어나지 않게(sceneFoods.ts). 과메기·미나리전·막걸리처럼 홍어가 아닌 메뉴 이야기에서
+// 장 글(제목·요점)에 없는 홍어·삼합·수육·묵은지가 장면 설명에만 들어 있으면, 그 장의 글로 장면을 다시 짓는다.
+// 전 장 공통 스타일(styleAnchor)에서는 음식 이름을 걷어 내 색·빛·그릇·테이블만 남긴다(모든 장에 실려 가므로).
+export function keepScenesOnMenu(plan:CarouselPlan,topic:string):CarouselPlan {
+  const topicMenu=mainMenuOf(topic);
+  return {...plan,styleAnchor:foodFreeAnchor(plan.styleAnchor),slides:plan.slides.map(slide=>{
+    if(!isOtherMenu(topicMenu)||!SKATE_TABLE.test(slide.visualPrompt))return slide;
+    if(copyMentionsSkate([slide.headline,...slide.points].join(" ")))return slide;
+    return {...slide,visualPrompt:sceneFromCopy(slide,topic)};
+  })};
+}
+
 // onFallback: AI 구성안을 못 써서 기본 문안으로 넘어갈 때 그 이유(오류)를 받는다. 예전에는 이유를 버려 로그에도 남지 않았다.
 export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,options:{seed?:number;onFallback?:(error:unknown)=>void}={}):Promise<CarouselPlan> {
   const parsed=CarouselPlanInputSchema.parse(input);
@@ -240,7 +253,7 @@ export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,op
   if(!ai)return vary(fallback,true);
   try {
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));
-    if(plan.slideCount===parsed.slideCount)return vary(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic),false);
+    if(plan.slideCount===parsed.slideCount)return vary(keepScenesOnMenu(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic),parsed.topic),false);
     options.onFallback?.(new Error("wrong slide count"));
     return vary(fallback,true);
   } catch(error) {

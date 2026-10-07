@@ -4,6 +4,7 @@ import { CARD_LAYOUTS } from "./design";
 import { STYLES } from "./styleCatalog";
 import { CHOPSTICK_SCENE } from "./carousel";
 import { heroMenu, josa, menuOf, type StoreMenuItem } from "@/features/store/menu";
+import { copyMentionsSkate, foodFreeAnchor } from "./sceneFoods";
 import { toFile } from "openai";
 
 // 이번 장의 글(제목·요점·장면 설명)과 주제 글. 주인공 메뉴를 고를 때 쓴다.
@@ -13,26 +14,30 @@ const topicTextOf=(input:ImageBrief)=>[input.topic,input.imageBrief].filter(Bool
 export function sceneHero(input:ImageBrief):StoreMenuItem|undefined {
   return heroMenu(slideTextOf(input),topicTextOf(input));
 }
-// 홍어가 실제로 나오는 장면인지: 주인공이 홍어 요리이거나, 이번 장(장이 없으면 주제) 글이 홍어·삼합을 말할 때.
+// 홍어가 실제로 나오는 장면인지: 주인공이 홍어 요리이거나, 이번 장 글(제목·요점. 장이 없으면 주제)이 홍어 상차림을 말할 때.
+// 장면 설명(visualPrompt)은 보지 않는다. AI가 덧붙인 "홍어 삼합" 한마디로 과메기 장에 홍어 지시가 통째로 붙던 길을 막는다.
 function showsSkate(input:ImageBrief,hero:StoreMenuItem|undefined):boolean {
   if(hero?.id.startsWith("hongeo-"))return true;
-  return /홍어|삼합/.test(input.slide?slideTextOf(input):topicTextOf(input));
+  // 메뉴를 못 찾은 장(주제)은 다른 메뉴와 부딪힐 일이 없으니 장면 설명까지 본다(예전과 같이).
+  if(!hero)return /홍어|삼합/.test(input.slide?slideTextOf(input):topicTextOf(input));
+  return copyMentionsSkate(input.slide?[input.slide.headline,...input.slide.points].join(" "):topicTextOf(input));
 }
 
-// 홍어가 아닌 메뉴가 주인공일 때. 겉모습은 STORE_MENU에서 가져오고, 홍어를 억지로 넣지 않는다.
-function menuHeroDirection(hero:StoreMenuItem,skate:boolean):string {
+// 홍어가 아닌 메뉴가 주인공일 때. 겉모습은 STORE_MENU에서 가져온다.
+// 나오면 안 되는 음식은 이름도 꺼내지 않는다(이미지 모델은 "홍어를 넣지 마"의 '홍어'에 끌려 그리기 쉽다).
+// 대신 "접시 위 음식은 이것과 장면에 적힌 곁들임뿐"이라고 긍정문으로 범위를 닫는다.
+function menuHeroDirection(hero:StoreMenuItem):string {
   return [
-    `이번 장면의 주인공은 ${josa(hero.short,"이다","다")}. ${josa(hero.short,"이","가")} 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓이고, 다른 음식은 장면 설명에 있을 때만 더 작게 곁들인다. 겉모습: ${hero.lookKo}.`,
-    skate?"":"장면 설명에 없는 홍어·수육·묵은지를 새로 넣지 않는다.",
-    `The hero of this image is ${hero.look} Keep it the largest, sharpest subject in front.${skate?"":" Do not add skate slices, boiled pork or kimchi that the scene does not mention."}`,
-  ].filter(Boolean).join(" ");
+    `이번 장면의 주인공은 ${josa(hero.short,"이다","다")}. ${josa(hero.short,"이","가")} 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓인다. 겉모습: ${hero.lookKo}. 식탁에 놓인 음식은 ${josa(hero.short,"과","와")} 장면 설명에 적힌 곁들임뿐이고, 곁들임은 더 작게 둔다.`,
+    `The hero of this image is ${hero.look} Keep it the largest, sharpest subject in front. The only foods on the table are this dish and the side items named in the scene description, shown smaller.`,
+  ].join(" ");
 }
 
 function foodDirection(input:ImageBrief):string {
   const hero=sceneHero(input);
   const skate=showsSkate(input,hero);
   const parts:string[]=[];
-  if(hero&&!hero.id.startsWith("hongeo-"))parts.push(menuHeroDirection(hero,skate));
+  if(hero&&!hero.id.startsWith("hongeo-"))parts.push(menuHeroDirection(hero));
   if(!skate)return parts.length?`${parts.join(" ")} 메뉴와 무관한 장식 소스는 추가하지 않는다.`:"";
   const subject=[input.topic,input.imageBrief,input.slide?.visualPrompt].filter(Boolean).join(" ");
   // A scene drafted by AI must not change an explicitly chosen preparation.
@@ -45,7 +50,9 @@ function foodDirection(input:ImageBrief):string {
   ] as const;
   const preparations:string[]=cooked.filter(([pattern])=>pattern.test(menuText)).map(([,description])=>description);
   const soup=/애\s*탕|홍어\s*탕/.test(menuText);
-  if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push("홍어회·삼합 장면의 홍어는 숙성 홍어 날개 살을 얇고 불규칙하게 썬 연한 분홍빛 또는 아이보리색 회로 표현한다. 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.");
+  // 삼합(수육·묵은지)은 장면이 말할 때만 꺼낸다. 홍어회 장면마다 "삼합"을 적으면 삼합 사진으로 끌려간다.
+  const samhap=/삼합|수육|묵은지/.test(menuText);
+  if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push(`홍어회 장면의 홍어는 숙성 홍어 날개 살을 얇고 불규칙하게 썬 연한 분홍빛 또는 아이보리색 회로 표현한다.${samhap?" 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.":""}`);
   // 작은 이미지 모델은 '홍어'를 몰라 베이컨·햄처럼 그리기 쉬워서 영어로 무엇인지 한 번 설명한다.
   preparations.push("Hongeo is Korean fermented skate, a flat ray fish: its flesh has fine parallel fibers and thin translucent cartilage lines, never marbled fat stripes. The skate must not look like bacon, ham, sausage or pork belly.");
   // 이미지 모델은 '홍어 한 점'을 꼬리·지느러미 달린 작은 생선 한 마리(가자미·박대 모양)로 그리기 쉽다.
@@ -55,8 +62,11 @@ function foodDirection(input:ImageBrief):string {
     :"홍어는 통째 생선으로 그리지 않는다. 꼬리·지느러미·머리가 달린 작은 생선 한 마리나 가자미·박대 같은 모양이 아니라, 넓은 날개 살을 썬 손가락 두 마디 크기의 납작한 조각으로 보여 준다. 조각 표면에는 한쪽 방향으로 나란한 연골 결이 줄무늬처럼 보인다. Show the skate only as sliced pieces of wing meat (flat, bite-sized, with parallel cartilage ridges). Never show a whole small fish with a tail, fins, head or a fish-shaped outline.");
   // 홍어 요리가 주인공인 장면만 "주인공은 홍어"를 못 박는다(과메기·미나리전·막걸리 장면이면 위 menuHeroDirection이 주인공을 정한다).
   // 삼합 장면은 모델이 익숙한 수육을 크게 그리고 홍어를 뒤로 밀기 쉽다. 다만 장면에 없는 수육·묵은지를 끌어오지 않는다.
-  if(!hero||hero.id==="hongeo-hoe")preparations.push("이 장면의 주인공은 홍어다. 홍어가 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓이고, 장면 설명에 곁들임(수육·묵은지·막걸리 등)이 있으면 더 작게 뒤나 가장자리에 조연으로만 둔다. 장면 설명에 없는 수육·묵은지를 새로 넣지 않는다. 집어 올린 한 점에는 홍어가 꼭 들어가야 하고 수육이 홍어를 가리면 안 된다. 다만 이번 장면이 묵은지에 싸거나 수육과 겹쳐 먹는 장면이면, 홍어만 따로 들지 말고 그 조합 그대로(홍어가 보이게) 보여 준다. The fermented skate is the hero: clearly visible and in focus in every scene. Do not add boiled pork or kimchi unless the scene mentions them. When the scene is about wrapping it in aged kimchi or stacking it with boiled pork, show that exact combination with the skate visible, instead of a lone skate slice.");
-  else if(hero.id.startsWith("hongeo-"))preparations.push(`이 장면의 주인공은 ${josa(hero.short,"이다","다")}. ${josa(hero.short,"이","가")} 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓인다. 장면 설명에 없는 수육·묵은지를 새로 넣지 않는다. The hero of this image is ${hero.look}`);
+  // 곁들임(수육·묵은지)은 장면이 말할 때만 이름을 꺼낸다. 말하지 않으면 "접시 위엔 홍어회뿐"이라고 긍정문으로 닫는다.
+  if(!hero||hero.id==="hongeo-hoe")preparations.push(samhap
+    ?"이 장면의 주인공은 홍어다. 홍어가 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓인다. 이번 장면이 묵은지에 싸거나 수육과 겹쳐 먹는 장면이므로 홍어만 따로 들지 말고 그 조합 그대로(홍어가 보이게) 보여 주고, 수육이 홍어를 가리지 않게 한다. The fermented skate is the hero, clearly visible and in focus; show the exact combination the scene describes (wrapped in aged kimchi or stacked with boiled pork) with the skate visible."
+    :"이 장면의 주인공은 홍어다. 홍어가 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓이고, 식탁의 음식은 홍어회와 장면 설명에 적힌 곁들임뿐이다. 집어 올린 한 점이 있다면 홍어 조각이다. The fermented skate is the hero, clearly visible and in focus; the only foods on the table are the sliced skate and the side items named in the scene description.");
+  else if(hero.id.startsWith("hongeo-"))preparations.push(`이 장면의 주인공은 ${josa(hero.short,"이다","다")}. ${josa(hero.short,"이","가")} 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓이고, 식탁의 음식은 ${josa(hero.short,"과","와")} 장면 설명에 적힌 곁들임뿐이다. The hero of this image is ${hero.look}`);
   return [...parts,...preparations].join(" ")+" 이번 장면에 해당하는 조리법만 표현한다. 두꺼운 정육면체 회, 두부 같은 고기 블록, 탑처럼 높은 적층, 초밥이나 연어로 바꾸는 표현은 금지한다. 메뉴와 무관한 장식 소스는 추가하지 않는다.";
 }
 
@@ -146,7 +156,8 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     input.slide&&!CHOPSTICK_SCENE.test(input.slide.visualPrompt)
       ? "이 장면에는 젓가락으로 한 점을 집어 든 모습을 넣지 말고, 음식은 접시·그릇·식탁 위에 놓인 모습으로 보여 줄 것. Do NOT show chopsticks lifting a slice in this image; the food rests on the plate or table." : "",
     input.slide ? `슬라이드 역할: ${input.slide.role}. 장면: ${input.slide.visualPrompt}.` : `세로 4:5 구도, 하나의 음식 피사체가 선명하고 먹음직스럽게 보이며 자연스러운 조명과 여백이 있는 ${styleId==="photo"?"실제 음식 사진 스타일":`${style.medium} 스타일`}.`,
-    input.styleAnchor ? `전체 캐러셀 공통 스타일: ${input.styleAnchor}.` : "",
+    // 공통 스타일은 모든 장에 붙으므로 음식 이름을 걷어 내고 색·빛·그릇·테이블만 보낸다(예전에 저장된 구성안 포함).
+    input.styleAnchor ? `전체 캐러셀 공통 스타일: ${foodFreeAnchor(input.styleAnchor)}.` : "",
     style.look,
     // 장면 설명이나 공통 스타일에 "사진"이 남아 있어도 화풍 지시가 이기도록 한 번 더 못 박는다.
     styleId==="photo" ? "" : `화풍: ${style.anchor}. 장면 설명이나 공통 스타일에 '사진'이라는 말이 있어도 사진처럼 만들지 말고 이 화풍으로 그릴 것.`,
