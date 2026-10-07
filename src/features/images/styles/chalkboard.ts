@@ -245,10 +245,13 @@ export const renderChalkboard:CardRenderer=async(inputs,slide,index,total)=>{
         placed.push({left,top,width:pinned.info.width,height:pinned.info.height});
       }
       // vs 배지와 화살표는 사진 위 별도 레이어(사진에 가려지지 않게). 칠판색 원 + 색분필 테두리.
-      const vx=540,vy=Math.round(y+DROP+PH*.45);
-      const vs=await textLayer("vs",{size:54,color:accent,width:120,height:90,font:STYLE_FONTS.chalk,align:"centre"});
-      layers.push(svgLayer(`<circle cx="${vx}" cy="${vy}" r="52" fill="${BOARD}" stroke="${accent}" stroke-width="5"/><path d="${handArrow(vx-150,vy+120,vx-40,vy+70,rand)}" stroke="${accent}" stroke-width="6" fill="none" stroke-linecap="round"/>`));
-      layers.push({input:vs.data,left:vx-Math.round(vs.info.width/2),top:vy-Math.round(vs.info.height/2)-4});
+      // 비교 장(versus)에만 붙인다. 실제 사진 캐러셀이 남는 사진으로 만든 두 장짜리 장은 비교가 아니다.
+      if(content.compare){
+        const vx=540,vy=Math.round(y+DROP+PH*.45);
+        const vs=await textLayer("vs",{size:54,color:accent,width:120,height:90,font:STYLE_FONTS.chalk,align:"centre"});
+        layers.push(svgLayer(`<circle cx="${vx}" cy="${vy}" r="52" fill="${BOARD}" stroke="${accent}" stroke-width="5"/><path d="${handArrow(vx-150,vy+120,vx-40,vy+70,rand)}" stroke="${accent}" stroke-width="6" fill="none" stroke-linecap="round"/>`));
+        layers.push({input:vs.data,left:vx-Math.round(vs.info.width/2),top:vy-Math.round(vs.info.height/2)-4});
+      }
       y=Math.max(...placed.map(box=>box.top+box.height))+20;
     }else{
       // 표지 상한 760(860 폭을 기울여도 액자 안), 본문 700. 회전으로 늘어나는 높이까지 넣어 남는 높이에 꼭 맞춘다.

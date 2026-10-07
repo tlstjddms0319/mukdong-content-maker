@@ -27,6 +27,9 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
   return response ? withoutSessionRefresh(response) : response;
 }
 
+// API 경로(/api/...)는 각 라우트가 직접 로그인을 확인하므로 프록시를 거치지 않게 뺀다.
+// 프록시가 도는 요청은 Next가 본문을 10MB까지만 복사해 두어서, 그보다 큰 사진 올리기(12MB까지 허용)와
+// 사진+AI의 참고 사진 요청이 본문이 잘린 채 500으로 실패했다.
 export const config = {
-  matcher: ["/((?!_next|.*\\..*).*)"],
+  matcher: ["/((?!_next|api(?:/|$)|.*\\..*).*)"],
 };

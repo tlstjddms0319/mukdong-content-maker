@@ -46,6 +46,9 @@ export const STYLE_FONTS={
 export type StyleContent={
   headline:string;subline:string;teaser:string;points:string[];keywords:string[];index:number;total:number;cover:boolean;last:boolean;
   kind:"cover"|"photo"|"photos"|"text";
+  // 두 사진을 견주는 비교 장(layout versus)인지. 사진이 두 장이어도 비교 장이 아니면 "vs" 같은 비교 표시를 하지 않는다
+  // (실제 사진 캐러셀은 남는 사진을 두 장짜리 장으로 넣는데, 그 장의 글은 비교가 아니다).
+  compare:boolean;
 };
 export function contentOf(slide:CarouselSlidePlan,inputs:Buffer[],index:number,total:number):StyleContent {
   const cover=slide.role==="cover";
@@ -53,6 +56,7 @@ export function contentOf(slide:CarouselSlidePlan,inputs:Buffer[],index:number,t
     headline:slide.headline.replace(/\s+/g," ").trim(),subline:cover?(slide.subline??"").replace(/\s+/g," ").trim():"",teaser:cover?teaserText(total,currentStoreCard()):"",
     points:cleanPoints(slide.points),keywords:slide.keywords,index,total,cover,last:index===total,
     kind:cover?"cover":inputs.length>=2?"photos":inputs.length===1?"photo":"text",
+    compare:slide.layout==="versus"&&inputs.length>=2,
   };
 }
 
