@@ -5,6 +5,7 @@ import { DEFAULT_SLIDE_LAYOUT, type SlideLayout } from "./slideLayout";
 import { normalizeCardLayout, photosNeeded, type DesignSpec } from "./design";
 import type { BodyFontId, TitleFontId } from "./typography";
 import type { ThemeId } from "./themes";
+import type { SeasonMotif } from "./seasonMotif";
 import type { StyleId } from "./styleCatalog";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { fitPlanToPhotos, swapPhoto } from "./photoCarousel";
@@ -36,6 +37,7 @@ export type GenerationState={
   titleFont:FontChoice<TitleFontId>;
   bodyFont:FontChoice<BodyFontId>;
   theme:FontChoice<ThemeId>;      // 게시물 테마. "auto"면 구성안(AI·서버)이 고른 테마.
+  season:FontChoice<SeasonMotif>; // 계절 소품(빗줄기·보름달·색동…). "auto"면 구성안이 고른 값(없으면 장식 없음).
   style:FontChoice<StyleId>;      // 디자인 계열(컬러 블록·신문·웹툰 등). "auto"면 구성안이 고른 계열.
   referenceUse:ReferenceUse;
   photoPreview:string;
@@ -64,7 +66,7 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],
     // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 캐러셀로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
@@ -104,12 +106,13 @@ export function setSlideLayout(slideLayout:SlideLayout){patch({slideLayout});}
 export function setTitleFont(titleFont:FontChoice<TitleFontId>){patch({titleFont});}
 export function setBodyFont(bodyFont:FontChoice<BodyFontId>){patch({bodyFont});}
 export function setTheme(theme:FontChoice<ThemeId>){patch({theme});}
+export function setSeason(season:FontChoice<SeasonMotif>){patch({season});}
 export function setStyle(style:FontChoice<StyleId>){patch({style});}
 
 // 서버에 보낼 디자인: 구성안의 추천(palette·글꼴)에 사용자가 직접 고른 글꼴을 덮어쓴다.
 // 요청을 보낼 때마다 계산하므로, 도중에 글꼴을 바꾸면 그다음에 만드는 장부터 적용된다.
-export function effectiveDesign(design:DesignSpec,current:Pick<GenerationState,"titleFont"|"bodyFont">&{theme?:FontChoice<ThemeId>;style?:FontChoice<StyleId>}=state):DesignSpec {
-  return {...design,...(current.titleFont!=="auto"?{titleFont:current.titleFont}:{}),...(current.bodyFont!=="auto"?{bodyFont:current.bodyFont}:{}),...(current.theme&&current.theme!=="auto"?{theme:current.theme}:{}),...(current.style&&current.style!=="auto"?{style:current.style}:{})};
+export function effectiveDesign(design:DesignSpec,current:Pick<GenerationState,"titleFont"|"bodyFont">&{theme?:FontChoice<ThemeId>;style?:FontChoice<StyleId>;season?:FontChoice<SeasonMotif>}=state):DesignSpec {
+  return {...design,...(current.season&&current.season!=="auto"?{season:current.season}:{}),...(current.titleFont!=="auto"?{titleFont:current.titleFont}:{}),...(current.bodyFont!=="auto"?{bodyFont:current.bodyFont}:{}),...(current.theme&&current.theme!=="auto"?{theme:current.theme}:{}),...(current.style&&current.style!=="auto"?{style:current.style}:{})};
 }
 // 장마다 AI가 고른 글꼴도 사용자가 직접 고른 글꼴이 있으면 덮어쓴다(직접 고른 글꼴은 모든 장에 같게 적용).
 export function effectiveSlide<T extends {titleFont?:string;bodyFont?:string}>(slide:T,current:Pick<GenerationState,"titleFont"|"bodyFont">=state):T {

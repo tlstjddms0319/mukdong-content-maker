@@ -259,8 +259,11 @@ const CLASSIC:ThemeKit={
 // 조각보: 전통 색(홍·치자·송록·쪽·분홍·미색) 천 조각을 이어 붙인 테두리와 바느질 선.
 // 천 조각은 화면 가장자리 띠(34px)에만 두고 안쪽은 비워 글자 대비를 해치지 않는다. 조각 길이는 장마다(variant) 조금씩 다르다.
 const JOGAK=["#B8463A","#D9A441","#5E7F5A","#34557A","#C9849A","#E8DCC4"];
+// 사진 위에 얹을 때(풀스크린·프레임·인용구)는 짙은 천만 쓴다. 바닥글 흰 글자가 띠에 걸쳐도 읽히게.
+const JOGAK_DEEP=["#8E3328","#8A6219","#46613F","#2A4563","#86485C","#5A4632"];
 const JOGAK_BAND=34;
-function jogakFrame(opacity:number,seam:string):string {
+// bottom: 아래 띠 두께. 사진 위에서는 바닥글(채널명·장 번호) 줄과 겹치지 않게 얇게 둔다.
+function jogakFrame(opacity:number,seam:string,colors:readonly string[]=JOGAK,bottom=JOGAK_BAND):string {
   const shift=currentVariant()*2;
   let out="";
   // 한 변을 길이가 다른 조각으로 나눈다. 색은 이웃끼리 겹치지 않게 차례로, 시작 색은 변마다 다르게.
@@ -268,15 +271,15 @@ function jogakFrame(opacity:number,seam:string):string {
     const sizes=[150,96,188,120,72,164,110,136];
     for(let at=0,i=0;at<length;i++){
       const size=Math.min(sizes[(i+shift)%sizes.length],length-at);
-      out+=draw(at,size,JOGAK[(i+start+shift)%JOGAK.length]);
+      out+=draw(at,size,colors[(i+start+shift)%colors.length]);
       at+=size;
     }
   };
   const rect=(x:number,y:number,w:number,h:number,color:string)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${color}" fill-opacity="${opacity}"/><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${seam}" stroke-opacity=".7" stroke-width="2"/>`;
   edge(1080,0,(at,size,color)=>rect(at,0,size,JOGAK_BAND,color));
-  edge(1080,3,(at,size,color)=>rect(at,1350-JOGAK_BAND,size,JOGAK_BAND,color));
-  edge(1350-JOGAK_BAND*2,1,(at,size,color)=>rect(0,JOGAK_BAND+at,JOGAK_BAND,size,color));
-  edge(1350-JOGAK_BAND*2,4,(at,size,color)=>rect(1080-JOGAK_BAND,JOGAK_BAND+at,JOGAK_BAND,size,color));
+  edge(1080,3,(at,size,color)=>rect(at,1350-bottom,size,bottom,color));
+  edge(1350-JOGAK_BAND-bottom,1,(at,size,color)=>rect(0,JOGAK_BAND+at,JOGAK_BAND,size,color));
+  edge(1350-JOGAK_BAND-bottom,4,(at,size,color)=>rect(1080-JOGAK_BAND,JOGAK_BAND+at,JOGAK_BAND,size,color));
   return out;
 }
 // 바느질 선(점선). 천 띠 안쪽을 한 바퀴 두른다.
@@ -347,7 +350,8 @@ const THEME_KITS:Record<ThemeId,ThemeKit>={
     wavyUnderline:options=>`<path d="M${options.x} ${options.y}H${options.x+options.width}" stroke="${options.color}" stroke-opacity="${options.opacity??1}" stroke-width="${Math.max(3,(options.strokeWidth??5)*.7)}" stroke-dasharray="14 9" stroke-linecap="round"/>`,
     photoRadius:requested=>requested?Math.min(requested,10):0,grainOpacity:requested=>Math.max(requested,.16),
     background:(palette,surface)=>jogakFrame(isLight(surface)?.82:.7,isLight(surface)?"#FFFFFF":palette.ink)+stitch(JOGAK_BAND+12,isLight(surface)?palette.accent:"#FFFFFF",.5),
-    photoOverlay:()=>jogakFrame(.92,"#FFFFFF")+stitch(JOGAK_BAND+12,"#FFFFFF",.7),
+    // 사진 위 바느질 선은 바닥글·채널명 줄을 가로지르므로 빼고, 천 띠만 짙은 색으로 두른다.
+    photoOverlay:()=>jogakFrame(.94,"#FFFFFF",JOGAK_DEEP,12),
   },
 };
 const kit=()=>THEME_KITS[currentTheme()];

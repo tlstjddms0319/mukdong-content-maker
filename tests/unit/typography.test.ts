@@ -31,7 +31,7 @@ describe("title and body fonts", () => {
     expect(prompt).toContain(fontCatalogText());
     for(const id of TitleFontIdSchema.options)expect(prompt).toContain(`${id}(${TITLE_FONTS[id].label}`);
     for(const id of BodyFontIdSchema.options)expect(prompt).toContain(`${id}(${BODY_FONTS[id].label}`);
-    expect(prompt).toContain("design 객체(style, palette, theme, titleFont, bodyFont, tone)");
+    expect(prompt).toContain("design 객체(style, palette, theme, titleFont, bodyFont, tone, season)");
   });
 
   it("lets the owner override only the font they picked", () => {
