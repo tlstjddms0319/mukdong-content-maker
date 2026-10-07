@@ -450,3 +450,14 @@ describe("each slide shows what its copy describes", () => {
     expect(buildImagePrompt(brief("홍어 살은 씹을수록 찰져요",["얇게 썰려 결이 보여요"]))).not.toContain("MUST SHOW");
   });
 });
+
+describe("no chopstick lifting unless the scene asks for it", () => {
+  const brief=(visualPrompt:string)=>({topic:"홍어회",count:1,aspectRatio:"4:5" as const,slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 조명",
+    slide:{role:"pairing" as const,subline:"",headline:"막걸리와 함께 놓아요",points:["사발에 막걸리를 따라요"],visualPrompt,textPosition:"top" as const,layout:"frame" as const,keywords:["막걸리"],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0}});
+  it("tells the model to keep the food on the plate when the scene does not mention lifting", () => {
+    expect(buildImagePrompt(brief("홍어 접시 옆 사발에 막걸리를 따르는 순간, 손·젓가락·얼굴 없음"))).toContain("Do NOT show chopsticks lifting a slice");
+  });
+  it("allows it when the scene itself is about lifting a slice", () => {
+    expect(buildImagePrompt(brief("젓가락으로 홍어 한 점을 집어 든 손을 눈높이에서"))).not.toContain("Do NOT show chopsticks lifting a slice");
+  });
+});

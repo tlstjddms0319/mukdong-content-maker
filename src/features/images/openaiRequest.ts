@@ -2,6 +2,7 @@ import type { ImageBrief } from "./schema";
 import { IMAGE_STYLE_DIRECTIONS, resolveImageStyle } from "./style";
 import { CARD_LAYOUTS } from "./design";
 import { STYLES } from "./styleCatalog";
+import { CHOPSTICK_SCENE } from "./carousel";
 import { toFile } from "openai";
 
 function foodDirection(input:ImageBrief):string {
@@ -49,8 +50,8 @@ export function sceneMustShow(input:ImageBrief):string {
 
 // 후보마다 다른 구도. 같은 프롬프트를 n번 보내면 모델의 우연 말고는 차이가 없어서, 후보 번호로 각도와 거리를 갈라 준다.
 export const CANDIDATE_VARIANTS:readonly string[]=[
-  "45도 위에서 접시 전체와 주변 곁들임이 보이게. 테이블 가장자리에 젓가락을 든 손이 살짝 들어온다",
-  "눈높이에서 가까이. 젓가락으로 집어 올린 한 점이 앞에, 상차림은 뒤에서 흐릿하게",
+  "45도 위에서 접시 전체와 주변 곁들임이 보이게. 손이나 젓가락 없이 놓인 상차림",
+  "낮은 눈높이에서 가까이. 접시 위 홍어 살의 결과 윤기가 앞에, 곁들임은 뒤에서 흐릿하게",
   "바로 위에서 내려다본 상차림. 마주 앉은 두 사람의 손과 잔이 양쪽 가장자리에",
   "옆에서 낮게. 테이블 위 그릇의 높이 차이와 조명의 결이 보이게",
 ];
@@ -93,6 +94,9 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     `한국 음식점 인스타그램 게시물용 ${style.medium}. 선택 주제(장면의 소재일 뿐, 이미지에 글자로 쓰지 말 것): ${input.topic}.`,
     input.imageBrief ? `기존 이미지 설명: ${input.imageBrief}.` : "",
     sceneMustShow(input),
+    // 이미지 모델은 '홍어'를 보면 젓가락으로 한 점 집어 든 사진으로 가기 쉽다. 장면이 그걸 말하지 않으면 막는다.
+    input.slide&&!CHOPSTICK_SCENE.test(input.slide.visualPrompt)
+      ? "이 장면에는 젓가락으로 한 점을 집어 든 모습을 넣지 말고, 음식은 접시·그릇·식탁 위에 놓인 모습으로 보여 줄 것. Do NOT show chopsticks lifting a slice in this image; the food rests on the plate or table." : "",
     input.slide ? `슬라이드 역할: ${input.slide.role}. 장면: ${input.slide.visualPrompt}.` : `세로 4:5 구도, 하나의 음식 피사체가 선명하고 먹음직스럽게 보이며 자연스러운 조명과 여백이 있는 ${styleId==="photo"?"실제 음식 사진 스타일":`${style.medium} 스타일`}.`,
     input.styleAnchor ? `전체 캐러셀 공통 스타일: ${input.styleAnchor}.` : "",
     style.look,

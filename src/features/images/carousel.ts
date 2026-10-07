@@ -77,16 +77,16 @@ export type CarouselPlan=z.infer<typeof CarouselPlanSchema>;
 // 준비된 요점은 주제와 무관하게 안전한 일반 문장만 쓴다(가격·원산지·영업시간 같은 확인 필요한 사실은 넣지 않는다).
 // 앞 장의 마지막 줄을 다음 장의 첫 줄이 받도록 써서, AI 없이도 슬라이드가 한 이야기로 읽히게 한다.
 const FALLBACK_SLIDES:Record<CarouselRole,Omit<CarouselSlidePlan,"role"|"layout"|"keywords"|"figure"|"titleFont"|"bodyFont"|"variant">>={
-  cover:{headline:"",points:[],visualPrompt:"완성된 음식 한 상을 45도 위에서 담은 히어로 음식 사진. 테이블 가장자리에 젓가락을 든 손이 살짝 들어오고, 얼굴은 프레임 밖",textPosition:"top"},
-  overview:{headline:"상에 뭐가 올라오는지 먼저 볼게요",points:["가운데 메인 접시, 둘레에 곁들임이 놓여요","처음이라면 순한 것부터 차례로 집어 보세요","다음 장에서 한 점을 가까이 볼게요"],visualPrompt:"그릇과 곁들임의 전체 구성이 보이도록 위에서 넓게 내려다본 상차림. 양쪽에서 젓가락을 든 두 사람의 손이 들어오고 얼굴은 없음",textPosition:"top"},
-  detail:{headline:"가까이 보면 결이 이렇게 살아 있어요",points:["얇게 썰려 빛에 비치면 결이 보여요","씹을수록 탄력이 느껴지는 부분이에요","이걸 어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"젓가락으로 집어 올린 한 점을 눈높이에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손만 보이고 얼굴 없음",textPosition:"bottom"},
+  cover:{headline:"",points:[],visualPrompt:"완성된 음식 한 상을 45도 위에서 담은 히어로 음식 사진. 넓은 접시 가득 썬 홍어 살과 곁들임이 놓여 있고 손·젓가락·얼굴 없음",textPosition:"top"},
+  overview:{headline:"상에 뭐가 올라오는지 먼저 볼게요",points:["가운데 메인 접시, 둘레에 곁들임이 놓여요","처음이라면 순한 것부터 차례로 집어 보세요","다음 장에서 한 점을 가까이 볼게요"],visualPrompt:"그릇과 곁들임의 전체 구성이 보이도록 바로 위에서 넓게 내려다본 상차림. 가운데 홍어 접시, 둘레에 수육·묵은지·막걸리 사발, 손과 얼굴 없음",textPosition:"top"},
+  detail:{headline:"가까이 보면 결이 이렇게 살아 있어요",points:["얇게 썰려 빛에 비치면 결이 보여요","씹을수록 탄력이 느껴지는 부분이에요","이걸 어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시 위에 겹쳐 놓인 홍어 살의 단면과 결을 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
   "how-to":{headline:"한 점은 이렇게 만들어 먹어요",points:["홍어 한 점을 먼저 집고 곁들임을 올려요","첫 점은 양념을 적게 해서 맛을 확인해요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 홍어 한 점을 집어 곁들임 위에 올리는 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"},
-  pairing:{headline:"같이 놓으면 맛이 잡히는 조합이에요",points:["곁들임이 맛의 균형을 잡아 줘요","음료는 담백한 것이 잘 어울려요","이제 가기 전에 확인할 것만 남았어요"],visualPrompt:"핵심 음식과 잘 어울리는 음료와 곁들임을 대각선 구도로 담은 식탁. 잔을 든 손과 젓가락이 함께 보이고 얼굴 없음",textPosition:"bottom"},
+  pairing:{headline:"같이 놓으면 맛이 잡히는 조합이에요",points:["곁들임이 맛의 균형을 잡아 줘요","음료는 담백한 것이 잘 어울려요","이제 가기 전에 확인할 것만 남았어요"],visualPrompt:"홍어 접시 옆에 막걸리 사발과 곁들임이 대각선으로 놓인 식탁. 사발에 막걸리를 따르는 순간, 얼굴 없음",textPosition:"bottom"},
   process:{headline:"손질부터 담음새까지 이렇게 준비해요",points:["재료를 손질해 접시에 가지런히 담아요","한 접시씩 순서대로 준비해요","이렇게 나온 한 상을 다음 장에서 볼게요"],visualPrompt:"깨끗한 손이 재료를 접시에 가지런히 담는 준비 과정을 옆 각도에서 담은 사진. 얼굴 없음",textPosition:"top"},
   occasion:{headline:"여럿이 나눠 먹을 때 더 좋은 자리예요",points:["가운데 한 상을 두고 각자 한 점씩 집어요","이야기하면서 천천히 먹기 좋은 구성이에요","분위기가 어떤지 이어서 볼게요"],visualPrompt:"여럿이 둘러앉은 식탁을 옆에서 담은 사진. 한 상을 향해 뻗은 여러 손과 잔이 보이고, 사람은 뒷모습이나 어깨까지만 나오고 얼굴 없음",textPosition:"bottom"},
   mood:{headline:"서두르지 않아도 되는 저녁이에요",points:["부드러운 조명 아래 한 상 앞에서 쉬어 가요","한 점씩 천천히 먹어도 괜찮은 자리예요","마지막으로 방문 전에 볼 것만 정리해요"],visualPrompt:"부드러운 저녁 조명 아래 한 상을 넓은 여백과 함께 담은 식탁 사진. 테이블 끝에 잔을 든 손이 보이고 얼굴 없음",textPosition:"top"},
   visit:{headline:"가기 전에 이것만 확인하면 돼요",points:["메뉴 구성은 프로필의 플레이스에서 확인해요","처음이라면 직원에게 편하게 물어봐도 돼요","저장해 두면 다음에 찾기 편해요"],visualPrompt:"푸짐하고 편안한 완성 상차림을 눈높이에서 담은 사진. 마주 앉은 사람의 손이 젓가락을 들고 있고 얼굴 없음, 매장 외관 없음",textPosition:"bottom"},
-  cta:{headline:"다음 한 점은 직접 확인해 보세요",points:["저장해 두면 다음 방문 때 편해요","궁금한 점은 댓글로 남겨 주세요"],visualPrompt:"비어 가는 접시 가장자리와 마지막 한 점을 대비해 담은 사진. 접시를 향한 젓가락과 손만 보이고 얼굴 없음",textPosition:"bottom"},
+  cta:{headline:"다음 한 점은 직접 확인해 보세요",points:["저장해 두면 다음 방문 때 편해요","궁금한 점은 댓글로 남겨 주세요"],visualPrompt:"비어 가는 접시 가장자리와 마지막 한 점을 대비해 담은 사진. 반쯤 빈 막걸리 사발과 접힌 냅킨, 얼굴 없음만 보이고 얼굴 없음",textPosition:"bottom"},
 };
 
 const FALLBACK_KEYWORDS:Record<CarouselRole,string[]>={
@@ -131,11 +131,11 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     `[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰려 빛에 비치면 결이 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요. 표지 headline은 넘기고 싶게 만드는 짧은 훅(8~18자, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(30자 이내 해요체 한 줄)에 넣으세요. 표지가 아닌 장의 subline은 빈 문자열로 두세요.`,
     `[사실 기준] 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어전·찜·무침의 조리법을 구분하고 선택 주제에 없는 삼합 구성을 강제하지 마세요. 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요.`,
     // 글도 홍어가 주인공: "묵은지를 펼치고 수육을 올려요"처럼 곁들임이 문장을 이끌면 그림보다 글에서 먼저 주인공이 바뀐다.
-    `[홍어 중심] headline과 points의 주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰세요. 수육·묵은지·막걸리는 "홍어 한 점을 묵은지에 싸요"처럼 홍어 문장 뒤에 곁들이는 말로만 넣고, 수육이나 묵은지로 시작하는 요점이나 단계 설명은 쓰지 마세요. 먹는 순서를 설명할 때도 첫 단계는 홍어를 고르거나 집는 동작입니다.`,
+    `[홍어 중심] headline과 points의 주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰세요. 수육·묵은지·막걸리는 "홍어 한 점을 묵은지에 싸요"처럼 홍어 문장 뒤에 곁들이는 말로만 넣고, 수육이나 묵은지로 시작하는 요점이나 단계 설명은 쓰지 마세요. 먹는 순서를 설명할 때도 첫 단계는 홍어를 고르는 데서 시작합니다.`,
     // A vs B 장은 글로 말한 차이가 두 사진에서 보여야 한다. 코 모양처럼 썬 회 사진에 안 나오는 차이는 쓰지 않는다.
     `[비교 장] layout이 versus인 장의 points는 두 사진을 나란히 놓았을 때 눈으로 보이는 차이(살의 색, 결의 굵기, 썬 모양, 윤기)만 쓰세요. 코 모양, 몸 전체 생김새처럼 썬 회 사진에 나오지 않는 차이는 쓰지 마세요. 두 visualPrompt는 같은 접시·각도·조명으로 맞추고, 쓰인 차이(예: 붉은빛 도는 홍어 살과 하얗고 투명한 가오리 살)가 한눈에 갈리도록 각 사진에 그 차이를 명시하세요.`,
     // 장면 다양성: 같은 접시를 거리만 바꿔 다섯 번 찍지 않도록, 장면 유형과 사람 요소를 장마다 다르게 배정한다.
-    `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도 또는 눈높이), 한 점의 질감(매크로), 젓가락으로 집거나 재료를 올리는 손, 함께 먹는 식탁(여러 손과 잔, 뒷모습), 준비 과정, 곁들임과의 조합. ${Math.max(2,Math.ceil(parsed.slideCount/2))}장 이상에는 손, 젓가락, 잔, 뒷모습처럼 사람이 먹고 있다는 느낌이 드는 요소를 넣되 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 음식이 나오는 모든 장면에서 홍어가 주인공입니다. visualPrompt에 홍어(또는 그 장의 홍어 요리)를 가장 크고 앞에, 초점이 맞게 둔다고 명시하고, 수육·묵은지·막걸리는 작게 곁들여지는 조연으로만 쓰세요. 집어 올리는 한 점도 홍어 조각이어야 합니다.`,
+    `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 각 visualPrompt에는 그 장의 글이 말하는 대상과 동작을 구체적으로 적으세요(예: "묵은지에 싼 홍어 한 점", "수육·묵은지와 겹친 삼합 한 입", "막걸리 사발을 따르는 순간", "접시 위 홍어 살 단면", "둘러앉은 식탁"). 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도), 위에서 본 상차림, 접시 위 질감(매크로), 곁들임과 싼·겹친 조합, 막걸리와 함께 놓인 식탁, 준비 과정, 함께 먹는 식탁(여러 손과 잔, 뒷모습). "젓가락으로 한 점을 집어 든" 장면은 한 게시물에 최대 한 장만 쓰고, 나머지 장은 접시·그릇·식탁 위에 놓인 모습으로 쓰세요. 손·잔·뒷모습 같은 사람 요소는 글이 먹는 동작이나 함께하는 자리를 말할 때만 넣고, 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 음식이 나오는 모든 장면에서 홍어가 주인공입니다. visualPrompt에 홍어(또는 그 장의 홍어 요리)를 가장 크고 앞에, 초점이 맞게 둔다고 명시하고, 수육·묵은지·막걸리는 작게 곁들여지는 조연으로만 쓰세요. 집어 올리는 한 점도 홍어 조각이어야 합니다.`,
     `[디자인] ${designCatalogText()}`,
     `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})을 쓰세요. 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone)를 두고(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud), 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
   ].join("\n");
@@ -147,6 +147,30 @@ export interface CarouselPlanAi {
 
 // options.seed를 주면 캐러셀마다 레이아웃·색·글꼴을 섞는다(variety.ts). 화면에서 쓰는 구성안 경로는 매번 무작위 시드를 넘기고,
 // 시드를 주지 않으면 섞지 않아 결과가 항상 같다(테스트·비교 스크립트용).
+// 한 게시물에 "젓가락으로 집어 든 한 점" 장면은 한 장만. 이미지 모델이 가장 쉽게 그리는 장면이라, 구성안 AI가
+// 여러 장에 쓰면 캐러셀이 같은 사진 다섯 장이 된다. 두 번째부터는 그 장의 글에서 장면을 다시 짓는다.
+// "젓가락 없음"처럼 막는 말은 세지 않도록, 실제로 집어 드는 표현만 본다.
+export const CHOPSTICK_SCENE=/젓가락으로|집어\s*(?:올|든|드)|집는|chopsticks?\s+(?:lift|hold|pick)/i;
+export function sceneFromCopy(slide:CarouselSlidePlan,topic:string):string {
+  const text=[slide.headline,...slide.points].join(" ");
+  const subject=/삼합/.test(text)?"홍어·수육·묵은지를 겹친 삼합 한 입이 접시 위에 놓인 모습"
+    :/(묵은지|김치)/.test(text)?"묵은지 잎에 홍어 한 점을 싸서 접시 위에 올려 둔 모습"
+    :/수육/.test(text)?"홍어 접시 옆에 얇게 썬 수육이 함께 놓인 모습"
+    :/막걸리/.test(text)?"홍어 접시 옆 사발에 막걸리를 따르는 순간"
+    :/(향|숙성|삭)/.test(text)?"썬 홍어 살의 단면과 결이 보이게 접시에 가지런히 놓인 모습(낮은 각도 매크로)"
+    :/(함께|여럿|모임|친구|가족)/.test(text)?"여럿이 둘러앉은 식탁 가운데 놓인 홍어 한 상, 사람은 손과 어깨까지만"
+    :"홍어 접시와 곁들임이 놓인 식탁을 45도에서 담은 모습";
+  return `${subject}. ${topic} 이야기의 "${slide.headline}" 장면. 젓가락으로 집어 든 장면이 아니며 얼굴은 나오지 않음`.slice(0,600);
+}
+export function limitChopstickScenes(plan:CarouselPlan,topic:string):CarouselPlan {
+  let seen=false;
+  return {...plan,slides:plan.slides.map(slide=>{
+    if(!CHOPSTICK_SCENE.test(slide.visualPrompt))return slide;
+    if(!seen){seen=true;return slide;}
+    return {...slide,visualPrompt:sceneFromCopy(slide,topic)};
+  })};
+}
+
 export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,options:{seed?:number}={}):Promise<CarouselPlan> {
   const parsed=CarouselPlanInputSchema.parse(input);
   const fallback=createFallbackCarouselPlan(parsed);
@@ -154,7 +178,7 @@ export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,op
   if(!ai)return vary(fallback,true);
   try {
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));
-    return plan.slideCount===parsed.slideCount ? vary(normalizeCarouselDesign(plan),false) : vary(fallback,true);
+    return plan.slideCount===parsed.slideCount ? vary(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic),false) : vary(fallback,true);
   } catch {
     return vary(fallback,true);
   }
