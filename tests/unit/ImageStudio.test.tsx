@@ -211,4 +211,22 @@ describe("owner photo cover recommendation",()=>{
     // 올린 사진의 태그에는 주제가 "주제:"로만 붙는다(사진 속 음식으로 오해하지 않게).
     expect(String(forms[0].get("tags"))).toBe("주제:겨울엔 과메기 한 점,매장 사진");
   });
+  it("offers the cover panorama only when the cover photo is wide",async()=>{
+    let uploads=0;
+    const analysis=(wide:boolean)=>({analyzed:true,ranking:["p1","p2"],recommended:null,scored:false,scoreAvailable:false,photos:[
+      {id:"p1",flags:[],labels:[],measured:true,wide,food:null,mismatch:null,appetite:null},{id:"p2",flags:[],labels:[],measured:true,wide:false,food:null,mismatch:null,appetite:null}]});
+    let wide=false;
+    const request=vi.fn(async(url:string)=>url==="/api/images/analyze"?{ok:true,json:async()=>analysis(wide)}:{ok:true,json:async()=>{uploads++;return {asset:{id:`p${uploads}`,preview:"data:image/jpeg;base64,AAAA",name:`사진${uploads}`}};}});
+    vi.stubGlobal("fetch",request);
+    const first=render(<ImageStudio topic="홍어 한 점" slideCount={5} sessionKey="pano-a" onApprove={()=>undefined}/>);
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"}),new File(["b"],"b.png",{type:"image/png"})]}});
+    await screen.findByRole("button",{name:/캐러셀 만들기/});
+    await waitFor(()=>expect(request.mock.calls.some(([url])=>url==="/api/images/analyze")).toBe(true));
+    expect(screen.queryByLabelText(/파노라마/)).not.toBeInTheDocument();
+    first.unmount();
+    wide=true;uploads=0;
+    render(<ImageStudio topic="홍어 한 점" slideCount={5} sessionKey="pano-b" onApprove={()=>undefined}/>);
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"}),new File(["b"],"b.png",{type:"image/png"})]}});
+    expect(await screen.findByLabelText(/파노라마/)).toBeInTheDocument();
+  });
 });

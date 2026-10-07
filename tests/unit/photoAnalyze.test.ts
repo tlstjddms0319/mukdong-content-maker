@@ -114,3 +114,12 @@ describe("photo and menu mismatch (gwamegi post, samhap photo)", () => {
     expect(data.photos[1].mismatch).toBe("AI가 보기엔 과메기 사진이 아니에요");
   });
 });
+
+describe("panorama-ready photos", () => {
+  it("marks a wide photo so the studio can offer the cover panorama", async () => {
+    const wide=`data:image/jpeg;base64,${(await sharp({create:{width:2160,height:1400,channels:3,background:"#886644"}}).jpeg().toBuffer()).toString("base64")}`;
+    const tall=`data:image/jpeg;base64,${(await sharp({create:{width:1400,height:1750,channels:3,background:"#886644"}}).jpeg().toBuffer()).toString("base64")}`;
+    const data=AnalyzeResponseSchema.parse(await (await post({photos:[{id:"w",image:wide},{id:"t",image:tall}]})).json());
+    expect(data.photos.map(photo=>photo.wide)).toEqual([true,false]);
+  });
+});

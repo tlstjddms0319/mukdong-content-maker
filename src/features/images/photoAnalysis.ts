@@ -29,6 +29,8 @@ export const AnalyzedPhotoSchema=z.object({
   labels:z.array(z.string()),         // 화면 배지 문구(PHOTO_QUALITY_LABELS)
   measured:z.boolean(),
   // Gemini 식욕 점수. 점검하지 않았거나 실패했으면 null.
+  // 가로로 충분히 긴 사진인지(표지+2장 파노라마에 쓸 수 있는지, render/panorama.ts). 잴 수 없었으면 false.
+  wide:z.boolean().default(false),
   // 사진 속 음식(보관함 이름·태그 또는 AI 점검으로 안 것, 짧은 한국어). 모르면 null.
   food:z.string().nullable().default(null),
   // 글의 메뉴와 사진 속 음식이 다를 때의 안내 문구(예: "과메기 글인데 삼합 사진이에요"). 맞거나 모르면 null.

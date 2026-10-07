@@ -4,6 +4,7 @@ import { ownerApiError } from "@/features/auth/guard";
 import { createAssetLibrary } from "@/features/images/assetLibrary";
 import { PHOTO_QUALITY_LABELS, photoQuality, type PhotoQualityFlag } from "@/features/images/render/photoEnhance";
 import { coverRank, expectedFoodFrom, scoreImages, type CoverCheck } from "@/features/images/coverCheck";
+import { panoramaReady } from "@/features/images/render/panorama";
 import { AnalyzeRequestSchema, FOOD_TAG, menuMismatch, photoFoodOf, photoFoodText, photoRank, rankPhotos, type AnalyzeResponse, type AnalyzedPhoto } from "@/features/images/photoAnalysis";
 
 // 사장님 사진 표지 추천. 1) 로컬 품질 검사(무료: 어두움·흔들림·색 틀어짐·작은 사진)로 먼저 거르고
@@ -35,6 +36,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   // 저장된 품질이 없는 사진(예전 사진·data URL)만 지금 잰다. 장당 0.1초 안팎이라 무료로 매번 해도 된다.
   const measured=await Promise.all(loaded.map(async item=>({
     ...item,
+    wide:item.bytes?await panoramaReady(item.bytes):false,
     flags:item.flags??(item.bytes?await photoQuality(item.bytes).then(quality=>quality.flags).catch(()=>null):null),
   })));
 
@@ -70,7 +72,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     // AI가 "글의 음식처럼 안 보인다"고 했는데 음식 이름으로는 못 가렸을 때도 알려 준다.
     const expected=expectedFoodFrom(topic);
     const aiMismatch=!tagged&&check&&check.foodVisible&&!check.looksLikeSkate&&topic?`AI가 보기엔 ${expected.name} 사진이 아니에요`:null;
-    return {id:item.id,flags,labels:flags.map(flag=>PHOTO_QUALITY_LABELS[flag]),measured:item.flags!==null,
+    return {id:item.id,flags,labels:flags.map(flag=>PHOTO_QUALITY_LABELS[flag]),measured:item.flags!==null,wide:item.wide,
       food:photoFoodOf(foodText)?.label??(check?.food?.trim().slice(0,10)||null),mismatch:tagged?.message??aiMismatch,
       appetite:check?{score:check.score,appetite:check.appetite,lighting:check.lighting,composition:check.composition,warnings:check.warnings,note:check.note}:null};
   });
