@@ -15,6 +15,14 @@ describe("CopyEditor generation", () => {
     fireEvent.click(screen.getByRole("button",{name:"AI 이미지 안내 넣기"}));
     expect(screen.getByLabelText("게시물 문안")).toHaveValue("냄새 없음\n\nAI 연출 이미지가 포함되어 있으며 실제 메뉴와 다를 수 있습니다.");
   });
+  it("shows what is left to polish when the AI draft came back with notes, until the owner edits",async()=>{
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({topic:"홍어",audience:"A",hook:"한 점",information:"짧은 설명",store_connection:"묵동홍어마을",call_to_action:"메뉴 확인",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null,quality_warnings:["본문을 공백 포함 500~800자로 맞추세요. 현재 120자입니다."]})}));
+    render(<CopyEditor topic="홍어" onContinue={()=>undefined}/>);
+    expect(await screen.findByText(/본문을 공백 포함 500~800자로/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("게시물 문안"),{target:{value:"직접 고친 글"}});
+    expect(screen.queryByText(/본문을 공백 포함 500~800자로/)).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
   it("sends what is in the owner's photos to the writer",async()=>{
     const request=vi.fn().mockResolvedValue({ok:true,json:async()=>({topic:"홍어",audience:"A",hook:"한 점",information:"설명",store_connection:"묵동홍어마을",call_to_action:"메뉴 확인",hashtags:["#홍어"],facts_used:[],facts_to_verify:[],image_disclosure:null})});
     vi.stubGlobal("fetch",request);

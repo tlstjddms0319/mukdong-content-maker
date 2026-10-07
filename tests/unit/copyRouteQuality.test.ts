@@ -30,9 +30,14 @@ describe("copy quality",()=>{
     // 주제 태그(최대 3개) + 지역 태그 + 가게 태그. AI가 넣은 지역 태그(#중랑구맛집 등)는 정해진 지역 태그로 바뀐다.
     expect((await response.json()).hashtags).toEqual(["#홍어","#묵동맛집","#묵동홍어마을"]);
   });
-  it("reports failed or too-short generation instead of returning a fixed samhap caption",async()=>{
+  it("keeps a too-short draft with a note to fix instead of throwing it away, and reports provider failures",async()=>{
+    // 예전에는 길이가 모자라면 문안 전체를 버리고 "AI 문안을 완성하지 못했어요"를 띄웠다. 이제 쓰고 다듬을 곳만 알려 준다.
     generate.mockResolvedValue({...result,information:"너무 짧음"});
-    expect((await POST(request())).status).toBe(502);
+    const kept=await POST(request());
+    expect(kept.status).toBe(200);
+    const body=await kept.json();
+    expect(body.information).toBe("너무 짧음");
+    expect(body.quality_warnings.some((issue:string)=>issue.includes("본문을 공백 포함"))).toBe(true);
     generate.mockRejectedValue(new Error("quota"));
     const response=await POST(request());
     expect(response.status).toBe(502);
@@ -62,13 +67,26 @@ describe("copy quality",()=>{
     expect(body.image_disclosure).toMatch(/AI/);
     expect(formatCopy(body)).toContain(body.image_disclosure);
   });
-  it("rejects oversized or still-repetitive copy after one repair, without retrying provider failures",async()=>{
+  it("asks once to repair oversized or repetitive copy, then uses it with notes; explains a quota failure without retrying",async()=>{
     generate.mockResolvedValue({...result,information:result.information.repeat(3)});
-    expect((await POST(request())).status).toBe(502);
+    const kept=await POST(request());
+    expect(kept.status).toBe(200);
     expect(generate).toHaveBeenCalledTimes(2);
+    expect((await kept.json()).quality_warnings.length).toBeGreaterThan(0);
     generate.mockReset().mockRejectedValue(new TextAiHttpError("Gemini",429,"quota"));
-    expect((await POST(request())).status).toBe(502);
+    const failed=await POST(request());
+    expect(failed.status).toBe(502);
     expect(generate).toHaveBeenCalledTimes(1);
+    const body=await failed.json();
+    expect(body.reason).toBe("quota");
+    expect(body.message).toContain("사용량을 다 썼어요");
+  });
+
+  it("still refuses copy that keeps an unverified absolute claim after the repair",async()=>{
+    generate.mockResolvedValue({...result,store_connection:"묵동홍어마을에서 정갈한 삼합 한 상을 준비하고 있어요."});
+    const response=await POST(request());
+    expect(response.status).toBe(502);
+    expect((await response.json()).reason).toBe("quality");
   });
   it("rejects unverified absolute claims even in partial rewrites",async()=>{
     generate.mockResolvedValue({replacement:"냄새 없음! 누구나 먹음!"});

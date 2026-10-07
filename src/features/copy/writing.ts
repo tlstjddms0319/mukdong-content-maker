@@ -89,6 +89,18 @@ export function generatedCopyIssues(copy:GeneratedCopy,length:CopyLength):string
   return issues;
 }
 
+// 꼭 막아야 하는 문제(확인 안 된 단정·매장 제공 주장·빠진 문단)와, 사장님이 고치면 되는 문제(길이·말투·상투어 등)를 나눈다.
+// 예전에는 다시 써 달라고 한 번 요청한 뒤에도 하나라도 남으면 문안 전체를 버려 "AI 문안을 완성하지 못했어요"가 자주 떴다.
+// 이제 꼭 막아야 하는 문제만 없으면 문안을 쓰고, 나머지는 화면의 "문안 다듬기"에 알려 준다.
+export function hardCopyIssues(copy:GeneratedCopy):string[] {
+  const parts=[copy.hook,copy.information,copy.store_connection,copy.call_to_action];
+  return [
+    ...checkTextClaims(parts.join("\n\n")).blocked,
+    ...storeConnectionIssues(copy.store_connection),
+    ...(parts.some(part=>!part.trim())?["첫 문장·정보·가게 연결·행동 제안을 모두 작성하세요."]:[]),
+  ];
+}
+
 // This flow knows only the store name and area; these serving claims need owner facts.
 // A phrase check catches explicit assertions, not every possible factual claim.
 export function storeConnectionIssues(text:string):string[] {
