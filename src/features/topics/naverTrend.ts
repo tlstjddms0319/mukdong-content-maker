@@ -10,20 +10,22 @@ import { z } from "zod";
 
 export const ANCHOR="막걸리";
 // 가게 메뉴·홍어로 이어지기 쉬운 음식 말. 묶음 이름이 화면과 프롬프트에 그대로 나간다.
-export const TREND_GROUPS:Array<{name:string;keywords:string[]}>=[
-  {name:"홍어",keywords:["홍어","홍어회","홍어무침"]},
-  {name:"삼합",keywords:["삼합","홍어삼합"]},
-  {name:"수육",keywords:["수육","보쌈"]},
-  {name:"묵은지",keywords:["묵은지"]},
+// menu: 그 말이 늘어나면 먼저 떠올릴 가게 메뉴(STORE_MENU id). 준비된 주제를 고를 때 쓴다. 없으면 장면(모임 등)으로만 쓴다.
+export const TREND_GROUPS:Array<{name:string;keywords:string[];menu?:string}>=[
+  {name:"홍어",keywords:["홍어","홍어회","홍어무침"],menu:"hongeo-hoe"},
+  {name:"삼합",keywords:["삼합","홍어삼합"],menu:"hongeo-hoe"},
+  {name:"수육",keywords:["수육","보쌈"],menu:"hongeo-hoe"},
+  {name:"묵은지",keywords:["묵은지"],menu:"hongeo-hoe"},
   {name:"굴",keywords:["굴","굴보쌈","생굴"]},
-  {name:"과메기",keywords:["과메기"]},
-  {name:"김장",keywords:["김장","김장김치"]},
-  {name:"전",keywords:["부침개","모둠전","전 맛집"]},
-  {name:"회",keywords:["모둠회","회 맛집"]},
-  {name:"막걸리 안주",keywords:["막걸리 안주"]},
+  {name:"과메기",keywords:["과메기"],menu:"gwamegi"},
+  {name:"김장",keywords:["김장","김장김치"],menu:"hongeo-hoe"},
+  {name:"전",keywords:["부침개","모둠전","전 맛집"],menu:"minari-jeon"},
+  {name:"회",keywords:["모둠회","회 맛집"],menu:"hongeo-hoe"},
+  {name:"막걸리 안주",keywords:["막걸리 안주"],menu:"baedari-makgeolli"},
   {name:"송년회",keywords:["송년회","송년회 장소"]},
   {name:"회식",keywords:["회식","회식 장소"]},
 ];
+export const trendMenu=(keyword:string)=>TREND_GROUPS.find(group=>group.name===keyword)?.menu;
 
 const ResponseSchema=z.object({results:z.array(z.object({title:z.string(),data:z.array(z.object({period:z.string(),ratio:z.number()}))}))});
 export type TrendKeyword={keyword:string;growth:number;level:number};
@@ -90,12 +92,18 @@ export async function fetchTrendKeywords(deps:TrendDeps={}):Promise<TrendKeyword
 }
 
 // 주제 추천용: 12시간 동안 결과를 기억해 호출을 아낀다(월 쿼터). 실패하면 빈 목록을 쓰고 30분 뒤 다시 시도.
-let cache:{at:number;value:TrendKeyword[]}|null=null;
+// status: 화면이 "반영됐는지"를 알려 주는 데 쓴다. off=키 없음, ok=늘어난 말 있음, none=정상인데 눈에 띄게 늘어난 말 없음, error=호출 실패.
+export type TrendStatus="off"|"ok"|"none"|"error";
+let cache:{at:number;value:TrendKeyword[];error:boolean}|null=null;
+export async function cachedTrendResult(deps:TrendDeps={},now=Date.now()):Promise<{keywords:TrendKeyword[];status:TrendStatus}> {
+  if(!naverConfigured(deps.env??process.env))return {keywords:[],status:"off"};
+  if(!cache||now-cache.at>=(cache.value.length?12:0.5)*3_600_000){
+    try{cache={at:now,value:await fetchTrendKeywords(deps),error:false};}
+    catch(error){console.warn("[trends] 네이버 검색 트렌드를 건너뜁니다:",error instanceof Error?error.message:String(error));cache={at:now,value:[],error:true};}
+  }
+  return {keywords:cache.value,status:cache.error?"error":cache.value.length?"ok":"none"};
+}
 export async function cachedTrendKeywords(deps:TrendDeps={},now=Date.now()):Promise<TrendKeyword[]> {
-  if(!naverConfigured(deps.env??process.env))return [];
-  if(cache&&now-cache.at<(cache.value.length?12:0.5)*3_600_000)return cache.value;
-  try{cache={at:now,value:await fetchTrendKeywords(deps)};}
-  catch(error){console.warn("[trends] 네이버 검색 트렌드를 건너뜁니다:",error instanceof Error?error.message:String(error));cache={at:now,value:[]};}
-  return cache.value;
+  return (await cachedTrendResult(deps,now)).keywords;
 }
 export function resetTrendCache(){cache=null;}

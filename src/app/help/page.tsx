@@ -38,7 +38,7 @@ export default async function HelpPage() {
     </section>
     <div className="state-card"><h2>알아두세요</h2>
       <p>AI 사용에는 계정 설정에 따라 비용이 들 수 있어요. 이미지 생성이 안 되면 내 사진으로 진행하세요. AI 이미지는 실제 메뉴와 다를 수 있으니 올리기 전에 꼭 확인해 주세요.</p>
-      <p>Instagram 연결 전에는 자동 게시되지 않아요. 추천 주제는 계절·명절, 내가 적은 성과, 그리고 네이버 키를 넣었다면 요즘 검색이 늘어난 음식 말을 참고해요. 추천 음악은 Instagram 보관함에서 직접 검색하고 사용 가능 여부를 확인해 주세요.</p>
+      <p>Instagram 연결 전에는 자동 게시되지 않아요. 추천 주제는 계절·명절, 내가 적은 성과, 그리고 네이버 키를 넣었다면 요즘 검색이 늘어난 음식 말을 참고해요. 검색 흐름을 반영한 주제에는 '검색 흐름' 표시가 붙어요. 새로고침하면 앞에 나온 메뉴는 빼고 다른 메뉴로 돌려요. 추천 음악은 Instagram 보관함에서 직접 검색하고 사용 가능 여부를 확인해 주세요.</p>
     </div>
     <div className="bottom-action"><Link className="button primary" href="/?new=1">새 초안 만들기</Link><Link className="button secondary" href="/drafts">내 초안 보기</Link><Link className="button secondary" href="/images">이미지 제작실</Link><Link className="button secondary" href="/settings">설정 보기</Link></div>
   </WizardShell>;

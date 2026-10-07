@@ -20,6 +20,9 @@ export type StoreMenuItem={
   lookKo:string;
   // 어울리는 계절(일반 상식 수준). 빈 배열이면 사계절.
   seasons:readonly MenuSeason[];
+  // 제철 달(있으면 계절보다 먼저 본다). 과메기처럼 제철이 계절 경계에 걸친 메뉴용: 계절만 보면 11월(가을)에 과메기가 빠졌다.
+  // 제철 바로 전달에는 "곧 제철" 메뉴로 따로 알려 준다(예고 주제용).
+  months?:readonly number[];
   // 계절 말고 어울리는 때(주제 추천 참고용, 짧게).
   moments:string;
 };
@@ -62,7 +65,7 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/과메기/,
     look:"Korean gwamegi: half-dried fish fillets cut into long glossy strips, dark reddish-brown flesh with a thin silvery-blue skin edge, laid neatly on a plate.",
     lookKo:"반건조한 생선 살을 길게 썰어 접시에 가지런히 놓은 윤기 도는 검붉은 과메기",
-    seasons:["겨울"],moments:"찬바람 부는 겨울 제철, 연말·신년 모임",
+    seasons:["겨울"],months:[11,12,1,2],moments:"찬바람 부는 늦가을부터 겨울 제철(보통 11월부터), 연말·신년 모임",
   },
   {
     id:"minari-jeon",name:"미나리전",short:"미나리전",category:"전",
@@ -117,12 +120,23 @@ export function josa(word:string,withFinal:string,withoutFinal:string):string {
   return word+(hasFinal?withFinal:withoutFinal);
 }
 
-// 이 계절에 어울리는 메뉴(사계절 메뉴 포함).
+// 이 계절에 어울리는 메뉴(사계절 메뉴 포함). 제철 달이 있는 메뉴는 날짜를 아는 menusForDate를 쓴다.
 export function menusInSeason(season:string|undefined):StoreMenuItem[] {
   return STORE_MENU.filter(item=>!item.seasons.length||!season||(item.seasons as readonly string[]).includes(season));
 }
 
+// 오늘(YYYY-MM-DD) 기준 제철 메뉴와 곧 제철인 메뉴. 제철 달(months)이 있으면 달로, 없으면 계절로 본다.
+// upcoming: 다음 달부터 제철인 메뉴(예: 10월의 과메기). 날짜를 모르면 계절로만 보고 upcoming은 비운다.
+export function menusForDate(today:string|undefined,season:string|undefined):{inSeason:StoreMenuItem[];upcoming:StoreMenuItem[]} {
+  const month=today?Number(today.slice(5,7)):NaN;
+  const known=Number.isInteger(month)&&month>=1&&month<=12;
+  const inSeason=STORE_MENU.filter(item=>item.months&&known?item.months.includes(month):!item.seasons.length||!season||(item.seasons as readonly string[]).includes(season));
+  const upcoming=known?STORE_MENU.filter(item=>item.months&&!item.months.includes(month)&&item.months.includes(month%12+1)):[];
+  return {inSeason,upcoming};
+}
+const monthRange=(months:readonly number[])=>`${months[0]}~${months[months.length-1]}월`;
+
 // 주제 추천 프롬프트에 넣는 메뉴 안내 한 줄씩.
 export function menuPromptLines():string {
-  return STORE_MENU.map(item=>`- ${item.name}(${item.category}, ${item.seasons.length?`${item.seasons.join("·")}에 특히 어울림`:"사계절"}; ${item.moments})`).join("\n");
+  return STORE_MENU.map(item=>`- ${item.name}(${item.category}, ${item.months?`${monthRange(item.months)} 제철`:item.seasons.length?`${item.seasons.join("·")}에 특히 어울림`:"사계절"}; ${item.moments})`).join("\n");
 }

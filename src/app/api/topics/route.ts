@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { z } from "zod";
-import { suggestTopics, topicDirectionsForRound } from "@/features/topics/service";
+import { overusedMenus, suggestTopics, topicDirectionsForRound } from "@/features/topics/service";
+import { STORE_MENU } from "@/features/store/menu";
 import { TopicInputSchema } from "@/features/topics/schema";
 import { buildTopicPrompt, topicGenerationSchema } from "@/features/topics/prompt";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
 import { createDraftRepository } from "@/features/drafts/repository";
 import { likedTopicTitles } from "@/features/drafts/performance";
-import { cachedTrendKeywords, trendLabel } from "@/features/topics/naverTrend";
+import { cachedTrendResult, trendLabel } from "@/features/topics/naverTrend";
 import { seasonContext } from "@/features/topics/season";
 
 const RequestSchema = z.object({
@@ -34,17 +35,20 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const season = seasonContext();
     // 사장님이 적어 둔 성과에서 반응 좋았던 주제(없으면 빈 목록).
     const likedTitles = likedTopicTitles(drafts);
-    // 네이버 검색이 늘어난 음식 말(키가 없거나 실패하면 빈 목록, 12시간 기억).
-    const trends = await cachedTrendKeywords();
+    // 네이버 검색이 늘어난 음식 말(키가 없거나 실패하면 빈 목록, 12시간 기억). status는 화면에 반영 여부를 알려 주는 데 쓴다.
+    const { keywords: trends, status: trendStatus } = await cachedTrendResult();
+    // 지금 화면과 최근 추천에 자주 나온 메뉴는 이번에 빼서 메뉴를 고르게 돌린다(예: 가을마다 홍어애탕만 나오던 문제).
+    const recentMenus = overusedMenus([...(body.recentTitles ?? []), ...recentDraftTopics], input.excludeTitles);
+    const hints = { recentMenus, trends: trends.map(({ keyword }) => keyword) };
     const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     let source: "ai" | "fallback" = "ai";
     const topics = await suggestTopics(input, { suggest:() => client.generateJson(
-      buildTopicPrompt(input, season, likedTitles, trends.map(trendLabel)),
+      buildTopicPrompt(input, season, likedTitles, trends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name)),
       topicGenerationSchema(directions),
     ) }, (reason) => { source = "fallback"; console.warn("[topics] using prepared topics:", reason); }, season,
-    (filled) => console.warn(`[topics] AI 추천 중 ${filled}칸이 규칙에 맞지 않아 준비된 주제로 채웠어요.`));
-    return NextResponse.json({ topics, source, provider: source === "ai" ? client.provider : null, season: { name: season.season, events: season.events.map(({ name, daysAway }) => ({ name, daysAway })) }, trends: trends.map(({ keyword, growth }) => ({ keyword, growth })) });
+    (filled) => console.warn(`[topics] AI 추천 중 ${filled}칸이 규칙에 맞지 않아 준비된 주제로 채웠어요.`), hints);
+    return NextResponse.json({ topics, source, provider: source === "ai" ? client.provider : null, season: { name: season.season, events: season.events.map(({ name, daysAway }) => ({ name, daysAway })) }, trends: trends.map(({ keyword, growth }) => ({ keyword, growth })), trendStatus });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: "입력 내용을 확인해 주세요." }, { status: 400 });

@@ -519,3 +519,4 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .poster-setting p { margin:0; }
 .poster-setting label.button { cursor:pointer; }
 .poster-setting label.button.disabled { cursor:not-allowed; opacity:.45; pointer-events:none; }
+.trend-badge { background:#E4F1E8; color:#1f5a43; }

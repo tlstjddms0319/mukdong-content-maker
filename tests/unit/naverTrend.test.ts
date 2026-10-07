@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ANCHOR, TREND_GROUPS, cachedTrendKeywords, fetchTrendKeywords, normalizeBatch, resetTrendCache, risingKeywords, trendLabel } from "@/features/topics/naverTrend";
+import { ANCHOR, TREND_GROUPS, cachedTrendKeywords, cachedTrendResult, fetchTrendKeywords, normalizeBatch, resetTrendCache, risingKeywords, trendLabel } from "@/features/topics/naverTrend";
 import { buildTopicPrompt } from "@/features/topics/prompt";
 
 // 12주(월요일 시작) 주 단위 구간. 마지막(10/5 주)은 endDate(10/4 토) 기준으로 아직 덜 끝난 주라 버려져야 한다.
@@ -56,6 +56,24 @@ describe("naver trend", () => {
     const calls=fetcher.mock.calls.length;
     expect(await cachedTrendKeywords(deps,3_600_000)).toEqual(first);
     expect(fetcher.mock.calls.length).toBe(calls);
+  });
+
+  it("reports whether trends were used: off without keys, none when nothing rose, error when the call failed", async () => {
+    expect((await cachedTrendResult({env:{}})).status).toBe("off");
+    const env={NAVER_CLIENT_ID:"id",NAVER_CLIENT_SECRET:"secret"};
+    const flatFetch=vi.fn(async(_url:string,init:RequestInit)=>{const body=JSON.parse(String(init.body));return new Response(JSON.stringify({results:body.keywordGroups.map((group:{groupName:string})=>({title:group.groupName,data:flat(20)}))}),{status:200});});
+    expect(await cachedTrendResult({env,fetch:flatFetch as unknown as typeof fetch,today:"2026-10-05"},0)).toEqual({keywords:[],status:"none"});
+    resetTrendCache();
+    vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const failing=vi.fn(async()=>new Response("{}",{status:500}));
+    expect((await cachedTrendResult({env,fetch:failing as unknown as typeof fetch,today:"2026-10-05"},0)).status).toBe("error");
+  });
+
+  it("asks the AI to name the trend it used", () => {
+    const input={storeName:"묵동홍어마을",recommendationRound:0,excludeTitles:[]} as never;
+    const prompt=buildTopicPrompt(input,undefined,[],["과메기 +40%"]);
+    expect(prompt).toContain("trend에 그 말을");
+    expect(prompt).toContain("- trend:");
   });
 
   it("adds trend keywords to the topic prompt only when there are some", () => {
