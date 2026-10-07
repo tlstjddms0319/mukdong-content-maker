@@ -7,8 +7,11 @@ import type { CarouselPlan, CarouselRole } from "./carousel";
 // 원칙
 // 1. 표지는 항상 첫 번째 사진을 쓴다.
 // 2. 사진이 모자라면 덜 중요한 장부터 "사진 없는 글자 레이아웃"(체크리스트·Q&A·영수증 등)으로 바꾼다. AI 이미지는 만들지 않는다.
-// 3. 사진이 남으면 사진 한 장짜리 장을 두 장(폴라로이드)·세 장(콜라주) 레이아웃으로 키워 올린 사진을 최대한 쓴다.
-// 4. 사진은 올린 순서대로 장 순서에 맞춰 나눠 준다(이야기 흐름과 사진 순서가 같게).
+// 3. 사진이 남으면 비교 장(versus)의 둘째 사진, 글자 카드로 정해진 장의 사진 순서로 넣고(올린 사진이 글자 카드보다 먼저), 그래도 남으면
+//    사진 한 장짜리 장을 두 장(폴라로이드)·세 장(콜라주) 레이아웃으로 키워 올린 사진을 최대한 쓴다.
+// 4. 한 장에 넣는 사진은 maxPerSlide까지. 디자인 계열(칠판·한지 등)은 한 장에 사진을 두 장까지만 그리므로 2,
+//    기본 템플릿만 3(콜라주)이다. 넘겨 주면 그리지 못한 사진이 말없이 빠진다.
+// 5. 사진은 올린 순서대로 장 순서에 맞춰 나눠 준다(이야기 흐름과 사진 순서가 같게). 다 못 넣은 사진은 unused로 알려 준다.
 
 // 사진을 먼저 받을 장의 우선순위(표지는 따로 처리). 음식이 주인공인 장이 앞에 온다.
 const PHOTO_PRIORITY:CarouselRole[]=["detail","overview","pairing","mood","occasion","process","how-to","visit","cta"];
@@ -22,14 +25,18 @@ const TEXT_LAYOUT:Record<CarouselRole,CardLayout>={
 const SINGLE_LAYOUT:CardLayout="frame";
 // 사진이 남을 때 키워 줄 수 있는 역할(장면을 여러 컷으로 보여 주기 좋은 장).
 const EXPANDABLE:CarouselRole[]=["overview","detail","pairing","mood","occasion"];
+// 사진이 남아도 글자 레이아웃을 지키는 장: 대형 숫자(stat)는 숫자가 주인공이라 사진 카드로 바꾸면 숫자가 사라진다.
+const KEEP_TEXT:ReadonlySet<CardLayout>=new Set(["stat"]);
 
-export type PhotoFit={plan:CarouselPlan;assignment:number[][]};
+export type PhotoFit={plan:CarouselPlan;assignment:number[][];unused:number[]};
+export type PhotoFitOptions={maxPerSlide?:2|3};
 
-export function fitPlanToPhotos(plan:CarouselPlan,photoCount:number):PhotoFit {
+export function fitPlanToPhotos(plan:CarouselPlan,photoCount:number,options:PhotoFitOptions={}):PhotoFit {
   if(photoCount<1)throw new Error("사진이 1장 이상 필요해요.");
+  const max=options.maxPerSlide??3;
   const slides=plan.slides.map(slide=>({...slide,layout:normalizeCardLayout(slide)}));
-  // 장마다 원래 원하던 사진 수(최소 0, 최대 3). 표지는 최소 1장.
-  const want=slides.map((slide,i)=>Math.max(i===0?1:0,photosNeeded(slide.layout)));
+  // 장마다 원래 원하던 사진 수(최소 0, 최대 max). 표지는 최소 1장.
+  const want=slides.map((slide,i)=>Math.min(max,Math.max(i===0?1:0,photosNeeded(slide.layout))));
   const give=slides.map(()=>0);
   let budget=photoCount;
   // 1단계: 표지에 한 장, 그다음 우선순위대로 사진을 원하는 장에 한 장씩.
@@ -37,13 +44,18 @@ export function fitPlanToPhotos(plan:CarouselPlan,photoCount:number):PhotoFit {
   const order=slides.map((slide,i)=>({role:slide.role,i})).filter(item=>item.i>0)
     .sort((a,b)=>PHOTO_PRIORITY.indexOf(a.role)-PHOTO_PRIORITY.indexOf(b.role)||a.i-b.i);
   for(const {i} of order)if(budget>0&&want[i]>0){give[i]=1;budget--;}
-  // 2단계: 여러 장을 원하던 장(콜라주·비교)에 남은 사진을 채운다.
-  for(const {i} of [{i:0},...order])while(budget>0&&give[i]>0&&give[i]<want[i]){give[i]++;budget--;}
-  // 3단계: 그래도 남으면 한 장짜리 장을 여러 장 레이아웃으로 키운다(표지는 그대로).
+  // 2단계: 비교 장(versus)은 사진 두 장이 있어야 비교가 되므로 먼저 둘째 사진을 채운다.
+  const fill=(only:(i:number)=>boolean)=>{for(const {i} of [{i:0},...order])while(only(i)&&budget>0&&give[i]>0&&give[i]<want[i]){give[i]++;budget--;}};
+  fill(i=>slides[i].layout==="versus");
+  // 3단계: 그래도 남으면 글자 카드로 정해진 장에 한 장씩(사장님 사진이 글자 카드보다 먼저). 대형 숫자 장은 그대로 둔다.
+  for(const {i} of order)if(budget>0&&give[i]===0&&!KEEP_TEXT.has(slides[i].layout)){give[i]=1;budget--;}
+  // 4단계: 여러 컷을 원하던 장(콜라주·폴라로이드)을 채운다.
+  fill(()=>true);
+  // 5단계: 그래도 남으면 한 장짜리 장을 여러 장 레이아웃으로 키운다(표지는 그대로). 한 장에 max장까지.
   for(const {i,role} of order){
     if(budget<=0)break;
     if(!EXPANDABLE.includes(role)||give[i]!==1)continue;
-    const extra=Math.min(2,budget);
+    const extra=Math.min(max-1,budget);
     give[i]+=extra;budget-=extra;
   }
   // 받은 사진 수에 맞는 레이아웃으로 바꾼다. 원래 레이아웃이 그 수에 맞으면 그대로 둔다.
@@ -60,18 +72,19 @@ export function fitPlanToPhotos(plan:CarouselPlan,photoCount:number):PhotoFit {
   // 장 순서대로 사진 번호를 나눠 준다.
   let next=0;
   const assignment=give.map(count=>Array.from({length:count},()=>next++));
-  return {plan:{...plan,slides:fitted},assignment};
+  return {plan:{...plan,slides:fitted},assignment,unused:Array.from({length:photoCount-next},(_,k)=>next+k)};
 }
 
 // 표지+2장 파노라마(render/panorama.ts): 표지 사진을 2번째 장에도 한 번 더 쓴다(두 장이 반씩 나눠 그린다).
 // 나머지 장은 2번째 장을 뺀 구성안으로 평소처럼 사진을 나눈 뒤, 2번째 장을 표지 사진(0번) 한 장짜리로 다시 끼운다.
-export function fitPanorama(plan:CarouselPlan,photoCount:number):PhotoFit {
-  if(plan.slides.length<2)return fitPlanToPhotos(plan,photoCount);
-  const rest=fitPlanToPhotos({...plan,slides:[plan.slides[0],...plan.slides.slice(2)]},photoCount);
+export function fitPanorama(plan:CarouselPlan,photoCount:number,options:PhotoFitOptions={}):PhotoFit {
+  if(plan.slides.length<2)return fitPlanToPhotos(plan,photoCount,options);
+  const rest=fitPlanToPhotos({...plan,slides:[plan.slides[0],...plan.slides.slice(2)]},photoCount,options);
   const second={...plan.slides[1],layout:SINGLE_LAYOUT,variant:0};
   return {
     plan:{...rest.plan,slides:[rest.plan.slides[0],second,...rest.plan.slides.slice(1)]},
     assignment:[rest.assignment[0],[0],...rest.assignment.slice(1)],
+    unused:rest.unused,
   };
 }
 

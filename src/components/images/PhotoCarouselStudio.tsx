@@ -43,6 +43,9 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
   const filling=phase==="slides"&&!deckEdited&&slides.length<slideCount;
   const progress=deckStatus?deckStatus:phase==="uploading"?photoStatus||"사진을 저장하고 있어요":phase==="planning"?"캐러셀 구성을 만들고 있어요":filling?`${slides.length}/${slideCount}장 완성 · 사진을 카드에 앉히고 있어요`:phase==="slides"?`${activeIndex+1}번 장 사진을 바꾸고 있어요`:"";
   const usedInActive=photoAssignment[activeIndex]??[];
+  // 장 수보다 사진이 많아 이번 캐러셀에 들어가지 못한 사진(말없이 빠지지 않게 알려 준다). 장마다 사진 바꾸기로 넣을 수 있다.
+  const placed=new Set(photoAssignment.flat());
+  const unused=done?photos.map((_,index)=>index).filter(index=>!placed.has(index)):[];
   // 사진 품질 배지·표지 추천. 고른 사진 묶음(순서와 무관)이 바뀌면 무료 로컬 검사만 다시 한다. 순서는 바꾸지 않는다(사장님이 고른다).
   // 주제도 키에 넣는다: 사진 속 음식이 글의 메뉴와 맞는지(무료 검사)가 주제에 따라 달라진다.
   const photoKey=photos.map(photo=>photo.id).sort().join("|");
@@ -126,6 +129,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
     </div>}
     {progress&&<GenerationProgress stage={`${phase}-${slides.length}`} message={progress} progress={filling?slides.length/slideCount:undefined}/>}
     {planFallback&&slides.length>0&&<p role="status" className="field-help">AI가 구성안을 만들지 못해 준비된 기본 문안으로 채웠어요.{state.planFallbackMessage?` 이유: ${state.planFallbackMessage}`:""} 문안이 주제와 다르면 다시 만들어 보세요.</p>}
+    {unused.length>0&&<p role="status" className="field-help">사진 {unused.length}장은 장 수보다 많아 이번 캐러셀에 넣지 않았어요({unused.map(index=>`${index+1}번`).join("·")}). 넣고 싶은 장에서 &apos;이 장 사진 바꾸기&apos;로 바꿔 넣을 수 있어요.</p>}
     {slides.length>0&&<>
       <div className="generated-carousel">
         <div role="img" aria-label="사진 캐러셀 미리보기" className="post-image" style={{aspectRatio:"4 / 5",...(active?.preview?{backgroundImage:`url(${active.preview})`}:{})}}><span>{activeIndex+1}번 슬라이드</span></div>

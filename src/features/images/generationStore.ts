@@ -136,6 +136,31 @@ export function selectCover(candidate:ApprovedImage){patch({cover:candidate,slid
 export function markApproved(){patch({approved:true});}
 
 const readPreview=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>typeof reader.result==="string"?resolve(reader.result):reject(new Error());reader.onerror=()=>reject(new Error());reader.readAsDataURL(file);});
+// 사진+AI의 참고 사진은 장마다 요청에 실려 가므로, 휴대폰 원본(수 MB) 그대로 보내지 않고 긴 변 2048px JPEG로 줄인다.
+// 이미지 AI도 어차피 줄여서 쓴다(Higgsfield 1536px, Cloudflare 512px). 줄일 수 없는 환경(오래된 브라우저)은 원본을 쓴다.
+export const REFERENCE_MAX_SIDE=2048;
+async function readReference(file:File):Promise<string> {
+  if(typeof createImageBitmap!=="function"||typeof document==="undefined")return readPreview(file);
+  let bitmap:ImageBitmap|undefined;
+  try{
+    // from-image: 휴대폰 사진의 회전 정보(EXIF)를 반영해 바로 세운다.
+    bitmap=await createImageBitmap(file,{imageOrientation:"from-image"});
+    const scale=Math.min(1,REFERENCE_MAX_SIDE/Math.max(bitmap.width,bitmap.height));
+    if(scale===1&&file.size<=2*1024*1024)return readPreview(file);
+    const canvas=document.createElement("canvas");
+    canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
+    const context=canvas.getContext("2d");
+    if(!context)return readPreview(file);
+    // 투명한 PNG가 JPEG로 바뀌며 검게 되지 않도록 흰 바탕을 먼저 깐다.
+    context.fillStyle="#ffffff";context.fillRect(0,0,canvas.width,canvas.height);
+    context.drawImage(bitmap,0,0,canvas.width,canvas.height);
+    return canvas.toDataURL("image/jpeg",.9);
+  }catch{
+    return readPreview(file);
+  }finally{
+    bitmap?.close();
+  }
+}
 
 // 카드에 찍는 전체 장 수("3 / 7"의 7). 장을 고친 캐러셀은 지금 장 수, 아니면 설정한 장 수.
 export const deckTotal=(current:GenerationState)=>current.deckEdited?current.slides.length:current.input.slideCount;
@@ -195,7 +220,7 @@ export async function uploadPhoto(file:File|undefined,onApprove:(images:Approved
   const token=++run;
   patch({phase:"uploading",error:""});
   try{
-    const preview=await readPreview(file);
+    const preview=reference?await readReference(file):await readPreview(file);
     if(token!==run)return;
     patch({photoPreview:preview});
     const body=new FormData();body.append("file",file);
@@ -385,7 +410,9 @@ export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
     const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
-    const fit=(state.panorama?fitPanorama:fitPlanToPhotos)(data.plan as CarouselPlan,state.photos.length);
+    // 디자인 계열(칠판·한지 등)은 한 장에 사진을 두 장까지만 그려서, 세 장짜리 콜라주는 기본 템플릿일 때만 만든다.
+    const style=effectiveDesign((data.plan as CarouselPlan).design).style;
+    const fit=(state.panorama?fitPanorama:fitPlanToPhotos)(data.plan as CarouselPlan,state.photos.length,{maxPerSlide:!style||style==="template"?3:2});
     // 기본 문안이어도 비용이 들지 않으니 멈추지 않고, 안내만 남긴다.
     patch({plan:fit.plan,planFallback:data.provider==="fallback",planFallbackMessage:data.provider==="fallback"?fallbackMessageOf(data):"",photoAssignment:fit.assignment,phase:"slides",...reviewNotice(data.review)});
     let next:ApprovedImage[]=[];
