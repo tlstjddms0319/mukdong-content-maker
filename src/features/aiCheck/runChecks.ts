@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { checkCoverCandidates } from "@/features/images/coverCheck";
+import { readCutoutLedger } from "@/features/images/remoteCutout";
+import { readSettings } from "@/features/settings/repository";
 import { fetchTrendKeywords, naverConfigured, trendLabel } from "@/features/topics/naverTrend";
 import { TEXT_PROVIDER_ORDER, resolveTextClients, type TextAiClient, type TextProvider } from "@/lib/ai/textClient";
 
@@ -10,6 +12,7 @@ import { TEXT_PROVIDER_ORDER, resolveTextClients, type TextAiClient, type TextPr
 // - 문안 AI(Gemini·Groq·Cloudflare): 짧은 JSON 하나 받기. 자동 전환 때문에 화면에서는 가려지는 "첫 순서 실패"를 따로 보여 준다.
 // - 표지 점검(Gemini 이미지 보기): 저장소에 들어 있는 홍어 견본 사진 한 장을 보고 "홍어로 보이는지" 답하는지.
 // - Higgsfield·OpenAI: 이미지를 만들지 않고 키 인증만 확인(크레딧 사용 없음).
+// - 원격 누끼: 설정에서 켰을 때만, 키가 있는지와 이번 달 사용량/예산을 장부로만 확인(호출 없음).
 // 키 값은 결과에 절대 넣지 않고, 오류 메시지에 키가 섞여 오면 가린다.
 
 export type AiCheckStatus="ok"|"fail"|"skip";
@@ -23,6 +26,8 @@ export type AiCheckDeps={
   sampleImage?:()=>Promise<Buffer>;
   trends?:typeof fetchTrendKeywords;
   timeoutMs?:number;
+  // 원격 누끼 설정과 이번 달 장부. 테스트는 주입하고, 없으면 저장된 설정과 저장소 장부를 읽는다.
+  remoteCutout?:()=>Promise<{enabled:boolean;monthlyCredits:number;used:number;month:string}>;
 };
 
 const TEXT_LABELS:Record<TextProvider,string>={gemini:"문안 AI · Gemini",groq:"문안 AI · Groq",cloudflare:"문안 AI · Cloudflare"};
@@ -102,5 +107,26 @@ export async function runAiChecks(deps:AiCheckDeps={}):Promise<AiCheckItem[]> {
     }));
   }else checks.push(Promise.resolve(skip("naver-trend","검색 트렌드 · 네이버 데이터랩","키가 설정되지 않았어요(선택).")));
 
+  // 6) 원격 누끼(설정, 기본 꺼짐): Higgsfield를 부르지 않고 키 유무와 이번 달 장부만 본다.
+  checks.push((async():Promise<AiCheckItem>=>{
+    const id="remote-cutout",label="원격 누끼 · Higgsfield 배경 제거";
+    try{
+      const state=await (deps.remoteCutout??defaultRemoteCutoutState)();
+      if(!state.enabled)return skip(id,label,"설정에서 꺼져 있어요(기본). 앱 안의 무료 누끼만 써요.");
+      if(!hfId||!hfSecret)return {id,label,status:"fail",message:"켜져 있지만 Higgsfield 키가 없어 무료 누끼로 그려요."};
+      const usage=`${state.month} 사용 ${state.used}/${state.monthlyCredits} 크레딧`;
+      if(state.used>=state.monthlyCredits)return {id,label,status:"fail",message:`${usage} · 이번 달 예산을 다 써서 무료 누끼로 그려요. 설정에서 예산을 늘릴 수 있어요.`};
+      return {id,label,status:"ok",message:`키 있음 · ${usage} (호출 없이 장부만 확인)`};
+    }catch(error){
+      return {id,label,status:"fail",message:scrubMessage(`설정이나 사용량 장부를 읽지 못했어요: ${error instanceof Error?error.message:String(error)}`,env)};
+    }
+  })());
+
   return Promise.all(checks);
+}
+
+async function defaultRemoteCutoutState(){
+  const settings=await readSettings();
+  const ledger=await readCutoutLedger();
+  return {enabled:settings.remoteCutout,monthlyCredits:settings.remoteCutoutMonthlyCredits,used:ledger.used,month:ledger.month};
 }

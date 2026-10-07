@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { auditRender } from "@/features/images/render/audit";
+import { auditRender, registerPhoto, DEAD_BAND } from "@/features/images/render/audit";
+import { mascotLayer } from "@/features/images/decor";
 import { textLayer } from "@/features/images/render/primitives";
 import { enhancePhoto, photoStats } from "@/features/images/render/photoEnhance";
 import { composeSlideCard } from "@/features/images/composeSlide";
@@ -57,6 +58,70 @@ describe("card audit", () => {
     }
     expect(problems).toEqual([]);
   },180_000);
+});
+
+describe("card audit warnings", () => {
+  // 경고는 재시도 대상(issues)에 들어가지 않고 notes·metrics에만 남는다.
+  it("notes a mascot covering text but forgives a light touch", async () => {
+    const title=await textLayer("마스코트 뒤에 숨은 글자",{size:60,color:"#111111",width:900,height:120});
+    const mascot=(await mascotLayer({width:200,left:0,top:0}))!;
+    const draw=(left:number,top:number)=>auditRender(async()=>canvas("#ffffff").composite([
+      {input:title.data,left:60,top:400},{input:mascot.input,left,top},
+    ]).jpeg().toBuffer());
+    const covered=await draw(120,380);
+    expect(covered.report.issues).toEqual([]);
+    expect(covered.report.metrics.warnings["decor-overlap"]).toBe(1);
+    expect(covered.report.notes.find(note=>note.kind==="decor-overlap")).toMatchObject({decor:"mascot"});
+    // 글자 상자 바로 아래에 발끝만 닿게 둔 경우는 경고하지 않는다.
+    const touching=await draw(120,400+title.info.height-4);
+    expect(touching.report.metrics.warnings["decor-overlap"]).toBe(0);
+  });
+
+  it("finds an empty band between content but ignores the outer margins", async () => {
+    const line=await textLayer("한 줄",{size:50,color:"#111111",width:400,height:80});
+    const photo=await sharp({create:{width:900,height:300,channels:3,background:"#b06050"}}).png().toBuffer();
+    registerPhoto(photo);
+    const {report}=await auditRender(async()=>canvas("#f4f2ee").composite([
+      {input:photo,left:90,top:100},{input:line.data,left:90,top:420},{input:line.data,left:90,top:900},
+    ]).jpeg().toBuffer(),{cover:true});
+    const bands=report.notes.filter(note=>note.kind==="dead-band");
+    expect(bands).toHaveLength(1);
+    expect(bands[0]).toMatchObject({kind:"dead-band"});
+    if(bands[0].kind==="dead-band"){
+      expect(bands[0].top).toBeGreaterThan(420);
+      expect(bands[0].bottom).toBeLessThanOrEqual(920);
+      expect(bands[0].bottom-bands[0].top).toBeGreaterThanOrEqual(DEAD_BAND);
+    }
+    // 사진 900×300은 캔버스의 약 19%: 사각 기준 40%에 못 미친다.
+    expect(report.notes.find(note=>note.kind==="photo-area")).toMatchObject({shape:"rect",limit:.4});
+    expect(report.issues).toEqual([]);
+  });
+
+  it("uses the shape-specific photo area limit and treats full-width photos as bleed", async () => {
+    const round=await sharp({create:{width:700,height:700,channels:3,background:"#b06050"}}).png().toBuffer();
+    registerPhoto(round,{shape:"circle"});
+    const circle=await auditRender(async()=>canvas("#f4f2ee").composite([{input:round,left:190,top:200}]).jpeg().toBuffer(),{cover:true});
+    expect(circle.report.metrics.photoShape).toBe("circle");
+    // 700×700 상자는 약 35%라 원형 기준(30%)은 넘는다.
+    expect(circle.report.notes.some(note=>note.kind==="photo-area")).toBe(false);
+    const wide=await sharp({create:{width:1080,height:600,channels:3,background:"#b06050"}}).png().toBuffer();
+    registerPhoto(wide);
+    const bleed=await auditRender(async()=>canvas("#1e1c1a").composite([{input:wide,left:0,top:0}]).jpeg().toBuffer(),{cover:true});
+    expect(bleed.report.metrics.photoShape).toBe("bleed");
+    expect(bleed.report.notes.find(note=>note.kind==="photo-area")).toMatchObject({shape:"bleed",limit:.5});
+  });
+
+  it("records the input photos' quality flags and skips warnings in the fast app mode", async () => {
+    const dark=await sharp({create:{width:400,height:300,channels:3,background:"#141414"}}).jpeg().toBuffer();
+    const draw=async()=>canvas("#ffffff").jpeg().toBuffer();
+    const audited=await auditRender(draw,{photos:[dark]});
+    const quality=audited.report.notes.find(note=>note.kind==="photo-quality");
+    expect(quality&&quality.kind==="photo-quality"?quality.flags:[]).toEqual(expect.arrayContaining(["dark","lowres"]));
+    expect(audited.report.issues).toEqual([]);
+    const fast=await auditRender(draw,{contrast:false,photos:[dark]});
+    expect(fast.report.notes).toEqual([]);
+    expect(Object.values(fast.report.metrics.warnings).every(count=>count===0)).toBe(true);
+  });
 });
 
 describe("photo enhancement", () => {

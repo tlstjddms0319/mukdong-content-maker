@@ -166,3 +166,31 @@ describe("ImageStudio carousel",()=>{
     expect(await screen.findByText("Cloudflare 생성이 어려워 OpenAI(으)로 전환했어요.")).toBeInTheDocument();
   });
 });
+
+describe("owner photo cover recommendation",()=>{
+  afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
+  it("shows quality badges and a cover pick, asks Gemini only from the button, and never reorders on its own",async()=>{
+    let uploads=0;
+    const analysis=(score:boolean)=>({analyzed:true,scored:score,scoreAvailable:true,ranking:["p2","p1"],recommended:"p2",photos:[
+      {id:"p1",flags:["dark"],labels:["어두움"],measured:true,appetite:null},
+      {id:"p2",flags:[],labels:[],measured:true,appetite:score?{score:9,appetite:5,lighting:4,composition:4,warnings:[],note:"윤기가 좋아요"}:null},
+    ]});
+    const request=vi.fn(async(url:string,init?:RequestInit)=>url==="/api/images/analyze"?{ok:true,json:async()=>analysis(JSON.parse(String(init?.body)).score)}
+      :{ok:true,json:async()=>{uploads++;return {asset:{id:`p${uploads}`,preview:"data:image/jpeg;base64,AAAA",name:`사진${uploads}`}};}});
+    vi.stubGlobal("fetch",request);
+    render(<ImageStudio topic="홍어전" slideCount={3} onApprove={()=>undefined}/>);
+    fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"}),new File(["b"],"b.png",{type:"image/png"})]}});
+    expect(await screen.findByText("표지로 추천")).toBeInTheDocument();
+    expect(screen.getByText("어두움")).toBeInTheDocument();
+    const analyzeBodies=()=>request.mock.calls.filter(([url])=>url==="/api/images/analyze").map(([,init])=>JSON.parse(String(init?.body)));
+    expect(analyzeBodies().every(body=>body.score===false)).toBe(true);
+    // 자동으로 순서를 바꾸지 않는다: 첫 사진은 여전히 사진1.
+    const strip=screen.getByRole("list",{name:"고른 사진"});
+    expect(strip.querySelectorAll("li")[0].querySelector("img")?.getAttribute("alt")).toBe("사진1");
+    fireEvent.click(screen.getByRole("button",{name:"맛있어 보이는 사진 찾기"}));
+    await waitFor(()=>expect(analyzeBodies().at(-1)).toMatchObject({score:true,topic:"홍어전"}));
+    expect(await screen.findByText(/표지는 직접 골라 주세요/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"2번 사진을 표지로"}));
+    await waitFor(()=>expect(strip.querySelectorAll("li")[0].querySelector("img")?.getAttribute("alt")).toBe("사진2"));
+  });
+});

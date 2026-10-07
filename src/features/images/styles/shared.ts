@@ -1,10 +1,11 @@
 import sharp, { type OverlayOptions } from "sharp";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { STORE_NAME } from "../slideLayout";
 import { rolesForCount, type CarouselSlidePlan } from "../carousel";
 import { noteAudit } from "../render/audit";
 import { seeded } from "./handDrawn";
-import { brandHandle, cleanPoints, finishPhoto, textLayer, type TextEmphasis, type Font, type Layer } from "../render/primitives";
+import { brandHandle, cleanPoints, currentRemoteCutout, finishPhoto, textLayer, type TextEmphasis, type Font, type Layer } from "../render/primitives";
 
 // 스타일 계열(styles/*.ts)이 함께 쓰는 도구. 계열마다 고유한 글꼴·색을 쓰므로 여기의 글꼴은 사용자가 고른 제목·본문 글꼴로
 // 바뀌지 않는다(render/primitives의 FONTS 역할 객체가 아니라서 resolveFont가 그대로 둔다).
@@ -239,10 +240,79 @@ function ring8(r:number):Array<[number,number]> {
   return Array.from({length:16},(_,i)=>{const a=(Math.PI*2*i)/16;return [Math.round(Math.cos(a)*r),Math.round(Math.sin(a)*r)] as [number,number];});
 }
 
+// 원격 누끼(Higgsfield 배경 제거) 결과를 렌더 동안 꺼내 쓰는 보관소. 렌더는 동기 흐름이라 렌더 안에서 외부를 부르지 않고,
+// 카드 생성 라우트가 렌더 전에 받아 둔 투명 PNG를 원본 사진의 sha1 열쇠로 넣어 둔다(features/images/remoteCutout.ts).
+// 렌더가 받는 사진은 보정(photoEnhance)을 거쳐 바이트가 달라지므로, sha1이 안 맞으면 밝기 차이 지문(dHash 64비트)과
+// 가로세로 비율로 같은 사진을 찾는다. 지문은 밝기·색 보정에는 거의 안 바뀌고 다른 사진끼리는 크게 다르다.
+// 서버 메모리만 쓰므로 오래된 것부터 지워 크기를 묶는다. 영구 캐시는 remoteCutout.ts의 저장소 캐시가 맡는다.
+type PreparedCutout={png:Buffer;print:Uint8Array;aspect:number};
+const PREPARED_CUTOUTS=new Map<string,PreparedCutout>();
+const PREPARED_LIMIT=48;
+export const cutoutKey=(input:Buffer):string=>createHash("sha1").update(input).digest("hex");
+async function fingerprint(input:Buffer):Promise<{print:Uint8Array;aspect:number}> {
+  const meta=await sharp(input).rotate().metadata();
+  const turned=(meta.orientation??1)>=5;
+  const w=(turned?meta.height:meta.width)??1,h=(turned?meta.width:meta.height)??1;
+  const grey=await sharp(input).rotate().greyscale().resize(9,8,{fit:"fill"}).raw().toBuffer();
+  const print=new Uint8Array(64);
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++)print[y*8+x]=grey[y*9+x]<grey[y*9+x+1]?1:0;
+  return {print,aspect:w/h};
+}
+export async function registerPreparedCutout(original:Buffer,png:Buffer):Promise<void> {
+  const key=cutoutKey(original);
+  PREPARED_CUTOUTS.delete(key);
+  PREPARED_CUTOUTS.set(key,{png,...await fingerprint(original)});
+  while(PREPARED_CUTOUTS.size>PREPARED_LIMIT)PREPARED_CUTOUTS.delete(PREPARED_CUTOUTS.keys().next().value!);
+}
+export const hasPreparedCutout=(original:Buffer):boolean=>PREPARED_CUTOUTS.has(cutoutKey(original));
+export const clearPreparedCutouts=():void=>PREPARED_CUTOUTS.clear();
+async function preparedCutoutFor(input:Buffer):Promise<Buffer|null> {
+  if(!PREPARED_CUTOUTS.size)return null;
+  const exact=PREPARED_CUTOUTS.get(cutoutKey(input));
+  if(exact)return exact.png;
+  const {print,aspect}=await fingerprint(input);
+  let best:{png:Buffer;distance:number}|null=null;
+  for(const entry of PREPARED_CUTOUTS.values()){
+    if(Math.abs(entry.aspect/aspect-1)>.02)continue;
+    let distance=0;
+    for(let i=0;i<64;i++)distance+=entry.print[i]^print[i];
+    if(distance<=8&&(!best||distance<best.distance))best={png:entry.png,distance};
+  }
+  return best?.png??null;
+}
+
+// 미리 받은 원격 누끼를 이 렌더의 사진 크기에 맞춘다. 원격 결과는 보정 전 원본에서 나왔으므로, 비율이 같으면 그 알파만 빌려
+// 렌더가 받은 (보정된) 사진에 씌워 다른 장과 색을 맞춘다. 비율이 다르면(원격이 잘라 낸 경우) 원격 결과를 그대로 쓴다.
+// 지운 비율이 이상하면(거의 다 지웠거나 거의 안 지움) 원격 결과가 틀린 것으로 보고 null → 로컬 누끼로 넘어간다.
+async function fromPreparedCutout(input:Buffer,prepared:Buffer,maxSide:number):Promise<{data:Buffer;width:number;height:number}|null> {
+  const {data,info}=await sharp(input).rotate().resize(maxSide,maxSide,{fit:"inside"}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  const meta=await sharp(prepared).metadata();
+  if(!meta.width||!meta.height)return null;
+  let rgba:Buffer;
+  if(Math.abs(meta.width/meta.height-info.width/info.height)<.02){
+    const alpha=await sharp(prepared).ensureAlpha().extractChannel(3).resize(info.width,info.height,{fit:"fill"}).raw().toBuffer();
+    for(let p=0;p<info.width*info.height;p++)data[p*4+3]=alpha[p];
+    rgba=await sharp(data,{raw:{width:info.width,height:info.height,channels:4}}).png().toBuffer();
+  }else rgba=await sharp(prepared).ensureAlpha().resize(maxSide,maxSide,{fit:"inside"}).png().toBuffer();
+  const {data:pixels,info:size}=await sharp(rgba).raw().toBuffer({resolveWithObject:true});
+  let clear=0;
+  for(let p=0;p<size.width*size.height;p++)if(pixels[p*4+3]<16)clear++;
+  const ratio=clear/(size.width*size.height);
+  if(ratio<.05||ratio>.92)return null;
+  const trimmed=await sharp(rgba).trim({threshold:1}).png().toBuffer({resolveWithObject:true});
+  return {data:trimmed.data,width:trimmed.info.width,height:trimmed.info.height};
+}
+
 // 사진의 배경을 지워 음식만 남긴다(누끼). 가장자리 픽셀의 평균색과 비슷한 영역을 바깥에서부터 지워 나간다.
 // 단색에 가까운 배경(스튜디오 사진, 흰 접시 뒤 단색 테이블)에서 잘 되고, 복잡한 배경이면 지운 비율이 이상해
 // null을 돌려준다. 그러면 스타일은 원형 스티커 사진으로 대신 그린다.
 export async function cutoutPhoto(input:Buffer,maxSide:number):Promise<{data:Buffer;width:number;height:number}|null> {
+  // 설정에서 원격 누끼를 켰고 카드 생성 라우트가 이 사진의 누끼를 미리 받아 두었으면 그것을 먼저 쓴다(렌더 중에는 조회만).
+  // 설정이 꺼져 있으면 보관소를 보지 않는다(검수 스크립트·테스트는 늘 로컬 누끼).
+  if(currentRemoteCutout()){
+    const prepared=await preparedCutoutFor(input).catch(()=>null);
+    if(prepared){const remote=await fromPreparedCutout(input,prepared,maxSide).catch(()=>null);if(remote)return remote;}
+  }
   const {data,info}=await sharp(input).rotate().resize(maxSide,maxSide,{fit:"inside"}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
   const {width:W,height:H}=info;
   const at=(x:number,y:number)=>(y*W+x)*4;
@@ -314,26 +384,134 @@ export async function cutoutPhoto(input:Buffer,maxSide:number):Promise<{data:Buf
   for(let p=0;p<W*H;p++){if(mask[p]>127){removed[p]=0;kept++;}else removed[p]=1;}
   const ratio=1-kept/(W*H);
   if(ratio<.12||ratio>.85)return null;
+  shaveFloorShadow(data,removed,W,H,[r,g,b]);
+  // 가장자리 1px 수축: 경계 픽셀에는 바탕색이 반쯤 섞여 있어(안티에일리어싱) 남겨 두면 색 바탕 위에서 회색 테두리가 된다.
+  // 지운 픽셀과 맞닿은 살린 픽셀을 한 겹 지워 가장 많이 섞인 띠를 버리고, 남은 띠는 decontaminateEdge가 바탕색을 빼 되살린다.
+  const edge:number[]=[];
+  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){const p=y*W+x;if(!removed[p]&&(removed[p-1]||removed[p+1]||removed[p-W]||removed[p+W]))edge.push(p);}
+  for(const p of edge)removed[p]=1;
+  decontaminateEdge(data,removed,W,H,[r,g,b]);
   for(let p=0;p<W*H;p++)if(removed[p])data[p*4+3]=0;
   // 가장자리를 살짝 부드럽게(알파만 흐리게) 해서 계단 모양을 줄인다.
   // 알파만 따로 꺼내 흐린 뒤 원래 RGBA에 다시 써 넣는다. (joinChannel로 PNG 알파를 붙이면 알파가 빠진 3채널이 될 수 있어
-  // 픽셀 배열에서 직접 합친다.)
+  // 픽셀 배열에서 직접 합친다.) 흐림으로 반투명해진 바깥 픽셀은 decontaminateEdge가 안쪽 색을 미리 칠해 두어 테두리가 물들지 않는다.
+  // 아주 옅은 픽셀(알파<24)은 지운다.
   const alpha=await sharp(Buffer.from(Array.from({length:W*H},(_,p)=>data[p*4+3])),{raw:{width:W,height:H,channels:1}}).blur(1.2).extractChannel(0).raw().toBuffer();
-  for(let p=0;p<W*H;p++)data[p*4+3]=alpha[p];
-  // 헤일로 제거(디컨태미네이션): 반투명 가장자리 픽셀에는 배경색이 섞여 있어 색 바탕 위에 올리면 회색·흰 테두리가 보인다.
-  // 섞인 비율(1−알파)만큼 배경 평균색을 빼고 알파로 나눠 원래 음식 색을 되살린다. 아주 옅은 픽셀(알파<24)은 지운다.
-  for(let p=0;p<W*H;p++){
-    const a=data[p*4+3];
-    if(a===255||a===0)continue;
-    if(a<24){data[p*4+3]=0;continue;}
-    const t=a/255,i=p*4;
-    data[i]=Math.max(0,Math.min(255,Math.round((data[i]-(1-t)*r)/t)));
-    data[i+1]=Math.max(0,Math.min(255,Math.round((data[i+1]-(1-t)*g)/t)));
-    data[i+2]=Math.max(0,Math.min(255,Math.round((data[i+2]-(1-t)*b)/t)));
-  }
+  for(let p=0;p<W*H;p++)data[p*4+3]=alpha[p]<24?0:alpha[p];
   const smooth=await sharp(data,{raw:{width:W,height:H,channels:4}}).png().toBuffer();
   const trimmed=await sharp(smooth).trim({threshold:1}).png().toBuffer({resolveWithObject:true});
   return {data:trimmed.data,width:trimmed.info.width,height:trimmed.info.height};
+}
+
+// 접시 바깥 바닥 그림자 깎기: 볼록 껍질은 접시 옆에 드리운 그림자까지 감싸 스티커 아래·옆에 갈색·회색 덩어리가 붙는다.
+// 그림자는 "바탕색을 어둡게 한 색"(밝기만 낮고 색 비율은 바탕과 같음)이라 그런 픽셀을 뺀 나머지(접시·음식)로 타원을 맞추고,
+// 타원 바깥에 있는 그림자 같은 픽셀만 지운다. 타원 안쪽(접시 위 어두운 음식)은 건드리지 않는다.
+// 남은 부분이 타원 모양이 아니면(그릇 여러 개, 네모 도마) 엉뚱하게 깎을 수 있어 아무것도 하지 않는다.
+function hueSat(r:number,g:number,b:number):[number,number] {
+  const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+  if(!max||!d)return [0,0];
+  const h=max===r?((g-b)/d+6)%6:max===g?(b-r)/d+2:(r-g)/d+4;
+  return [h*60,d/max];
+}
+function shaveFloorShadow(data:Buffer,removed:Uint8Array,W:number,H:number,bg:[number,number,number]):void {
+  const bgLum=bg[0]*.299+bg[1]*.587+bg[2]*.114||1,bgHsv=hueSat(bg[0],bg[1],bg[2]);
+  // 그림자는 바탕보다 어둡고 색이 진해지지만 색상(hue)은 거의 같다(살구색 바탕 → 갈색 그림자). 회색 바탕이면 그림자도 무채색이다.
+  const shadowLike=(p:number)=>{
+    const i=p*4;
+    // 그림자 끝의 옅은 번짐은 거의 바탕색이다. 볼록 껍질이 다시 살려 둔 바탕색 픽셀도 함께 깎는다.
+    // 회색 바탕이면 흰 접시 테두리 음영도 바탕색과 비슷해 깎이므로 색 있는 바탕에서만 쓴다.
+    if(bgHsv[1]>=.12&&Math.hypot(data[i]-bg[0],data[i+1]-bg[1],data[i+2]-bg[2])<28)return true;
+    const k=(data[i]*.299+data[i+1]*.587+data[i+2]*.114)/bgLum;
+    if(k<.3||k>.93)return false;
+    const [h,sat]=hueSat(data[i],data[i+1],data[i+2]);
+    if(bgHsv[1]<.12)return sat<.18;
+    const dh=Math.min(Math.abs(h-bgHsv[0]),360-Math.abs(h-bgHsv[0]));
+    return dh<12&&sat>=bgHsv[1]*.6;
+  };
+  let n=0,sx=0,sy=0;
+  const shade=new Uint8Array(W*H);
+  for(let p=0;p<W*H;p++){if(removed[p])continue;if(shadowLike(p)){shade[p]=1;continue;}n++;sx+=p%W;sy+=Math.floor(p/W);}
+  if(n<200)return;
+  const cx=sx/n,cy=sy/n;
+  let xx=0,yy=0,xy=0;
+  for(let p=0;p<W*H;p++){if(removed[p]||shade[p])continue;const dx=p%W-cx,dy=Math.floor(p/W)-cy;xx+=dx*dx;yy+=dy*dy;xy+=dx*dy;}
+  xx/=n;yy/=n;xy/=n;
+  // 공분산의 고유값으로 타원 반지름을 구한다(꽉 찬 타원이면 반지름 = 2√고유값).
+  const tr=(xx+yy)/2,det=Math.sqrt(Math.max(0,((xx-yy)/2)**2+xy*xy));
+  const a=2*Math.sqrt(tr+det),b=2*Math.sqrt(Math.max(1e-6,tr-det)),theta=.5*Math.atan2(2*xy,xx-yy);
+  if(!(a>8&&b>8))return;
+  const cos=Math.cos(theta),sin=Math.sin(theta);
+  const reach=(p:number)=>{const dx=p%W-cx,dy=Math.floor(p/W)-cy,u=dx*cos+dy*sin,v=-dx*sin+dy*cos;return (u/a)**2+(v/b)**2;};
+  let inside=0;
+  for(let p=0;p<W*H;p++)if(!removed[p]&&!shade[p]&&reach(p)<=1.06)inside++;
+  // 타원 모양 판정: 접시·음식의 93% 이상이 타원 안에 있고, 타원 넓이의 88% 이상을 채운다.
+  if(inside/n<.93||n/(Math.PI*a*b)<.88)return;
+  const cut:number[]=[];
+  // 색 있는 바탕이면 그림자(같은 색상의 진한 색)와 흰·회색 접시 테두리가 확실히 구별돼 타원 바로 바깥부터 깎는다.
+  // 회색 바탕이면 접시 테두리 음영도 그림자처럼 보여 4% 여유를 둔다.
+  const margin=bgHsv[1]>=.12?1.005:1.04;
+  for(let p=0;p<W*H;p++)if(shade[p]&&reach(p)>margin**2)cut.push(p);
+  // 깎을 몫이 지나치게 크면(남은 부분의 절반 넘게) 판정이 틀렸을 수 있으니 그대로 둔다.
+  if(cut.length>n*.5)return;
+  for(const p of cut)removed[p]=1;
+  // 깎고 나면 그림자 자리에 떨어진 작은 섬(잡티)이 남을 수 있다. 타원 중심에서 이어진 덩어리만 남긴다.
+  const start=Math.round(cy)*W+Math.round(cx);
+  if(removed[start])return;
+  const seen=new Uint8Array(W*H),stack=[start];
+  seen[start]=1;
+  while(stack.length){
+    const p=stack.pop()!,x=p%W;
+    for(const q of [x>0?p-1:-1,x<W-1?p+1:-1,p-W,p+W])if(q>=0&&q<W*H&&!seen[q]&&!removed[q]){seen[q]=1;stack.push(q);}
+  }
+  for(let p=0;p<W*H;p++)if(!seen[p])removed[p]=1;
+}
+
+// 헤일로 제거(디컨태미네이션): 가장자리 2px 띠의 픽셀에는 바탕색이 섞여 있어 색 바탕 위에 올리면 회색·흰 테두리가 보인다.
+// 1) 안쪽(가장자리에서 3px 이상 들어간) 깨끗한 색을 바깥으로 번져 띠와 그 바깥 3px까지 "가까운 안쪽 색" F를 정한다.
+// 2) 띠의 픽셀 c를 바탕색 B와 F를 잇는 선에 투영해 섞인 비율 t를 구하고, 바탕 몫(1−t)·B를 빼고 t로 나눠 원래 색을 되살린다.
+//    t가 너무 작으면(거의 바탕) 나눗셈이 잡음을 키우므로 F를 그대로 쓴다. F와 B가 거의 같으면(흰 접시·흰 바탕) 건드리지 않는다.
+// 3) 지운 쪽 3px에는 F를 칠해 둔다. 알파를 흐리면 이 픽셀들이 반투명하게 살아나는데, 원래 색(바탕·그림자)이 아니라 안쪽 색으로 보인다.
+function decontaminateEdge(data:Buffer,removed:Uint8Array,W:number,H:number,bg:[number,number,number]):void {
+  const N=W*H,BAND=3;
+  // 지운 영역에서의 거리(살린 픽셀, 최대 BAND)와 살린 영역에서의 거리(지운 픽셀, 최대 BAND)를 함께 잰다.
+  const dist=new Uint8Array(N).fill(255);
+  let frontier:number[]=[];
+  for(let p=0;p<N;p++){
+    const x=p%W;
+    const touches=(q:number)=>q>=0&&q<N&&removed[q]!==removed[p];
+    if(touches(p-W)||touches(p+W)||(x>0&&touches(p-1))||(x<W-1&&touches(p+1))){dist[p]=1;frontier.push(p);}
+  }
+  for(let d=2;d<=BAND&&frontier.length;d++){
+    const next:number[]=[];
+    for(const p of frontier){const x=p%W;for(const q of [p-W,p+W,x>0?p-1:-1,x<W-1?p+1:-1])if(q>=0&&q<N&&dist[q]===255&&removed[q]===removed[p]){dist[q]=d;next.push(q);}}
+    frontier=next;
+  }
+  // 안쪽 색 번지기: 띠 밖의 살린 픽셀(dist 255)이 씨앗. 띠(dist≤BAND)로 한 겹씩 넓혀 가며 이웃 씨앗의 색을 물려준다.
+  const owner=new Int32Array(N).fill(-1);
+  frontier=[];
+  for(let p=0;p<N;p++)if(!removed[p]&&dist[p]===255){owner[p]=p;}
+  for(let p=0;p<N;p++){
+    if(owner[p]<0||dist[p]!==255)continue;
+    const x=p%W;
+    for(const q of [p-W,p+W,x>0?p-1:-1,x<W-1?p+1:-1])if(q>=0&&q<N&&dist[q]!==255){frontier.push(p);break;}
+  }
+  for(let step=0;step<BAND*2+1&&frontier.length;step++){
+    const next:number[]=[];
+    for(const p of frontier){const x=p%W;for(const q of [p-W,p+W,x>0?p-1:-1,x<W-1?p+1:-1])if(q>=0&&q<N&&owner[q]<0&&dist[q]!==255){owner[q]=owner[p];next.push(q);}}
+    frontier=next;
+  }
+  for(let p=0;p<N;p++){
+    const source=owner[p];
+    if(source<0||source===p)continue;
+    const i=p*4,f=source*4;
+    if(removed[p]){data[i]=data[f];data[i+1]=data[f+1];data[i+2]=data[f+2];continue;}
+    const d0=data[f]-bg[0],d1=data[f+1]-bg[1],d2=data[f+2]-bg[2],len=d0*d0+d1*d1+d2*d2;
+    if(len<100)continue;
+    const t=Math.max(0,Math.min(1,((data[i]-bg[0])*d0+(data[i+1]-bg[1])*d1+(data[i+2]-bg[2])*d2)/len));
+    if(t>=.95)continue;
+    if(t<.3){data[i]=data[f];data[i+1]=data[f+1];data[i+2]=data[f+2];continue;}
+    for(let c=0;c<3;c++)data[i+c]=Math.max(0,Math.min(255,Math.round((data[i+c]-(1-t)*bg[c])/t)));
+  }
 }
 
 // 누끼 둘레에 흰 스티커 테두리를 두르고(알파를 번지게 해 키운 흰 실루엣), 아래에 그림자를 깐다.

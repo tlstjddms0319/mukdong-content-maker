@@ -58,6 +58,9 @@ function referenceDirection(input:ImageBrief):string {
   return `첨부한 원본 음식의 형태와 특징은 유지하고 조명, 색감, 구도만 자연스럽게 보완할 것. ${noCopy}`;
 }
 
+// 소품은 한국 상차림으로만. 이미지 모델은 '생선회'를 보면 일식 소품을 끌어오기 쉬워서 이름을 들어 막는다.
+const PROPS_DIRECTIVE="Props, if any, are Korean: brass yugi bowls, a dented yangeun kettle, a makgeolli sabal bowl, mukeunji. No Japanese props: no sushi geta board, wasabi, pickled ginger, chopstick rests or sake set.";
+
 const NO_TEXT_DIRECTIVE="Absolutely no text in the image: no letters, words, Korean or English characters, numbers, captions, speech bubbles, question marks, signs or logos. Food and background only.";
 
 export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
@@ -78,6 +81,10 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 사람이 먹고 있는 느낌은 장면 설명이 요구할 때만, 얼굴이 식별되지 않는 범위에서 넣는다.
     "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
     foodDirection(input),
+    // 실사 홍어 장면의 질감·빛. 결과 비침이 홍어다움을 만든다. 클로즈업(detail)은 접시 비율을 주지 않는다.
+    styleId==="photo"&&/홍어|삼합/.test([input.topic,input.imageBrief,input.slide?.visualPrompt].filter(Boolean).join(" "))
+      ? `Skate texture: visible parallel fiber texture, translucent pink edges backlit by the side light.${input.slide?.role==="detail"?"":" The plate fills about 60% of the frame."}` : "",
+    PROPS_DIRECTIVE,
     // 레이아웃마다 사진이 쓰이는 방식이 달라서, 그 레이아웃의 사진 분위기와 여백 요청을 붙인다.
     input.slide ? CARD_LAYOUTS[input.slideLayout==="overlay"?"fullscreen":input.slide.layout].photoHint : "",
     // 디자인 계열(컬러 블록·신문 등)은 사진을 누끼·흑백·픽셀처럼 따로 가공하므로, 그 가공에 맞는 촬영 조건을 덧붙인다.

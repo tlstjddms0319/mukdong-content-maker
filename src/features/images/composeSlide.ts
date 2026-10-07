@@ -1,4 +1,4 @@
-import { enhancePhoto, type PhotoKind } from "./render/photoEnhance";
+import { enhancePhoto, foodLookOf, type PhotoKind } from "./render/photoEnhance";
 import { registerPhoto, auditRender, describeIssue, type AuditReport } from "./render/audit";
 import sharp, { type OverlayOptions } from "sharp";
 import { access } from "node:fs/promises";
@@ -676,7 +676,9 @@ export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlide
   await access(FONTS.bold.file);
   const raw=Array.isArray(input)?input:[input];
   const kind=photoKindOf(options);
-  const inputs=kind==="none"?raw:await Promise.all(raw.map(photo=>enhancePhoto(photo,{kind})));
+  // 메뉴별 보정(홍어·삼합·막걸리·전): 장 제목과 키워드에서 메뉴를 찾는다. 못 찾으면 기본 보정.
+  const food=kind==="none"?null:foodLookOf([slide.headline,...(slide.keywords??[])].join(" "));
+  const inputs=kind==="none"?raw:await Promise.all(raw.map(photo=>enhancePhoto(photo,{kind,food})));
   const card:CardLayout=layout==="overlay"?"fullscreen":normalizeCardLayout(slide);
   if(photosNeeded(card)>0&&!inputs.length)throw new Error("slide image required");
   const fonts=resolveSlideFonts(design,slide);
@@ -691,7 +693,7 @@ export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlide
   // 그래도 남으면 문제가 가장 적은 결과를 쓰고 서버 로그에 남긴다. 대비 검사는 무거워서 자동 검수 테스트에서만 한다.
   let current=slide,best:{image:Buffer;report:AuditReport;count:number}|null=null;
   for(let attempt=0;attempt<3;attempt++){
-    const {image,report}=await auditRender(()=>draw(current),{contrast:options.contrast??false,cover:index===1});
+    const {image,report}=await auditRender(()=>draw(current),{contrast:options.contrast??false,cover:index===1,...(options.contrast?{photos:raw}:{})});
     const count=report.issues.filter(issue=>issue.kind==="overflow"||issue.kind==="overlap").length;
     if(!best||count<best.count)best={image,report,count};
     if(count===0)break;

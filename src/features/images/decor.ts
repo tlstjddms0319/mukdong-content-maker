@@ -1,6 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import path from "node:path";
 import { access } from "node:fs/promises";
+import { registerDecor } from "./render/audit";
 
 // 카드 장식 요소 모음. 종이 질감, 마스킹 테이프, 반짝이, 물결 밑줄, 스티커, 점 무늬, 낙서 화살표 등을
 // SVG 조각(문자열)으로 만들어 돌려준다. 그리기 함수는 조각을 한 장의 SVG 레이어로 묶어 캔버스에 올린다.
@@ -259,6 +260,8 @@ export async function mascotLayer(options:{width:number;left:number;top:number;p
   }
   const mascot=await mascotCache.get(key)!;
   if(!mascot)return null;
+  // 자동 검수가 마스코트가 글자를 가렸는지 볼 수 있게 등록한다(render/audit.ts, 경고만).
+  registerDecor(mascot.data,"mascot");
   // anchor는 left/top이 가리키는 모서리. 아래쪽 기준이면 그림 높이만큼 위로 올린다.
   const anchor=options.anchor??"top-left";
   const left=anchor.endsWith("right")?options.left-mascot.info.width:options.left;
@@ -287,6 +290,7 @@ export async function propLayer(name:PropName,options:{width:number;left:number;
     if(options.rotate)image=sharp(await image.png().toBuffer()).rotate(options.rotate,{background:{r:0,g:0,b:0,alpha:0}});
     return image.png().toBuffer();
   });
+  registerDecor(buffer,"prop");
   const meta=await sharp(buffer).metadata();
   const width=meta.width??options.width,height=meta.height??options.width;
   const anchor=options.anchor??"top-left";

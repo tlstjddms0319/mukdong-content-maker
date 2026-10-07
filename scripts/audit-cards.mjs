@@ -1,11 +1,14 @@
 // 모든 디자인 계열과 템플릿 레이아웃을 까다로운 문안·밝은/어두운 사진으로 그려 자동 검수(render/audit.ts) 결과를 모은다.
-// 실행: node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/audit-cards.mjs [--verbose] [--style=계열] [--handle=계정]
+// 실행: node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/audit-cards.mjs [--verbose] [--style=계열] [--handle=계정] [--area]
+// 문제(issues)와 따로 경고(장식 겹침·빈 띠·표지 사진 면적·사진 품질)를 계열별로 센다. 경고는 실패로 치지 않는다(다음 개선 목록).
+// 식욕 점수(Gemini 비전)는 scripts/appetite-bench.mjs가 따로 잰다.
 import sharp from "sharp";
 import { readFile } from "node:fs/promises";
 import { composeSlideCard } from "../src/features/images/composeSlide.ts";
 import { CardLayoutSchema, LAYOUT_VARIANTS, photosNeeded } from "../src/features/images/design.ts";
 import { StyleIdSchema } from "../src/features/images/styleCatalog.ts";
-import { describeIssue } from "../src/features/images/render/audit.ts";
+import { AUDIT_WARNING_KINDS, describeIssue, describeNote } from "../src/features/images/render/audit.ts";
+import { photoQuality } from "../src/features/images/render/photoEnhance.ts";
 
 const verbose=process.argv.includes("--verbose");
 const only=process.argv.find(arg=>arg.startsWith("--style="))?.slice(8);
@@ -39,6 +42,12 @@ for(const style of StyleIdSchema.options.filter(id=>!only||id===only)){
 const counts={};let failed=0;
 // 측정값(문제는 아님): 몰래 축소·외톨이 줄 건수, 표지 사진 면적(계열·레이아웃별 최소값).
 const measured={shrinks:{},orphans:{},coverArea:{}};
+// 경고: 종류 → 계열 키 → 건수.
+const warned=Object.fromEntries(AUDIT_WARNING_KINDS.map(kind=>[kind,{}]));
+// 사진 품질은 넣은 사진에 달린 것이라 사진마다 한 번만 잰다. 카드 그리기가 품질 메모를 남기지 않는 경로(composeSlideCard가
+// 원본 사진을 검수에 넘기지 않을 때)에서는 여기서 잰 값으로 센다.
+const qualityCache=new Map();
+const flagsOf=photo=>{if(!qualityCache.has(photo))qualityCache.set(photo,photoQuality(photo).then(q=>q.flags).catch(()=>[]));return qualityCache.get(photo);};
 for(const c of cases){
   const slide={...base,...c.copy,subline:c.role==="cover"?c.copy.subline:"",role:c.role,layout:c.layout,variant:c.variant,points:c.role==="cover"?[]:c.copy.points};
   const index=c.role==="cover"?1:c.role==="visit"?5:2;
@@ -47,7 +56,14 @@ for(const c of cases){
   if(report.metrics.shrinks)measured.shrinks[key]=(measured.shrinks[key]??0)+report.metrics.shrinks;
   if(report.metrics.orphans)measured.orphans[key]=(measured.orphans[key]??0)+report.metrics.orphans;
   if(c.role==="cover"&&c.copyName==="normal")measured.coverArea[key]=Math.min(measured.coverArea[key]??1,report.metrics.photoArea);
-  if(verbose&&(report.metrics.shrinks||report.metrics.orphans))console.log(`${c.style} ${c.layout}#${c.variant} ${c.role} ${c.copyName} ${c.photoName}: 측정`,report.notes.map(n=>n.kind==="shrink"?`축소 "${n.text}" ${n.from}→${n.to}px`:`외톨이 줄 "${n.text}" ${n.ratio}`).join(" | "));
+  const notes=[...report.notes];
+  if(!report.notes.some(note=>note.kind==="photo-quality"))for(const [i,photo] of c.photos.slice(0,Math.max(1,photosNeeded(c.layout))).entries()){
+    const flags=await flagsOf(photo);
+    if(flags.length)notes.push({kind:"photo-quality",photo:i,flags});
+  }
+  // 한 장에 빈 띠가 둘이어도 한 건(걸린 카드 수)으로 센다.
+  for(const kind of new Set(notes.map(note=>note.kind)))if(kind in warned)warned[kind][key]=(warned[kind][key]??0)+1;
+  if(verbose&&notes.length)console.log(`${c.style} ${c.layout}#${c.variant} ${c.role} ${c.copyName} ${c.photoName}: 측정`,notes.map(describeNote).join(" | "));
   if(report.issues.length){
     failed++;
     for(const issue of report.issues){const key=`${c.style}/${c.style==="template"?c.layout:"*"} ${issue.kind}`;counts[key]=(counts[key]??0)+1;}
@@ -64,3 +80,7 @@ if(process.argv.includes("--area")){
   console.log("표지 사진 면적(보통 문안, 최소값):");
   for(const [key,area] of Object.entries(measured.coverArea).sort((a,b)=>a[1]-b[1]))console.log(`  ${key}: ${Math.round(area*100)}%`);
 }
+// 경고는 계열별로(많은 순), 걸린 카드 수다.
+const LABELS={"decor-overlap":"장식 겹침","dead-band":"빈 띠","photo-area":"표지 사진 면적 부족","photo-quality":"사진 품질"};
+console.log(`경고 ${AUDIT_WARNING_KINDS.map(kind=>`${LABELS[kind]} ${sum(warned[kind])}`).join(", ")}`);
+for(const kind of AUDIT_WARNING_KINDS)for(const [key,count] of Object.entries(warned[kind]).sort((a,b)=>b[1]-a[1]))console.log(`  ${LABELS[kind]} ${key}: ${count}`);

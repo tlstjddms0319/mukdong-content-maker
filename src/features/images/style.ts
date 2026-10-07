@@ -23,7 +23,8 @@ export const IMAGE_STYLE_DIRECTIONS:Record<ImageStyle,StyleDirection>={
     medium:"사진",
     scene:"음식 사진 장면",
     anchor:"실제 음식 사진 질감",
-    look:"Editorial food photography, natural side-window light, realistic food texture, restrained highlights and appetizing natural colors. One clear focal point. Avoid plastic gloss, excessive saturation, decorative clutter and duplicated food shapes. Follow the scene's camera angle.",
+    // 먹음직스러움은 질감(촉촉한 윤기)과 빛(따뜻한 옆빛)에서 나온다. 색온도·화면 비율을 숫자로 주면 작은 모델도 덜 흔들린다.
+    look:"Editorial food photography, warm 3200-4000K side light, glossy moist highlights on the food, realistic texture and appetizing natural colors. One clear focal point. Avoid plastic gloss, excessive saturation, decorative clutter and duplicated food shapes. Follow the scene's camera angle.",
   },
   anime:{
     medium:"애니메이션 일러스트",
