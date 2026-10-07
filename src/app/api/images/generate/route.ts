@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordUsage, type UsageProvider } from "@/lib/usage/ledger";
 import { ownerApiError } from "@/features/auth/guard";
 import { ImageBriefSchema, type ImageBrief } from "@/features/images/schema";
 import { normalizeCardLayout, photosNeeded } from "@/features/images/design";
@@ -17,6 +18,9 @@ import { checkCoverCandidates, coverRank, expectedFoodFrom } from "@/features/im
 
 type ImageProvider="higgsfield"|"cloudflare"|"openai";
 const PROVIDER_LABELS:Record<ImageProvider,string>={higgsfield:"Higgsfield",cloudflare:"Cloudflare",openai:"OpenAI"};
+const USAGE_IDS:Record<ImageProvider,UsageProvider>={higgsfield:"higgsfield",cloudflare:"cloudflare-image",openai:"openai-image"};
+// 실패의 HTTP 상태(알 수 있을 때만). 429면 사용량 장부가 "한도 초과"로 센다.
+const imageErrorStatus=(error:unknown)=>{const status=(error as {status?:unknown})?.status;return typeof status==="number"?status:0;};
 const HIGGSFIELD_MESSAGES:Record<HiggsfieldImageError["reason"],string>={
   auth:"Higgsfield 키를 확인해 주세요.",
   credits:"Higgsfield 크레딧이 부족해요. 충전하거나 설정에서 다른 이미지 AI를 골라 주세요.",
@@ -92,9 +96,17 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const used:ImageProvider[]=[];
     for(const [index,name] of chain.entries()){
       // 앞 제공자가 일부만 만들었으면 남은 장수만, 그리고 이어지는 후보 번호부터 요청한다.
-      try { images=[...images,...await generators[name]({...parsed.data,count:parsed.data.count-images.length,candidateOffset:images.length})]; used.push(name); break; }
+      try {
+        const made=await generators[name]({...parsed.data,count:parsed.data.count-images.length,candidateOffset:images.length});
+        images=[...images,...made]; used.push(name);
+        recordUsage({provider:USAGE_IDS[name],ok:true,units:made.length});
+        break;
+      }
       catch(error) {
         const completed=error instanceof CloudflarePartialImageError||error instanceof HiggsfieldPartialImageError?error.images:[];
+        // 사용량 장부: 크레딧 부족·429는 "한도 초과"로 적는다(설정 화면 "AI 사용량").
+        recordUsage({provider:USAGE_IDS[name],ok:false,units:0,status:imageErrorStatus(error),quota:error instanceof HiggsfieldImageError&&error.reason==="credits"});
+        if(completed.length)recordUsage({provider:USAGE_IDS[name],ok:true,units:completed.length});
         if(completed.length){images=[...images,...completed];used.push(name);}
         if(index===chain.length-1)throw error;
         console.warn(`[images] ${name} 생성 실패, 다음 이미지 AI로 전환합니다:`,error instanceof Error?error.name:String(error));

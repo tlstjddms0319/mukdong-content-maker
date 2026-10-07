@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import type { z } from "zod";
 import { TextAiHttpError } from "./errors";
 import { toStrictJsonSchema } from "./jsonSchema";
+import { recordGroqLimits } from "@/lib/usage/ledger";
 
 export class GroqConfigurationError extends Error {
   constructor(message = "Groq API 키가 연결되지 않았습니다.") {
@@ -31,12 +32,18 @@ export function createGroqClient(options: { apiKey?:string; model?:string; clien
     async generateJson<T>(prompt:string, schema:z.ZodType<T>):Promise<T> {
       let completion: OpenAI.Chat.Completions.ChatCompletion;
       try {
-        completion = await client.chat.completions.create({
+        const request = client.chat.completions.create({
           model,
           messages:[{ role:"user", content:prompt }],
           response_format:{ type:"json_schema", json_schema:{ name:"result", strict:true, schema:toStrictJsonSchema(schema) } },
           reasoning_effort:"low",
-        });
+        }) as Promise<OpenAI.Chat.Completions.ChatCompletion> & { withResponse?:()=>Promise<{ data:OpenAI.Chat.Completions.ChatCompletion; response:Response }> };
+        // Groq는 응답 머리글로 남은 요청·토큰 수를 알려 준다. 설정 화면 "AI 사용량"에 보여 주려고 적어 둔다.
+        if (typeof request.withResponse === "function") {
+          const { data, response } = await request.withResponse();
+          completion = data;
+          recordGroqLimits(response.headers);
+        } else completion = await request;
       } catch (error) {
         const status = typeof (error as { status?:unknown }).status === "number" ? (error as { status:number }).status : 0;
         throw new TextAiHttpError("Groq", status, `Groq API 오류 (${status || "network"})`);
