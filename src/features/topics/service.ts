@@ -1,6 +1,7 @@
 import { TopicInputSchema, TopicSuggestionsSchema, type TopicInput, type TopicSuggestion, type TopicSuggestionInput } from "./schema";
 import type { SeasonContext } from "./season";
-import { isHongeoHoe, mainMenuOf, menuOf, menusInSeason, type StoreMenuItem } from "@/features/store/menu";
+import { STORE_MENU, isHongeoHoe, mainMenuOf, menuOf, menusForDate, type StoreMenuItem } from "@/features/store/menu";
+import { trendMenu } from "./naverTrend";
 
 export interface TopicAiClient {
   suggest(input:TopicInput):Promise<TopicSuggestionInput[]>;
@@ -14,7 +15,12 @@ const TOPIC_DIRECTIONS = [
   ["곁들임이 맛에 주는 변화","제철 메뉴 한 접시(과메기·미나리전 등)","홍어의 향과 식감"],
 ] as const;
 
-type PreparedTopic=Omit<TopicSuggestion,"id"|"season">;
+type PreparedTopic=Omit<TopicSuggestion,"id"|"season"|"trend">;
+
+// 추천을 고르는 데 쓰는 참고 정보(라우트가 만든다).
+// recentMenus: 최근에 보여 준 주제에 자주 나온 메뉴 id(이번에는 되도록 빼서 메뉴를 고르게 돌린다).
+// trends: 네이버 검색이 늘어난 말(묶음 이름). 준비된 주제는 그 말과 이어지는 메뉴를 먼저 고른다.
+export type TopicHints={recentMenus?:ReadonlySet<string>;trends?:readonly string[]};
 
 // 준비된 주제(AI 실패 시). 라운드마다 [일상 질문, (메뉴 소개 칸은 계절에 맞춰 아래 MENU_TOPICS에서), 홍어 요리 질문].
 // 일상 질문 제목에는 홍어·삼합을 넣지 않고, summary 앞쪽에 이어질 가게 메뉴를 먼저 적는다(메뉴 판별에 쓰인다).
@@ -79,24 +85,52 @@ export function topicMenu(topic:Pick<TopicSuggestion,"title"|"summary">):StoreMe
 // 홍어회·삼합이 아닌 가게 메뉴(과메기·미나리전·배다리 막걸리·홍어애탕·홍어무침 등)를 다루는 주제인지.
 export const isOtherMenuTopic=(topic:Pick<TopicSuggestion,"title"|"summary">)=>{const menu=topicMenu(topic);return Boolean(menu&&!isHongeoHoe(menu));};
 
-// 메뉴 소개 칸 고르기: 이번 계절 메뉴 + 다른 칸과 겹치지 않는 메뉴 → 계절 무관 + 겹치지 않음 → 이번 계절 → 아무거나.
+// 메뉴 소개 칸 고르기. 앞 단계일수록 먼저:
+// 검색이 늘어난 말의 메뉴 → 이번 철(또는 곧 제철) 메뉴 가운데 최근에 자주 안 나온 것 → 최근에 자주 안 나온 아무 메뉴
+// → 이번 철 메뉴 → 겹치지 않는 메뉴 → 아무거나. 모두 다른 칸과 메뉴가 겹치지 않는 것을 먼저 본다.
 // 라운드마다 시작 위치를 돌려 같은 메뉴만 나오지 않게 한다.
-function pickMenuTopic(index:number,season:SeasonContext|undefined,taken:ReadonlySet<string>,accept:(topic:PreparedTopic)=>boolean):PreparedTopic|undefined {
-  const inSeason=new Set(menusInSeason(season?.season).map(item=>item.id));
+function pickMenuTopic(index:number,season:SeasonContext|undefined,taken:ReadonlySet<string>,accept:(topic:PreparedTopic)=>boolean,hints:TopicHints={}):{topic:PreparedTopic;trend:string}|undefined {
+  const {inSeason,upcoming}=menusForDate(season?.today,season?.season);
+  const timely=new Set([...inSeason,...upcoming].map(item=>item.id));
+  const recent=hints.recentMenus??new Set<string>();
+  const trendOf=(menu:string)=>(hints.trends??[]).find(keyword=>trendMenu(keyword)===menu)??"";
   const rotated=MENU_TOPICS.map((_,i)=>MENU_TOPICS[(index+i)%MENU_TOPICS.length]);
-  const tiers=[
-    (item:typeof MENU_TOPICS[number])=>inSeason.has(item.menu)&&!taken.has(item.menu),
-    (item:typeof MENU_TOPICS[number])=>!taken.has(item.menu),
-    (item:typeof MENU_TOPICS[number])=>inSeason.has(item.menu),
+  type Item=typeof MENU_TOPICS[number];
+  const tiers:Array<(item:Item)=>boolean>=[
+    item=>Boolean(trendOf(item.menu))&&!taken.has(item.menu),
+    item=>timely.has(item.menu)&&!taken.has(item.menu)&&!recent.has(item.menu),
+    item=>!taken.has(item.menu)&&!recent.has(item.menu),
+    item=>timely.has(item.menu)&&!taken.has(item.menu),
+    item=>!taken.has(item.menu),
     ()=>true,
   ];
-  for(const tier of tiers){const found=rotated.find(item=>tier(item)&&accept(item.topic));if(found)return found.topic;}
+  for(const tier of tiers){const found=rotated.find(item=>tier(item)&&accept(item.topic));if(found)return {topic:found.topic,trend:trendOf(found.menu)};}
   return undefined;
+}
+
+// 최근 주제 제목에서 주인공 메뉴를 짐작한다(메뉴 이름이 없으면 준비된 주제의 설명, "탕·국물"이면 홍어애탕).
+const PREPARED_SUMMARIES=new Map<string,string>([...FALLBACK_TOPIC_ROUNDS.flatMap(round=>[round.general,round.hongeo]),...MENU_TOPICS.map(item=>item.topic),...Object.values(SEASONAL_TOPICS)].map(topic=>[titleKey(topic.title),topic.summary]));
+export function titleMenu(title:string):StoreMenuItem|undefined {
+  const direct=mainMenuOf(title);
+  if(direct)return direct;
+  const summary=PREPARED_SUMMARIES.get(titleKey(title));
+  if(summary)return mainMenuOf(summary);
+  if(/탕|국물/.test(title))return STORE_MENU.find(item=>item.id==="hongeo-aetang");
+  return undefined;
+}
+// 이번에는 빼고 돌릴 메뉴: 지금 화면(current, "새로고침" 직전 추천)에 나온 메뉴 + 최근 주제(최근 것부터) 9개 안에 두 번 이상 나온 메뉴.
+// 홍어회는 홍어 질문 칸에 늘 나오므로 세지 않는다. 같은 메뉴가 새로고침마다 되풀이되지 않게 한다(예: 가을마다 홍어애탕).
+export function overusedMenus(recentTitles:readonly string[],current:readonly string[]=[]):Set<string> {
+  const menuId=(title:string)=>{const menu=titleMenu(title);return menu&&!isHongeoHoe(menu)?menu.id:undefined;};
+  const counts=new Map<string,number>();
+  for(const title of recentTitles.slice(0,9)){const id=menuId(title);if(id)counts.set(id,(counts.get(id)??0)+1);}
+  const now=current.map(menuId).filter((id):id is string=>Boolean(id));
+  return new Set([...now,...[...counts].filter(([,count])=>count>=2).map(([id])=>id)]);
 }
 
 // avoidTitles: 최근에 보여 준 주제. 되도록 피하지만, 다 피할 수 없으면 제외 목록만 지킨다.
 // 한 묶음 = [일상 질문(또는 이번 시기 주제), 계절에 맞는 메뉴 소개(홍어회·삼합 아님), 홍어 요리 질문].
-export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season?:SeasonContext,avoidTitles:readonly string[]=[]):TopicSuggestion[] {
+export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season?:SeasonContext,avoidTitles:readonly string[]=[],hints:TopicHints={}):TopicSuggestion[] {
   const excluded=new Set(excludeTitles.map(titleKey));
   const avoided=new Set(avoidTitles.map(titleKey));
   // 이번 시기 행사 가운데 준비된 주제가 있고 제외·최근 목록에 없는 첫 행사를 고른다.
@@ -105,12 +139,14 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
   const allowed=(topic:PreparedTopic,strict:boolean)=>!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title)));
   const roundAt=(index:number,strict:boolean):TopicSuggestion[]|undefined=>{
     const round=FALLBACK_TOPIC_ROUNDS[index];
-    const first:TopicSuggestion=event?{...SEASONAL_TOPICS[event.id],season:event.name,id:`fallback-season-${event.id}`}:{...round.general,season:"",id:`fallback-${index+1}-1`};
-    const last:TopicSuggestion={...round.hongeo,season:"",id:`fallback-${index+1}-3`};
+    const first:TopicSuggestion=event?{...SEASONAL_TOPICS[event.id],season:event.name,trend:"",id:`fallback-season-${event.id}`}:{...round.general,season:"",trend:"",id:`fallback-${index+1}-1`};
+    const last:TopicSuggestion={...round.hongeo,season:"",trend:"",id:`fallback-${index+1}-3`};
     const taken=new Set([first,last].map(topic=>topicMenu(topic)?.id).filter((id):id is string=>Boolean(id)));
-    const menu=pickMenuTopic(index,season,taken,topic=>allowed(topic,strict)&&titleKey(topic.title)!==titleKey(first.title));
+    const menu=pickMenuTopic(index,season,taken,topic=>allowed(topic,strict)&&titleKey(topic.title)!==titleKey(first.title),hints);
     if(!menu)return undefined;
-    return [first,{...menu,season:"",id:`fallback-${index+1}-2`},last];
+    // 메뉴 소개 칸이 아니어도 주인공 메뉴가 검색이 늘어난 말과 이어지면 그 말을 표시한다(예: 송년회 주제의 과메기).
+    const trendFor=(topic:TopicSuggestion)=>topic.trend||((hints.trends??[]).find(keyword=>trendMenu(keyword)&&trendMenu(keyword)===topicMenu(topic)?.id)??"");
+    return [first,{...menu.topic,season:"",trend:menu.trend,id:`fallback-${index+1}-2`},last].map(topic=>({...topic,trend:trendFor(topic)}));
   };
   // 1순위: 제외·최근 목록과 하나도 겹치지 않는 묶음, 2순위: 제외 목록만 피한 묶음(최근 것이 일부 겹쳐도).
   for(const strict of [true,false]){
@@ -129,7 +165,7 @@ const meetsTopicBasics=(topic:TopicSuggestion,storeName:string)=>/[?？]$/.test(
 // AI가 준 주제 3개를 통째로 버리지 않고, 조건에 맞는 것만 살려 "일상 질문 2개 + 홍어 질문 1개" 순서로 맞춘다.
 // 세 주제가 모두 홍어회·삼합이면 둘째 칸을 이번 계절의 다른 메뉴 주제로 바꾼다(홍어만 파지 않게).
 // 모자란 칸만 준비된 주제(이번 시기·최근에 안 보인 것 우선)로 채운다. filled = 준비된 주제로 채운 칸 수.
-export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:string;round:number;excludeTitles:readonly string[];avoidTitles:readonly string[];season?:SeasonContext}):{topics:TopicSuggestion[];filled:number} {
+export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:string;round:number;excludeTitles:readonly string[];avoidTitles:readonly string[];season?:SeasonContext;hints?:TopicHints}):{topics:TopicSuggestion[];filled:number} {
   const blocked=new Set([...options.excludeTitles,...options.avoidTitles].map(titleKey));
   const used=new Set<string>();
   const take=(topic:TopicSuggestion)=>{used.add(titleKey(topic.title));return topic;};
@@ -143,10 +179,13 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   // 채울 후보: 이번 묶음부터 차례로 돌며, 최근에 안 보인 것 → 제외 목록만 피한 것 순서.
   const excluded=new Set(options.excludeTitles.map(titleKey));
   const avoided=new Set(options.avoidTitles.map(titleKey));
-  const pool=Array.from({length:FALLBACK_TOPIC_ROUNDS.length},(_,offset)=>fallbackTopics((options.round+offset)%FALLBACK_TOPIC_ROUNDS.length,[],options.season,options.avoidTitles)).flat();
+  const pool=Array.from({length:FALLBACK_TOPIC_ROUNDS.length},(_,offset)=>fallbackTopics((options.round+offset)%FALLBACK_TOPIC_ROUNDS.length,[],options.season,options.avoidTitles,options.hints)).flat();
+  // 최근에 자주 나온 메뉴와 이미 고른 칸의 메뉴는 되도록 피한다(메뉴를 고르게 돌리기).
+  const recent=options.hints?.recentMenus??new Set<string>();
+  const fresh=(topic:TopicSuggestion)=>{const id=topicMenu(topic)?.id;return !id||(!recent.has(id)&&![...general,...hongeo].some(item=>topicMenu(item)?.id===id));};
   const pick=(fits:(topic:TopicSuggestion)=>boolean)=>{
-    for(const strict of [true,false]){
-      const found=pool.find(topic=>fits(topic)&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
+    for(const [strict,varied] of [[true,true],[true,false],[false,false]] as const){
+      const found=pool.find(topic=>fits(topic)&&(!varied||fresh(topic))&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
       if(found)return take(found);
     }
     throw new Error("다른 추천 주제를 찾지 못했습니다.");
@@ -181,13 +220,24 @@ function normalizeSeasonLabels(topics:TopicSuggestion[],season?:SeasonContext):T
 }
 
 // onFallback: 세 칸 모두 준비된 주제로 대체됐을 때(이유와 함께). onPartial: 일부 칸만 채웠을 때.
-export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string)=>void,season?:SeasonContext,onPartial?:(filled:number)=>void):Promise<TopicSuggestion[]> {
+// AI가 trend에 적은 말은 이번에 넘긴 검색 흐름 말이고, 제목·설명에 그 말이나 이어지는 메뉴가 실제로 나올 때만 남긴다.
+export function normalizeTrendLabels(topics:TopicSuggestion[],trends:readonly string[]=[]):TopicSuggestion[] {
+  return topics.map(topic=>{
+    const keyword=topic.trend.trim();
+    const menu=STORE_MENU.find(item=>item.id===trendMenu(keyword));
+    const text=`${topic.title} ${topic.summary}`;
+    const used=trends.includes(keyword)&&(text.includes(keyword)||Boolean(menu&&menuOf(text).some(item=>item.id===menu.id)));
+    return {...topic,trend:used?keyword:""};
+  });
+}
+
+export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string)=>void,season?:SeasonContext,onPartial?:(filled:number)=>void,hints:TopicHints={}):Promise<TopicSuggestion[]> {
   const parsed=TopicInputSchema.parse(input);
-  const fallback=(reason="no AI client")=>{onFallback?.(reason);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season,parsed.avoidTitles);};
+  const fallback=(reason="no AI client")=>{onFallback?.(reason);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season,parsed.avoidTitles,hints);};
   if(!ai)return fallback();
   try{
-    const suggestions=normalizeSeasonLabels(TopicSuggestionsSchema.parse(await ai.suggest(parsed)),season);
-    const {topics,filled}=assembleTopics(suggestions,{storeName:parsed.storeName,round:parsed.recommendationRound,excludeTitles:parsed.excludeTitles,avoidTitles:parsed.avoidTitles,season});
+    const suggestions=normalizeTrendLabels(normalizeSeasonLabels(TopicSuggestionsSchema.parse(await ai.suggest(parsed)),season),hints.trends);
+    const {topics,filled}=assembleTopics(suggestions,{storeName:parsed.storeName,round:parsed.recommendationRound,excludeTitles:parsed.excludeTitles,avoidTitles:parsed.avoidTitles,season,hints});
     if(filled>=3)return fallback(`suggestions broke the topic rules: ${suggestions.map(topic=>topic.title).join(" / ").slice(0,200)}`);
     if(filled>0)onPartial?.(filled);
     return topics;

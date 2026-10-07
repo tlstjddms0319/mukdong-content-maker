@@ -18,6 +18,8 @@ export const TopicSuggestionSchema = z.object({
   imageBrief: z.string().min(1),
   // 이 주제에 반영한 시기(행사·계절 이름). 시기와 무관하면 빈 문자열. 예전 초안에는 없어서 기본값을 둔다.
   season: z.string().trim().max(30).optional().default(""),
+  // 이 주제에 반영한 네이버 검색 흐름 말(trendKeywords의 묶음 이름, 예: "과메기"). 반영하지 않았으면 빈 문자열.
+  trend: z.string().trim().max(30).optional().default(""),
 });
 
 export const TopicSuggestionsSchema = z.array(TopicSuggestionSchema).length(3).superRefine((topics,context) => {

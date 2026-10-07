@@ -22,7 +22,7 @@ describe("month plan helpers", () => {
   });
 
   it("prefers seasonal, then hongeo topics, and skips titles already used", () => {
-    const topic=(title:string,season="")=>({id:title,title,summary:"요약",reason:"이유",audience:"A" as const,imageBrief:"사진",season});
+    const topic=(title:string,season="")=>({id:title,title,summary:"요약",reason:"이유",audience:"A" as const,imageBrief:"사진",season,trend:""});
     const picked=pickWeekTopics([topic("같은 회인데 왜 다를까?"),topic("홍어는 왜 수육이랑 먹을까?"),topic("김장날엔 왜 수육을 삶을까?","김장철")],2,new Set());
     expect(picked.map(item=>item.title)).toEqual(["김장날엔 왜 수육을 삶을까?","홍어는 왜 수육이랑 먹을까?"]);
     expect(pickWeekTopics([topic("홍어는 왜 수육이랑 먹을까?")],1,new Set(["홍어는왜수육이랑먹을까"]))).toEqual([]);
