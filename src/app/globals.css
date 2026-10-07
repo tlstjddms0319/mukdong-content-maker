@@ -512,3 +512,10 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .deck-new-slide { display:grid; gap:8px; padding-top:8px; border-top:1px dashed var(--line); }
 .deck-new-slide input, .deck-new-slide textarea { width:100%; }
 .field-check { display:flex; align-items:center; gap:8px; font-size:14px; flex-basis:100%; }
+/* 설정 "맨 뒤 홍보 포스터": 미리보기(4:5) 옆에 설명·버튼. 좁은 화면에서는 위아래로. */
+.poster-setting { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+.poster-setting > img { width:220px; height:auto; aspect-ratio:4/5; border-radius:10px; border:1px solid var(--line); background:#f5f1e8; }
+.poster-setting > div { flex:1 1 260px; min-width:0; display:grid; gap:10px; }
+.poster-setting p { margin:0; }
+.poster-setting label.button { cursor:pointer; }
+.poster-setting label.button.disabled { cursor:not-allowed; opacity:.45; pointer-events:none; }

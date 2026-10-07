@@ -7,6 +7,7 @@ import { normalizeStyleId, StyleIdSchema, type StyleId } from "./styleCatalog";
 import { typographyOf } from "./typography";
 import { auditRender, type AuditReport } from "./render/audit";
 import { addSeasonMotif } from "./render/seasonLayer";
+import { readCustomPoster } from "@/features/store/posterStore";
 import { FONTS, blob, brandHandle, canvas, currentTone, sparkles, svgLayer, textLayer, withRenderContext, type Font, type Layer } from "./render/primitives";
 import { contactShadow, doodleArrow, mascotLayer, propLayer, textureLayer, type PropName, type TextureName } from "./decor";
 import { STYLE_FONTS, brandSeal, snap } from "./styles/shared";
@@ -457,20 +458,31 @@ export async function renderStoreCard(design:DesignSpecInput|undefined,index:num
 // 4:5(1080×1350)와 비율이 다를 수 있어 잘라 내지 않고 통째로 넣는다: 높이(또는 폭)에 맞추고, 남는 가장자리는
 // 같은 포스터를 크게 흐려 깐다(위아래를 자르면 아래쪽 상차림·오른쪽 접시가 잘린다).
 export const STORE_POSTER_FILE=path.join(process.cwd(),"assets/store/promo-card.webp");
-let posterCache:{file:string;mtime:number;image:Buffer}|null=null;
+// 포스터를 4:5 카드로 맞춘다(같은 원본이면 다시 굽지 않게 key로 기억. 기본 포스터·올린 포스터 두 개면 충분).
+const fitted=new Map<string,Promise<Buffer>>();
+export function fitPoster(source:Buffer,key:string):Promise<Buffer> {
+  const cached=fitted.get(key);
+  if(cached)return cached;
+  const job=(async()=>{
+    const back=await sharp(source).resize(1080,1350,{fit:"cover"}).blur(40).modulate({brightness:.9}).toBuffer();
+    const front=await sharp(source).resize(1080,1350,{fit:"inside"}).sharpen({sigma:.6,m1:.3,m2:.8}).toBuffer({resolveWithObject:true});
+    return sharp(back).composite([{input:front.data,left:Math.round((1080-front.info.width)/2),top:Math.round((1350-front.info.height)/2)}]).jpeg({quality:92}).toBuffer();
+  })();
+  fitted.set(key,job);
+  job.catch(()=>fitted.delete(key));
+  if(fitted.size>4)fitted.delete(fitted.keys().next().value!);
+  return job;
+}
+// 저장소에 들어 있는 기본 포스터(파일이 바뀌면 다시 굽는다).
 export async function storePoster(file=STORE_POSTER_FILE):Promise<Buffer|null> {
   const info=await stat(file).catch(()=>null);
   if(!info?.isFile())return null;
-  if(posterCache&&posterCache.file===file&&posterCache.mtime===info.mtimeMs)return posterCache.image;
-  const source=await readFile(file);
-  const back=await sharp(source).resize(1080,1350,{fit:"cover"}).blur(40).modulate({brightness:.9}).toBuffer();
-  const front=await sharp(source).resize(1080,1350,{fit:"inside"}).sharpen({sigma:.6,m1:.3,m2:.8}).toBuffer({resolveWithObject:true});
-  const image=await sharp(back).composite([{input:front.data,left:Math.round((1080-front.info.width)/2),top:Math.round((1350-front.info.height)/2)}]).jpeg({quality:92}).toBuffer();
-  posterCache={file,mtime:info.mtimeMs,image};
-  return image;
+  return fitPoster(await readFile(file),`${file}|${info.mtimeMs}`);
 }
-// 맨 뒤 홍보 카드: 포스터가 있으면 포스터, 없으면 코드 디자인.
+// 맨 뒤 홍보 카드: 설정에서 올린 포스터 → 기본 포스터 → 코드 디자인 순서.
 export async function renderStorePromoImage(design:DesignSpecInput|undefined,index:number,total:number,options:StoreCardOptions={}):Promise<Buffer> {
+  const custom=await readCustomPoster().catch(error=>{console.warn("[store-card] 올린 포스터를 읽지 못해 기본 포스터를 씁니다:",error instanceof Error?error.message:String(error));return null;});
+  if(custom)return fitPoster(custom.image,`custom|${custom.updatedAt}`);
   return await storePoster().catch(()=>null)??renderStoreCardImage(design,index,total,options);
 }
 
