@@ -15,8 +15,8 @@ function bearerMatches(request:Request,secret:string|undefined){
 
 export async function POST(request:Request){
   if(!bearerMatches(request,process.env.INSTAGRAM_SCHEDULER_SECRET)&&(await ownerApiError())!==null)return NextResponse.json({error:"인증이 필요합니다."},{status:401});
-  if(!isAutoPublishEnabled())return NextResponse.json({error:"자동 게시가 꺼져 있습니다(INSTAGRAM_AUTOPUBLISH=off)."},{status:409});
-  try{return NextResponse.json(await runScheduledPublishing());}
+  // 자동 게시가 꺼져 있어도 외부 크론이 부르면 토큰 갱신은 한다(응답의 reason이 "autopublish-off").
+  try{return NextResponse.json(await runScheduledPublishing(console.info,isAutoPublishEnabled()));}
   catch(error){
     if(error instanceof SchedulerConfigurationError)return NextResponse.json({error:error.message},{status:503});
     return NextResponse.json({error:"예약 게시 점검에 실패했습니다."},{status:500});

@@ -1,10 +1,12 @@
-import { mkdir,open,readFile,rename,rm,writeFile } from "node:fs/promises";
+import { mkdir,open,readFile,rename,rm,stat,writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { InstagramConnectionSchema,PublicationSchema,type InstagramConnection,type Publication,type PublicInstagramConnection } from "./schema";
 import { remoteStore } from "@/lib/files/remoteStore";
 
 const uuid=(value:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+const STALE_LOCK_MS=15*60*1000;
 
 export class PublicationLockError extends Error{
   constructor(){super("Draft is already being published.");this.name="PublicationLockError";}
@@ -41,7 +43,15 @@ export function createInstagramRepository(root=process.env.DATA_DIR??path.join(p
     await mkdir(path.dirname(lockPath),{recursive:true});
     let handle;
     try{handle=await open(lockPath,"wx");}
-    catch(error){if((error as NodeJS.ErrnoException).code==="EEXIST")throw new PublicationLockError();throw error;}
+    catch(error){
+      if((error as NodeJS.ErrnoException).code!=="EEXIST")throw error;
+      // 게시 도중 프로세스가 죽으면 잠금 파일이 남는다. 정상 게시는 2분 안팎이므로 15분 넘은 잠금은 지우고 한 번 더 잡는다.
+      const age=await stat(lockPath).then(info=>Date.now()-info.mtimeMs).catch(()=>0);
+      if(age<STALE_LOCK_MS)throw new PublicationLockError();
+      await rm(lockPath,{force:true});
+      try{handle=await open(lockPath,"wx");}
+      catch(retry){if((retry as NodeJS.ErrnoException).code==="EEXIST")throw new PublicationLockError();throw retry;}
+    }
     try{return await task();}
     finally{try{await handle.close();}finally{await rm(lockPath,{force:true});}}
   }

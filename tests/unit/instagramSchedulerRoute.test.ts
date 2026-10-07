@@ -35,11 +35,13 @@ describe("scheduler trigger route",()=>{
     expect(await response.json()).toMatchObject({due:["a"]});
   });
 
-  it("lets the logged-in owner trigger a check and refuses when auto publishing is off",async()=>{
+  it("lets the logged-in owner trigger a check and only refreshes the token when auto publishing is off",async()=>{
     ownerApiError.mockResolvedValue(null);
     runScheduledPublishing.mockResolvedValue({checkedAt:"2026-09-11T00:00:00.000Z",tokenRefreshed:false,due:[],published:[],skipped:[],failed:[]});
     expect((await call()).status).toBe(200);
+    expect(runScheduledPublishing).toHaveBeenLastCalledWith(expect.any(Function),true);
     vi.stubEnv("INSTAGRAM_AUTOPUBLISH","off");
-    expect((await call()).status).toBe(409);
+    expect((await call()).status).toBe(200);
+    expect(runScheduledPublishing).toHaveBeenLastCalledWith(expect.any(Function),false);
   });
 });
