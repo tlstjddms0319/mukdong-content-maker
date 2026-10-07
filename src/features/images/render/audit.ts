@@ -35,9 +35,12 @@ type TextInfo={width:number;height:number;color:string;size:number;mask?:Buffer;
 type CompositeCall={canvas:{width?:number;height?:number;buffer?:Buffer};layers:OverlayOptions[]};
 // 사진 모양. 모양마다 같은 면적이라도 눈에 보이는 음식 크기가 달라 기준이 다르다(원·메달은 모서리가 빈다).
 // bleed: 사진이 캔버스 좌우 끝까지 닿는(또는 캔버스 바탕인) 표지.
-export type PhotoShape="rect"|"circle"|"medal"|"arch"|"bleed";
-export const PHOTO_AREA_LIMITS:Record<PhotoShape,number>={rect:.4,circle:.3,medal:.3,arch:.35,bleed:.5};
-export type DecorKind="mascot"|"prop";
+// cutout: 배경을 지운 음식 스티커(컬러 블록·팝업북·키치). 테두리 없이 음식만 남아 같은 크기라도 상자 면적이 작게 잡히므로 기준을 낮춘다.
+export type PhotoShape="rect"|"circle"|"medal"|"arch"|"bleed"|"cutout";
+export const PHOTO_AREA_LIMITS:Record<PhotoShape,number>={rect:.4,circle:.3,medal:.3,arch:.35,bleed:.5,cutout:.2};
+// ornament: 일부러 크게 깐 그림 장식(팝업북의 펼친 책, 타이포그래피의 유령 글자 등). 빈 띠 계산에서는 "찬 자리"로 치고,
+// 글자 뒤에 깔리는 것이 의도이므로 장식 겹침 검사에서는 뺀다. 바탕 무늬·질감처럼 화면 전체에 고르게 깔린 것은 등록하지 않는다.
+export type DecorKind="mascot"|"prop"|"ornament";
 type Rect={left:number;top:number;width:number;height:number};
 export type AuditNote=
   |{kind:"shrink";text:string;from:number;to:number}
@@ -169,7 +172,7 @@ async function warningsOf(calls:CompositeCall[],boxes:TextBox[],area:PhotoArea,o
   const notes:AuditNote[]=[];
   const placedDecor=await canvasLayers(calls,decors);
   // 1) 장식 겹침: 상자 교집합을 DECOR_TOUCH만큼 안으로 줄인 범위에서 글자 획과 장식 그림이 함께 진한 점을 센다.
-  for(const decor of placedDecor)for(const text of boxes){
+  for(const decor of placedDecor.filter(item=>item.value!=="ornament"))for(const text of boxes){
     const x0=Math.max(decor.box.left,text.left)+DECOR_TOUCH,x1=Math.min(decor.box.left+decor.box.width,text.left+text.width)-DECOR_TOUCH;
     const y0=Math.max(decor.box.top,text.top)+DECOR_TOUCH,y1=Math.min(decor.box.top+decor.box.height,text.top+text.height)-DECOR_TOUCH;
     if(x1<=x0||y1<=y0)continue;
