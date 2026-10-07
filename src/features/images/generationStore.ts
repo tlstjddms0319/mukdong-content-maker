@@ -423,7 +423,8 @@ export async function editSlideText(index:number,edit:SlideTextEdit){
 // (이미지 AI는 부르지 않아 비용이 없다). 밑바탕이 없는 장(저장된 초안을 다시 연 경우 등)은 그대로 두고 안내만 한다.
 export const MAX_DECK_SLIDES=10;
 export type NewSlideSource="photo"|"ai"|"text"|"raw";
-export type NewSlide={headline:string;points:string[];source:NewSlideSource;photo?:StudioPhoto};
+// verbatim: 적은 글을 카드 문구로 그대로 쓴다. 아니면 적은 글을 "이런 장을 만들어 줘"라는 요청으로 읽어 문안 AI가 문구·장면을 짓는다.
+export type NewSlide={headline:string;points:string[];source:NewSlideSource;photo?:StudioPhoto;verbatim?:boolean};
 
 // 장 번호가 바뀐 장을 차례로 다시 그린다. skip은 방금 새로 그린 장(다시 그릴 필요 없음).
 async function redrawDeck(token:number,skip=-1){
@@ -469,14 +470,14 @@ export async function uploadSlidePhoto(file:File|undefined):Promise<StudioPhoto|
 }
 
 // 새 장의 구성안. 지금 장의 글꼴 설정을 이어받고, 역할은 본문(detail)으로 둔다.
-function newSlidePlan(input:NewSlide,after:CarouselPlan["slides"][number]|undefined):CarouselPlan["slides"][number]{
+function newSlidePlan(input:NewSlide&{visualPrompt?:string;keywords?:string[]},after:CarouselPlan["slides"][number]|undefined):CarouselPlan["slides"][number]{
   const headline=input.headline.trim();
   const layout:CarouselPlan["slides"][number]["layout"]=input.source==="text"?"checklist":"frame";
   return {
     role:"detail",headline,subline:"",points:input.points.map(point=>point.trim()).filter(Boolean),
     // 이미지 AI로 만들 때 쓰는 장면 설명. 제목과 주제로 짓는다(12자 이상).
-    visualPrompt:`${headline} — ${state.input.topic} 장면, 묵동홍어마을의 홍어 요리`.slice(0,600),
-    textPosition:"bottom",layout,keywords:[],figure:"",
+    visualPrompt:(input.visualPrompt??`${headline} — ${state.input.topic} 장면, 묵동홍어마을의 한 상. 얼굴 없음`).slice(0,600),
+    textPosition:"bottom",layout,keywords:input.keywords??[],figure:"",
     titleFont:after?.titleFont??"auto",bodyFont:after?.bodyFont??"auto",variant:0,
   };
 }
@@ -498,11 +499,31 @@ export async function addSlide(input:NewSlide){
     patch({slides,deckEdited:true,approved:false,activeSlide:position,error:""});
     return;
   }
-  const problem=slideTextProblem({headline:input.headline,points:input.points});
-  if(problem){patch({error:problem});return;}
+  if(input.verbatim){
+    const problem=slideTextProblem({headline:input.headline,points:input.points});
+    if(problem){patch({error:problem});return;}
+  }else if(![input.headline,...input.points].some(text=>text.trim())){patch({error:"어떤 장을 넣을지 적어 주세요."});return;}
   if(input.source==="photo"&&!input.photo){patch({error:"새 장에 넣을 사진을 골라 주세요."});return;}
   const plan=state.plan;
-  const slide=newSlidePlan(input,plan.slides[position-1]);
+  // 요청으로 읽기: 문안 AI가 카드 제목·요점·사진 장면을 짓는다(실패하면 서버가 규칙으로 지은 문구를 준다).
+  let drafted:Partial<Pick<NewSlide,"headline"|"points">>&{visualPrompt?:string;keywords?:string[]}={};
+  if(!input.verbatim&&input.source!=="raw"){
+    patch({phase:"slides",deckStatus:"요청에 맞게 새 장 문구를 짓는 중…",error:""});
+    try{
+      const response=await fetch("/api/images/slide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        topic:state.input.topic,request:[input.headline,...input.points].map(text=>text.trim()).filter(Boolean).join("\n").slice(0,400),
+        previous:plan.slides[position-1]?.headline??"",next:plan.slides[position]?.headline??"",source:input.source,
+      })});
+      const data=await readJsonResponse(response);
+      if(!response.ok||!data.draft)throw new Error(data.message||"새 장 문구를 짓지 못했어요.");
+      drafted={headline:data.draft.headline,points:data.draft.points,visualPrompt:data.draft.visualPrompt,keywords:data.draft.keywords};
+    }catch(error){
+      patch({phase:"idle",deckStatus:"",error:error instanceof Error?error.message:"새 장 문구를 짓지 못했어요."});
+      return;
+    }
+    patch({phase:"idle",deckStatus:""});
+  }
+  const slide=newSlidePlan({...input,...drafted},plan.slides[position-1]);
   // 사진은 스튜디오 사진 목록에 넣고(이미 있으면 그 번호) 이 장에 배정한다. 사진 수 한도(10장)를 넘지 않는다.
   let photos=state.photos,slots:number[]=[];
   if(input.source==="photo"&&input.photo){

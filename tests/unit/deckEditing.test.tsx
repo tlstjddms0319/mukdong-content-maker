@@ -58,7 +58,7 @@ describe("deck editing", () => {
   it("inserts a photo slide after the current one and renumbers the deck", async () => {
     const {hook,bodies}=await builtDeck();
     act(()=>setActiveSlide(1));
-    await act(async()=>{await addSlide({headline:"묵은지에 싸 먹어요",points:["한입 크기로 싸요"],source:"photo",photo:{id:"p9",preview:photo(9),name:"새 사진"}});});
+    await act(async()=>{await addSlide({headline:"묵은지에 싸 먹어요",points:["한입 크기로 싸요"],source:"photo",verbatim:true,photo:{id:"p9",preview:photo(9),name:"새 사진"}});});
     const state=hook.result.current;
     expect(state.slides).toHaveLength(6);
     expect(state.plan!.slides[2]).toMatchObject({headline:"묵은지에 싸 먹어요",points:["한입 크기로 싸요"],role:"detail"});
@@ -73,15 +73,34 @@ describe("deck editing", () => {
 
   it("adds a text-only card without photos", async () => {
     const {hook,bodies}=await builtDeck();
-    await act(async()=>{await addSlide({headline:"가기 전에 확인해요",points:["처음이라면 덜 삭힌 걸로"],source:"text"});});
+    await act(async()=>{await addSlide({headline:"가기 전에 확인해요",points:["처음이라면 덜 삭힌 걸로"],source:"text",verbatim:true});});
     expect(hook.result.current.slides).toHaveLength(6);
     expect(bodies[0].photos).toBeUndefined();
     expect(hook.result.current.plan!.slides[1].layout).toBe("checklist");
   });
 
+  it("reads what the owner typed as a request and lets the AI write the card copy and scene", async () => {
+    // 사장님이 겪은 사례: 요청 문장이 카드에 그대로 찍히고 사진은 늘 젓가락으로 홍어를 든 장면이었다.
+    const {hook,bodies}=await builtDeck();
+    const base=(globalThis.fetch as ReturnType<typeof vi.fn>).getMockImplementation()!;
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url==="/api/images/slide"){
+        bodies.push({slideRequest:JSON.parse(String(init?.body))});
+        return {ok:true,json:async()=>({draft:{kind:"content",headline:"미나리전엔 막걸리가 짝이에요",points:["바삭한 미나리전을 한 입 먹어요"],visualPrompt:"노릇한 미나리전 접시 옆 막걸리 사발, 손 없음",keywords:["미나리전"]}})};
+      }
+      return base(url,init);
+    }));
+    await act(async()=>{await addSlide({headline:"미나리전과 막걸리를 같이 소개해 줘",points:[],source:"text"});});
+    const state=hook.result.current;
+    expect(bodies[0].slideRequest).toMatchObject({request:"미나리전과 막걸리를 같이 소개해 줘",topic:"홍어 한 점"});
+    expect(state.plan!.slides[1].headline).toBe("미나리전엔 막걸리가 짝이에요");
+    expect(state.plan!.slides[1].visualPrompt).toContain("미나리전");
+    expect(state.slides).toHaveLength(6);
+  });
+
   it("refuses a new slide without a title", async () => {
     const {hook,bodies}=await builtDeck();
-    await act(async()=>{await addSlide({headline:"",points:[],source:"text"});});
+    await act(async()=>{await addSlide({headline:"",points:[],source:"text",verbatim:true});});
     expect(hook.result.current.error).toContain("제목");
     expect(bodies).toHaveLength(0);
   });

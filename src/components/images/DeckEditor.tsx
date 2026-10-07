@@ -26,6 +26,8 @@ export function DeckEditor({state}:{state:GenerationState}){
   // 구성안이 생기거나 사라지면 고를 수 있는 방식이 바뀐다. 지금 목록에 없는 방식이면 첫 방식으로 본다.
   const source=sources.some(([value])=>value===chosen)?chosen:sources[0][0];
   const [title,setTitle]=useState("");
+  // 기본은 "요청으로 읽기": 적은 글을 보고 AI가 카드 문구·사진 장면을 짓는다. 체크하면 적은 글을 문구로 그대로 쓴다.
+  const [verbatim,setVerbatim]=useState(false);
   const [body,setBody]=useState("");
   // 새 장에 고른 사진. 스튜디오 사진 목록에서 고르거나 새로 올린다(새로 올린 사진은 여기 후보에만 더해 둔다).
   const [extra,setExtra]=useState<StudioPhoto[]>([]);
@@ -35,7 +37,7 @@ export function DeckEditor({state}:{state:GenerationState}){
   const photo=candidates.find(item=>item.id===picked);
   const needsText=source!=="raw";
   const needsPhoto=source==="photo"||source==="raw";
-  const problem=needsText?slideTextProblem({headline:title,points:body.split("\n")}):null;
+  const problem=needsText?(verbatim?slideTextProblem({headline:title,points:body.split("\n")}):(title.trim()||body.trim()?null:"어떤 장을 넣을지 적어 주세요.")):null;
   const ready=!busy&&!full&&(!needsText||!problem)&&(!needsPhoto||!!photo);
 
   const upload=async(file:File|undefined)=>{
@@ -45,7 +47,7 @@ export function DeckEditor({state}:{state:GenerationState}){
     if(added){setExtra(list=>[...list,added]);setPicked(added.id);}
   };
   const submit=async()=>{
-    await addSlide({headline:title,points:body.split("\n"),source,...(photo?{photo}:{})});
+    await addSlide({headline:title,points:body.split("\n"),source,verbatim,...(photo?{photo}:{})});
     setTitle("");setBody("");setPicked("");setOpen(false);
   };
 
@@ -65,11 +67,13 @@ export function DeckEditor({state}:{state:GenerationState}){
         {sources.map(([value,label])=><button key={value} type="button" className="button secondary" aria-pressed={source===value} disabled={busy} onClick={()=>setSource(value)}>{label}</button>)}
       </div>
       {needsText&&<>
-        <label htmlFor={`${id}-title`}>카드 제목 <small>{title.trim().length}/42</small></label>
-        <input id={`${id}-title`} maxLength={60} value={title} disabled={busy} placeholder="예: 묵은지에 싸 먹으면 더 맛있어요" onChange={event=>setTitle(event.target.value)}/>
-        <label htmlFor={`${id}-points`}>카드 요점 <small>한 줄에 하나, {SLIDE_POINT_MAX_COUNT}줄·줄마다 {SLIDE_POINT_MAX_LENGTH}자까지(비워도 돼요)</small></label>
+        <label className="deck-verbatim"><input type="checkbox" checked={verbatim} disabled={busy} onChange={event=>setVerbatim(event.target.checked)}/> 적은 글을 카드 문구로 그대로 쓰기</label>
+        {!verbatim&&<p className="field-help">원하는 장을 편하게 적어 주세요. AI가 요청에 맞게 카드 제목·요점과 사진 장면을 지어요(예: “묵은지에 홍어를 싸 먹는 법을 보여 줘”).</p>}
+        <label htmlFor={`${id}-title`}>{verbatim?"카드 제목":"카드 제목 또는 요청"} {verbatim&&<small>{title.trim().length}/42</small>}</label>
+        <input id={`${id}-title`} maxLength={verbatim?60:200} value={title} disabled={busy} placeholder={verbatim?"예: 묵은지에 싸 먹으면 더 맛있어요":"예: 미나리전과 막걸리를 같이 소개해 줘"} onChange={event=>setTitle(event.target.value)}/>
+        <label htmlFor={`${id}-points`}>{verbatim?"카드 요점":"카드 요점 또는 더 원하는 내용"} <small>{verbatim?`한 줄에 하나, ${SLIDE_POINT_MAX_COUNT}줄·줄마다 ${SLIDE_POINT_MAX_LENGTH}자까지(비워도 돼요)`:"비워도 돼요"}</small></label>
         <textarea id={`${id}-points`} rows={3} value={body} disabled={busy} onChange={event=>setBody(event.target.value)}/>
-        {title.trim()&&problem&&<p role="alert">{problem}</p>}
+        {(title.trim()||body.trim())&&problem&&<p role="alert">{problem}</p>}
       </>}
       {source==="ai"&&<p className="field-help">제목을 바탕으로 이미지 AI가 새 장면을 만들어요. 이미지 한 장 비용이 들고 1~3분 걸려요.</p>}
       {needsPhoto&&<div className="photo-swap">
