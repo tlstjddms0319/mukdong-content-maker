@@ -115,7 +115,8 @@ export function planFallbackReason(error:unknown):PlanFallbackReason {
   if(error instanceof TextAiHttpError){
     if(error.status===429)return "quota";
     if(error.status===401||error.status===403)return "key";
-    if(error.status>=500)return "busy";
+    // 0: 시간 초과·연결 끊김(guardedFetch). 잠시 뒤 다시 하면 되는 경우라 "바쁨"으로 알린다.
+    if(error.status>=500||error.status===0)return "busy";
     return "error";
   }
   if(error instanceof z.ZodError||error instanceof SyntaxError)return "format";

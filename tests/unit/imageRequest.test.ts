@@ -83,6 +83,8 @@ describe("OpenAI image request", () => {
     // 이 파일은 Higgsfield 키가 없는 기존 순서(Cloudflare → OpenAI)를 검증한다.
     vi.stubEnv("HF_API_KEY_ID","");
     vi.stubEnv("HF_API_KEY_SECRET","");
+    // 자동 순서는 키가 있는 제공자만 쓴다. OpenAI 클라이언트는 모의 객체지만 "키가 있음"을 알려 준다.
+    vi.stubEnv("OPENAI_API_KEY","sk-test");
   });
   afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();});
 

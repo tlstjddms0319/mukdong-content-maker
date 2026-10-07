@@ -1,5 +1,6 @@
 import type { CopyInput, CopyPart, GeneratedCopy } from "./schema";
-import { checkTextClaims } from "@/features/guard/service";
+import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
+import { STORE_MENU, josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 
 export const COPY_LENGTHS={short:[200,350],medium:[500,800],detailed:[900,1200]} as const;
 export type CopyLength=keyof typeof COPY_LENGTHS;
@@ -24,8 +25,30 @@ export function formatCopy(copy:GeneratedCopy):string {
   return [copy.hook,copy.information,copy.store_connection,copy.call_to_action,copy.image_disclosure,normalizeHashtags(copy.hashtags).join(" ")].filter(Boolean).join("\n\n");
 }
 
+// 가게 메뉴 목록(문안 프롬프트용). 메뉴 데이터 한 곳(store/menu.ts)에서 만들어 홍어찜처럼 새 메뉴가 빠지지 않게 한다.
+export const COPY_MENU_LIST=STORE_MENU.map(item=>item.id==="hongeo-hoe"?"홍어회·삼합":item.name).join(", ");
+
+// "무엇이 어떻게 다른지 구체적으로" 예시를 주인공 메뉴에 맞춘다. 예전에는 늘 홍어·수육·묵은지 예시라 과메기 글에도 홍어가 끌려왔다.
+// 재료를 지어내지 않도록, 그 음식 자체에서 확인할 수 있는 식감·모양만 쓴다.
+const TEXTURE_EXAMPLES:Record<string,string>={
+  "hongeo-muchim":"'새콤한 양념 사이로 씹히는 꼬들한 홍어 살'",
+  "hongeo-aetang":"'진한 국물과 부드럽게 풀어지는 건더기'",
+  "hongeo-jjim":"'쪄서 촉촉해진 살결과 결대로 갈라지는 식감'",
+  gwamegi:"'쫀득한 과메기 살과 겉의 윤기, 씹을수록 올라오는 고소함'",
+  "minari-jeon":"'바삭한 가장자리와 아삭한 미나리 줄기'",
+  "baedari-makgeolli":"'톡 쏘는 탄산감과 은은한 단맛'",
+};
+export function copyHeroMenu(input:Pick<CopyInput,"topic"|"contentBrief"|"imageBrief">&{photoNotes?:readonly string[]}):StoreMenuItem|undefined {
+  return mainMenuOf(input.topic,input.contentBrief,input.imageBrief,...(input.photoNotes??[]));
+}
+function textureExample(menu:StoreMenuItem|undefined,topic:string):string {
+  if(menu&&TEXTURE_EXAMPLES[menu.id])return TEXTURE_EXAMPLES[menu.id];
+  return /삼합|수육|묵은지/.test(topic)?"'홍어의 탄력, 수육의 부드러움, 묵은지의 아삭함'":"'홍어 살의 쫀득한 탄력과 씹을수록 올라오는 향'";
+}
+
 export function buildCopyPrompt(input:CopyInput,length:CopyLength):string {
   const [min,max]=COPY_LENGTHS[length];
+  const hero=copyHeroMenu(input);
   const audience={A:"새로운 음식과 해산물을 탐색하는 20~30대. 구체적인 맛·식감의 차이와 발견하는 재미",B:"친구와 모일 식사 장소를 고르는 20~30대. 일행의 취향과 방문 전 알아볼 점",C:"홍어에 호기심은 있지만 향이 낯선 20~30대. 부담 없이 작은 한입으로 취향을 알아보는 방법"}[input.audience];
   // 사장님 사진을 보고 적은 내용이 있으면, "이미지 기획은 실제 사진 분석이 아니다"라는 일반 지시보다 이것을 먼저 따르게 한다.
   const photos=input.photoNotes?.length?`\n[실제 사진] 이 게시물에 들어간 사장님 사진에 보이는 것(사진을 보고 적은 참고 데이터): ${JSON.stringify(input.photoNotes)}. 본문은 이 사진들에 보이는 음식·장면과 맞게 쓰고, 사진에 없는 메뉴를 주인공처럼 쓰지 마세요. 사진에 보이는 것은 "사진처럼"·"한 점을 집어 들면"처럼 자연스럽게 짚어도 되지만, 사진 설명에 없는 재료·개수·양·원산지는 추정하지 마세요. 해시태그도 주제와 사진 속 음식에 맞추세요.`:"";
@@ -35,13 +58,13 @@ export function buildCopyPrompt(input:CopyInput,length:CopyLength):string {
 필드: hook, information, store_connection, call_to_action, hashtags(배열), facts_used(배열), facts_to_verify(배열), image_disclosure(null).
 해시태그와 이미지 고지를 제외한 본문은 공백 포함 ${min}~${max}자. 짧은 첫 문장, 주제에 맞는 정보, 가게와 자연스러운 연결, 마지막 행동 제안 순서입니다. information은 짧은 길이 설정이면 1~2문단, 나머지는 2~3문단이며 각 문단은 빈 줄로 나누세요.
 음식 정보 약 70%, 가게 연결 약 20%, 행동 제안 약 10%를 기준으로 자연스럽게 구성하세요. hook은 주제에 맞는 감각이나 질문 하나로 시작하고 '미식의 향연', '풍미의 세계', '놓치지 마세요', '맛집 인정' 같은 상투어·유행어 남용과 낚시 제목을 피하세요. 매장명은 store_connection에서 한 번만 쓰세요.
-홍어를 찾던 사람이 아닌, 평소 음식 궁금증으로 읽기 시작한 독자도 이해할 수 있게 쓰세요. 질문형 주제라면 hook은 그 질문을 살리고 information의 첫 문단에서 질문에 답한 뒤 주제의 가게 메뉴(홍어회·삼합, 홍어무침, 홍어애탕, 과메기, 미나리전, 배다리 막걸리 중 주제가 말하는 것)를 관련 사례로 연결하세요. 과메기·미나리전·막걸리 같은 주제에 홍어나 삼합을 억지로 끌어오지 마세요. 질문에 답하지 않은 채 삼합 소개나 방문 권유로 넘어가지 마세요. contentBrief가 있으면 그 설명 방향과 연결 근거를 따르되, 그 안의 주장이나 확인할 정보가 검증된 사실이라고 여기지 마세요. 역사·화학·생리적 원인처럼 확인되지 않은 설명은 단정하지 말고 facts_to_verify에 구체적으로 적으세요. 답변에 필요한 근거가 없으면 불확실성을 솔직히 밝히고 출처나 원인을 지어내지 마세요.
-문체는 가까운 사람에게 음식을 설명하듯 해요체로 통일하세요. '식감의 레이어', '감촉을 선사', '포근하게 완화', '입안의 경쾌한 리듬'처럼 감각을 꾸미는 추상적 비유는 쓰지 마세요. 대신 '홍어의 탄력, 수육의 부드러움, 묵은지의 아삭함'처럼 무엇이 어떻게 다른지 구체적으로 설명하세요. 낯선 음식에 대한 질문이나 작은 한입으로 맛을 비교하는 방법으로 내용을 넓히고 비유로 글자 수를 늘리지 마세요.
+홍어를 찾던 사람이 아닌, 평소 음식 궁금증으로 읽기 시작한 독자도 이해할 수 있게 쓰세요. 질문형 주제라면 hook은 그 질문을 살리고 information의 첫 문단에서 질문에 답한 뒤 주제의 가게 메뉴(${COPY_MENU_LIST} 중 주제가 말하는 것)를 관련 사례로 연결하세요. 과메기·미나리전·막걸리 같은 주제에 홍어나 삼합을 억지로 끌어오지 마세요. 질문에 답하지 않은 채 삼합 소개나 방문 권유로 넘어가지 마세요. contentBrief가 있으면 그 설명 방향과 연결 근거를 따르되, 그 안의 주장이나 확인할 정보가 검증된 사실이라고 여기지 마세요. 역사·화학·생리적 원인처럼 확인되지 않은 설명은 단정하지 말고 facts_to_verify에 구체적으로 적으세요. 답변에 필요한 근거가 없으면 불확실성을 솔직히 밝히고 출처나 원인을 지어내지 마세요.
+문체는 가까운 사람에게 음식을 설명하듯 해요체로 통일하세요. '식감의 레이어', '감촉을 선사', '포근하게 완화', '입안의 경쾌한 리듬'처럼 감각을 꾸미는 추상적 비유는 쓰지 마세요. 대신 ${textureExample(hero,input.topic)}처럼 무엇이 어떻게 다른지 구체적으로 설명하세요. 낯선 음식에 대한 질문이나 작은 한입으로 맛을 비교하는 방법으로 내용을 넓히고 비유로 글자 수를 늘리지 마세요.
 이미지 기획의 음식·장면과 글의 중심 소재를 맞추세요. 이미지 기획은 실제 사진을 분석한 결과가 아닙니다. 사진에 없는 재료를 있다고 단정하거나 실제 매장의 청결·인테리어를 본 것처럼 서술하지 마세요.
 이미지 기획에 명시되지 않은 재료의 위아래 순서·개수·양을 추정하지 마세요. 식감 설명에서도 '수분이 빠져 아삭하다'처럼 확인하지 않은 조리·숙성 원인을 붙이지 말고 관찰 가능한 식감과 개인별 차이만 설명하세요.
 홍어는 삭힘의 향과 호불호가 있는 음식임을 존중하세요. 향이 사라진다거나 누구나 쉽게 먹는다고 보장하지 마세요. 홍어회·삼합·무침·애탕 등 선택한 조리법을 구분하고, 주제에 없는 삼합 소개를 매번 반복하지 마세요. 한 문단에 한 가지 새로운 정보를 담고 분량을 채우기 위한 반복은 금지합니다.
 확인된 가게 정보는 매장명 묵동홍어마을, 지역 묵동·중랑구뿐입니다. 확인되지 않은 가격, 원산지, 숙성 기간, 영업시간, 주차, 건강 효능, 실제 제공 메뉴·예약 가능 여부는 만들지 마세요. 확인이 필요한 정보는 본문에서 단정하지 말고 facts_to_verify에 적으세요.
-store_connection은 한 문단 1~2문장으로, 음식에 대한 관심에서 지역과 가게 탐색으로 연결하세요. '정갈한 삼합 한 상을 준비하고 있습니다'처럼 실제 메뉴·서비스 제공을 주장하지 마세요. 안전한 연결 예: '이 조합이 궁금해졌다면, 묵동에서 홍어를 알아볼 때 묵동홍어마을의 메뉴도 살펴보세요.' 예문은 그대로 반복하기보다 선택 주제에 맞게 바꾸세요. facts_to_verify에 적었다고 본문의 단정이 허용되는 것은 아닙니다.
+store_connection은 한 문단 1~2문장으로, 음식에 대한 관심에서 지역과 가게 탐색으로 연결하세요. '정갈한 삼합 한 상을 준비하고 있습니다'처럼 실제 메뉴·서비스 제공을 주장하지 마세요. 안전한 연결 예: '이 조합이 궁금해졌다면, 묵동에서 ${josa(hero?.short??"홍어","을","를")} 알아볼 때 묵동홍어마을의 메뉴도 살펴보세요.' 예문은 그대로 반복하기보다 선택 주제에 맞게 바꾸세요. facts_to_verify에 적었다고 본문의 단정이 허용되는 것은 아닙니다.
 call_to_action은 '프로필의 네이버 플레이스에서 메뉴 확인' 또는 '전화로 방문·예약 가능 여부 문의' 중 문맥에 맞는 행동 하나만 제안하세요. 온라인 예약·주문이 가능하다고 단정하지 마세요.
 call_to_action도 자연스러운 해요체 한 문장으로 쓰세요. 예: '프로필의 네이버 플레이스에서 메뉴를 확인해 보세요.' 또는 '방문을 정하기 전에 전화로 예약 가능 여부를 확인해 보세요.' '문의 부탁드립니다'처럼 갑자기 공문체로 끝내지 마세요.
 hook_options는 hook을 대신할 수 있는 첫 문장 후보 3개입니다. 각각 다른 방식(질문형, 장면 묘사형, 비교형)으로, 40자 이내로 쓰세요. hook과 같은 문장은 넣지 마세요.
@@ -79,7 +102,7 @@ export function copyTextIssues(text:string):string[] {
 export function generatedCopyIssues(copy:GeneratedCopy,length:CopyLength):string[] {
   const parts=[copy.hook,copy.information,copy.store_connection,copy.call_to_action];
   const body=parts.join("\n\n"),[min,max]=COPY_LENGTHS[length];
-  const issues=[...copyTextIssues(body),...storeConnectionIssues(copy.store_connection)];
+  const issues=[...copyTextIssues(body),...servingIssues(copy)];
   if(parts.some(part=>!part.trim()))issues.push("첫 문장·정보·가게 연결·행동 제안을 모두 작성하세요.");
   if(body.length<min||body.length>max)issues.push(`본문을 공백 포함 ${min}~${max}자로 맞추세요. 현재 ${body.length}자입니다.`);
   if(formatCopy(copy).length>2200)issues.push("이미지 고지와 해시태그를 포함해 2,200자 이내로 줄이세요.");
@@ -96,17 +119,20 @@ export function hardCopyIssues(copy:GeneratedCopy):string[] {
   const parts=[copy.hook,copy.information,copy.store_connection,copy.call_to_action];
   return [
     ...checkTextClaims(parts.join("\n\n")).blocked,
-    ...storeConnectionIssues(copy.store_connection),
+    ...servingIssues(copy),
     ...(parts.some(part=>!part.trim())?["첫 문장·정보·가게 연결·행동 제안을 모두 작성하세요."]:[]),
   ];
 }
 
-// This flow knows only the store name and area; these serving claims need owner facts.
-// A phrase check catches explicit assertions, not every possible factual claim.
+// 이 앱은 가게 이름과 지역만 안다. 가게가 무엇을 준비·제공·판매한다는 단정은 사장님 확인이 필요하다(guard/service.ts).
+// 가게 소개 문단은 주어가 생략돼도 가게 이야기로 보고, 다른 문단은 가게가 주어인 문장만 본다.
+// 예전에는 가게 소개 문단만 봤고("…에서 과메기를 내놓아요"가 정보 문단에 있으면 통과), "준비하고 있다면"도 막았다.
 export function storeConnectionIssues(text:string):string[] {
-  return /(?:준비|제공|판매|운영)(?:하고|합니다|해요|했어요|했습니다|해\s*드|해드|중|됩니다)/.test(text)
-    ? ["확인되지 않은 매장 제공 내용을 단정하지 말고 메뉴 확인·가게 탐색으로 연결하세요."]
-    : [];
+  return servingClaimIssues(text,{storeParagraph:true});
+}
+function servingIssues(copy:GeneratedCopy):string[] {
+  const others=[copy.hook,copy.information,copy.call_to_action].join("\n");
+  return [...new Set([...storeConnectionIssues(copy.store_connection),...servingClaimIssues(others)])];
 }
 
 // Only replace a visible paragraph, preserving all other user text exactly.

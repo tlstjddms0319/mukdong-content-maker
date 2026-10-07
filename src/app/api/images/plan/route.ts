@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
-import { CarouselPlanInputSchema, buildCarouselPlanPrompt, planCarousel } from "@/features/images/carousel";
+import { CarouselPlanInputSchema, buildCarouselPlanPrompt, carouselMenu, keepScenesOnMenu, planCarousel } from "@/features/images/carousel";
 import { guardSlidePoints } from "@/features/images/slidePoints";
 import { randomSeed } from "@/features/images/variety";
 import { reviewCarouselPlan } from "@/features/images/planReview";
@@ -38,11 +38,15 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   let review:{applied:boolean;before:number;after:number}|null=null;
   let finalPlan=plan;
   if(provider!=="fallback"){
-    const result=await reviewCarouselPlan(plan,input.data.topic,{review:(prompt,schema)=>client.generateJson(prompt,schema)});
-    finalPlan=result.plan;
+    // 검수에도 구성안과 같은 주인공 메뉴·사진 설명·내용 메모를 준다. 검수가 글을 바꾸면 장면이 메뉴를 벗어나지 않았는지 한 번 더 맞춘다.
+    const menu=carouselMenu(input.data);
+    const result=await reviewCarouselPlan(plan,input.data.topic,{review:(prompt,schema)=>client.generateJson(prompt,schema)},{menu,photoNotes:input.data.photoNotes,contentBrief:input.data.contentBrief});
+    finalPlan=result.applied?keepScenesOnMenu(result.plan,input.data.topic,menu):result.plan;
     review={applied:result.applied,before:result.before,after:result.after};
     if(result.applied)console.info(`[plan-review] 문안 검수 적용: 문제 ${result.before}건 → ${result.after}건`);
   }
   const fallback=provider==="fallback"?{fallbackReason:fallbackReason??"error",fallbackMessage:PLAN_FALLBACK_MESSAGES[fallbackReason??"error"]}:{};
-  return NextResponse.json({plan:guardSlidePoints(finalPlan),provider,review,...fallback});
+  // 카드에 찍히는 글을 마지막으로 거른다. 큰 숫자는 주제·메모·사진 설명에 있는 것만 남긴다.
+  const sources={topic:input.data.topic,contentBrief:input.data.contentBrief,imageBrief:input.data.imageBrief,photoNotes:input.data.photoNotes};
+  return NextResponse.json({plan:guardSlidePoints(finalPlan,sources),provider,review,...fallback});
 }

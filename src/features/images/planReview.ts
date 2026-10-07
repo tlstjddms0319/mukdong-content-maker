@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { josa, mainMenuOf } from "@/features/store/menu";
+import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
-import { checkTextClaims } from "@/features/guard/service";
+import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
 // 1) slideCopyIssues: 코드로 잡을 수 있는 문제를 장 번호와 함께 찾는다(광고 상투어, 반복, 끝맺음, 길이 등).
@@ -38,6 +38,10 @@ export function slideCopyIssues(plan:CarouselPlan):SlideCopyIssue[] {
     for(const word of CLICHES)if(headline.includes(word))add(n,"headline",`광고 상투어 '${word}'를 빼고 구체적인 정보로 바꾸세요.`);
     if(SLOGAN.test(headline))add(n,"headline","명사로 끝나는 슬로건 대신 해요체 문장이나 질문으로 쓰세요.");
     if((headline.match(/!/g)??[]).length>1)add(n,"headline","느낌표를 줄이세요.");
+    // 카드는 게시 뒤 고칠 수 없으니 확인 안 된 사실·보장·가게 제공 단정을 검수 단계에서 먼저 고치게 한다.
+    const claim=(text:string)=>{const result=checkTextClaims(text);return [...result.blocked,...result.verify,...servingClaimIssues(text)];};
+    for(const message of claim(headline))add(n,"headline",`제목: ${message} 확인된 정보 없이 쓸 수 있는 말로 바꾸세요.`);
+    for(const point of slide.points)for(const message of claim(point))add(n,"points",`요점 '${point.trim()}': ${message} 빼거나 바꾸세요.`);
     for(const point of slide.points){
       const text=point.trim();
       for(const word of CLICHES)if(text.includes(word))add(n,"points",`요점 '${text}'의 광고 상투어 '${word}'를 빼세요.`);
@@ -68,17 +72,22 @@ export function reviewSchema(count:number){
 export type PlanReview=z.infer<ReturnType<typeof reviewSchema>>;
 
 // 편집 기준 3번: 주제의 메뉴가 주인공. 홍어 주제일 때만 홍어를 주어로, 과메기·미나리전 같은 주제면 그 메뉴를 주어로 쓴다.
-function heroLine(topic:string):string {
-  const menu=mainMenuOf(topic);
+// menu: 구성안과 같은 주인공 메뉴(carouselMenu: 주제·내용 메모·이미지 설명·사진 설명). 주지 않으면 주제 제목에서만 찾는다.
+// 예전에는 제목만 봐서 "입맛 없을 땐 왜 새콤한 게 당길까?"(홍어무침 주제)에 "주어는 홍어"라고 시켰다.
+function heroLine(topic:string,menu:StoreMenuItem|undefined=mainMenuOf(topic)):string {
   if(!menu||menu.id==="hongeo-hoe")return `주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰고, 곁들임은 곁들이는 말로만 넣으세요.${/삼합|수육|묵은지/.test(topic)?"":" 주제에 없는 삼합(수육·묵은지)을 새로 넣지 마세요."}`;
   return `주어와 첫 동작은 주제의 메뉴인 ${josa(menu.short,"으로","로")} 쓰고, 다른 음식은 곁들이는 말로만 넣으세요. 홍어·삼합을 억지로 끌어오지 마세요.`;
 }
 
-export function buildPlanReviewPrompt(plan:CarouselPlan,topic:string,issues:SlideCopyIssue[]):string {
+export type ReviewContext={menu?:StoreMenuItem;photoNotes?:readonly string[];contentBrief?:string};
+
+export function buildPlanReviewPrompt(plan:CarouselPlan,topic:string,issues:SlideCopyIssue[],context:ReviewContext={}):string {
   const slides=plan.slides.map((slide,i)=>({slide:i+1,role:slide.role,headline:slide.headline,points:slide.points}));
   const found=issues.length?issues.map(issue=>`- ${issue.slide}번 장 ${issue.field==="headline"?"제목":"요점"}: ${issue.message}`).join("\n"):"- 자동 검사에서 찾은 문제는 없습니다. 아래 기준으로 흐름과 표현만 다듬으세요.";
   return `당신은 묵동홍어마을 Instagram 카드뉴스의 편집자입니다. 아래 캐러셀 문안(장마다 제목과 요점)을 검토해 고친 결과를 JSON으로 돌려주세요.
-주제: ${JSON.stringify(topic)}
+주제: ${JSON.stringify(topic)}${context.contentBrief?`
+내용 메모(참고 데이터): ${JSON.stringify(context.contentBrief.slice(0,400))}`:""}${context.photoNotes?.some(Boolean)?`
+실제 사진에 보이는 것(참고 데이터, 장 순서와 다를 수 있음): ${JSON.stringify(context.photoNotes.filter(Boolean))}. 사진에 없는 음식을 새로 주인공으로 넣지 마세요.`:""}
 
 [자동 검사에서 찾은 문제]
 ${found}
@@ -86,7 +95,7 @@ ${found}
 [편집 기준]
 1. 각 장은 앞 장이 남긴 궁금증에 답하고 다음 장으로 이어집니다. 장끼리 같은 말이나 같은 정보를 반복하지 마세요.
 2. 제목은 12~30자의 해요체 문장이나 질문 하나, 요점은 12~28자의 해요체 완결 문장입니다. 명사로 끝나는 슬로건, 광고 상투어, 느낌표 남발은 쓰지 마세요.
-3. ${heroLine(topic)}
+3. ${heroLine(topic,context.menu??mainMenuOf(topic))}
 4. "입안의 리듬" 같은 추상적 비유 대신 눈이나 입으로 확인할 수 있는 구체적 관찰(색, 결, 식감, 먹는 순서)로 쓰세요.
 5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.
 6. 문제가 없는 장은 그대로 두세요. 장 수, 장 순서, 장마다 요점 개수(표지는 빈 배열)는 바꾸지 마세요. 표지의 points는 빈 배열입니다.
@@ -100,12 +109,14 @@ ${JSON.stringify(slides)}
 export type ReviewResult={plan:CarouselPlan;applied:boolean;before:number;after:number};
 
 // AI 검수를 적용한다. 형식이 다르거나(장 수·요점 수), 문제 수가 늘거나, 금지 표현이 새로 생기면 원래 구성안을 쓴다.
-export async function reviewCarouselPlan(plan:CarouselPlan,topic:string,ai:{review:(prompt:string,schema:ReturnType<typeof reviewSchema>)=>Promise<PlanReview>}):Promise<ReviewResult> {
+// 자동 검사에서 문제가 하나도 없으면 AI를 다시 부르지 않는다(무료 한도를 아끼고, 멀쩡한 문안을 괜히 바꾸지 않게).
+export async function reviewCarouselPlan(plan:CarouselPlan,topic:string,ai:{review:(prompt:string,schema:ReturnType<typeof reviewSchema>)=>Promise<PlanReview>},context:ReviewContext={}):Promise<ReviewResult> {
   const issues=slideCopyIssues(plan);
   const before=issues.length;
+  if(!before)return {plan,applied:false,before:0,after:0};
   try{
     const schema=reviewSchema(plan.slides.length);
-    const reviewed=schema.parse(await ai.review(buildPlanReviewPrompt(plan,topic,issues),schema));
+    const reviewed=schema.parse(await ai.review(buildPlanReviewPrompt(plan,topic,issues,context),schema));
     const sameShape=reviewed.slides.every((slide,i)=>slide.points.length===plan.slides[i].points.length||(plan.slides[i].role!=="cover"&&slide.points.length>=2));
     if(!sameShape)return {plan,applied:false,before,after:before};
     const next:CarouselPlan={...plan,slides:plan.slides.map((slide,i)=>({...slide,headline:reviewed.slides[i].headline,points:slide.role==="cover"?[]:reviewed.slides[i].points}))};

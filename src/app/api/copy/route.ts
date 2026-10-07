@@ -23,7 +23,7 @@ const FAILURE_MESSAGES:Record<CopyFailure,string>={
 class CopyQualityError extends Error { constructor(readonly issues:string[]){super(`copy quality: ${issues.join(" / ").slice(0,300)}`);this.name="CopyQualityError";} }
 function failureOf(error:unknown):CopyFailure {
   if(error instanceof CopyQualityError)return "quality";
-  if(error instanceof TextAiHttpError)return error.status===429?"quota":error.status===401||error.status===403?"key":error.status>=500?"busy":"error";
+  if(error instanceof TextAiHttpError)return error.status===429?"quota":error.status===401||error.status===403?"key":error.status>=500||error.status===0?"busy":"error";
   if(error instanceof z.ZodError||error instanceof SyntaxError)return "format";
   if(error instanceof Error&&error.name==="TextAiUnavailableError")return "no-ai";
   return "error";
@@ -49,7 +49,10 @@ export async function POST(request:Request) { const denied=await ownerApiError()
         if(hashtags.length<3)throw new Error("invalid hashtags");
         return NextResponse.json({replacement:hashtags.join(" "),_meta:{provider:client.provider??"unknown"}});
       }
-      const result=await client.generateJson(context+' JSON 필드는 replacement(문자열)만 반환하세요. 이 부분은 1~3문장, 최대 250자로 쓰세요.',z.object({replacement:z.string().trim().min(1).max(250)}));
+      // 첫 문장은 인스타그램 '더 보기' 앞에 보이는 한 줄이라 한 문장·60자 이내로 받는다(다른 부분은 1~3문장·250자).
+      const hook=input.data.focus==="hook";
+      const result=await client.generateJson(context+(hook?' JSON 필드는 replacement(문자열)만 반환하세요. 첫 문장은 한 문장, 공백 포함 60자 이내로 쓰세요.':' JSON 필드는 replacement(문자열)만 반환하세요. 이 부분은 1~3문장, 최대 250자로 쓰세요.'),z.object({replacement:z.string().trim().min(1).max(hook?80:250)}));
+      if(hook&&result.replacement.length>60)result.replacement=result.replacement.split(/(?<=[.!?])\s+/)[0].slice(0,60).trim();
       // 부분 수정도 꼭 막아야 하는 문제(확인 안 된 단정·매장 제공 주장)만 거절하고, 말투·상투어는 화면의 "문안 다듬기"에 맡긴다.
       const blocked=checkTextClaims(result.replacement).blocked;
       if(blocked.length)throw new CopyQualityError(blocked);
@@ -59,8 +62,19 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     // 문제가 있으면 한 번 보완을 요청하고, 두 초안 중 문제가 적은 쪽을 쓴다. 꼭 막아야 하는 문제가 남았을 때만 거절한다.
     let instruction=prompt;
     let best:{copy:z.infer<typeof GeneratedCopySchema>;hard:string[];soft:string[];attempt:number}|null=null;
+    let repairFailed=false;
     for(let attempt=0;attempt<2;attempt++){
-      const copy=GeneratedCopySchema.parse({...await client.generateJson(instruction,GeneratedCopyContentSchema),topic:input.data.topic,audience:input.data.audience});
+      let raw:unknown;
+      try{raw=await client.generateJson(instruction,GeneratedCopyContentSchema);}
+      catch(error){
+        // 보완 요청(두 번째)이 실패해도(무료 한도 429·형식 오류) 첫 초안에 꼭 막을 문제가 없으면 그 초안을 쓴다.
+        // 예전에는 이 실패가 그대로 밖으로 나가 쓸 수 있는 첫 초안까지 버리고 "AI 문안을 완성하지 못했어요"가 떴다.
+        if(attempt===0||!best||best.hard.length)throw error;
+        repairFailed=true;
+        console.info(`[copy] 보완 요청이 실패해 첫 초안을 써요(${failureOf(error)})`);
+        break;
+      }
+      const copy=GeneratedCopySchema.parse({...raw as object,topic:input.data.topic,audience:input.data.audience});
       copy.hashtags=mixHashtags(copy.hashtags);
       copy.hook_options=cleanHookOptions(copy.hook_options??[],copy.hook);
       copy.image_disclosure=input.data.hasAiImages?AI_IMAGE_DISCLOSURE:null;
@@ -75,7 +89,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     const claims=checkTextClaims([copy.hook,copy.information,copy.store_connection,copy.call_to_action].join("\n"));
     copy.facts_to_verify=[...new Set([...copy.facts_to_verify,...claims.verify])];
     if(best.soft.length)console.info(`[copy] 다듬을 곳이 남은 문안을 썼어요: ${best.soft.join(" / ").slice(0,300)}`);
-    return NextResponse.json({...copy,...(best.soft.length?{quality_warnings:best.soft}:{}),_meta:{provider:client.provider??"unknown",qualityRepaired:best.attempt===1}});
+    return NextResponse.json({...copy,...(best.soft.length?{quality_warnings:best.soft}:{}),_meta:{provider:client.provider??"unknown",qualityRepaired:best.attempt===1,...(repairFailed?{repairFailed:true}:{})}});
   }catch(error){
     const reason=failureOf(error);
     console.warn(`[copy] AI 문안을 쓰지 못했어요(${reason}):`,error instanceof Error?error.message.replace(/\s+/g," ").slice(0,300):String(error));
