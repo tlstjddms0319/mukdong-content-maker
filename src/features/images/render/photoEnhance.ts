@@ -44,6 +44,69 @@ export async function photoStats(input:Buffer):Promise<PhotoStats> {
   return {mean,luminance};
 }
 
+// ── 사진 품질(계획서 A11) ─────────────────────────────────────────────────────────────────
+// 사장님 사진을 보관함에 넣을 때 한 번 재서 "어두움·흔들림·색 틀어짐·작은 사진" 배지를 붙이고,
+// 표지 추천과 렌더(흐린 사진은 선명화를 약하게)에 쓴다. 긴 변 384px 축소본에서 재므로 사진 한 장 100ms 안팎이다.
+// - luminance: 평균 밝기(0~1). .35 미만이면 어두움.
+// - saturation: 평균 채도(0~1). 홍어·막걸리는 원래 채도가 낮아 배지에는 쓰지 않고 참고값으로만 둔다.
+// - cast: 빨강·파랑 평균 차이를 평균 밝기로 나눈 값(음수면 푸르스름). −.18 미만 또는 .75 초과면 색 틀어짐.
+// - green: 초록이 빨강·파랑 평균보다 많은 정도(형광등). .08 초과면 색 틀어짐.
+// - sharpness: 가장 날카로운 경계(라플라시안 상위 1%)를 밝기 표준편차로 나눈 값. 샘플·픽스처의 정상 사진 .85~2.3,
+//   blur 3을 건 사진 .15~.38, 9px 흔들림 .43~.88. .6 미만이면 흔들림.
+// - longSide: 원본 긴 변(px). 900 미만이면 카카오톡 전송본처럼 작은 사진.
+export type PhotoQualityFlag="dark"|"blurry"|"cast"|"lowres";
+export type PhotoQuality={luminance:number;saturation:number;cast:number;green:number;sharpness:number;longSide:number;flags:PhotoQualityFlag[]};
+export const PHOTO_QUALITY_LIMITS={dark:.35,blurry:.6,cast:.18,warmCast:.75,green:.08,lowres:900} as const;
+const QUALITY_SIDE=384;
+export async function photoQuality(input:Buffer):Promise<PhotoQuality> {
+  const meta=await sharp(input).rotate().metadata();
+  const longSide=Math.max(meta.autoOrient?.width??meta.width??0,meta.autoOrient?.height??meta.height??0);
+  const small=sharp(input).rotate().resize(QUALITY_SIDE,QUALITY_SIDE,{fit:"inside"}).removeAlpha().toColourspace("srgb");
+  const {data,info}=await small.clone().raw().toBuffer({resolveWithObject:true});
+  const n=info.width*info.height;
+  let r=0,g=0,b=0,sat=0;
+  const gray=new Float32Array(n);
+  for(let i=0,p=0;p<n;p++,i+=3){
+    const R=data[i],G=data[i+1],B=data[i+2];
+    r+=R;g+=G;b+=B;
+    const max=Math.max(R,G,B),min=Math.min(R,G,B);
+    sat+=max?(max-min)/max:0;
+    gray[p]=R*.2126+G*.7152+B*.0722;
+  }
+  r/=n;g/=n;b/=n;
+  const luminance=(r*.2126+g*.7152+b*.0722)/255;
+  const average=Math.max(1,(r+g+b)/3);
+  const cast=(r-b)/average;
+  // 초록 기운(형광등): 초록이 빨강·파랑 평균보다 얼마나 많은가.
+  const green=(g-(r+b)/2)/average;
+  // 선명도: 라플라시안(가운데×4 − 상하좌우) 절댓값의 상위 1% 값. 분산을 쓰면 흰 접시처럼 무늬가 적은 사진이
+  // 흐린 사진으로 잘못 잡힌다. 상위 1%는 "가장 또렷한 경계가 얼마나 날카로운가"라서, 접시 테두리 하나만 또렷해도 높게 나온다.
+  const W=info.width,H=info.height;
+  const histogram=new Uint32Array(1024);
+  let count=0;
+  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+    const p=y*W+x,v=Math.abs(4*gray[p]-gray[p-1]-gray[p+1]-gray[p-W]-gray[p+W]);
+    histogram[Math.min(1023,Math.round(v))]++;count++;
+  }
+  let edge=0;
+  for(let v=1023,seen=0;v>=0;v--){seen+=histogram[v];if(seen>=count*.01){edge=v;break;}}
+  // 어둡거나 뿌연(대비가 낮은) 사진은 경계 값도 함께 작아진다. 밝기 표준편차로 나눠 "대비에 비해 경계가 얼마나 날카로운가"를 잰다.
+  let graySum=0,graySq=0;
+  for(let p=0;p<n;p++){graySum+=gray[p];graySq+=gray[p]*gray[p];}
+  const grayStdev=Math.sqrt(Math.max(1,graySq/n-(graySum/n)**2));
+  const sharpness=Math.round(edge/grayStdev*100)/100;
+  const flags:PhotoQualityFlag[]=[];
+  if(luminance<PHOTO_QUALITY_LIMITS.dark)flags.push("dark");
+  if(sharpness<PHOTO_QUALITY_LIMITS.blurry)flags.push("blurry");
+  // 홍어·수육·묵은지·백열등 아래 사진은 원래 붉다(샘플 삼합 사진 .52). 따뜻한 쪽은 아주 크게 틀어졌을 때(>.75)만,
+  // 형광등·그늘에서 생기는 푸른 쪽(<−.18)은 민감하게 본다. 푸르스름한 홍어는 식욕을 떨어뜨린다.
+  if(cast<-PHOTO_QUALITY_LIMITS.cast||cast>PHOTO_QUALITY_LIMITS.warmCast||green>PHOTO_QUALITY_LIMITS.green)flags.push("cast");
+  if(longSide>0&&longSide<PHOTO_QUALITY_LIMITS.lowres)flags.push("lowres");
+  const round=(value:number,digits=3)=>Math.round(value*10**digits)/10**digits;
+  return {luminance:round(luminance),saturation:round(sat/n),cast:round(cast),green:round(green),sharpness,longSide,flags};
+}
+export const PHOTO_QUALITY_LABELS:Record<PhotoQualityFlag,string>={dark:"어두움",blurry:"흔들림",cast:"색 틀어짐",lowres:"작은 사진"};
+
 export async function enhancePhoto(input:Buffer,options:{kind?:Exclude<PhotoKind,"none">}={}):Promise<Buffer> {
   const kind=options.kind??"real";
   // toColourspace("srgb"): 흑백 사진도 RGB 3채널로 받아 아래 루프가 항상 3칸 단위로 돈다.

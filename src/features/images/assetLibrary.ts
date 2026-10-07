@@ -5,6 +5,7 @@ import sharp from "sharp";
 import { z } from "zod";
 import { createMediaStore, MediaValidationError } from "@/lib/files/mediaStore";
 import { remoteStore } from "@/lib/files/remoteStore";
+import { photoQuality } from "./render/photoEnhance";
 import { AssetDetailsSchema, LibraryAssetSchema, type AssetDetails, type LibraryAsset } from "./freeCards";
 
 export function createAssetLibrary(root=process.env.DATA_DIR??path.join(process.cwd(),"data")) {
@@ -41,11 +42,14 @@ export function createAssetLibrary(root=process.env.DATA_DIR??path.join(process.
     async add(file:File,details:AssetDetails):Promise<LibraryAsset> {
       const metadata=AssetDetailsSchema.parse(details);
       if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size===0||file.size>12*1024*1024)throw new MediaValidationError("JPG, PNG, WebP 사진을 12MB까지 등록할 수 있어요.");
+      const bytes=Buffer.from(await file.arrayBuffer());
       let preview:Buffer;
-      try{preview=await sharp(Buffer.from(await file.arrayBuffer()),{limitInputPixels:40_000_000}).rotate().resize(1400,1400,{fit:"inside",withoutEnlargement:true}).flatten({background:"#f5f1e8"}).jpeg({quality:88}).toBuffer();}
+      try{preview=await sharp(bytes,{limitInputPixels:40_000_000}).rotate().resize(1400,1400,{fit:"inside",withoutEnlargement:true}).flatten({background:"#f5f1e8"}).jpeg({quality:88}).toBuffer();}
       catch{throw new MediaValidationError("읽을 수 있는 이미지 파일을 골라 주세요. 최대 4천만 화소까지 지원해요.");}
       const original=await createMediaStore(root).saveOriginal(file);
-      return save({...metadata,id:original.id,preview:`data:image/jpeg;base64,${preview.toString("base64")}`,createdAt:new Date().toISOString(),lastUsedAt:null,useCount:0});
+      // 사진 품질(어두움·흔들림 등)은 원본으로 한 번 잰다. 측정이 실패해도 사진 등록은 막지 않는다.
+      const quality=await photoQuality(bytes).catch(()=>null);
+      return save({...metadata,id:original.id,preview:`data:image/jpeg;base64,${preview.toString("base64")}`,createdAt:new Date().toISOString(),lastUsedAt:null,useCount:0,quality});
     },
     async markUsed(ids:string[]) {
       const now=new Date().toISOString();

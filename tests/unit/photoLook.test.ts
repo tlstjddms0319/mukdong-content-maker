@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { enhancePhoto, enhancePhotoLegacy, photoStats } from "@/features/images/render/photoEnhance";
+import { enhancePhoto, enhancePhotoLegacy, photoQuality, photoStats } from "@/features/images/render/photoEnhance";
 import { finishPhoto } from "@/features/images/render/primitives";
 
 const fixture=(name:string)=>readFile(`tests/fixtures/photos/${name}.jpg`);
@@ -75,5 +75,21 @@ describe("photo look (phase 1)", () => {
     expect(await sharpness(food)).toBeGreaterThan(await sharpness(plain)*1.1);
     const meta=await sharp(food).metadata();
     expect([meta.width,meta.height]).toEqual([540,675]);
+  });
+});
+
+describe("photo quality flags", () => {
+  // 픽스처는 scripts/make-photo-fixtures.mjs로 샘플을 일부러 망가뜨려 만든 "나쁜 사장님 사진"이다.
+  const fixture=(name:string)=>readFile(`tests/fixtures/photos/${name}.jpg`);
+  it("flags dark, blurry, green-cast and small photos", async () => {
+    expect((await photoQuality(await fixture("blurry"))).flags).toContain("blurry");
+    expect((await photoQuality(await fixture("dark"))).flags).toContain("dark");
+    expect((await photoQuality(await fixture("cast-green"))).flags).toContain("cast");
+    const small=await sharp(await fixture("warm")).resize(600).jpeg().toBuffer(); // 긴 변 800px(카카오톡 전송본 크기)
+    expect((await photoQuality(small)).flags).toContain("lowres");
+  });
+  it("leaves warm, white-plate and landscape photos alone", async () => {
+    // 붉은 저녁 조명 사진과 흰 접시가 큰 사진은 정상이다(색 틀어짐·흔들림으로 잡지 않는다).
+    for(const name of ["warm","bright-plate","landscape"])expect((await photoQuality(await fixture(name))).flags,name).toEqual([]);
   });
 });

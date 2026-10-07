@@ -13,6 +13,11 @@ export const LibraryAssetSchema=AssetDetailsSchema.extend({
   createdAt:z.string().datetime(),lastUsedAt:z.string().datetime().nullable(),
   // 게시물에 쓴 횟수(사진 보관함의 "자주 쓴 사진" 정렬용). 예전에 저장한 사진에는 없으므로 0부터.
   useCount:z.number().int().min(0).default(0),
+  // 사진 품질(계획서 A11). 보관함에 넣을 때 render/photoEnhance.ts photoQuality()로 한 번 잰다. 예전 사진에는 없다(null).
+  quality:z.object({
+    luminance:z.number(),saturation:z.number(),cast:z.number(),sharpness:z.number(),longSide:z.number().int(),
+    flags:z.array(z.enum(["dark","blurry","cast","lowres"])),
+  }).nullable().default(null),
 });
 export type LibraryAsset=z.infer<typeof LibraryAssetSchema>;
 export type AssetDetails=z.infer<typeof AssetDetailsSchema>;
