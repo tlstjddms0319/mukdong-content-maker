@@ -664,7 +664,8 @@ const CARD_RENDERERS:Record<CardLayout,(inputs:Buffer[],slide:CarouselSlidePlan,
 //   "ai"   이미지 AI가 만든 사진 → 따뜻한 색 vibrance만 약하게(색·밝기는 이미 정돈돼 있음)
 //   "none" 보정 없음(기본값. 검수 스크립트·테스트가 같은 입력으로 같은 그림을 보게)
 // options.enhance는 예전 호출과의 호환용이다(true → "real").
-export type CardOptions={photoKind?:PhotoKind;enhance?:boolean;brandHandle?:string};
+// remoteCutout: 설정의 "원격 누끼"가 켜졌을 때만 true. 누끼 계열(colorblock·popup·kitsch)이 Higgsfield 배경 제거를 먼저 시도한다.
+export type CardOptions={photoKind?:PhotoKind;enhance?:boolean;brandHandle?:string;remoteCutout?:boolean};
 const photoKindOf=(options:CardOptions):PhotoKind=>options.photoKind??(options.enhance?"real":"none");
 export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions={}):Promise<Buffer> {
   return (await composeSlideCard(input,slide,index,total,layout,design,options)).image;
@@ -685,7 +686,7 @@ export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlide
   // 단 "사진 위 글자"(overlay)로 고른 경우는 계열과 무관하게 풀스크린으로 그린다.
   const style=design?.style??"template";
   const render=style!=="template"&&layout!=="overlay"?STYLE_RENDERERS[style]:CARD_RENDERERS[card];
-  const draw=(current:CarouselSlidePlan)=>withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:current.variant??0,palette,brandHandle:options.brandHandle,tone:design?.tone},()=>render(inputs,current,index,total,palette));
+  const draw=(current:CarouselSlidePlan)=>withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:current.variant??0,palette,brandHandle:options.brandHandle,tone:design?.tone,remoteCutout:options.remoteCutout},()=>render(inputs,current,index,total,palette));
   // 그린 카드를 바로 검수해서(render/audit.ts) 글자가 넘치거나 겹치면 요점을 뒤에서부터 하나씩 빼고 다시 그린다(최대 2번).
   // 그래도 남으면 문제가 가장 적은 결과를 쓰고 서버 로그에 남긴다. 대비 검사는 무거워서 자동 검수 테스트에서만 한다.
   let current=slide,best:{image:Buffer;report:AuditReport;count:number}|null=null;
