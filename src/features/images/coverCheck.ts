@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { z } from "zod";
 import { toStrictJsonSchema } from "@/lib/ai/jsonSchema";
 import { mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
+import { recordUsage } from "@/lib/usage/ledger";
 
 // AI 표지 후보 점검(식욕 점수). 표지 후보(글자를 얹기 전 원본)나 사장님 사진을 Gemini에 보여 주고
 // 먹음직스러움·조명·구도 점수와 흔한 실패(이미지 속 글자, 기대한 음식으로 안 보임, 어색한 손, 어두움·흐림·어수선함)를 확인한다.
@@ -169,7 +170,9 @@ export async function scoreImages(images:Buffer[],options:CoverCheckOptions={}):
     const first=primaryLimited&&canFallBack?fallback:primary;
     let response=await call(first,data);
     // 429면 다른 모델로 한 번만 더, 그래도 안 되면 이 장은 포기한다.
-    if(response.status===429&&first===primary&&canFallBack){primaryLimited=true;response=await call(fallback,data);}
+    if(response.status===429&&first===primary&&canFallBack){recordUsage({provider:"gemini-vision",ok:false,status:429});primaryLimited=true;response=await call(fallback,data);}
+    // 사용량 장부(설정 화면 "AI 사용량"). 같은 사진은 캐시라 다시 세지 않는다.
+    recordUsage({provider:"gemini-vision",ok:response.ok,status:response.status});
     if(!response.ok)throw new GeminiStatusError(response.status);
     const body=await response.json() as {candidates?:Array<{content?:{parts?:Array<{text?:string}>}}>};
     const text=body.candidates?.[0]?.content?.parts?.map(part=>part.text??"").join("")??"";

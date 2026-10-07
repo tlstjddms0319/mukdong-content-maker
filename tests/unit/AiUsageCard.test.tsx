@@ -1,0 +1,27 @@
+// 설정 화면 "AI 사용량" 카드: 키를 넣은 AI만, 오늘·이번 달 사용량과 한도 초과·Groq 남은 요청 수·대시보드 링크를 보여 준다.
+import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AiUsageCard } from "@/components/settings/AiUsageCard";
+
+const counter=(units:number,extra:Partial<{calls:number;failures:number;quota:number}>={})=>({calls:units,failures:0,quota:0,units,...extra});
+const stat=(id:string,today:number,month:number,more:Record<string,unknown>={})=>({id,today:counter(today),month:counter(month),lastQuota:null,lastError:null,...more});
+
+describe("AI usage card", () => {
+  afterEach(()=>vi.unstubAllGlobals());
+  it("shows configured AIs with counts, quota hits, Groq remaining and dashboard links", async () => {
+    const now=new Date().toISOString();
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({usage:{month:"2026-10",today:"2026-10-07",groq:{remainingRequests:987,limitRequests:1000,at:now},providers:[
+      stat("gemini",3,40,{month:counter(40,{failures:2,quota:1}),lastQuota:now}),stat("gemini-vision",0,6),stat("groq",1,5),stat("cloudflare",0,0),
+      stat("higgsfield",2,12),stat("cloudflare-image",0,0),stat("openai-image",0,0),
+    ]},cutout:{used:4,budget:20}})})));
+    render(<AiUsageCard connections={{gemini:true,groq:true,cloudflare:false,openai:false,higgsfield:true}}/>);
+    expect(await screen.findByText("Gemini 문안")).toBeInTheDocument();
+    expect(screen.getByText(/오늘 3회 · 이번 달 40회 · 실패 2번 · 마지막 한도 초과 오늘/)).toBeInTheDocument();
+    expect(screen.getByText(/남은 요청 987 \/ 1,000/)).toBeInTheDocument();
+    expect(screen.getByText(/오늘 2장 · 이번 달 12장/)).toBeInTheDocument();
+    expect(screen.getByText(/원격 누끼\(Higgsfield\) 이번 달 4크레딧 \/ 예산 20크레딧/)).toBeInTheDocument();
+    // 키가 없고 쓴 적도 없는 AI는 숨긴다.
+    expect(screen.queryByText("OpenAI 이미지")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link",{name:/AI Studio 사용량 열기/})[0]).toHaveAttribute("href","https://aistudio.google.com/usage");
+  });
+});

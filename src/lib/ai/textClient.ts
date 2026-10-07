@@ -1,4 +1,5 @@
 import "server-only";
+import { recordUsage } from "@/lib/usage/ledger";
 import type { z } from "zod";
 import type { AppSettings } from "@/features/settings/schema";
 import { createCloudflareTextClient } from "./cloudflareTextClient";
@@ -57,9 +58,12 @@ export function createTextClient(setting: AppSettings["textAiProvider"] | undefi
           try {
             const value = await client.generateJson(prompt, schema);
             last = client.provider;
+            recordUsage({ provider:client.provider, ok:true });
             return value;
           } catch (error) {
             failure = error;
+            // 사용량 장부(설정 화면 "AI 사용량"): HTTP 실패면 상태 코드(429는 한도 초과)까지 적는다.
+            recordUsage({ provider:client.provider, ok:false, status:error instanceof TextAiHttpError ? error.status : 0 });
             // HTTP, quota and network failures move on; only a malformed reply earns one more try here.
             if (error instanceof TextAiHttpError) break;
           }
