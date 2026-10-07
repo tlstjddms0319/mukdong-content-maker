@@ -127,4 +127,18 @@ describe("copy quality",()=>{
     expect(prompt).toContain("같은 이야기 흐름");
   });
 
+  it("tells the writer what is in the owner's photos so the caption matches them", async () => {
+    generate.mockResolvedValue(result);
+    const response=await POST(request({photoNotes:["홍어회 · 접시에 펼친 홍어회","젓가락으로 집어 든 홍어회 한 점, 뒤에 막걸리 사발"]}));
+    expect(response.status).toBe(200);
+    const prompt=String(generate.mock.calls[0][0]);
+    expect(prompt).toContain("[실제 사진]");
+    expect(prompt).toContain("젓가락으로 집어 든 홍어회 한 점, 뒤에 막걸리 사발");
+    expect(prompt).toContain("사진에 없는 메뉴를 주인공처럼 쓰지 마세요");
+    // 사진 내용을 모르면 넣지 않는다.
+    generate.mockClear();
+    await POST(request());
+    expect(String(generate.mock.calls[0][0])).not.toContain("[실제 사진]");
+  });
+
 });

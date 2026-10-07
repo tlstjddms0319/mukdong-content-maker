@@ -8,9 +8,10 @@ import { readJsonResponse } from "@/lib/http/readJson";
 
 const PROVIDER_LABELS:Record<string,string>={gemini:"Gemini",groq:"Groq",cloudflare:"Cloudflare"};
 
-export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience="A",contentBrief,imageBrief,hasAiImages=false,slideOutline,initialText,onTextChange,onContinue,saving=false}:{topic?:string;audience?:"A"|"B"|"C";contentBrief?:string;imageBrief?:string;hasAiImages?:boolean;slideOutline?:string[];initialText?:string;onTextChange?:(text:string)=>void;onContinue:(text:string)=>void;saving?:boolean}) {
+export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience="A",contentBrief,imageBrief,hasAiImages=false,slideOutline,photoNotes,initialText,onTextChange,onContinue,saving=false}:{topic?:string;audience?:"A"|"B"|"C";contentBrief?:string;imageBrief?:string;hasAiImages?:boolean;slideOutline?:string[];photoNotes?:string[];initialText?:string;onTextChange?:(text:string)=>void;onContinue:(text:string)=>void;saving?:boolean}) {
   // 배열은 렌더마다 새 참조라 effect 의존성에는 문자열로 넣는다.
   const outlineKey=slideOutline?.join("\n")??"";
+  const notesKey=photoNotes?.join("\n")??"";
   const [text,setText]=useState(initialText??"");
   const [status,setStatus]=useState<"loading"|"ai"|"fallback"|"saved">(initialText?"saved":"loading");
   const [provider,setProvider]=useState("");
@@ -27,7 +28,7 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     if(focus&&!section){setError("부분 수정은 첫 문장·본문·가게 소개·마무리가 빈 줄로 나뉜 문안에서 사용할 수 있어요.");return;}
     const run=++runRef.current;edited.current=false;setStatus("loading");setError("");
     try{
-      const response=await fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,...(outlineKey?{slideOutline:outlineKey.split("\n")}:{}),focus,...(focus?{currentText:current}:{})})});
+      const response=await fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,...(outlineKey?{slideOutline:outlineKey.split("\n")}:{}),...(notesKey?{photoNotes:notesKey.split("\n")}:{}),focus,...(focus?{currentText:current}:{})})});
       const copy=await readJsonResponse(response);
       if(!response.ok)throw new Error(copy.message||"문안을 만들지 못했어요. 다시 시도해 주세요.");
       if(run!==runRef.current)return;
@@ -42,12 +43,12 @@ export function CopyEditor({topic="처음 먹는 홍어, 삼합부터",audience=
     if(edited.current)return;
     const runCounter=runRef;
     let active=true;
-    fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,...(outlineKey?{slideOutline:outlineKey.split("\n")}:{})})})
+    fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,audience,contentBrief,imageBrief,hasAiImages,...(outlineKey?{slideOutline:outlineKey.split("\n")}:{}),...(notesKey?{photoNotes:notesKey.split("\n")}:{})})})
       .then(async response=>{const body=await readJsonResponse(response);if(!response.ok)throw new Error(body.message||"문안을 만들지 못했어요.");return body;})
       .then(copy=>{if(active){if(!edited.current){const next=formatCopy(copy);setText(next);onTextChange?.(next);setFactsToVerify(copy.facts_to_verify??[]);setHookOptions(Array.isArray(copy.hook_options)?copy.hook_options:[]);}setProvider(String(copy._meta?.provider??""));setStatus("ai");}})
       .catch(reason=>{if(active){setStatus("fallback");setError(reason instanceof Error?reason.message:"문안을 만들지 못했어요. 다시 시도해 주세요.");}});
     return ()=>{active=false;runCounter.current++;};
-  },[topic,audience,contentBrief,imageBrief,hasAiImages,outlineKey,onTextChange]);
+  },[topic,audience,contentBrief,imageBrief,hasAiImages,outlineKey,notesKey,onTextChange]);
   const applyHook=(option:string)=>{
     const section=copySection(text,"hook");
     if(!section)return;
