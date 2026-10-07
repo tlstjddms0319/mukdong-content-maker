@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
 import { ImageBriefSchema } from "@/features/images/schema";
-import { addLibraryPhoto, addSlide, approvedDeck, postTotal, setStoreCardIncluded, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
+import { addLibraryPhoto, addSlide, approvedDeck, postTotal, setStoreCardIncluded, swapSlidePhoto, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
 
 const photo=(n:number)=>`data:image/jpeg;base64,PHOTO${n}`;
 const card=(n:number)=>`data:image/jpeg;base64,CARD${n}`;
@@ -180,5 +180,42 @@ describe("cover panorama requests", () => {
   it("stays off unless asked", async () => {
     const {bodies}=await build();
     expect(bodies.every(body=>body.panorama===undefined)).toBe(true);
+  });
+});
+
+describe("review fixes in the deck", () => {
+  afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
+  async function build(slideCount:5|10,options?:{panorama?:boolean}){
+    const plan=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount});
+    const bodies:Array<Record<string,unknown>>=[];
+    let n=0;
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
+      if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
+      bodies.push(JSON.parse(String(init?.body)));
+      return {ok:true,json:async()=>({images:[card(++n)],source:"photo"})};
+    }));
+    const hook=renderHook(()=>useGenerationState());
+    act(()=>{ensureGeneration(`r|${slideCount}`,{topic:"홍어 한 점",slideCount});[1,2,3].forEach(i=>addLibraryPhoto({id:`p${i}`,preview:photo(i),name:`사진${i}`}));});
+    await act(async()=>{await buildPhotoCarousel(options);});
+    await waitFor(()=>expect(hook.result.current.slides).toHaveLength(slideCount));
+    return {hook,bodies};
+  }
+  it("does not add the store card to a 10-slide carousel (Instagram allows 10 images)", async () => {
+    const {hook,bodies}=await build(10);
+    expect(bodies.every(body=>body.slideTotal===10&&!body.storeCard)).toBe(true);
+    expect(approvedDeck(hook.result.current)).toHaveLength(10);
+  });
+  it("redraws the panorama partner when one side's photo is swapped", async () => {
+    const {hook,bodies}=await build(5,{panorama:true});
+    bodies.length=0;
+    act(()=>setActiveSlide(1));
+    await act(async()=>{await swapSlidePhoto(2);});
+    await waitFor(()=>expect(bodies).toHaveLength(2));
+    expect(bodies[0]).toMatchObject({slideIndex:2});
+    expect(bodies[0].panorama).toBeUndefined();
+    expect(bodies[1]).toMatchObject({slideIndex:1});
+    expect(bodies[1].panorama).toBeUndefined();
+    expect(hook.result.current.photoAssignment[1]).toEqual([2]);
   });
 });

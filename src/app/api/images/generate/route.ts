@@ -105,8 +105,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
       catch(error) {
         const completed=error instanceof CloudflarePartialImageError||error instanceof HiggsfieldPartialImageError?error.images:[];
         // 사용량 장부: 크레딧 부족·429는 "한도 초과"로 적는다(설정 화면 "AI 사용량").
-        recordUsage({provider:USAGE_IDS[name],ok:false,units:0,status:imageErrorStatus(error),quota:error instanceof HiggsfieldImageError&&error.reason==="credits"});
-        if(completed.length)recordUsage({provider:USAGE_IDS[name],ok:true,units:completed.length});
+        // 일부만 만든 실패도 한 번의 요청으로 센다(만든 장수는 units로).
+        recordUsage({provider:USAGE_IDS[name],ok:false,units:completed.length,status:imageErrorStatus(error),quota:error instanceof HiggsfieldImageError&&error.reason==="credits"});
         if(completed.length){images=[...images,...completed];used.push(name);}
         if(index===chain.length-1)throw error;
         console.warn(`[images] ${name} 생성 실패, 다음 이미지 AI로 전환합니다:`,error instanceof Error?error.name:String(error));

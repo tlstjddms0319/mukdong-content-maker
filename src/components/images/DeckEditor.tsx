@@ -2,7 +2,7 @@
 import { useId, useRef, useState } from "react";
 import Image from "next/image";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH } from "@/features/images/carousel";
-import { MAX_DECK_SLIDES, activeSlideIndex, addSlide, removeSlide, setStoreCardIncluded, slideTextProblem, storeCardOn, uploadSlidePhoto, type GenerationState, type NewSlideSource, type StudioPhoto } from "@/features/images/generationStore";
+import { MAX_DECK_SLIDES, STORE_CARD_MAX_CONTENT, activeSlideIndex, deckTotal, addSlide, removeSlide, setStoreCardIncluded, slideTextProblem, storeCardOn, uploadSlidePhoto, type GenerationState, type NewSlideSource, type StudioPhoto } from "@/features/images/generationStore";
 
 // "장 고치기": 완성된 캐러셀(또는 저장된 초안을 다시 연 것)에서 장을 빼거나 새 장을 끼워 넣는다.
 // AI 캐러셀과 실제 사진 캐러셀이 함께 쓴다. 상태와 다시 그리기는 generationStore(removeSlide·addSlide)가 맡는다.
@@ -66,6 +66,7 @@ export function DeckEditor({state}:{state:GenerationState}){
       {storeCardOn(state)&&(state.storeCard.image?.preview
         ?<Image src={state.storeCard.image.preview} alt="맨 뒤 가게 홍보 카드 미리보기" width={108} height={135} unoptimized/>
         :<span className="field-help">홍보 카드를 그리는 중…</span>)}
+      {state.storeCard.include&&deckTotal(state)>STORE_CARD_MAX_CONTENT&&<span className="field-help">인스타그램은 한 게시물에 10장까지라, 10장 캐러셀에는 홍보 카드를 붙이지 않아요.</span>}
     </div>}
     {open&&!full&&<div className="deck-new-slide">
       <div className="option-picker" role="group" aria-label="새 장 만들기 방식">

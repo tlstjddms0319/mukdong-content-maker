@@ -28,21 +28,24 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
   {
     id:"hongeo-hoe",name:"홍어회(삼합 포함)",short:"홍어회",category:"홍어 요리",
     // "홍어" 하나만 써도 홍어회로 본다. 홍어무침·홍어애탕·홍어전·홍어찜과 가게 이름(묵동홍어마을)은 빼고 본다.
-    match:/홍어\s*회|삼합|홍어(?!\s*(?:무침|애|탕|전(?!문|통|체|날)|찜|마을))/,
+    // "홍어 애호가"처럼 애탕·애국이 아닌 "애"는 홍어회로 본다.
+    match:/홍어\s*회|삼합|홍어(?!\s*(?:무침|애\s*(?:탕|국)|탕|전(?!문|통|체|날)|찜|마을))/,
     look:"Korean hongeo-hoe: thin, irregular slices of fermented skate wing meat, pale pink to ivory, with fine parallel cartilage lines.",
     lookKo:"얇고 불규칙하게 썬 연분홍·아이보리빛 홍어 날개 살 회",
     seasons:[],moments:"모임·잔칫상·김장철 수육과 함께",
   },
   {
     id:"hongeo-muchim",name:"홍어무침",short:"홍어무침",category:"홍어 요리",
-    match:/홍어\s*무침|무침/,
+    // "미나리 무침"처럼 다른 무침과 헷갈리지 않게 "홍어"가 붙은 것만 본다.
+    match:/홍어\s*무침/,
     look:"Korean hongeo-muchim: bite-sized pieces of skate coated in a glossy red chili dressing, piled in a shallow bowl.",
     lookKo:"한입 크기 홍어 조각을 윤기 도는 붉은 양념에 무쳐 얕은 그릇에 담은 모습",
     seasons:["봄","여름"],moments:"입맛 없을 때 새콤한 안주, 막걸리와 함께",
   },
   {
     id:"hongeo-aetang",name:"홍어애탕",short:"홍어애탕",category:"홍어 요리",
-    match:/홍어\s*애\s*탕|애\s*탕|홍어\s*탕|애국/,
+    // 애탕은 이 가게에서 홍어애탕뿐이라 단독으로도 본다. "애국"은 "애국가" 같은 말과 헷갈려 "홍어"가 붙은 것만.
+    match:/홍어\s*애\s*(?:탕|국)|애\s*탕|홍어\s*탕/,
     look:"Korean hongeo-aetang: a hot, steaming soup in an earthenware pot or deep bowl, cloudy reddish-brown broth with soft pieces and green leafy greens.",
     lookKo:"뚝배기나 깊은 그릇에 김이 오르는 탁한 붉은 갈색 국물과 푸른 잎채소가 보이는 탕",
     seasons:["가을","겨울"],moments:"찬바람 불 때, 따뜻한 국물이 당길 때",
