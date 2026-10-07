@@ -399,7 +399,7 @@ describe("hongeo stays the hero", () => {
     const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",subline:"",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0}});
     expect(prompt).toContain("주인공은 홍어");
     expect(prompt).toContain("The fermented skate is the hero");
-    expect(prompt).toContain("수육이 홍어를 가리면 안 된다");
+    expect(prompt).toContain("수육이 홍어를 가리지 않게");
     // 홍어와 무관한 주제에는 붙지 않는다.
     expect(buildImagePrompt({topic:"김치찌개",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:3,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블"})).not.toContain("The fermented skate is the hero");
   });
@@ -417,7 +417,9 @@ describe("the topic's menu is the hero", () => {
     const prompt=buildImagePrompt(brief("과메기는 왜 찬바람이 불면 찾을까?"));
     expect(prompt).toContain("주인공은 과메기다");
     expect(prompt).toContain("gwamegi");
-    expect(prompt).toContain("Do not add skate slices");
+    // 나오면 안 되는 음식은 "넣지 마"로도 이름을 꺼내지 않는다(이미지 모델이 낱말에 끌려 삼합을 그리던 원인). 범위는 긍정문으로 닫는다.
+    expect(prompt).toContain("The only foods on the table are this dish");
+    expect(prompt).not.toMatch(/홍어|삼합|수육|묵은지|skate|pork|kimchi/i);
     expect(prompt).not.toContain("주인공은 홍어");
     expect(prompt).not.toContain("The fermented skate is the hero");
     expect(prompt).not.toContain("통째 생선으로 그리지 않는다");
@@ -447,7 +449,9 @@ describe("the topic's menu is the hero", () => {
   it("does not pull boiled pork and kimchi into a plain hongeo scene", () => {
     const prompt=buildImagePrompt(brief("홍어의 톡 쏘는 향은 어디서 올까?"));
     expect(prompt).toContain("주인공은 홍어");
-    expect(prompt).toContain("장면 설명에 없는 수육·묵은지를 새로 넣지 않는다");
+    expect(prompt).toContain("the only foods on the table are the sliced skate");
+    // 장면이 말하지 않으면 수육·묵은지·삼합은 이름도 나오지 않는다.
+    expect(prompt).not.toMatch(/수육|묵은지|삼합|boiled pork|kimchi/i);
   });
 });
 
