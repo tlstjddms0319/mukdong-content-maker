@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ownerApiError } from "@/features/auth/guard";
 import { DesignSpecSchema, PaletteIdSchema } from "@/features/images/design";
 import { StoredStyleIdSchema } from "@/features/images/styleCatalog";
-import { renderStoreCardImage } from "@/features/images/storeCard";
+import { renderStorePromoImage } from "@/features/images/storeCard";
 import { readSettings } from "@/features/settings/repository";
 
 // 캐러셀 맨 뒤 가게 홍보 카드("묵동홍어마을" 한 장). 이미지 AI를 부르지 않고 코드로만 그린다(비용 없음).
@@ -24,7 +24,8 @@ export async function POST(request:Request){
   try{
     // 설정을 못 읽어도 카드는 계정 없이 그린다(바닥글이 빠질 뿐 실패할 일은 아니다).
     const settings=await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 계정 없이 홍보 카드를 그립니다:",error instanceof Error?error.message:String(error));return null;});
-    const image=await renderStoreCardImage(body.design,body.index,body.total,{brandHandle:settings?.brandHandle??""});
+    // 사장님 홍보 포스터(assets/store/promo-card.webp)가 있으면 그것을, 없으면 코드 디자인으로 그린다.
+    const image=await renderStorePromoImage(body.design,body.index,body.total,{brandHandle:settings?.brandHandle??""});
     return NextResponse.json({image:`data:image/jpeg;base64,${image.toString("base64")}`},{headers:{"Cache-Control":"no-store"}});
   }catch(error){
     console.error("[store-card] 홍보 카드를 그리지 못했어요:",error instanceof Error?error.message:String(error));

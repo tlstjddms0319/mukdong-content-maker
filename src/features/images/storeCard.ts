@@ -1,4 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
+import path from "node:path";
+import { readFile, stat } from "node:fs/promises";
 import { STORE_NAME } from "./slideLayout";
 import { contrastRatio, isLight, paletteOf, readableOn, type DesignSpecInput, type Palette } from "./design";
 import { normalizeStyleId, StyleIdSchema, type StyleId } from "./styleCatalog";
@@ -447,6 +449,29 @@ export async function renderStoreCard(design:DesignSpecInput|undefined,index:num
   const {image,report}=await auditRender(()=>withRenderContext(context,()=>drawStoreCard(style,tokens,safeIndex,safeTotal,palette)),{contrast:options.contrast??false,cover:options.gridSafe??false});
   // 내용 장과 같은 계절 소품을 홍보 카드에도 얹는다(빈 자리에만).
   return {image:await addSeasonMotif(image,report,design?.season,safeIndex),report};
+}
+
+// ── 사장님이 만든 홍보 포스터 ────────────────────────────────────────────────────────────
+// assets/store/promo-card.webp가 있으면 맨 뒤 홍보 카드는 그 포스터를 그대로 쓴다(가게 이름·메뉴·주소·전화가 다 들어 있다).
+// 포스터를 바꾸려면 같은 이름으로 파일만 바꿔 넣으면 된다. 없으면 위의 코드 디자인(계열별)으로 그린다.
+// 4:5(1080×1350)와 비율이 다를 수 있어 잘라 내지 않고 통째로 넣는다: 높이(또는 폭)에 맞추고, 남는 가장자리는
+// 같은 포스터를 크게 흐려 깐다(위아래를 자르면 아래쪽 상차림·오른쪽 접시가 잘린다).
+export const STORE_POSTER_FILE=path.join(process.cwd(),"assets/store/promo-card.webp");
+let posterCache:{file:string;mtime:number;image:Buffer}|null=null;
+export async function storePoster(file=STORE_POSTER_FILE):Promise<Buffer|null> {
+  const info=await stat(file).catch(()=>null);
+  if(!info?.isFile())return null;
+  if(posterCache&&posterCache.file===file&&posterCache.mtime===info.mtimeMs)return posterCache.image;
+  const source=await readFile(file);
+  const back=await sharp(source).resize(1080,1350,{fit:"cover"}).blur(40).modulate({brightness:.9}).toBuffer();
+  const front=await sharp(source).resize(1080,1350,{fit:"inside"}).sharpen({sigma:.6,m1:.3,m2:.8}).toBuffer({resolveWithObject:true});
+  const image=await sharp(back).composite([{input:front.data,left:Math.round((1080-front.info.width)/2),top:Math.round((1350-front.info.height)/2)}]).jpeg({quality:92}).toBuffer();
+  posterCache={file,mtime:info.mtimeMs,image};
+  return image;
+}
+// 맨 뒤 홍보 카드: 포스터가 있으면 포스터, 없으면 코드 디자인.
+export async function renderStorePromoImage(design:DesignSpecInput|undefined,index:number,total:number,options:StoreCardOptions={}):Promise<Buffer> {
+  return await storePoster().catch(()=>null)??renderStoreCardImage(design,index,total,options);
 }
 
 // 이미지만 필요할 때.
