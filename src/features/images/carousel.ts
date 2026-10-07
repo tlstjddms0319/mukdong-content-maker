@@ -193,7 +193,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     // 장면 다양성: 같은 접시를 거리만 바꿔 다섯 번 찍지 않도록, 장면 유형과 사람 요소를 장마다 다르게 배정한다.
     `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 각 visualPrompt에는 그 장의 글이 말하는 대상과 동작을 구체적으로 적으세요(예: ${sceneExamples(menu)}). 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도), 위에서 본 상차림, 접시 위 질감(매크로), 곁들임과 함께 놓인 조합, 막걸리와 함께 놓인 식탁, 준비 과정, 함께 먹는 식탁(여러 손과 잔, 뒷모습). "젓가락으로 한 점을 집어 든" 장면은 한 게시물에 최대 한 장만 쓰고, 나머지 장은 접시·그릇·식탁 위에 놓인 모습으로 쓰세요. 손·잔·뒷모습 같은 사람 요소는 글이 먹는 동작이나 함께하는 자리를 말할 때만 넣고, 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 음식이 나오는 모든 장면에서 주제의 메뉴(${menu&&menu.id!=="hongeo-hoe"?menu.short:"홍어"})가 주인공입니다. visualPrompt에 그 메뉴를 가장 크고 앞에, 초점이 맞게 둔다고 명시하고, 다른 음식·술은 글이 말할 때만 작게 곁들여지는 조연으로 쓰세요. 집어 올리는 한입도 주인공 메뉴여야 합니다.`,
     `[디자인] ${designCatalogText()}`,
-    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})만 쓰고 음식 이름은 쓰지 마세요(모든 장에 똑같이 붙으므로, 음식은 각 장 visualPrompt에만). 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone)를 두고(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud), 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
+    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})만 쓰고 음식 이름은 쓰지 마세요(모든 장에 똑같이 붙으므로, 음식은 각 장 visualPrompt에만). 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone, season)를 두고(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud. season은 아래 계절 소품 중 주제에 꼭 맞을 때만, 애매하면 none), 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
   ].join("\n");
 }
 

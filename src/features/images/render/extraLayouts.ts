@@ -127,6 +127,7 @@ export async function footerPlan(slide:CarouselSlidePlan,index:number,total:numb
 const THEME_TEXTURE:Partial<Record<ReturnType<typeof currentTheme>,{name:TextureName;opacity:number}>>={
   notebook:{name:"linen",opacity:.14},
   retro:{name:"kraft",opacity:.2},
+  jogakbo:{name:"hanji",opacity:.16},
 };
 export async function themeTexture():Promise<OverlayOptions|null> {
   const pick=THEME_TEXTURE[currentTheme()];
@@ -154,7 +155,7 @@ export function photoWell(x:number,y:number,width:number,height:number,options:{
 
 // 큰 카드·사진 뒤 그림자. SVG 흐림(softShadow)은 큰 판 하나에 0.4~0.8초가 들어, 1/4 해상도로 굽고 캐시하는 shadowLayer를 쓴다.
 // 단 잡지·미니멀(옅게)·포스터(딱딱한 그림자)는 THEME_KITS가 그림자 모양을 바꾸므로 그 테마에서는 테마 함수(softShadow)를 그대로 쓴다.
-const FAST_SHADOW_THEMES=new Set(["classic","notebook","retro"]);
+const FAST_SHADOW_THEMES=new Set(["classic","notebook","retro","jogakbo"]);
 // shadowLayer는 번짐 여백까지 포함한 판이라 화면(1080×1350)보다 크거나 바깥으로 삐져나올 수 있다.
 // sharp composite는 바탕보다 큰 그림·음수 좌표를 받지 않으므로 화면 안쪽만 잘라 낸다.
 const clipCache=new Map<string,Promise<OverlayOptions>>();

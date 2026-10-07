@@ -3,6 +3,7 @@ import type { CarouselRole } from "./carousel";
 import { BodyFontIdSchema, TitleFontIdSchema, fontCatalogText } from "./typography";
 import { ThemeIdSchema, themeCatalogText } from "./themes";
 import { StyleIdSchema, styleCatalogText } from "./styleCatalog";
+import { SeasonMotifSchema, seasonCatalogText } from "./seasonMotif";
 
 // 카드 디자인은 "AI가 백지에 그리기"가 아니라, 아래 선택지 안에서 주제에 맞게 고르는 방식이다.
 // 선택지 밖의 값은 스키마가 걸러내고, 어울리지 않는 조합은 normalizeCardLayout이 바로잡는다.
@@ -89,11 +90,13 @@ export const DesignSpecSchema=z.object({
   // 장식 세기(계획서 B11). calm이면 키치·팝업북·네온·칠판처럼 장식이 많은 계열이 햇살·반짝이·효과를 줄인 절제 변형으로 그린다.
   // 잔칫상·기념일처럼 격식 있는 글에 시끄러운 장식이 붙지 않게 한다. 예전 구성안처럼 비어 있으면 loud(지금까지의 모양).
   tone:z.enum(["loud","calm"]).default("loud"),
+  // 계절 소품(seasonMotif.ts). 카드 빈 자리에만 옅게 얹는다. 예전 구성안처럼 비어 있으면 none(장식 없음).
+  season:SeasonMotifSchema.default("none"),
 });
 export type DesignSpec=z.output<typeof DesignSpecSchema>;
 // 그리기 함수는 글꼴이 빠진 예전 값도 받는다(빠진 글꼴은 기본값).
 export type DesignSpecInput=z.input<typeof DesignSpecSchema>;
-export const DEFAULT_DESIGN:DesignSpec={palette:"warm",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud"};
+export const DEFAULT_DESIGN:DesignSpec={palette:"warm",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none"};
 
 export const paletteOf=(design?:DesignSpecInput):Palette=>PALETTES[design?.palette??DEFAULT_DESIGN.palette].colors;
 
@@ -158,5 +161,5 @@ export function normalizeCardLayout(slide:{role:CarouselRole;layout?:CardLayout;
 export function designCatalogText():string {
   const palettes=PaletteIdSchema.options.map(id=>`${id}(${PALETTES[id].label}: ${PALETTES[id].when})`).join(", ");
   const layouts=CardLayoutSchema.options.map(id=>`${id}(${CARD_LAYOUTS[id].label}: ${CARD_LAYOUTS[id].when})`).join(", ");
-  return `${styleCatalogText()} design.palette는 주제의 분위기에 맞게 다음 중 하나: ${palettes}. ${themeCatalogText()} ${fontCatalogText()} 각 slide의 layout은 그 장의 내용에 맞게 다음 중 하나: ${layouts}. 표지는 fullscreen, frame, quote 중에서, 본문은 내용에 맞게 고르되 이어지는 두 장이 같은 layout이 되지 않게 섞고, browser·qa·stat·receipt·checklist·timeline은 사진이 없으니 글자 정보가 중심인 장에만 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣으세요(해시태그·검색창·비교 이름에 쓰임). 각 slide의 figure는 stat 레이아웃에서 크게 보여 줄 숫자(예: "3가지", "48시간")이며, 주제나 내용 메모에 실제로 있는 숫자만 쓰고 그 외에는 빈 문자열로 두세요. 숫자를 지어내지 마세요.`;
+  return `${styleCatalogText()} design.palette는 주제의 분위기에 맞게 다음 중 하나: ${palettes}. ${themeCatalogText()} ${seasonCatalogText()} ${fontCatalogText()} 각 slide의 layout은 그 장의 내용에 맞게 다음 중 하나: ${layouts}. 표지는 fullscreen, frame, quote 중에서, 본문은 내용에 맞게 고르되 이어지는 두 장이 같은 layout이 되지 않게 섞고, browser·qa·stat·receipt·checklist·timeline은 사진이 없으니 글자 정보가 중심인 장에만 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣으세요(해시태그·검색창·비교 이름에 쓰임). 각 slide의 figure는 stat 레이아웃에서 크게 보여 줄 숫자(예: "3가지", "48시간")이며, 주제나 내용 메모에 실제로 있는 숫자만 쓰고 그 외에는 빈 문자열로 두세요. 숫자를 지어내지 마세요.`;
 }

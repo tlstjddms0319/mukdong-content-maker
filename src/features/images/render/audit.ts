@@ -95,7 +95,9 @@ export type AuditIssue=
   |{kind:"gridSafe";box:TextBox};
 // warnings: 경고 종류별 건수(검수 모드가 아니면 모두 0). photoShape: 면적을 잰 가장 큰 사진의 모양(사진이 없으면 null).
 export type AuditMetrics={photoArea:number;photoShape:PhotoShape|null;shrinks:number;orphans:number;warnings:Record<AuditWarningKind,number>};
-export type AuditReport={issues:AuditIssue[];boxes:TextBox[];metrics:AuditMetrics;notes:AuditNote[]};
+// occupied: 캔버스에 놓인 사진·장식(마스코트·소품·큰 장식) 상자. 글자 상자(boxes)와 함께 "이미 찬 자리"로,
+// 계절 소품(render/seasonLayer.ts)이 빈 자리를 찾을 때 쓴다. 바탕 사진(풀스크린)이면 화면 전체 한 상자.
+export type AuditReport={issues:AuditIssue[];boxes:TextBox[];metrics:AuditMetrics;notes:AuditNote[];occupied:Rect[]};
 export type AuditOptions={cover?:boolean;contrast?:boolean;warnings?:boolean;photos?:Buffer[]};
 
 // 그리기 함수를 검수 컨텍스트 안에서 실행하고 결과 이미지와 함께 검수 결과를 돌려준다.
@@ -116,7 +118,8 @@ export async function auditRender(render:()=>Promise<Buffer>,options:AuditOption
     orphans:count("orphan"),
     warnings:Object.fromEntries(AUDIT_WARNING_KINDS.map(kind=>[kind,count(kind)])) as Record<AuditWarningKind,number>,
   };
-  return {image,report:{issues,boxes,metrics,notes:store.notes}};
+  const decorBoxes=(await canvasLayers(store.calls,decors)).map(item=>item.box);
+  return {image,report:{issues,boxes,metrics,notes:store.notes,occupied:[...area.boxes,...decorBoxes]}};
 }
 
 async function canvasSize(call:CompositeCall){

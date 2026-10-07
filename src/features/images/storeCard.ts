@@ -4,6 +4,7 @@ import { contrastRatio, isLight, paletteOf, readableOn, type DesignSpecInput, ty
 import { normalizeStyleId, StyleIdSchema, type StyleId } from "./styleCatalog";
 import { typographyOf } from "./typography";
 import { auditRender, type AuditReport } from "./render/audit";
+import { addSeasonMotif } from "./render/seasonLayer";
 import { FONTS, blob, brandHandle, canvas, currentTone, sparkles, svgLayer, textLayer, withRenderContext, type Font, type Layer } from "./render/primitives";
 import { contactShadow, doodleArrow, mascotLayer, propLayer, textureLayer, type PropName, type TextureName } from "./decor";
 import { STYLE_FONTS, brandSeal, snap } from "./styles/shared";
@@ -443,7 +444,9 @@ export async function renderStoreCard(design:DesignSpecInput|undefined,index:num
   const style=styleOf(design),palette=paletteOf(design),tokens=storeTokensOf(design);
   const safeTotal=Math.max(1,Math.round(total)),safeIndex=Math.min(safeTotal,Math.max(1,Math.round(index)));
   const context={typography:typographyOf(design?.titleFont,design?.bodyFont),theme:design?.theme??"classic",variant:0,palette,brandHandle:options.brandHandle,tone:design?.tone};
-  return auditRender(()=>withRenderContext(context,()=>drawStoreCard(style,tokens,safeIndex,safeTotal,palette)),{contrast:options.contrast??false,cover:options.gridSafe??false});
+  const {image,report}=await auditRender(()=>withRenderContext(context,()=>drawStoreCard(style,tokens,safeIndex,safeTotal,palette)),{contrast:options.contrast??false,cover:options.gridSafe??false});
+  // 내용 장과 같은 계절 소품을 홍보 카드에도 얹는다(빈 자리에만).
+  return {image:await addSeasonMotif(image,report,design?.season,safeIndex),report};
 }
 
 // 이미지만 필요할 때.
