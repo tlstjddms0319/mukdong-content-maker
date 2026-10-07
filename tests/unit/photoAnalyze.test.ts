@@ -20,6 +20,31 @@ const post=(body:unknown)=>POST(new Request("http://localhost/api/images/analyze
 
 beforeEach(()=>{vi.clearAllMocks();mocks.guard.mockResolvedValue(null);delete process.env.GEMINI_API_KEY;});
 
+describe("reading what is in each photo (describe)", () => {
+  it("reads every photo, dark ones included, and returns the scene for slide matching", async () => {
+    process.env.GEMINI_API_KEY="test-key";
+    mocks.read.mockImplementation(async(id:string)=>id===ID_A?asset(ID_A,["dark"]):asset(id,[]));
+    mocks.score.mockResolvedValue([{...check(3),food:"홍어회",scene:"접시에 펼친 홍어회"},{...check(4),food:"막걸리",scene:"사발에 따른 막걸리와 손"}]);
+    const data=AnalyzeResponseSchema.parse(await (await post({photos:[{id:ID_A},{id:ID_B}],describe:true,topic:"막걸리엔 왜 전을 곁들일까?"})).json());
+    // 표지 추천(score)과 달리 어두운 사진도 읽는다: 캐러셀에 들어갈 사진이라 내용을 알아야 한다.
+    expect(mocks.score.mock.calls[0][0]).toHaveLength(2);
+    expect(data.photos.map(photo=>photo.scene)).toEqual(["접시에 펼친 홍어회","사발에 따른 막걸리와 손"]);
+    const { photoNote }=await import("@/features/images/photoAnalysis");
+    expect(photoNote(data.photos[1])).toBe("사발에 따른 막걸리와 손");
+    expect(photoNote(data.photos[0])).toBe("접시에 펼친 홍어회");
+    expect(photoNote({food:"삼합",scene:"수육과 묵은지를 곁들인 한 상"})).toBe("삼합 · 수육과 묵은지를 곁들인 한 상");
+  });
+
+  it("falls back to the owner's photo name and tags without a Gemini key (free path)", async () => {
+    mocks.read.mockImplementation(async(id:string)=>id===ID_A?{...asset(ID_A,[]),name:"막걸리 사발",tags:["주제:과메기 개시","매장 사진"]}:{...asset(id,[]),name:"IMG_2034",tags:[]});
+    const data=AnalyzeResponseSchema.parse(await (await post({photos:[{id:ID_A},{id:ID_B}],describe:true})).json());
+    expect(mocks.score).not.toHaveBeenCalled();
+    expect(data.photos[0].scene).toBe("막걸리 사발");
+    // 한글이 없는 파일 이름은 사진 설명으로 쓰지 않는다.
+    expect(data.photos[1].scene).toBeNull();
+  });
+});
+
 describe("owner photo cover recommendation", () => {
   it("is guarded and validates the photo list", async () => {
     mocks.guard.mockResolvedValueOnce(new Response(null,{status:401}));

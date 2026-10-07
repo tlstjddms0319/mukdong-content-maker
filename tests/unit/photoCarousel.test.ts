@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
 import { photosNeeded } from "@/features/images/design";
-import { fitPlanToPhotos, swapPhoto } from "@/features/images/photoCarousel";
+import { fitPlanToPhotos, matchPhotosToSlides, photoMatchScore, swapPhoto } from "@/features/images/photoCarousel";
 import { contentOf } from "@/features/images/styles/shared";
 
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
@@ -88,6 +88,46 @@ describe("fitting a carousel plan to real photos", () => {
   it("swaps a slide photo and keeps each photo in one slot", () => {
     expect(swapPhoto([2],5)).toEqual([5]);
     expect(swapPhoto([2,3,4],4)).toEqual([4,3,2]);
+  });
+});
+
+describe("putting each photo on the slide whose copy it shows", () => {
+  const plan={...base(5)};
+  plan.slides=plan.slides.map((slide,i)=>i===1?{...slide,headline:"사발에 따르면 이런 빛이에요",points:["막걸리를 사발에 따르면 뽀얀 빛이 보여요"],visualPrompt:"막걸리 사발을 가까이 담은 사진",keywords:["막걸리"]}
+    :i===3?{...slide,headline:"한 점은 이렇게 먹어요",points:["홍어회 한 점을 젓가락으로 집어요"],visualPrompt:"젓가락으로 홍어회를 집어 든 손",keywords:["홍어"]}:slide);
+
+  it("scores shared menus above shared scene words and ignores unknown photos", () => {
+    expect(photoMatchScore(plan.slides[1],"막걸리 · 사발에 따른 막걸리")).toBeGreaterThan(photoMatchScore(plan.slides[1],"홍어회 · 접시에 펼친 홍어회"));
+    expect(photoMatchScore(plan.slides[1],"")).toBe(0);
+  });
+
+  it("moves the matching photo to its slide, keeps the cover photo and reports the leftovers", () => {
+    // 칸 수: 표지 1, 2번 1, 4번 1. 올린 순서대로면 2번 장에 홍어 접시(1번 사진)가 들어간다.
+    const assignment=[[0],[1],[],[2],[]];
+    const notes=["홍어회 · 접시 위 홍어회","홍어회 · 접시에 펼친 홍어회","홍어회 · 젓가락으로 집어 든 한 점","막걸리 · 사발에 따른 막걸리"];
+    const matched=matchPhotosToSlides(plan,assignment,notes);
+    expect(matched.assignment[0]).toEqual([0]);
+    expect(matched.assignment[1]).toEqual([3]);
+    expect(matched.assignment[3]).toEqual([2]);
+    expect(matched.unused).toEqual([1]);
+  });
+
+  it("changes nothing when no photo could be read", () => {
+    const assignment=[[0],[1],[],[2],[]];
+    expect(matchPhotosToSlides(plan,assignment,["","","",""])).toEqual({assignment,unused:[3]});
+  });
+
+  it("keeps the upload order among photos that match equally", () => {
+    const assignment=[[0],[1],[],[2],[]];
+    const notes=["홍어회","수육","수육","수육"];
+    expect(matchPhotosToSlides(plan,assignment,notes).assignment).toEqual(assignment);
+  });
+
+  it("keeps the panorama pair on the cover photo", () => {
+    const assignment=[[0],[0],[],[1],[]];
+    const matched=matchPhotosToSlides(plan,assignment,["홍어회","젓가락으로 집어 든 홍어회 한 점"]);
+    expect(matched.assignment.slice(0,2)).toEqual([[0],[0]]);
+    expect(matched.assignment[3]).toEqual([1]);
   });
 });
 

@@ -1,5 +1,6 @@
 import { LAYOUT_VARIANTS, normalizeCardLayout, photosNeeded, type CardLayout } from "./design";
-import type { CarouselPlan, CarouselRole } from "./carousel";
+import type { CarouselPlan, CarouselRole, CarouselSlidePlan } from "./carousel";
+import { menuOf } from "@/features/store/menu";
 
 // 실제 사진 여러 장으로 캐러셀을 만들 때, 구성안(AI가 장마다 고른 레이아웃)을 가진 사진 수에 맞춘다.
 // 화면 코드에서도 쓰므로 서버 전용 모듈(sharp 등)을 불러오지 않는다.
@@ -95,4 +96,56 @@ export function swapPhoto(slots:number[],photoIndex:number,slot=0):number[] {
   if(existing>=0)next[existing]=next[slot];
   next[slot]=photoIndex;
   return next;
+}
+
+// ── 사진을 글이 맞는 장에 넣기 ─────────────────────────────────────────────────────────────
+// fitPlanToPhotos는 장마다 사진 "몇 장"을 정하고 올린 순서대로 나눠 준다. 사진마다 보이는 것(notes, AI가 읽은 음식·장면)을
+// 알면, 그 칸 수는 그대로 두고 어느 사진을 어느 장에 넣을지를 글과 겹치는 정도로 다시 고른다.
+// 예: "사발에 따르면 이런 빛이에요" 장에는 홍어 접시보다 막걸리 사발이 보이는 사진.
+// - 표지 첫 칸은 사장님이 고른 첫 사진 그대로(파노라마의 2번째 장도 표지 사진을 그대로 쓴다).
+// - 점수가 같으면 원래 배치(올린 순서)를 지킨다. 사진 내용을 하나도 모르면 아무것도 바꾸지 않는다.
+// - 칸보다 사진이 많으면 글과 가장 덜 맞는 사진이 unused로 남는다.
+
+// 메뉴 말고도 장면을 가르는 낱말(술·곁들임·사람 요소·찍은 거리). 같은 낱말이 장 글과 사진 설명에 함께 있으면 1점.
+const SCENE_WORDS:ReadonlyArray<RegExp>=[
+  /막걸리|사발|술잔|잔(?![가-힣]*치)/,/손(?!님)|젓가락|집어/,/수육|돼지고기|보쌈/,/김치|묵은지/,/삼합/,
+  /상차림|한\s*상|식탁|테이블/,/가까이|단면|결|클로즈업/,/위에서|내려다/,/전(?:을|이|과|은)?\s|부침|노릇/,/국물|뚝배기|탕/,
+];
+const slideText=(slide:CarouselSlidePlan)=>[slide.headline,slide.subline,...(slide.points??[]),slide.visualPrompt,...(slide.keywords??[])].filter(Boolean).join(" ");
+
+// 장 글과 사진 설명이 얼마나 맞는지. 같은 메뉴 3점, 장면 낱말 1점씩. 사진 설명이 비면 0.
+export function photoMatchScore(slide:CarouselSlidePlan,note:string):number {
+  if(!note.trim())return 0;
+  const text=slideText(slide);
+  const menus=new Set(menuOf(text).map(item=>item.id));
+  const shared=menuOf(note).filter(item=>menus.has(item.id)).length;
+  return shared*3+SCENE_WORDS.filter(word=>word.test(text)&&word.test(note)).length;
+}
+
+export function matchPhotosToSlides(plan:CarouselPlan,assignment:number[][],notes:readonly string[]):{assignment:number[][];unused:number[]} {
+  const total=notes.length;
+  const unusedOf=(slots:number[][])=>{const used=new Set(slots.flat());return Array.from({length:total},(_,i)=>i).filter(i=>!used.has(i));};
+  if(!notes.some(note=>note.trim()))return {assignment,unused:unusedOf(assignment)};
+  // 바꿀 수 있는 칸: 표지 사진(0번)이 들어간 칸을 뺀 모든 칸. 후보 사진: 0번을 뺀 모든 사진(지금 빠진 사진 포함).
+  const slots=assignment.flatMap((photos,slide)=>photos.map((photo,slot)=>({slide,slot,original:photo}))).filter(item=>item.original!==0);
+  const pool=new Set(Array.from({length:total},(_,i)=>i).filter(i=>i!==0));
+  const next=assignment.map(photos=>[...photos]);
+  const open=new Set(slots.map((_,index)=>index));
+  // 가장 잘 맞는 (칸, 사진) 짝부터 정한다. 같으면 원래 그 칸에 있던 사진, 그다음 앞 장·앞 사진.
+  while(open.size&&pool.size){
+    let best:{slot:number;photo:number;score:number;keep:number}|null=null;
+    for(const index of open){
+      const item=slots[index];
+      for(const photo of pool){
+        const score=photoMatchScore(plan.slides[item.slide],notes[photo]??"");
+        const keep=item.original===photo?1:0;
+        if(!best||score>best.score||(score===best.score&&(keep>best.keep||(keep===best.keep&&(index<best.slot||(index===best.slot&&photo<best.photo))))))best={slot:index,photo,score,keep};
+      }
+    }
+    if(!best)break;
+    const item=slots[best.slot];
+    next[item.slide][item.slot]=best.photo;
+    open.delete(best.slot);pool.delete(best.photo);
+  }
+  return {assignment:next,unused:unusedOf(next)};
 }

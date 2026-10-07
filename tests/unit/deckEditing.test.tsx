@@ -157,6 +157,8 @@ describe("cover panorama requests", () => {
     let n=0;
     vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
       if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
+      // 사진 내용 읽기(사진을 글이 맞는 장에 넣기). 여기서는 실패로 두어 올린 순서대로 배치한다.
+      if(url==="/api/images/analyze")return {ok:false,json:async()=>({})};
       if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
       bodies.push(JSON.parse(String(init?.body)));
       return {ok:true,json:async()=>({images:[card(++n)],source:"photo"})};
@@ -191,6 +193,8 @@ describe("review fixes in the deck", () => {
     let n=0;
     vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
       if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
+      // 사진 내용 읽기(사진을 글이 맞는 장에 넣기). 여기서는 실패로 두어 올린 순서대로 배치한다.
+      if(url==="/api/images/analyze")return {ok:false,json:async()=>({})};
       if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
       bodies.push(JSON.parse(String(init?.body)));
       return {ok:true,json:async()=>({images:[card(++n)],source:"photo"})};

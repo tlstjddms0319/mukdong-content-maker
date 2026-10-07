@@ -31,7 +31,7 @@ describe("cover panorama", () => {
     const rowsOf=(pixels:number[])=>pixels.reduce<number[]>((rows,_,i)=>i%3===0&&pixels[i]>200&&pixels[i+1]>150&&pixels[i+2]<140?[...rows,i/3]:rows,[]);
     expect(rowsOf(await lineRow(left.image,1079))).toEqual(rowsOf(await lineRow(right.image,0)));
     expect(rowsOf(await lineRow(left.image,1079)).length).toBeGreaterThan(0);
-  });
+  },20_000); // 1080×1350 두 장을 그리고 이음선을 비교한다(바쁠 때 5초를 넘긴다).
 
   it("only uses photos that are wide enough, and falls back to the usual design otherwise", async () => {
     expect(await panoramaReady(await widePhoto())).toBe(true);

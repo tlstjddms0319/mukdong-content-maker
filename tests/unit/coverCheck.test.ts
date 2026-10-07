@@ -7,7 +7,7 @@ const { checkCoverCandidates, clearCoverCheckCache, coverRank, coverScore, cover
 
 const image=(color="#d9b8a8")=>sharp({create:{width:900,height:1100,channels:3,background:color}}).jpeg().toBuffer();
 const reply=(value:object)=>new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify(value)}]}}]}),{status:200});
-const GOOD={foodVisible:true,looksLikeSkate:true,textInImage:false,oddHands:false,appetite:4,lighting:4,composition:3,dark:false,blurry:false,clutter:false,note:"윤기가 좋아요",food:"홍어회"};
+const GOOD={foodVisible:true,looksLikeSkate:true,textInImage:false,oddHands:false,appetite:4,lighting:4,composition:3,dark:false,blurry:false,clutter:false,note:"윤기가 좋아요",food:"홍어회",scene:"접시에 펼친 홍어회"};
 const asFetch=(fn:unknown)=>fn as typeof fetch;
 const bodyOf=(fn:ReturnType<typeof vi.fn>,call=0)=>JSON.parse(String((fn.mock.calls[call] as unknown as [string,RequestInit])[1].body));
 const urlOf=(fn:ReturnType<typeof vi.fn>,call=0)=>String((fn.mock.calls[call] as unknown as [string])[0]);
