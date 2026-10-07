@@ -61,6 +61,8 @@ export type GenerationState={
   photos:StudioPhoto[];          // 실제 사진 캐러셀에 쓸 사진(올린 순서 = 장에 배치되는 순서)
   photoAssignment:number[][];    // 장마다 들어간 사진 번호(photos 기준). 사진 바꾸기에 쓴다.
   photoViews:PhotoView[][];      // photoAssignment와 같은 모양: 그 칸의 사진을 얼마나 가까이 잘라 쓰는지. 없으면 사진 그대로.
+  photoNotes:string[];           // photos와 같은 순서: 사진마다 보이는 것(사진 분석). 모르면 "". 문안(캡션)에도 넘긴다.
+  referenceNote:string;          // 사진+AI 참고 사진에 보이는 것(사진 분석). 모르면 "".
   deckEdited:boolean;            // 사용자가 완성된 캐러셀에서 장을 빼거나 넣었는지. 그러면 장 수는 설정값이 아니라 지금 장 수다.
   deckStatus:string;             // 장을 빼고 넣은 뒤 장 번호를 다시 그리는 동안의 진행 안내.
   // 맨 뒤 가게 홍보 카드(사장님 결정: 모든 캐러셀 끝에 "묵동홍어마을" 홍보 카드 한 장, 이미지 AI 비용 없음).
@@ -71,7 +73,7 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",referenceWarning:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],photoViews:[],
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",referenceWarning:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],photoViews:[],photoNotes:[],referenceNote:"",
     // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 캐러셀로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
@@ -79,7 +81,7 @@ export function initialGenerationState(key:string,input:GenerationInput,approved
 }
 
 // 만든 것들만 비우고 모드·화풍·참고 사진은 남긴다(모드 카드나 표지 다시 만들기에서 쓰는 초기화).
-const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,planFallbackMessage:"",refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[],photoViews:[],deckEdited:false,deckStatus:""};
+const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,planFallbackMessage:"",refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[],photoViews:[],photoNotes:[],deckEdited:false,deckStatus:""};
 
 let state:GenerationState=initialGenerationState("",EMPTY_INPUT);
 // 늦게 도착한 응답을 버리기 위한 토큰. 새 작업이 시작되거나 상태가 초기화될 때마다 올라간다.
@@ -139,6 +141,16 @@ export function selectCover(candidate:ApprovedImage){patch({cover:candidate,slid
 export function markApproved(){patch({approved:true});}
 
 const readPreview=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>typeof reader.result==="string"?resolve(reader.result):reject(new Error());reader.onerror=()=>reject(new Error());reader.readAsDataURL(file);});
+// 문안(캡션)에 넘길 "게시물에 실제로 들어간 사진에 보이는 것". 실제 사진 캐러셀은 장에 들어간 사진 순서대로(같은 사진은 한 번),
+// 사진+AI는 참고 사진 한 장(표지가 이 사진의 음식을 살린다). 아는 것이 없으면 undefined.
+export function deckPhotoNotes(current:Pick<GenerationState,"mode"|"photoAssignment"|"photoNotes"|"referenceNote"|"slides">):string[]|undefined {
+  if(current.mode==="mix")return current.referenceNote?[current.referenceNote]:undefined;
+  if(current.mode!=="photo"||!current.slides.length)return undefined;
+  const order=[...new Set(current.photoAssignment.flat())];
+  const notes=order.map(index=>current.photoNotes[index]?.trim()).filter((note):note is string=>Boolean(note));
+  return notes.length?notes.slice(0,10):undefined;
+}
+
 // 사진+AI의 참고 사진은 장마다 요청에 실려 가므로, 휴대폰 원본(수 MB) 그대로 보내지 않고 긴 변 2048px JPEG로 줄인다.
 // 이미지 AI도 어차피 줄여서 쓴다(Higgsfield 1536px, Cloudflare 512px). 줄일 수 없는 환경(오래된 브라우저)은 원본을 쓴다.
 export const REFERENCE_MAX_SIDE=2048;
@@ -233,6 +245,7 @@ async function checkReference(preview:string){
     const parsed=AnalyzeResponseSchema.safeParse(await readJsonResponse(response));
     const mismatch=parsed.success?parsed.data.photos[0]?.mismatch:null;
     // 그사이 다른 참고 사진으로 바꿨으면 버린다.
+    if(parsed.success&&state.photoPreview===preview)patch({referenceNote:photoNote(parsed.data.photos[0])});
     if(mismatch&&state.photoPreview===preview)patch({referenceWarning:`${mismatch}. 표지는 이 사진의 음식을 살려 만들어요. 맞는 사진으로 바꾸거나 '화풍·분위기만'을 골라 주세요.`});
   }catch{/* 안내는 보조 기능 */}
 }
@@ -244,7 +257,7 @@ export async function uploadPhoto(file:File|undefined,onApprove:(images:Approved
   try{
     const preview=reference?await readReference(file):await readPreview(file);
     if(token!==run)return;
-    patch({photoPreview:preview,referenceWarning:""});
+    patch({photoPreview:preview,referenceWarning:"",referenceNote:""});
     const body=new FormData();body.append("file",file);
     const response=await fetch("/api/media/upload",{method:"POST",body});
     const data=await readJsonResponse(response);
@@ -447,6 +460,7 @@ export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
     const photos=state.photos;
     const notes=await describePhotos(photos,topic);
     if(token!==run)return;
+    patch({photoNotes:notes});
     const photoNotes=notes.some(Boolean)?notes:undefined;
     const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:"photo",...(photoNotes?{photoNotes}:{})})});
     const data=await readJsonResponse(response);

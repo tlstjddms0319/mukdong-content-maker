@@ -15,6 +15,8 @@ export const CopyInputSchema = z.object({
   contentBrief:z.string().trim().max(600).optional(),
   // 캐러셀 슬라이드의 제목 순서. 캡션이 슬라이드와 같은 이야기 흐름을 따르게 한다.
   slideOutline:z.array(z.string().trim().min(1).max(60)).max(10).optional(),
+  // 게시물에 실제로 들어간 사장님 사진마다 보이는 것(사진 분석, 예: "젓가락으로 집어 든 홍어회 한 점"). 캡션이 사진과 맞게 쓰이게 한다.
+  photoNotes:z.array(z.string().trim().min(1).max(120)).max(10).optional(),
 });
 export type GeneratedCopy = z.infer<typeof GeneratedCopySchema>;
 export type CopyInput = z.infer<typeof CopyInputSchema>;
