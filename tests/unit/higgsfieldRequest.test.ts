@@ -15,6 +15,8 @@ beforeEach(async()=>{
   png=await sharp({create:{width:300,height:400,channels:3,background:"#bb8877"}}).png().toBuffer();
   vi.stubEnv("HF_API_KEY_ID","key-id");
   vi.stubEnv("HF_API_KEY_SECRET","key-secret");
+  // 아래 예전 테스트는 Grok Image 2.0 요청 모양을 본다(기본 모델 Nano Banana Pro는 맨 아래 테스트에서 따로 본다).
+  vi.stubEnv("HF_IMAGE_MODEL","grok-image-2");
   readSettings.mockReset();
   readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"automatic"});
 });
@@ -104,5 +106,55 @@ describe("Higgsfield image generation",()=>{
 
     expect(response.status).toBe(502);
     expect((await response.json()).message).toContain("크레딧이 부족");
+  });
+
+  it("uses Nano Banana Pro first, at the card's photo window ratio",async()=>{
+    vi.stubEnv("HF_IMAGE_MODEL","");
+    const { generateHiggsfieldImages,resetHiggsfieldModelSkips }=await import("@/features/images/higgsfieldRequest");
+    resetHiggsfieldModelSkips();
+    const calls:{url:string;init?:RequestInit}[]=[];
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+      calls.push({url,init});
+      if(url.endsWith("/nano-banana-pro"))return json({status:"completed",request_id:"n1",images:[{url:"https://cdn.example.com/n1.png"}]});
+      if(url==="https://cdn.example.com/n1.png")return new Response(new Uint8Array(png));
+      throw new Error(`unexpected ${url}`);
+    }));
+    await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5",windowRatio:1.5});
+    expect(calls[0].url).toBe("https://api.higgsfield.ai/nano-banana-pro");
+    expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({aspect_ratio:"3:2",resolution:"2k"});
+  });
+
+  it("falls back to Grok Image 2.0 when the Nano Banana Pro route is not open for the account, and remembers it",async()=>{
+    vi.stubEnv("HF_IMAGE_MODEL","");
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const { generateHiggsfieldImages,resetHiggsfieldModelSkips }=await import("@/features/images/higgsfieldRequest");
+    resetHiggsfieldModelSkips();
+    const calls:string[]=[];
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>{
+      calls.push(url);
+      if(url.endsWith("/nano-banana-pro"))return json({detail:"Not Found"},404);
+      if(url.endsWith("/xai/grok-imagine-image-2.0"))return json({status:"completed",request_id:"g1",images:[{url:"https://cdn.example.com/g1.png"}]});
+      if(url==="https://cdn.example.com/g1.png")return new Response(new Uint8Array(png));
+      throw new Error(`unexpected ${url}`);
+    }));
+    const [image]=await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"});
+    expect(image.startsWith("data:image/jpeg")).toBe(true);
+    expect(calls.filter(url=>url.endsWith("/nano-banana-pro"))).toHaveLength(1);
+    // 다음 요청은 열리지 않은 경로를 다시 두드리지 않는다.
+    await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"});
+    expect(calls.filter(url=>url.endsWith("/nano-banana-pro"))).toHaveLength(1);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("does not hide credit or safety failures behind the fallback",async()=>{
+    vi.stubEnv("HF_IMAGE_MODEL","");
+    const { generateHiggsfieldImages,resetHiggsfieldModelSkips }=await import("@/features/images/higgsfieldRequest");
+    resetHiggsfieldModelSkips();
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>{
+      if(url.endsWith("/nano-banana-pro"))return json({detail:"no credits"},402);
+      throw new Error(`unexpected ${url}`);
+    }));
+    await expect(generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"})).rejects.toMatchObject({reason:"credits"});
   });
 });

@@ -21,10 +21,16 @@ export function cloudflareSize(ratio=1024/1280):{width:number;height:number} {
   return {width:round16(Math.sqrt(area*r)),height:round16(Math.sqrt(area/r))};
 }
 
-// Higgsfield(Grok Image 2.0)가 받는 비율(models_explore 기준). 4:5는 없어 3:4가 가장 가깝다.
+// Higgsfield 모델이 받는 비율(Higgsfield models_explore 기준).
+// Grok Image 2.0: 4:5가 없어 3:4가 가장 가깝다. Nano Banana Pro: 4:5·5:4까지 받는다.
+export type AspectOption=readonly [string,number];
 export const HIGGSFIELD_ASPECTS=[["9:16",9/16],["1:2",1/2],["2:3",2/3],["3:4",3/4],["1:1",1],["4:3",4/3],["3:2",3/2],["2:1",2],["16:9",16/9]] as const;
+export const NANO_BANANA_ASPECTS=[["9:16",9/16],["2:3",2/3],["3:4",3/4],["4:5",4/5],["1:1",1],["5:4",5/4],["4:3",4/3],["3:2",3/2],["16:9",16/9],["21:9",21/9]] as const;
 export function higgsfieldAspect(ratio=3/4):typeof HIGGSFIELD_ASPECTS[number][0] {
   return nearest(ratio,HIGGSFIELD_ASPECTS);
+}
+export function aspectFrom(options:ReadonlyArray<AspectOption>,ratio:number):string {
+  return nearest(ratio,options);
 }
 
 // 프롬프트에 붙일 구도 지시. 가로·정사각 칸이면 접시 전체가 여유 있게 들어오게 한다(가장자리에서 잘리지 않게).
