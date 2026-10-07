@@ -5,6 +5,7 @@ import { z } from "zod";
 import { checkCoverCandidates } from "@/features/images/coverCheck";
 import { readCutoutLedger } from "@/features/images/remoteCutout";
 import { readSettings } from "@/features/settings/repository";
+import { higgsfieldModels } from "@/features/images/higgsfieldRequest";
 import { fetchTrendKeywords, naverConfigured, trendLabel } from "@/features/topics/naverTrend";
 import { TEXT_PROVIDER_ORDER, resolveTextClients, type TextAiClient, type TextProvider } from "@/lib/ai/textClient";
 
@@ -85,7 +86,14 @@ export async function runAiChecks(deps:AiCheckDeps={}):Promise<AiCheckItem[]> {
     checks.push(timed("higgsfield","이미지 AI · Higgsfield",timeoutMs,env,async()=>{
       const response=await request("https://api.higgsfield.ai/requests/00000000-0000-4000-8000-000000000000/status",{headers:{Authorization:`Key ${hfId}:${hfSecret}`,Accept:"application/json"}});
       if(response.status===401||response.status===403)throw new Error(`키가 거부됐어요(${response.status}). 키 ID와 시크릿이 한 쌍인지 확인해 주세요.`);
-      return `키 인증 통과 (응답 ${response.status}, 크레딧 사용 없음)`;
+      // 먼저 쓸 이미지 모델의 경로가 이 계정에서 열려 있는지: 프롬프트 없는 요청을 보내 "입력값이 틀림"(400·422)이면 경로가 있고,
+      // 404·405면 경로가 없다. 입력값이 틀린 요청은 작업이 만들어지지 않아 크레딧을 쓰지 않는다.
+      const [model,fallback]=higgsfieldModels(env);
+      const probe=await request(`https://api.higgsfield.ai${model.path}`,{method:"POST",headers:{Authorization:`Key ${hfId}:${hfSecret}`,Accept:"application/json","Content-Type":"application/json"},body:"{}"});
+      const route=probe.status===404||probe.status===405
+        ?`${model.label} 경로를 찾지 못해 ${fallback?.label??"다른 모델"}(으)로 만들어요`
+        :`이미지 모델 ${model.label} 사용`;
+      return `키 인증 통과 (응답 ${response.status}, 크레딧 사용 없음) · ${route}`;
     }));
   }else checks.push(Promise.resolve(skip("higgsfield","이미지 AI · Higgsfield","키가 설정되지 않았어요.")));
 
