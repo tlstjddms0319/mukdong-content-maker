@@ -116,7 +116,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       <button type="button" className="button secondary" disabled={approved} onClick={()=>approveRawPhotos(onApprove)}>글자 없이 사진만 쓰기</button>
     </div>}
     {progress&&<GenerationProgress stage={`${phase}-${slides.length}`} message={progress} progress={filling?slides.length/slideCount:undefined}/>}
-    {planFallback&&slides.length>0&&<p role="status" className="field-help">AI가 구성안을 만들지 못해 준비된 기본 문안으로 채웠어요. 문안이 주제와 다르면 다시 만들어 보세요.</p>}
+    {planFallback&&slides.length>0&&<p role="status" className="field-help">AI가 구성안을 만들지 못해 준비된 기본 문안으로 채웠어요.{state.planFallbackMessage?` 이유: ${state.planFallbackMessage}`:""} 문안이 주제와 다르면 다시 만들어 보세요.</p>}
     {slides.length>0&&<>
       <div className="generated-carousel">
         <div role="img" aria-label="사진 캐러셀 미리보기" className="post-image" style={{aspectRatio:"4 / 5",...(active?.preview?{backgroundImage:`url(${active.preview})`}:{})}}><span>{activeIndex+1}번 슬라이드</span></div>

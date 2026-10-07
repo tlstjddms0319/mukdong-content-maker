@@ -43,6 +43,7 @@ export type GenerationState={
   providerNotice:string;
   plan?:CarouselPlan;
   planFallback:boolean;      // AI가 구성안을 못 만들어 준비된 기본 문안으로 채웠는지. 표지 생성 전에 사용자가 다시 시도할 수 있게 멈춘다.
+  planFallbackMessage:string; // 기본 문안으로 넘어간 이유(서버가 짧은 한국어로 보냄. 사용량 한도·키·형식 등). 모르면 빈 문자열.
   covers:ApprovedImage[];
   cover?:ApprovedImage;
   slides:ApprovedImage[];
@@ -63,7 +64,7 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],
     // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 캐러셀로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
@@ -71,7 +72,7 @@ export function initialGenerationState(key:string,input:GenerationInput,approved
 }
 
 // 만든 것들만 비우고 모드·화풍·참고 사진은 남긴다(모드 카드나 표지 다시 만들기에서 쓰는 초기화).
-const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[],deckEdited:false,deckStatus:""};
+const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,planFallbackMessage:"",refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[],deckEdited:false,deckStatus:""};
 
 let state:GenerationState=initialGenerationState("",EMPTY_INPUT);
 // 늦게 도착한 응답을 버리기 위한 토큰. 새 작업이 시작되거나 상태가 초기화될 때마다 올라간다.
@@ -163,6 +164,8 @@ export async function setStoreCardIncluded(include:boolean){
   patch({phase:"slides",deckStatus:"장 번호를 맞추는 중"});
   try{await redrawDeck(token);}finally{if(token===run)patch({phase:"idle",deckStatus:""});}
 }
+// 서버가 보낸 "기본 문안으로 넘어간 이유". 예전 서버 응답에는 없으므로 빈 문자열.
+const fallbackMessageOf=(data:unknown)=>{const message=(data as {fallbackMessage?:unknown})?.fallbackMessage;return typeof message==="string"?message.slice(0,120):"";};
 function requestBase(){const {topic,imageBrief}=state.input;return {topic,...(imageBrief?{imageBrief}:{}),slideTotal:postTotal(state),...(state.deckEdited?{deckEdited:true}:{}),...(storeCardOn(state)?{storeCard:true}:{}),imageStyle:state.imageStyle,slideLayout:state.slideLayout};}
 // 참고 사진(mix)이 있으면 그것을, 아니면 고른 표지의 글자 없는 원본을 이어 가기용으로 붙인다.
 function referenceFields(){return state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:state.cover?.referencePreview?{referenceImage:state.cover.referencePreview,referenceMode:"continuity"}:{};}
@@ -226,8 +229,8 @@ export async function startPlan(){
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
     const next=data.plan as CarouselPlan;
     // 기본 문안은 주제와 무관한 일반 문장이라, 그걸로 이미지를 만들어 크레딧을 쓰기 전에 멈추고 알린다.
-    if(data.provider==="fallback"){patch({plan:next,planFallback:true,phase:"idle"});return;}
-    patch({plan:next,planFallback:false,...reviewNotice(data.review)});
+    if(data.provider==="fallback"){patch({plan:next,planFallback:true,planFallbackMessage:fallbackMessageOf(data),phase:"idle"});return;}
+    patch({plan:next,planFallback:false,planFallbackMessage:"",...reviewNotice(data.review)});
     void requestCovers(next,token);
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"구성안을 만들지 못했습니다.",phase:"idle"});
@@ -361,7 +364,7 @@ export async function buildPhotoCarousel(){
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
     const fit=fitPlanToPhotos(data.plan as CarouselPlan,state.photos.length);
     // 기본 문안이어도 비용이 들지 않으니 멈추지 않고, 안내만 남긴다.
-    patch({plan:fit.plan,planFallback:data.provider==="fallback",photoAssignment:fit.assignment,phase:"slides",...reviewNotice(data.review)});
+    patch({plan:fit.plan,planFallback:data.provider==="fallback",planFallbackMessage:data.provider==="fallback"?fallbackMessageOf(data):"",photoAssignment:fit.assignment,phase:"slides",...reviewNotice(data.review)});
     let next:ApprovedImage[]=[];
     for(let i=0;i<fit.plan.slides.length;i++){
       const card=await composePhotoSlide(fit.plan,i,fit.assignment[i]);
