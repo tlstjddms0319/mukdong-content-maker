@@ -17,6 +17,9 @@ export const AnalyzeRequestSchema=z.object({
     .refine(photos=>new Set(photos.map(photo=>photo.id)).size===photos.length,"사진이 중복됐어요."),
   // true면 Gemini로 식욕 점수까지 매긴다(비용이 드는 호출이라 사장님이 버튼을 눌렀을 때만 보낸다).
   score:z.boolean().default(false),
+  // true면 표지 추천과 상관없이 모든 사진(어둡거나 흔들린 사진 포함)을 Gemini로 읽어 사진 속 음식·장면을 알려 준다.
+  // 실제 사진 캐러셀을 만들 때 사진을 글이 맞는 장에 넣으려고 쓴다. 키가 없으면 보관함 이름·태그로만 안다(무료).
+  describe:z.boolean().default(false),
   // 기대 음식을 고르는 데 쓰는 주제(없으면 홍어회).
   topic:z.string().max(200).optional(),
 });
@@ -35,6 +38,8 @@ export const AnalyzedPhotoSchema=z.object({
   food:z.string().nullable().default(null),
   // 글의 메뉴와 사진 속 음식이 다를 때의 안내 문구(예: "과메기 글인데 삼합 사진이에요"). 맞거나 모르면 null.
   mismatch:z.string().nullable().default(null),
+  // 사진에 보이는 것 한 줄(AI가 본 것, 예: "젓가락으로 집어 든 홍어회 한 점, 뒤에 막걸리 사발"). 모르면 null.
+  scene:z.string().nullable().default(null),
   appetite:z.object({
     score:z.number(),appetite:z.number(),lighting:z.number(),composition:z.number(),
     warnings:z.array(z.string()),note:z.string(),
@@ -91,4 +96,12 @@ export function menuMismatch(topic:string|undefined,photoText:string):{label:str
   const food=photoFoodOf(photoText);
   if(!food||food.menu.id===topicMenu.id)return null;
   return {label:food.label,message:`${topicMenu.short} 글인데 ${food.label} 사진이에요`};
+}
+
+// 문안 AI와 사진 배치에 넘기는 사진 한 장의 설명("홍어회 · 젓가락으로 집어 든 한 점"). 아무것도 모르면 빈 문자열.
+export function photoNote(photo:Pick<AnalyzedPhoto,"food"|"scene">|undefined):string {
+  if(!photo)return "";
+  const food=photo.food?.trim()??"",scene=photo.scene?.trim()??"";
+  // 장면 설명에 음식 이름이 이미 있으면 한 번만 쓴다.
+  return (food&&!scene.includes(food)?[food,scene]:[scene||food]).filter(Boolean).join(" · ").slice(0,100);
 }

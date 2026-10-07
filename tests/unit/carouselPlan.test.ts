@@ -155,6 +155,16 @@ describe("carousel planning", () => {
     expect(prompt).toContain("코 모양, 몸 전체 생김새처럼 썬 회 사진에 나오지 않는 차이는 쓰지 마세요");
   });
 
+  it("tells the plan AI what is in the owner's photos only when it knows", () => {
+    const prompt=buildCarouselPlanPrompt({topic:"막걸리엔 왜 전을 곁들일까?",slideCount:3,photoNotes:["홍어회 · 접시에 펼친 홍어회","","막걸리 · 사발에 따른 막걸리"]});
+    expect(prompt).toContain("[실제 사진]");
+    expect(prompt).toContain("1번(표지): 홍어회 · 접시에 펼친 홍어회");
+    expect(prompt).toContain("2번: 내용 모름");
+    expect(prompt).toContain("어느 사진에도 없는 음식·술을 주인공으로 한 장은 만들지 마세요");
+    expect(buildCarouselPlanPrompt({topic:"홍어",slideCount:3,photoNotes:["",""]})).not.toContain("[실제 사진]");
+    expect(buildCarouselPlanPrompt({topic:"홍어",slideCount:3})).not.toContain("[실제 사진]");
+  });
+
   it("asks for slide points, ships safe fallback points, and drops risky provider points", async () => {
     const prompt=buildCarouselPlanPrompt({topic:"홍어와 가오리",slideCount:3,contentBrief:"코 모양과 냄새가 다르다"});
     expect(prompt).toContain("points 배열");

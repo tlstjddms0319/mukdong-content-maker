@@ -6,10 +6,10 @@ import { normalizeCardLayout, photosNeeded, type DesignSpec } from "./design";
 import type { BodyFontId, TitleFontId } from "./typography";
 import type { ThemeId } from "./themes";
 import type { SeasonMotif } from "./seasonMotif";
-import { TOPIC_TAG } from "./photoAnalysis";
+import { AnalyzeResponseSchema, TOPIC_TAG, photoNote } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
 import { readJsonResponse } from "@/lib/http/readJson";
-import { fitPanorama, fitPlanToPhotos, swapPhoto } from "./photoCarousel";
+import { fitPanorama, fitPlanToPhotos, matchPhotosToSlides, swapPhoto } from "./photoCarousel";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
 // 화면(ImageStudio)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
@@ -43,6 +43,8 @@ export type GenerationState={
   style:FontChoice<StyleId>;      // 디자인 계열(컬러 블록·신문·웹툰 등). "auto"면 구성안이 고른 계열.
   referenceUse:ReferenceUse;
   photoPreview:string;
+  // 사진+AI 참고 사진이 글의 메뉴와 다를 때 안내(예: "과메기 글인데 삼합 사진이에요"). Gemini 키가 있을 때만 알 수 있다.
+  referenceWarning:string;
   photoStatus:string;
   providerNotice:string;
   plan?:CarouselPlan;
@@ -68,7 +70,7 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",referenceWarning:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],
     // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 캐러셀로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
@@ -212,8 +214,27 @@ export async function setStoreCardIncluded(include:boolean){
 const fallbackMessageOf=(data:unknown)=>{const message=(data as {fallbackMessage?:unknown})?.fallbackMessage;return typeof message==="string"?message.slice(0,120):"";};
 function requestBase(){const {topic,imageBrief}=state.input;return {topic,...(imageBrief?{imageBrief}:{}),slideTotal:postTotal(state),...(state.deckEdited?{deckEdited:true}:{}),...(storeCardOn(state)?{storeCard:true}:{}),imageStyle:state.imageStyle,slideLayout:state.slideLayout};}
 // 참고 사진(mix)이 있으면 그것을, 아니면 고른 표지의 글자 없는 원본을 이어 가기용으로 붙인다.
-function referenceFields(){return state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:state.cover?.referencePreview?{referenceImage:state.cover.referencePreview,referenceMode:"continuity"}:{};}
+// 사진+AI의 "음식 그대로"는 표지에만 쓴다. 2장부터 같은 사진을 "음식 모양 그대로"로 보내면 장 글(젓가락으로 한 점,
+// 막걸리 상차림 등)과 상관없이 거의 같은 접시가 반복됐다. 나머지 장은 사장님 사진의 색감·조명만 이어 가고 장면은 장 글대로 만든다.
+export function referenceFieldsFor(role:CarouselRole|undefined,current:Pick<GenerationState,"mode"|"photoPreview"|"referenceUse"|"cover">=state){
+  if(current.mode==="mix")return {referenceImage:current.photoPreview,referenceMode:role==="cover"?current.referenceUse:"style" as const};
+  return current.cover?.referencePreview?{referenceImage:current.cover.referencePreview,referenceMode:"continuity" as const}:{};
+}
 const sourceOf=(reported?:string)=>(reported??(state.mode==="mix"?"ai-edited":"ai-generated")) as ApprovedImage["source"];
+
+// 사진+AI 참고 사진이 글의 메뉴와 맞는지 AI로 한 번 본다(실제 사진 사용의 "메뉴 다름"과 같은 검사). 표지는 이 사진의 음식을
+// 그대로 살리므로, 과메기 글에 삼합 사진이면 글과 그림이 어긋난다. 막지는 않고 알려만 준다. 실패하면 조용히 넘어간다.
+async function checkReference(preview:string){
+  if(preview.length>8_000_000)return;
+  try{
+    const response=await fetch("/api/images/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({photos:[{id:"reference",image:preview}],describe:true,...(state.input.topic?{topic:state.input.topic.slice(0,200)}:{})})});
+    if(!response.ok)return;
+    const parsed=AnalyzeResponseSchema.safeParse(await readJsonResponse(response));
+    const mismatch=parsed.success?parsed.data.photos[0]?.mismatch:null;
+    // 그사이 다른 참고 사진으로 바꿨으면 버린다.
+    if(mismatch&&state.photoPreview===preview)patch({referenceWarning:`${mismatch}. 표지는 이 사진의 음식을 살려 만들어요. 맞는 사진으로 바꾸거나 '화풍·분위기만'을 골라 주세요.`});
+  }catch{/* 안내는 보조 기능 */}
+}
 
 export async function uploadPhoto(file:File|undefined,onApprove:(images:ApprovedImage[])=>void,reference=state.mode==="mix"){
   if(!file)return;
@@ -222,13 +243,14 @@ export async function uploadPhoto(file:File|undefined,onApprove:(images:Approved
   try{
     const preview=reference?await readReference(file):await readPreview(file);
     if(token!==run)return;
-    patch({photoPreview:preview});
+    patch({photoPreview:preview,referenceWarning:""});
     const body=new FormData();body.append("file",file);
     const response=await fetch("/api/media/upload",{method:"POST",body});
     const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message);
     patch({photoStatus:`${file.name} ${reference?"참고 사진을":"사진을"} 저장했어요.`});
+    if(reference)void checkReference(preview);
     if(!reference)onApprove([{id:data.id,preview,source:"photo"}]);
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"사진을 저장하지 못했어요."});
@@ -284,7 +306,7 @@ export async function startPlan(){
 async function generate(slide:CarouselPlan["slides"][number],index:number,refinement=""):Promise<ApprovedImage>{
   // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
   const count=state.slideLayout==="card"?Math.max(1,photosNeeded(normalizeCardLayout(slide))):1;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:state.plan!.styleAnchor,design:effectiveDesign(state.plan!.design),slideIndex:index,count,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFields()})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:state.plan!.styleAnchor,design:effectiveDesign(state.plan!.design),slideIndex:index,count,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFieldsFor(slide.role)})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");
@@ -400,19 +422,38 @@ async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[]):
 // 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. AI 이미지는 만들지 않는다.
 // options.panorama: 표지+2장 파노라마로 만들지. 화면이 "표지 사진이 가로로 긴지"(사진 분석)를 확인하고 넘긴다.
 // 넘기지 않으면 끈다(가로로 짧은 사진이면 2번째 장에 같은 사진만 한 번 더 나오게 되므로).
+// 사진마다 보이는 것(음식·장면) 한 줄. Gemini 키가 있으면 AI가 사진을 읽고, 없으면 보관함 이름·태그로만 안다(무료).
+// 실패하거나 모르면 빈 문자열이라 예전처럼 올린 순서대로 배치한다.
+async function describePhotos(photos:StudioPhoto[],topic:string):Promise<string[]> {
+  try{
+    const response=await fetch("/api/images/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({photos:photos.map(photo=>({id:photo.id})),describe:true,...(topic?{topic:topic.slice(0,200)}:{})})});
+    if(!response.ok)return photos.map(()=>"");
+    const parsed=AnalyzeResponseSchema.safeParse(await readJsonResponse(response));
+    if(!parsed.success)return photos.map(()=>"");
+    return photos.map(photo=>photoNote(parsed.data.photos.find(item=>item.id===photo.id)));
+  }catch{return photos.map(()=>"");}
+}
+
 export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
   if(!state.photos.length)return;
   const token=++run;
   patch({...CLEARED,phase:"planning",slideLayout:"card",panorama:options.panorama===true});
   try{
     const {topic,imageBrief,contentBrief,slideCount}=state.input;
-    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:"photo"})});
+    // 1) 사진에 무엇이 보이는지 읽어 문안 AI에게 알려 준다(사진에 없는 음식을 주인공으로 한 장을 쓰지 않게).
+    const photos=state.photos;
+    const notes=await describePhotos(photos,topic);
+    if(token!==run)return;
+    const photoNotes=notes.some(Boolean)?notes:undefined;
+    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:"photo",...(photoNotes?{photoNotes}:{})})});
     const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
     // 디자인 계열(칠판·한지 등)은 한 장에 사진을 두 장까지만 그려서, 세 장짜리 콜라주는 기본 템플릿일 때만 만든다.
     const style=effectiveDesign((data.plan as CarouselPlan).design).style;
-    const fit=(state.panorama?fitPanorama:fitPlanToPhotos)(data.plan as CarouselPlan,state.photos.length,{maxPerSlide:!style||style==="template"?3:2});
+    const fitted=(state.panorama?fitPanorama:fitPlanToPhotos)(data.plan as CarouselPlan,photos.length,{maxPerSlide:!style||style==="template"?3:2});
+    // 2) 장마다 사진 칸 수는 그대로 두고, 사진 내용이 그 장의 글과 맞는 사진을 넣는다(표지는 첫 사진 그대로).
+    const fit=photoNotes?{...fitted,...matchPhotosToSlides(fitted.plan,fitted.assignment,notes)}:fitted;
     // 기본 문안이어도 비용이 들지 않으니 멈추지 않고, 안내만 남긴다.
     patch({plan:fit.plan,planFallback:data.provider==="fallback",planFallbackMessage:data.provider==="fallback"?fallbackMessageOf(data):"",photoAssignment:fit.assignment,phase:"slides",...reviewNotice(data.review)});
     let next:ApprovedImage[]=[];

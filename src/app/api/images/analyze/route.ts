@@ -27,10 +27,18 @@ async function loadPhoto(photo:{id:string;image?:string},library:ReturnType<type
   return {id:photo.id,bytes,flags:asset.quality?.flags??null,meta:{name:asset.name??"",tags:asset.tags??[]}};
 }
 
+// AI가 사진을 못 봤으면 사장님이 단 사진 이름·태그로 대신한다(무료). 한글이 없는 파일 이름("IMG_2034")과
+// 올릴 때 자동으로 붙는 "매장 사진" 태그는 사진 내용이 아니라서 뺀다.
+function tagScene(meta:Loaded["meta"]):string|null {
+  if(!meta)return null;
+  const text=photoFoodText(meta).replace(/(^|\s)매장 사진(?=\s|$)/g," ").replace(/\s+/g," ").trim();
+  return /[가-힣]/.test(text)?text.slice(0,60):null;
+}
+
 export async function POST(request:Request) { const denied=await ownerApiError(); if(denied)return denied;
   const parsed=AnalyzeRequestSchema.safeParse(await request.json().catch(()=>null));
   if(!parsed.success)return NextResponse.json({message:"확인할 사진을 1~10장 골라 주세요."},{status:400});
-  const {photos,score,topic}=parsed.data;
+  const {photos,score,describe,topic}=parsed.data;
   const library=createAssetLibrary();
   const loaded=await Promise.all(photos.map(photo=>loadPhoto(photo,library)));
   // 저장된 품질이 없는 사진(예전 사진·data URL)만 지금 잰다. 장당 0.1초 안팎이라 무료로 매번 해도 된다.
@@ -42,12 +50,14 @@ export async function POST(request:Request) { const denied=await ownerApiError()
 
   const scoreAvailable=Boolean(process.env.GEMINI_API_KEY?.trim());
   // 어둡거나 흔들린 사진은 표지로 쓰기 어려워 Gemini에 보내지 않는다(비용 절약).
-  const usable=measured.filter(item=>item.bytes&&!item.flags?.some(flag=>flag==="dark"||flag==="blurry"));
+  // 사진 내용 읽기(describe)는 캐러셀의 모든 사진을 장에 넣어야 하므로 어둡거나 흔들린 사진도 읽는다.
+  const usable=measured.filter(item=>item.bytes&&(describe||!item.flags?.some(flag=>flag==="dark"||flag==="blurry")));
   const checks=new Map<string,CoverCheck>();
   let message:string|undefined;
-  if(score&&!scoreAvailable)message="Gemini 키가 없어 사진 밝기·선명도만 봤어요.";
-  else if(score&&!usable.length)message="모든 사진이 어둡거나 흔들려서 맛 점수는 매기지 않았어요.";
-  else if(score){
+  const ask=score||describe;
+  if(ask&&!scoreAvailable)message="Gemini 키가 없어 사진 밝기·선명도만 봤어요.";
+  else if(ask&&!usable.length)message="모든 사진이 어둡거나 흔들려서 맛 점수는 매기지 않았어요.";
+  else if(ask){
     const results=await scoreImages(usable.map(item=>item.bytes!),{expectedFood:expectedFoodFrom(topic)});
     results?.forEach((check,index)=>{if(check)checks.set(usable[index].id,check);});
     if(!results)message="AI 점검이 지금 어려워 사진 밝기·선명도만 봤어요.";
@@ -74,6 +84,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     const aiMismatch=!tagged&&check&&check.foodVisible&&!check.looksLikeSkate&&topic?`AI가 보기엔 ${expected.name} 사진이 아니에요`:null;
     return {id:item.id,flags,labels:flags.map(flag=>PHOTO_QUALITY_LABELS[flag]),measured:item.flags!==null,wide:item.wide,
       food:photoFoodOf(foodText)?.label??(check?.food?.trim().slice(0,10)||null),mismatch:tagged?.message??aiMismatch,
+      scene:check?.scene?.trim().slice(0,60)||tagScene(item.meta),
       appetite:check?{score:check.score,appetite:check.appetite,lighting:check.lighting,composition:check.composition,warnings:check.warnings,note:check.note}:null};
   });
   // 점수가 붙은 사진은 coverRank, 못 붙은 사진은 중간값(5)에서 품질 감점만 한다.

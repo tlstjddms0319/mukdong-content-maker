@@ -12,6 +12,9 @@ export const CarouselPlanInputSchema=z.object({
   contentBrief:z.string().trim().min(1).max(600).optional(),
   imageStyle:ImageStyleSchema.optional(),
   slideCount:z.union([z.literal(3),z.literal(5),z.literal(7),z.literal(10)]).default(5),
+  // 실제 사진 캐러셀: 사장님이 올린 사진마다 보이는 것 한 줄(올린 순서, 첫 사진이 표지). 모르는 사진은 빈 문자열.
+  // 문안 AI가 사진에 없는 음식을 주인공으로 한 장을 쓰지 않게 하고, 사진을 글이 맞는 장에 넣는 데 쓴다.
+  photoNotes:z.array(z.string().trim().max(120)).max(10).optional(),
 });
 
 export const CarouselRoleSchema=z.enum(["cover","overview","detail","how-to","pairing","process","occasion","mood","visit","cta"]);
@@ -195,9 +198,17 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     `[비교 장] layout이 versus인 장의 points는 두 사진을 나란히 놓았을 때 눈으로 보이는 차이(살의 색, 결의 굵기, 썬 모양, 윤기)만 쓰세요. 코 모양, 몸 전체 생김새처럼 썬 회 사진에 나오지 않는 차이는 쓰지 마세요. 두 visualPrompt는 같은 접시·각도·조명으로 맞추고, 쓰인 차이(예: 붉은빛 도는 홍어 살과 하얗고 투명한 가오리 살)가 한눈에 갈리도록 각 사진에 그 차이를 명시하세요.`,
     // 장면 다양성: 같은 접시를 거리만 바꿔 다섯 번 찍지 않도록, 장면 유형과 사람 요소를 장마다 다르게 배정한다.
     `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 각 visualPrompt에는 그 장의 글이 말하는 대상과 동작을 구체적으로 적으세요(예: ${sceneExamples(menu)}). 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도), 위에서 본 상차림, 접시 위 질감(매크로), 곁들임과 함께 놓인 조합, 막걸리와 함께 놓인 식탁, 준비 과정, 함께 먹는 식탁(여러 손과 잔, 뒷모습). "젓가락으로 한 점을 집어 든" 장면은 한 게시물에 최대 한 장만 쓰고, 나머지 장은 접시·그릇·식탁 위에 놓인 모습으로 쓰세요. 손·잔·뒷모습 같은 사람 요소는 글이 먹는 동작이나 함께하는 자리를 말할 때만 넣고, 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 음식이 나오는 모든 장면에서 주제의 메뉴(${menu&&menu.id!=="hongeo-hoe"?menu.short:"홍어"})가 주인공입니다. visualPrompt에 그 메뉴를 가장 크고 앞에, 초점이 맞게 둔다고 명시하고, 다른 음식·술은 글이 말할 때만 작게 곁들여지는 조연으로 쓰세요. 집어 올리는 한입도 주인공 메뉴여야 합니다.`,
+    photoRule(parsed.photoNotes),
     `[디자인] ${designCatalogText()}`,
     `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})만 쓰고 음식 이름은 쓰지 마세요(모든 장에 똑같이 붙으므로, 음식은 각 장 visualPrompt에만). 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone, season)를 두고(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud. season은 아래 계절 소품 중 주제에 꼭 맞을 때만, 애매하면 none), 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
   ].join("\n");
+}
+
+// 실제 사진 캐러셀이면 사진에 보이는 것을 알려 주고, 사진으로 보여 줄 수 있는 글을 쓰게 한다. 사진 내용을 모르면 빈 문자열.
+export function photoRule(notes:readonly string[]|undefined):string {
+  if(!notes?.some(note=>note.trim()))return "";
+  const list=notes.map((note,index)=>`${index+1}번${index===0?"(표지)":""}: ${note.trim()||"내용 모름"}`).join("; ");
+  return `[실제 사진] 이 캐러셀은 사장님이 직접 찍은 사진 ${notes.length}장으로 만듭니다. 사진에 보이는 것 — ${list}. 표지는 1번 사진입니다. 각 장의 headline·points·visualPrompt는 이 사진들 가운데 하나로 보여 줄 수 있는 내용으로 쓰고, 어느 사진에도 없는 음식·술을 주인공으로 한 장은 만들지 마세요. 주제의 메뉴는 그대로 지키되 사진에 보이는 곁들임·사람 요소·장면을 활용하고, visualPrompt에는 그 장에 맞는 사진에 보이는 것을 그대로 적으세요. 사진 설명에 없는 사실(원산지, 가격, 양)은 지어내지 마세요.`;
 }
 
 export interface CarouselPlanAi {
