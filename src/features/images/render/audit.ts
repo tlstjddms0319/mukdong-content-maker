@@ -47,6 +47,8 @@ export type AuditNote=
   |{kind:"orphan";text:string;ratio:number}
   |{kind:"decor-overlap";decor:DecorKind;decorBox:Rect;textBox:Rect;pixels:number}
   |{kind:"dead-band";top:number;bottom:number}
+  // 사진을 칸에 맞추며 남긴 원본 면적 비율(1=다 보임). 낮을수록 접시가 잘려 보인다.
+  |{kind:"photo-crop";kept:number;width:number;height:number}
   |{kind:"photo-area";area:number;shape:PhotoShape;limit:number}
   |{kind:"photo-quality";photo:number;flags:PhotoQualityFlag[]};
 export type AuditWarningKind="decor-overlap"|"dead-band"|"photo-area"|"photo-quality";
@@ -342,5 +344,6 @@ export function describeNote(note:AuditNote):string {
     case "dead-band":return `빈 띠 ${note.top}~${note.bottom}px(${note.bottom-note.top}px)`;
     case "photo-area":return `표지 사진 면적 ${Math.round(note.area*100)}% < ${note.shape} 기준 ${Math.round(note.limit*100)}%`;
     case "photo-quality":return `사진 ${note.photo+1} 품질: ${note.flags.join(",")}`;
+    case "photo-crop":return `사진을 ${note.width}×${note.height} 칸에 맞추며 원본의 ${Math.round(note.kept*100)}%만 남김`;
   }
 }

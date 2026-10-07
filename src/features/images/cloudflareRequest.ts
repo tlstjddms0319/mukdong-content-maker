@@ -2,6 +2,7 @@ import "server-only";
 import sharp from "sharp";
 import type { ImageBrief } from "./schema";
 import { buildImagePrompt, candidateBriefs } from "./openaiRequest";
+import { cloudflareSize } from "./imageAspect";
 
 const MODEL="@cf/black-forest-labs/flux-2-klein-4b";
 const REQUEST_TIMEOUT_MS=60_000;
@@ -42,8 +43,10 @@ async function referenceBlob(dataUrl:string) {
 async function generateOne(input:ImageBrief,accountId:string,token:string):Promise<string> {
   const form=new FormData();
   form.append("prompt",buildImagePrompt(input,Boolean(input.referenceImage)));
-  form.append("width","1024");
-  form.append("height","1280");
+  // 카드의 사진 칸 비율로 만든다(모르면 예전처럼 세로 1024×1280).
+  const size=cloudflareSize(input.windowRatio);
+  form.append("width",String(size.width));
+  form.append("height",String(size.height));
   if(input.referenceImage)form.append("input_image_0",await referenceBlob(input.referenceImage),"reference.png");
   let response:Response;
   try {
