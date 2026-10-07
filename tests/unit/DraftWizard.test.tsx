@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DraftWizard } from "@/components/wizard/DraftWizard";
+import { resetGenerationStore } from "@/features/images/generationStore";
 const plan={slideCount:3,styleAnchor:"따뜻한 흰 그릇과 나무 테이블의 일관된 음식 사진",design:{palette:"warm"},slides:[{role:"cover",headline:"표지",points:[],visualPrompt:"선명한 완성 음식 한 상을 정면에서 담은 사진",textPosition:"top",layout:"fullscreen",keywords:["홍어"],figure:""},{role:"how-to",headline:"먹는 법",points:[],visualPrompt:"젓가락으로 한 점을 만드는 손동작 음식 사진",textPosition:"bottom",layout:"frame",keywords:["먹는 법"],figure:""},{role:"visit",headline:"방문",points:[],visualPrompt:"편안한 완성 상차림을 담은 음식 사진 장면",textPosition:"bottom",layout:"frame",keywords:["방문"],figure:""}]};
 describe("DraftWizard",()=>{
   it.each([["ai-edited",true],["design",false]] as const)("restores the image brief and passes %s provenance into new copy",async(source,hasAiImages)=>{
@@ -14,7 +15,8 @@ describe("DraftWizard",()=>{
     const copyRequest=request.mock.calls.find(([url])=>url==="/api/copy");
     expect(JSON.parse(String(copyRequest?.[1]?.body))).toMatchObject({topic:"홍어전",imageBrief:"노릇한 전 한 접시",contentBrief:"익혔을 때 달라지는 식감을 설명하고 홍어전으로 연결한다.",hasAiImages});
   });
-  afterEach(()=>{vi.unstubAllGlobals();localStorage.clear();sessionStorage.clear();window.history.replaceState({},"","/");});
+  // 이미지 생성 상태는 모듈 전체가 함께 쓰므로 테스트마다 비운다(앞 테스트의 장이 다음 테스트의 "저장 안 한 작업"으로 남지 않게).
+  afterEach(()=>{vi.unstubAllGlobals();localStorage.clear();sessionStorage.clear();window.history.replaceState({},"","/");resetGenerationStore();});
   it("returns to the same unsaved draft and step after the wizard is remounted",async()=>{
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({})})));
     const first=render(<DraftWizard/>);
@@ -99,7 +101,8 @@ describe("DraftWizard",()=>{
   });
   it("saves an edited caption before showing final review",async()=>{
     const id="11111111-1111-4111-8111-111111111111";
-    localStorage.setItem("mukdong-current-draft",id);
+    // 같은 탭에서 이어 가는 경우(탭 세션이 있음). 새 탭은 지난 초안으로 곧장 들어가지 않는다(아래 테스트).
+    localStorage.setItem("mukdong-current-draft",id);sessionStorage.setItem("mukdong-wizard-session",JSON.stringify({draftId:id,topic:"저장된 주제",audience:"A",imageBrief:"",contentBrief:"",step:"topic"}));
     const request=vi.fn(async(url:string,init?:RequestInit)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id,topic:"저장된 주제",audience:"A",selected_media_id:"22222222-2222-4222-8222-222222222222",media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"photo",file_id:"saved-photo",purpose:"instagram-primary"}]})}:url==="/api/drafts"&&init?.method==="PATCH"?{ok:true,json:async()=>({})}:url==="/api/copy"?{ok:false,json:async()=>({})}:{ok:false,json:async()=>({})});
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);
     await screen.findByDisplayValue("저장된 주제");
@@ -129,11 +132,11 @@ describe("DraftWizard",()=>{
     expect(screen.getByRole("button",{name:"슬라이드 3 보기"})).toHaveStyle({backgroundImage:'url("visit-3")'});
     expect(screen.getByLabelText("피드 대표 이미지")).toHaveStyle({backgroundImage:'url("cover-1")'});
   });
-  it("restores every ordered saved media item",async()=>{const draftId="11111111-1111-4111-8111-111111111111";localStorage.setItem("mukdong-current-draft",draftId);vi.stubGlobal("fetch",vi.fn(async(url:string)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id:draftId,topic:"저장된 주제",audience:"B",selected_media_id:"22222222-2222-4222-8222-222222222222",selected_media_ids:["22222222-2222-4222-8222-222222222222","33333333-3333-4333-8333-333333333333"],media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"ai-generated",file_id:"one",purpose:"instagram-cover"},{id:"33333333-3333-4333-8333-333333333333",source:"ai-generated",file_id:"two",purpose:"instagram-detail"}]})}:{ok:false,json:async()=>({})}));render(<DraftWizard/>);await screen.findByDisplayValue("저장된 주제");fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));expect(screen.getByText("선택한 이미지 2장이 저장되어 있어요.")).toBeInTheDocument();});
+  it("restores every ordered saved media item",async()=>{const draftId="11111111-1111-4111-8111-111111111111";localStorage.setItem("mukdong-current-draft",draftId);sessionStorage.setItem("mukdong-wizard-session",JSON.stringify({draftId:draftId,topic:"저장된 주제",audience:"A",imageBrief:"",contentBrief:"",step:"topic"}));vi.stubGlobal("fetch",vi.fn(async(url:string)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id:draftId,topic:"저장된 주제",audience:"B",selected_media_id:"22222222-2222-4222-8222-222222222222",selected_media_ids:["22222222-2222-4222-8222-222222222222","33333333-3333-4333-8333-333333333333"],media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"ai-generated",file_id:"one",purpose:"instagram-cover"},{id:"33333333-3333-4333-8333-333333333333",source:"ai-generated",file_id:"two",purpose:"instagram-detail"}]})}:{ok:false,json:async()=>({})}));render(<DraftWizard/>);await screen.findByDisplayValue("저장된 주제");fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));expect(screen.getByText("선택한 이미지 2장이 저장되어 있어요.")).toBeInTheDocument();});
   it("invalidates restored images when refresh selects a new recommendation",async()=>{
     const draftId="11111111-1111-4111-8111-111111111111";
     const refreshed=[{id:"four",title:"새 첫 추천",summary:"",reason:"새 첫 이유",audience:"A",imageBrief:"새 이미지"},{id:"five",title:"새 둘째 추천",summary:"",reason:"새 둘째 이유",audience:"B",imageBrief:"새 이미지"},{id:"six",title:"새 셋째 추천",summary:"",reason:"새 셋째 이유",audience:"C",imageBrief:"새 이미지"}];
-    localStorage.setItem("mukdong-current-draft",draftId);
+    localStorage.setItem("mukdong-current-draft",draftId);sessionStorage.setItem("mukdong-wizard-session",JSON.stringify({draftId:draftId,topic:"저장된 주제",audience:"A",imageBrief:"",contentBrief:"",step:"topic"}));
     vi.stubGlobal("fetch",vi.fn(async(url:string)=>url.startsWith("/api/drafts?")?{ok:true,json:async()=>({id:draftId,topic:"저장된 주제",audience:"B",selected_media_id:"22222222-2222-4222-8222-222222222222",selected_media_ids:["22222222-2222-4222-8222-222222222222"],media_candidates:[{id:"22222222-2222-4222-8222-222222222222",source:"ai-generated",file_id:"one",purpose:"instagram-cover"}]})}:url==="/api/topics"?{ok:true,json:async()=>({topics:refreshed})}:{ok:false,json:async()=>({})}));
     render(<DraftWizard/>);await screen.findByDisplayValue("저장된 주제");fireEvent.click(screen.getByRole("button",{name:"AI 추천 새로고침"}));
     await screen.findByDisplayValue("새 첫 추천");expect(localStorage.getItem("mukdong-current-draft")).toBeNull();
@@ -294,5 +297,32 @@ describe("DraftWizard",()=>{
     fireEvent.click(await screen.findByRole("button",{name:"글자 없이 사진만 쓰기"}));
     expect(await screen.findByRole("button",{name:"저장 다시 시도"})).toBeInTheDocument();expect(screen.getByRole("button",{name:"문안 만들기"})).toBeDisabled();
     fireEvent.click(screen.getByRole("button",{name:"저장 다시 시도"}));await waitFor(()=>expect(screen.getByRole("button",{name:"문안 만들기"})).toBeEnabled());expect(saves).toBe(2);
+  });
+  it("opens a fresh tab on new recommendations and offers to resume the last draft",async()=>{
+    const id="44444444-4444-4444-8444-444444444444";
+    localStorage.setItem("mukdong-current-draft",id);localStorage.setItem("mukdong-current-draft-topic","지난번 주제");
+    const topics=[{id:"one",title:"오늘의 추천",summary:"",reason:"이유",audience:"A",imageBrief:""},{id:"two",title:"둘째",summary:"",reason:"이유",audience:"B",imageBrief:""},{id:"three",title:"셋째",summary:"",reason:"이유",audience:"C",imageBrief:""}];
+    const request=vi.fn(async(url:string)=>url==="/api/topics"?{ok:true,json:async()=>({topics})}:{ok:false,json:async()=>({})});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);
+    expect(await screen.findByDisplayValue("오늘의 추천")).toBeInTheDocument();
+    expect(screen.getByText(/만들던 초안이 있어요 · 지난번 주제/)).toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"이어서 만들기"})).toBeInTheDocument();
+    // 초안 전체(이미지 포함)를 읽지 않는다.
+    expect(request.mock.calls.some(([url])=>url.startsWith("/api/drafts?"))).toBe(false);
+  });
+  it("keeps the draft, plan date and briefs when the topic title is only polished",async()=>{
+    window.history.replaceState({},"","/?topic="+encodeURIComponent("과메기는 왜 찬바람이 불면 찾을까?")+"&audience=A&imageBrief="+encodeURIComponent("김과 쪽파를 곁들인 과메기 한 접시")+"&brief="+encodeURIComponent("찬바람과 제철")+"&planDate=2030-11-03");
+    const request=vi.fn<(url:string,init?:RequestInit)=>Promise<unknown>>(async(url:string)=>url==="/api/images/plan"?{ok:false,json:async()=>({message:"계획 실패"})}:{ok:false,json:async()=>({})});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);
+    const input=await screen.findByDisplayValue("과메기는 왜 찬바람이 불면 찾을까?");
+    expect(screen.getByText(/한 달 기획 · 11\/3/)).toBeInTheDocument();
+    fireEvent.change(input,{target:{value:"과메기는 왜 찬바람 불 때 찾을까?"}});
+    expect(screen.getByText(/한 달 기획 · 11\/3/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"이미지 선택"}));
+    fireEvent.click(screen.getByRole("button",{name:"AI 이미지 생성"}));
+    fireEvent.click(screen.getByRole("button",{name:"표지 후보 2장 만들기"}));
+    await waitFor(()=>expect(request).toHaveBeenCalledWith("/api/images/plan",expect.anything()));
+    const planBody=JSON.parse(String((request.mock.calls.find(([url])=>url==="/api/images/plan")?.[1] as RequestInit).body));
+    expect(planBody).toMatchObject({topic:"과메기는 왜 찬바람 불 때 찾을까?",imageBrief:"김과 쪽파를 곁들인 과메기 한 접시",contentBrief:"찬바람과 제철"});
   });
 });

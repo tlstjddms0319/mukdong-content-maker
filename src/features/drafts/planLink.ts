@@ -22,6 +22,8 @@ export const PLAN_STATE_LABELS:Record<PlanItemState,string>={planned:"기획",mi
 
 const titleKey=(title:string)=>title.replace(/[\s?!.,]/g,"");
 const progress=(draft:PlanDraftSummary)=>draft.reviewed?3:draft.hasCaption?2:draft.hasImages?1:0;
+// 기획 칸에 연결된 초안이 이미지·문안·최종 확인 중 하나라도 진행됐는지("다시 기획하기"가 이 칸은 그대로 둔다).
+export const planDraftStarted=(draft:PlanDraftSummary|undefined)=>Boolean(draft&&progress(draft)>0);
 
 // 기획 칸에 해당하는 초안 찾기: 같은 게시일에서 시작한 초안을 먼저, 없으면(연결 전 옛 초안) 같은 제목의 날짜 없는 초안.
 // 여러 개면 가장 많이 진행된 초안을 고른다.

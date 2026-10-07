@@ -3,8 +3,10 @@ import type { InstagramConnection,Publication } from "./schema";
 import { signMediaUrl } from "./publicMedia";
 import { selectedDraftMedia } from "@/features/drafts/selection";
 import { PublicationLockError } from "./repository";
+import { NEEDS_CHECK_MESSAGE, isStalePreparing } from "./publicationState";
 
-export type ContainerStatus="IN_PROGRESS"|"FINISHED"|"ERROR"|"EXPIRED";
+// PUBLISHED: 컨테이너가 이미 게시됨(게시 요청 뒤 응답을 못 받았을 때 실제로 올라갔는지 확인하는 데 쓴다).
+export type ContainerStatus="IN_PROGRESS"|"FINISHED"|"ERROR"|"EXPIRED"|"PUBLISHED";
 export const CONTAINER_POLL_ATTEMPTS=30;
 export const CONTAINER_POLL_INTERVAL_MS=3000;
 export class InstagramPublishError extends Error{constructor(message:string,public kind:"approval"|"incomplete"|"reconnect"|"in-progress"|"meta"="meta"){super(message);}}
@@ -28,10 +30,17 @@ async function publishLocked(input:{draftId:string;approved:boolean;caption?:str
   const previous=await deps.repo.readPublication(input.draftId);
   if(previous?.status==="published")return {status:"published" as const,alreadyPublished:true,mediaId:previous.mediaId};
   if(previous?.status==="preparing"){
-    if(!previous.mediaId)throw new InstagramPublishError("이미 게시 준비 중이에요.","in-progress");
-    const recovered:Publication={...previous,status:"published",safeError:null,publishedAt:previous.publishedAt??(deps.now??(()=>new Date()))().toISOString()};
-    await deps.repo.savePublication(recovered);
-    return {status:"published" as const,alreadyPublished:true,mediaId:recovered.mediaId};
+    if(!previous.mediaId){
+      // 오래 멈춘 "준비 중"은 Meta에 실제 결과를 물어 정리한다. 아직 진행 중이거나 알 수 없으면 새로 올리지 않는다(중복 게시 방지).
+      const settled=await settleStalePreparing(previous,deps);
+      if(settled.status==="published")return {status:"published" as const,alreadyPublished:true,mediaId:settled.mediaId};
+      if(settled.status==="preparing")throw new InstagramPublishError(settled.safeError===NEEDS_CHECK_MESSAGE?NEEDS_CHECK_MESSAGE:"이미 게시 준비 중이에요.","in-progress");
+      // failed로 정리됐으면 아래에서 새로 게시한다.
+    }else{
+      const recovered:Publication={...previous,status:"published",safeError:null,publishedAt:previous.publishedAt??(deps.now??(()=>new Date()))().toISOString()};
+      await deps.repo.savePublication(recovered);
+      return {status:"published" as const,alreadyPublished:true,mediaId:recovered.mediaId};
+    }
   }
   const [draft,connection]=await Promise.all([deps.readDraft(input.draftId),deps.readConnection()]);
   if(!draft||!draft.selected_media_id||(!draft.copy&&!input.caption?.trim()))throw new InstagramPublishError("이미지와 문안을 모두 완성해 주세요.","incomplete");
@@ -81,4 +90,31 @@ async function createCarouselContainer(selected:ReturnType<typeof selectedDraftM
     children.push(await deps.meta.createImageContainer({instagramUserId:connection.instagramUserId,accessToken:connection.accessToken,imageUrl:signMediaUrl({draftId,mediaId:media.id,expiresAt,baseUrl:deps.baseUrl,secret:deps.signingSecret}),isCarouselItem:true}));
   }
   return deps.meta.createCarouselContainer({instagramUserId:connection.instagramUserId,accessToken:connection.accessToken,children,caption:approvedCaption});
+}
+
+// "게시 준비 중"으로 오래 멈춘 기록을 정리한다(게시 도중 서버 재시작·메모리 부족·네트워크 끊김).
+// - 아직 오래되지 않았으면 그대로(진짜 진행 중일 수 있다).
+// - 컨테이너도 못 만들었으면 Meta에 아무것도 가지 않았으므로 실패로 바꿔 다시 시도할 수 있게 한다.
+// - 컨테이너가 있으면 Meta에 상태를 묻는다: PUBLISHED면 게시됨, FINISHED·ERROR·EXPIRED면 게시 안 됨(실패),
+//   진행 중이거나 물어보지 못하면 "확인 필요"로 남겨 사장님이 Instagram에서 보고 고르게 한다.
+export async function settleStalePreparing(previous:Publication,deps:Pick<PublishDependencies,"repo"|"meta"|"readConnection"|"now">):Promise<Publication> {
+  const now=(deps.now??(()=>new Date()))();
+  if(!isStalePreparing(previous,now.getTime()))return previous;
+  const save=(value:Publication)=>deps.repo.savePublication(value);
+  if(!previous.containerId)return save({...previous,status:"failed",safeError:"게시가 중간에 멈췄어요(Instagram에는 올라가지 않았어요). 다시 시도할 수 있어요."});
+  let status:ContainerStatus|null=null;
+  try{
+    const connection=await deps.readConnection();
+    if(connection)status=await deps.meta.getContainerStatus(previous.containerId,connection.accessToken);
+  }catch{status=null;}
+  if(status==="PUBLISHED")return save({...previous,status:"published",safeError:null,publishedAt:now.toISOString()});
+  if(status==="FINISHED"||status==="ERROR"||status==="EXPIRED")return save({...previous,status:"failed",safeError:"게시가 중간에 멈췄어요(Instagram에는 올라가지 않았어요). 다시 시도할 수 있어요."});
+  return previous.safeError===NEEDS_CHECK_MESSAGE?previous:save({...previous,safeError:NEEDS_CHECK_MESSAGE});
+}
+
+// 사장님이 Instagram에서 직접 확인한 결과로 "확인 필요" 기록을 정리한다. 준비 중인 기록에만 쓸 수 있다.
+export function resolvePublicationByOwner(previous:Publication,outcome:"published"|"failed",now:Date):Publication {
+  return outcome==="published"
+    ?{...previous,status:"published",safeError:null,publishedAt:previous.publishedAt??now.toISOString()}
+    :{...previous,status:"failed",safeError:"사장님이 확인: Instagram에 올라가지 않았어요."};
 }

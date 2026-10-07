@@ -128,6 +128,26 @@ it("rejects final review for an unfinished draft and rejects past planned times"
   expect(await repository.readDraft(id)).not.toHaveProperty("planned_publish_at");
 });
 
+it("lets the owner cancel an overdue schedule but not re-enable it on a past date", async () => {
+  directory=await mkdtemp(path.join(tmpdir(),"mukdong-plan-cancel-"));
+  process.env.DATA_DIR=directory;
+  vi.resetModules();
+  const { createDraftRepository }=await import("@/features/drafts/repository");
+  const id="22222222-2222-4222-8222-222222222222",media="33333333-3333-4333-8333-333333333333";
+  const repository=createDraftRepository(directory);
+  const past="2020-05-15T09:00:00.000Z";
+  await repository.saveDraft({id,status:"ready",topic:"홍어 한 점",audience:"A",media_candidates:[{id:media,source:"photo",file_id:"data:image/png;base64,AQ==",purpose:"instagram-cover"}],selected_media_id:media,selected_media_ids:[media],copy:null,caption:"문안",planned_publish_at:past,final_review_complete:true,facts_to_verify:[],store_profile_version:"2026-09-10",created_at:"2026-09-10T00:00:00.000Z",updated_at:"2026-09-10T00:00:00.000Z"});
+  const { PATCH }=await import("@/app/api/drafts/route");
+  const update=(planned_publish_at:string,final_review_complete:boolean)=>PATCH(new Request("http://localhost/api/drafts",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,planned_publish_at,final_review_complete})}));
+
+  // 서버가 잠들어 지나간 예약: 최종 확인을 끄는 것은 지난 날짜 그대로 보내도 된다.
+  expect((await update(past,false)).status).toBe(200);
+  expect(await repository.readDraft(id)).toMatchObject({planned_publish_at:past,final_review_complete:false});
+  // 다시 켜려면 미래 시각이 필요하다.
+  expect((await update(past,true)).status).toBe(400);
+  expect((await update("2019-01-01T09:00:00.000Z",false)).status).toBe(400);
+});
+
 it("fills the planned time from the month plan only when a draft is first saved", async () => {
   directory=await mkdtemp(path.join(tmpdir(),"mukdong-plan-"));
   process.env.DATA_DIR=directory;

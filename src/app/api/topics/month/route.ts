@@ -10,6 +10,8 @@ import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
 import { createDraftRepository } from "@/features/drafts/repository";
 import { likedTopicTitles } from "@/features/drafts/performance";
+import { selectedDraftMedia } from "@/features/drafts/selection";
+import { matchPlanDraft, planDraftStarted } from "@/features/drafts/planLink";
 
 const STORE_NAME="묵동홍어마을";
 const titleKey=(title:string)=>title.replace(/[\s?!.,]/g,"");
@@ -33,14 +35,25 @@ export async function POST(request:Request){
     const month=body.data.month;
     // 이번 달이면 오늘(한국 시간) 이후 게시일만 기획한다.
     const today=seasonContext().today;
-    const dates=postDatesForMonth(month,undefined,month===today.slice(0,7)?today:undefined);
-    if(!dates.length)return NextResponse.json({message:"이 달에는 남은 게시일이 없어요. 다음 달을 기획해 보세요."},{status:400});
+    const openDates=postDatesForMonth(month,undefined,month===today.slice(0,7)?today:undefined);
+    // "다시 기획하기"여도 지난 날짜와 이미 초안을 시작한 칸은 그대로 둔다(주제가 바뀌면 초안과 칸의 연결이 끊겨 같은 날 글이 둘 생길 수 있다).
+    const drafts=await createDraftRepository().listDrafts().catch(()=>[]);
+    const summaries=drafts.map(draft=>({id:draft.id,topic:draft.topic,plan_date:draft.plan_date,hasImages:selectedDraftMedia(draft).length>0,hasCaption:!!draft.caption?.trim(),reviewed:!!draft.final_review_complete}));
+    const previous=await readMonthPlan(month).catch(()=>null);
+    const kept=(previous?.items??[]).filter(item=>!openDates.includes(item.date)||planDraftStarted(matchPlanDraft(item,summaries)));
+    const keptDates=new Set(kept.map(item=>item.date));
+    const dates=openDates.filter(date=>!keptDates.has(date));
+    if(!dates.length){
+      if(previous&&kept.length)return NextResponse.json({plan:previous,fallbackWeeks:0,kept:kept.length,message:"남은 게시일은 모두 초안을 시작했거나 지난 날짜라 그대로 두었어요."});
+      return NextResponse.json({message:"이 달에는 남은 게시일이 없어요. 다음 달을 기획해 보세요."},{status:400});
+    }
     // 사장님이 적어 둔 성과에서 반응 좋았던 주제(없으면 빈 목록).
-    const likedTitles=likedTopicTitles(await createDraftRepository().listDrafts().catch(()=>[]));
+    const likedTitles=likedTopicTitles(drafts);
     const settings=await readSettings().catch(()=>null);
     const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
-    const used=new Set<string>();
-    const recent:string[]=[];
+    // 남겨 둔 칸의 주제는 새 주제와 겹치지 않게 미리 넣어 둔다.
+    const used=new Set<string>(kept.map(item=>titleKey(item.title)));
+    const recent:string[]=kept.map(item=>item.title);
     const weekly:Array<{dates:string[];topics:Awaited<ReturnType<typeof suggestTopics>>}>=[];
     let fallbackWeeks=0;
     for(const [index,weekDates] of groupByWeek(dates).entries()){
@@ -53,10 +66,11 @@ export async function POST(request:Request){
     }
     const styles=rotateStyles(dates.length,month);
     let n=0;
-    const items:MonthPlanItem[]=weekly.flatMap(week=>week.dates.slice(0,week.topics.length).map((date,i)=>({...week.topics[i],date,style:styles[n++]})));
+    const fresh:MonthPlanItem[]=weekly.flatMap(week=>week.dates.slice(0,week.topics.length).map((date,i)=>({...week.topics[i],date,style:styles[n++]})));
+    const items=[...kept,...fresh].sort((a,b)=>a.date.localeCompare(b.date));
     const plan={month,createdAt:new Date().toISOString(),items};
     await writeMonthPlan(plan);
-    return NextResponse.json({plan,fallbackWeeks});
+    return NextResponse.json({plan,fallbackWeeks,kept:kept.length});
   }catch(error){
     console.warn("[month-plan] 기획 실패:",error instanceof Error?error.message:String(error));
     return NextResponse.json({message:"한 달 기획을 만들지 못했어요. 잠시 뒤 다시 시도해 주세요."},{status:500});

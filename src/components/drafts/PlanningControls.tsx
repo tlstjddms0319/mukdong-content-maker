@@ -38,6 +38,6 @@ export function PlanningControls({ draftId, topic, plannedPublishAt, finalReview
     {!canReview&&<small>이미지와 문안을 먼저 저장해 주세요.</small>}
     {message&&<small role="status">{message}</small>}
     {error&&<small role="alert">{error}</small>}
-    <small>Instagram을 연결하고 ‘최종 확인 완료’를 켜 두면 이 시각에 자동으로 게시돼요. 연결 전에는 자동 게시되지 않아요.</small>
+    <small>Instagram을 연결하고 ‘최종 확인 완료’를 켜 두면 이 시각에 자동으로 게시돼요. 연결 전에는 자동 게시되지 않아요. 무료 서버가 잠들어 있으면 늦어질 수 있고(설정의 외부 깨우기 안내 참고), 6시간 넘게 지나면 게시하지 않아요. 예약을 멈추려면 ‘최종 확인 완료’를 끄고 저장하세요.</small>
   </form>;
 }

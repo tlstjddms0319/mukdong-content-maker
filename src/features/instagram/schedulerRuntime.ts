@@ -6,15 +6,16 @@ import { runPublishScheduler, type SchedulerRun } from "./scheduler";
 // 실제 저장소·Meta 클라이언트·환경변수를 묶어 스케줄러를 한 번 돌린다. 라우트와 서버 내부 타이머가 함께 쓴다.
 export class SchedulerConfigurationError extends Error {}
 
-export async function runScheduledPublishing(log:(message:string)=>void=console.info):Promise<SchedulerRun> {
+// autoPublish=false면 토큰 갱신만 한다(자동 게시를 꺼도 연결은 살아 있게).
+export async function runScheduledPublishing(log:(message:string)=>void=console.info,autoPublish=isAutoPublishEnabled()):Promise<SchedulerRun> {
   const baseUrl=process.env.MEDIA_PUBLIC_BASE_URL,signingSecret=process.env.MEDIA_SIGNING_SECRET;
-  if(!baseUrl||!signingSecret)throw new SchedulerConfigurationError("게시 서버 설정이 필요합니다: MEDIA_PUBLIC_BASE_URL, MEDIA_SIGNING_SECRET");
+  if(autoPublish&&(!baseUrl||!signingSecret))throw new SchedulerConfigurationError("게시 서버 설정이 필요합니다: MEDIA_PUBLIC_BASE_URL, MEDIA_SIGNING_SECRET");
   const drafts=createDraftRepository(),repo=createInstagramRepository();
   return runPublishScheduler({
     listDrafts:drafts.listDrafts,readDraft:drafts.readDraft,
     readConnection:repo.readConnection,saveConnection:repo.saveConnection,repo,
     meta:instagramPublishingClient,refreshToken:refreshInstagramToken,
-    baseUrl,signingSecret,log,
+    baseUrl:baseUrl??"",signingSecret:signingSecret??"",log,autoPublish,
   });
 }
 

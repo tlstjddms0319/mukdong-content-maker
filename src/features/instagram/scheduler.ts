@@ -1,6 +1,7 @@
 import type { Draft } from "@/features/drafts/schema";
 import type { InstagramConnection, Publication } from "./schema";
 import { InstagramPublishError, publishApprovedDraft } from "./publish";
+import { MAX_PUBLISH_LATENESS_MS, NEEDS_CHECK_MESSAGE, isStalePreparing } from "./publicationState";
 
 // 게시 예정 시각(planned_publish_at)이 지났고 최종 확인이 끝난 초안을 찾아 자동으로 게시한다.
 // 사람 대신 누르는 것뿐이므로 게시 로직 자체는 버튼 게시와 같은 publishApprovedDraft를 쓴다.
@@ -18,22 +19,25 @@ export type SchedulerDeps=Omit<PublishDeps,"readDraft">&{
   saveConnection:(value:InstagramConnection)=>Promise<InstagramConnection>;
   refreshToken:(accessToken:string)=>Promise<{accessToken:string;expiresIn:number}>;
   log?:(message:string)=>void;
+  // false면 토큰 갱신만 하고 게시는 하지 않는다(INSTAGRAM_AUTOPUBLISH=off여도 연결이 60일 뒤 끊기지 않게).
+  autoPublish?:boolean;
 };
 
 export type SchedulerRun={
   checkedAt:string;
-  reason?:"not-connected"|"reconnect";
+  reason?:"not-connected"|"reconnect"|"autopublish-off";
   tokenRefreshed:boolean;
   due:string[];
   published:{draftId:string;mediaId:string|null;alreadyPublished:boolean}[];
-  skipped:{draftId:string;reason:"published"|"cooldown"|"in-progress"}[];
+  skipped:{draftId:string;reason:"published"|"cooldown"|"in-progress"|"needs-check"}[];
   failed:{draftId:string;message:string}[];
 };
 
+// 예약 시각이 지났고, 너무 오래(6시간 넘게) 지나지는 않은 초안만. 오래 지난 것은 "예약 놓침"으로 화면에 보여 주고 게시하지 않는다.
 export function isDueForPublishing(draft:Draft,now:Date):boolean {
-  return draft.final_review_complete===true
-    &&typeof draft.planned_publish_at==="string"
-    &&Date.parse(draft.planned_publish_at)<=now.getTime()
+  if(draft.final_review_complete!==true||typeof draft.planned_publish_at!=="string")return false;
+  const late=now.getTime()-Date.parse(draft.planned_publish_at);
+  return late>=0&&late<=MAX_PUBLISH_LATENESS_MS
     &&Boolean(draft.selected_media_id)
     &&Boolean(draft.caption?.trim());
 }
@@ -56,7 +60,11 @@ export async function refreshConnectionIfNeeded(connection:InstagramConnection,d
 function skipReason(previous:Publication|null,now:Date):SchedulerRun["skipped"][number]["reason"]|null {
   if(!previous)return null;
   if(previous.status==="published")return "published";
-  if(previous.status==="preparing"&&!previous.mediaId)return "in-progress";
+  if(previous.status==="preparing"&&!previous.mediaId){
+    // 사장님 확인을 기다리는 기록은 매분 Meta에 다시 묻지 않는다. 오래 멈춘 기록은 게시 단계에서 정리하도록 넘긴다.
+    if(previous.safeError===NEEDS_CHECK_MESSAGE)return "needs-check";
+    if(!isStalePreparing(previous,now.getTime()))return "in-progress";
+  }
   if(previous.status==="failed"&&now.getTime()-Date.parse(previous.attemptedAt)<FAILED_RETRY_COOLDOWN_MS)return "cooldown";
   return null;
 }
@@ -69,6 +77,7 @@ export async function runPublishScheduler(deps:SchedulerDeps):Promise<SchedulerR
   const {connection,refreshed}=await refreshConnectionIfNeeded(stored,deps,now);
   run.tokenRefreshed=refreshed;
   if(Date.parse(connection.expiresAt)<=now.getTime())return {...run,reason:"reconnect"};
+  if(deps.autoPublish===false)return {...run,reason:"autopublish-off"};
 
   const due=(await deps.listDrafts()).filter(draft=>isDueForPublishing(draft,now)).sort((a,b)=>a.planned_publish_at!.localeCompare(b.planned_publish_at!));
   run.due=due.map(draft=>draft.id);

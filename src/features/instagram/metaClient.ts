@@ -63,7 +63,7 @@ export const instagramPublishingClient={
   async getContainerStatus(id:string,accessToken:string){
     const url=new URL(graph(id));url.search=new URLSearchParams({fields:"status_code",access_token:accessToken}).toString();
     const value=await readJson(await fetch(url));
-    return (typeof value.status_code==="string"?value.status_code:"ERROR") as "IN_PROGRESS"|"FINISHED"|"ERROR"|"EXPIRED";
+    return (typeof value.status_code==="string"?value.status_code:"ERROR") as "IN_PROGRESS"|"FINISHED"|"ERROR"|"EXPIRED"|"PUBLISHED";
   },
   async publishContainer(input:{instagramUserId:string;containerId:string;accessToken:string}){
     const value=await postForm(`${input.instagramUserId}/media_publish`,{creation_id:input.containerId,access_token:input.accessToken});

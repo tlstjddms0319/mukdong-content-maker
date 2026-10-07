@@ -50,7 +50,12 @@ export async function PATCH(request: Request) { const denied=await ownerApiError
     if(!planned.success)return privateJson({error:"게시 희망일시를 확인해 주세요."},{status:400});
     const existing=await repository.readDraft(planned.data.id);
     if(!existing)return privateJson({error:"초안을 찾을 수 없습니다."},{status:404});
-    if(planned.data.planned_publish_at&&Date.parse(planned.data.planned_publish_at)<=Date.now())return privateJson({error:"미래의 게시 희망일시를 골라 주세요."},{status:400});
+    // "미래 시각"은 날짜를 새로 정하거나 최종 확인을 켤 때만 본다. 예약 시각이 지난 초안의 최종 확인을 끄는 것(예약 취소)은
+    // 언제든 되어야 한다. 예전에는 지난 날짜가 그대로 다시 오는 바람에 취소가 막혀, 지난 글이 1분 뒤 게시될 수 있었다.
+    const minute=(value:string|null|undefined)=>value?Math.floor(Date.parse(value)/60_000):null;
+    const dateChanged=minute(planned.data.planned_publish_at)!==minute(existing.planned_publish_at);
+    const turningOn=planned.data.final_review_complete&&!existing.final_review_complete;
+    if(planned.data.planned_publish_at&&(dateChanged||turningOn)&&Date.parse(planned.data.planned_publish_at)<=Date.now())return privateJson({error:"미래의 게시 희망일시를 골라 주세요."},{status:400});
     if(planned.data.final_review_complete&&(!planned.data.planned_publish_at||!existing.caption?.trim()||!selectedDraftMedia(existing).length))return privateJson({error:"이미지와 문안을 저장하고 희망일시를 정한 뒤 확인해 주세요."},{status:400});
     return privateJson(await repository.saveDraft({...existing,...planned.data,updated_at:new Date().toISOString()}));
   }

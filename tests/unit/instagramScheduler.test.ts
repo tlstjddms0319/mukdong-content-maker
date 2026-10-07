@@ -5,6 +5,7 @@ import { isDueForPublishing,refreshConnectionIfNeeded,runPublishScheduler } from
 import type { InstagramConnection,Publication } from "@/features/instagram/schema";
 import type { Draft } from "@/features/drafts/schema";
 import { PublicationLockError } from "@/features/instagram/repository";
+import { NEEDS_CHECK_MESSAGE } from "@/features/instagram/publicationState";
 
 const NOW=new Date("2026-09-11T00:00:00.000Z");
 const iso=(offsetMs:number)=>new Date(NOW.getTime()+offsetMs).toISOString();
@@ -85,5 +86,49 @@ describe("Instagram publish scheduler",()=>{
     expect(run.published).toEqual([]);
     expect(meta.publishContainer).not.toHaveBeenCalled();
     expect(expired.meta.publishContainer).not.toHaveBeenCalled();
+  });
+
+  it("does not publish a post that is more than six hours late (shown as missed instead)",async()=>{
+    const late=makeDraft({planned_publish_at:iso(-7*60*60*1000)}),recent=makeDraft({planned_publish_at:iso(-5*60*60*1000)});
+    expect(isDueForPublishing(late,NOW)).toBe(false);
+    const {deps,meta}=setup([late,recent],makeConnection());
+    const run=await runPublishScheduler(deps);
+    expect(run.due).toEqual([recent.id]);
+    expect(meta.publishContainer).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles a publish that got stuck before the container existed and retries it",async()=>{
+    const draft=makeDraft();
+    const stuck:Publication={draftId:draft.id,status:"preparing",containerId:null,mediaId:null,safeError:null,attemptedAt:iso(-20*60*1000),publishedAt:null};
+    const {deps,store}=setup([draft],makeConnection(),{[draft.id]:stuck});
+    const run=await runPublishScheduler(deps);
+    expect(run.published).toEqual([{draftId:draft.id,mediaId:"post-1",alreadyPublished:false}]);
+    expect(store.get(draft.id)).toMatchObject({status:"published",mediaId:"post-1"});
+  });
+
+  it("asks Meta about a stuck container: published means done, unknown waits for the owner",async()=>{
+    const posted=makeDraft(),unknown=makeDraft(),fresh=makeDraft();
+    const stuck=(draftId:string,attemptedAt=iso(-20*60*1000)):Publication=>({draftId,status:"preparing",containerId:`c-${draftId}`,mediaId:null,safeError:null,attemptedAt,publishedAt:null});
+    const {deps,meta,store}=setup([posted,unknown,fresh],makeConnection(),{[posted.id]:stuck(posted.id),[unknown.id]:stuck(unknown.id),[fresh.id]:stuck(fresh.id,iso(-2*60*1000))});
+    meta.getContainerStatus.mockImplementation((async(id:string)=>id===`c-${posted.id}`?"PUBLISHED":"IN_PROGRESS") as never);
+    const run=await runPublishScheduler(deps);
+    expect(run.published).toEqual([{draftId:posted.id,mediaId:null,alreadyPublished:true}]);
+    expect(run.skipped).toContainEqual({draftId:fresh.id,reason:"in-progress"});
+    expect(store.get(unknown.id)?.safeError).toBe(NEEDS_CHECK_MESSAGE);
+    expect(meta.publishContainer).not.toHaveBeenCalled();
+    // 다음 점검에서는 확인을 기다리는 기록을 다시 묻지 않는다.
+    meta.getContainerStatus.mockClear();
+    const next=await runPublishScheduler(deps);
+    expect(next.skipped).toContainEqual({draftId:unknown.id,reason:"needs-check"});
+    expect(meta.getContainerStatus).not.toHaveBeenCalledWith(`c-${unknown.id}`,expect.anything());
+  });
+
+  it("only refreshes the token when auto publishing is off",async()=>{
+    const soon=makeConnection({expiresAt:iso(3*DAY),updatedAt:iso(-2*DAY)});
+    const {deps,meta,refreshToken}=setup([makeDraft()],soon);
+    const run=await runPublishScheduler({...deps,autoPublish:false});
+    expect(refreshToken).toHaveBeenCalled();
+    expect(run).toMatchObject({reason:"autopublish-off",tokenRefreshed:true,due:[]});
+    expect(meta.publishContainer).not.toHaveBeenCalled();
   });
 });
