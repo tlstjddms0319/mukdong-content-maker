@@ -93,7 +93,8 @@ async function archPhoto(input:Buffer,width:number,height:number):Promise<Buffer
   const mask=svg(Wp,Hp,`<path d="${archPath(0,0,Wp,Hp)}" fill="#fff"/>`);
   const shaped=await sharp(await photo(input,Wp,Hp)).composite([{input:mask,blend:"dest-in"}]).png().toBuffer();
   // 보정·마스크를 거친 새 버퍼는 자동 등록되지 않으므로 직접 등록한다(검수의 사진 면적 측정).
-  registerPhoto(shaped);
+  // 위가 반원이라 같은 상자라도 사각보다 사진이 덜 보이므로 아치 기준(35%)으로 재게 모양을 알려 준다.
+  registerPhoto(shaped,{shape:"arch"});
   return shaped;
 }
 // 아치 둘레 금 링 두 줄: 창 가장자리(마스크 가장자리의 계단을 덮는다)와 12px 바깥. 둘 다 MIN_STROKE 이상.

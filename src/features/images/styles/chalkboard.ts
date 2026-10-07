@@ -255,7 +255,8 @@ export const renderChalkboard:CardRenderer=async(inputs,slide,index,total)=>{
       // 사진이 낮아져도 폭은 700 이상 유지해(가로로 긴 사진) 면적을 지킨다.
       const capH=content.cover?760:700,angle=(rand()-.5)*(content.cover?5:4);
       const fitRoom=bottom-y-(pointsH?pointsH+24:0)-10;
-      const widthOf=(h:number)=>Math.min(PW_MAX,Math.max(700,Math.round(h*1.3)));
+      // 표지는 제목이 길어 사진이 낮아져도 폭을 860 그대로 둔다(가로로 긴 사진): 700으로 좁히면 긴 제목 표지의 사진 면적이 30%까지 떨어졌다.
+      const widthOf=(h:number)=>content.cover?PW_MAX:Math.min(PW_MAX,Math.max(700,Math.round(h*1.3)));
       const tiltedH=(h:number)=>{const r=Math.abs(angle)*Math.PI/180;return Math.ceil((h+PIN_FRAME)*Math.cos(r)+(widthOf(h)+PIN_B*2)*Math.sin(r))+4;};
       let PH=capH;
       while(PH>MIN_PH-60&&tiltedH(PH)>fitRoom)PH-=4;

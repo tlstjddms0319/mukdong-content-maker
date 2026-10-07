@@ -22,8 +22,29 @@ function foodDirection(input:ImageBrief):string {
   // 실제 홍어회는 넓은 날개 살을 썬 조각이므로, 통째 생선 모양을 명시적으로 금지한다.
   preparations.push("홍어는 통째 생선으로 그리지 않는다. 꼬리·지느러미·머리가 달린 작은 생선 한 마리나 가자미·박대 같은 모양이 아니라, 넓은 날개 살을 썬 손가락 두 마디 크기의 납작한 조각으로 보여 준다. 조각 표면에는 한쪽 방향으로 나란한 연골 결이 줄무늬처럼 보인다. Show the skate only as sliced pieces of wing meat (flat, bite-sized, with parallel cartilage ridges). Never show a whole small fish with a tail, fins, head or a fish-shaped outline.");
   // 삼합 장면은 모델이 익숙한 수육을 크게 그리고 홍어를 뒤로 밀기 쉽다. 홍어가 주인공임을 한국어·영어로 못 박는다.
-  preparations.push("이 가게의 주인공은 홍어다. 모든 장면에서 홍어가 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓이고, 수육·묵은지·막걸리는 더 작게 뒤나 가장자리에 조연으로만 둔다. 집어 올린 한 점은 홍어 조각이어야 하며, 수육이 홍어보다 크거나 앞에 오면 안 된다. The fermented skate is the hero of every scene: largest, closest to the camera or centered, and in focus; boiled pork and kimchi are small supporting sides behind or beside it, never larger or more prominent than the skate.");
+  preparations.push("이 가게의 주인공은 홍어다. 모든 장면에서 홍어가 가장 크고 가장 앞(또는 가운데)에 초점이 맞게 놓이고, 수육·묵은지·막걸리는 더 작게 뒤나 가장자리에 조연으로만 둔다. 집어 올린 한 점에는 홍어가 꼭 들어가야 하고 수육이 홍어를 가리면 안 된다. 다만 이번 장면이 묵은지에 싸거나 수육과 겹쳐 먹는 장면이면, 홍어만 따로 들지 말고 그 조합 그대로(홍어가 보이게) 보여 준다. The fermented skate is the hero: clearly visible and in focus in every scene. When the scene is about wrapping it in aged kimchi or stacking it with boiled pork, show that exact combination with the skate visible, instead of a lone skate slice.");
   return preparations.join(" ")+" 이번 장면에 해당하는 조리법만 표현한다. 두꺼운 정육면체 회, 두부 같은 고기 블록, 탑처럼 높은 적층, 초밥이나 연어로 바꾸는 표현은 금지한다. 메뉴와 무관한 장식 소스는 추가하지 않는다.";
+}
+
+// 이번 장의 제목·요점이 말하는 "먹는 동작"을 이미지에 꼭 보이게 하는 문장(가장 앞쪽에 둔다).
+// 예전에는 장면 설명이 긴 공통 지시문 사이에 묻혀, "묵은지에 감싸요"·"수육 한 조각 곁들여요" 장에서도
+// 홍어만 젓가락으로 든 같은 사진이 나왔다. 글에 나온 조합을 영어·한국어로 짧게 못 박는다.
+const SCENE_ACTIONS:ReadonlyArray<readonly [RegExp,string]>=[
+  [/삼합/,"삼합: 홍어 한 점·수육 한 조각·묵은지를 한 젓가락에 겹친 모습 / the three are stacked together in one chopstick bite: skate slice, a slice of boiled pork and aged kimchi"],
+  [/(묵은지|김치)[^.!?]*(싸|감싸|말아|올려|얹)|(싸|감싸|말아)[^.!?]*(묵은지|김치)/,"묵은지에 홍어를 싼 모습 / a skate slice wrapped in or laid on a leaf of red aged kimchi, the kimchi clearly visible around it"],
+  [/수육/,"수육 한 조각이 홍어와 함께 보이는 모습 / a slice of boiled pork belly together with the skate, both clearly visible"],
+  [/막걸리/,"막걸리 사발이 함께 보이는 모습 / a brass or ceramic bowl of milky makgeolli in the scene"],
+  [/초장|양념|기름장/,"찍어 먹는 양념 종지 / a small dipping-sauce dish next to the bite"],
+];
+export function sceneMustShow(input:ImageBrief):string {
+  const slide=input.slide;
+  if(!slide)return "";
+  const text=[slide.headline,...slide.points].join(" ");
+  const actions=SCENE_ACTIONS.filter(([pattern])=>pattern.test(text)).map(([,description])=>description);
+  // 삼합이면 수육·묵은지 문장은 삼합 문장에 이미 들어 있으므로 겹쳐 쓰지 않는다.
+  const unique=actions.some(item=>item.startsWith("삼합"))?actions.filter(item=>!item.startsWith("수육")&&!item.startsWith("묵은지")):actions;
+  if(!unique.length)return "";
+  return `이번 장 필수 장면(가장 중요, 다른 장과 다른 장면으로): ${unique.join("; ")}. MUST SHOW in this image: ${unique.map(item=>item.split(" / ")[1]).join("; ")}.`;
 }
 
 // 후보마다 다른 구도. 같은 프롬프트를 n번 보내면 모델의 우연 말고는 차이가 없어서, 후보 번호로 각도와 거리를 갈라 준다.
@@ -71,6 +92,7 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     NO_TEXT_DIRECTIVE,
     `한국 음식점 인스타그램 게시물용 ${style.medium}. 선택 주제(장면의 소재일 뿐, 이미지에 글자로 쓰지 말 것): ${input.topic}.`,
     input.imageBrief ? `기존 이미지 설명: ${input.imageBrief}.` : "",
+    sceneMustShow(input),
     input.slide ? `슬라이드 역할: ${input.slide.role}. 장면: ${input.slide.visualPrompt}.` : `세로 4:5 구도, 하나의 음식 피사체가 선명하고 먹음직스럽게 보이며 자연스러운 조명과 여백이 있는 ${styleId==="photo"?"실제 음식 사진 스타일":`${style.medium} 스타일`}.`,
     input.styleAnchor ? `전체 캐러셀 공통 스타일: ${input.styleAnchor}.` : "",
     style.look,

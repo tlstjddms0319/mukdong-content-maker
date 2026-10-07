@@ -398,10 +398,10 @@ describe("hongeo stays the hero", () => {
   it("tells the image model that the skate is largest and in front while pork and kimchi are sides", () => {
     const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",subline:"",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0}});
     expect(prompt).toContain("주인공은 홍어");
-    expect(prompt).toContain("hero of every scene");
-    expect(prompt).toContain("수육이 홍어보다 크거나 앞에 오면 안 된다");
+    expect(prompt).toContain("The fermented skate is the hero");
+    expect(prompt).toContain("수육이 홍어를 가리면 안 된다");
     // 홍어와 무관한 주제에는 붙지 않는다.
-    expect(buildImagePrompt({topic:"김치찌개",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:3,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블"})).not.toContain("hero of every scene");
+    expect(buildImagePrompt({topic:"김치찌개",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:3,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블"})).not.toContain("The fermented skate is the hero");
   });
   it("forbids drawing the skate as a whole small fish", () => {
     const prompt=buildImagePrompt({topic:"홍어회",count:1,aspectRatio:"4:5",slideIndex:1,slideTotal:5,styleAnchor:"따뜻한 색온도"});
@@ -426,5 +426,27 @@ describe("appetizing photo direction (A9)", () => {
   it("keeps skate texture out of other foods and illustration styles", () => {
     expect(buildImagePrompt({...brief,topic:"김치찌개"})).not.toContain("Skate texture:");
     expect(buildImagePrompt({...brief,imageStyle:"anime"})).not.toContain("Skate texture:");
+  });
+});
+
+describe("each slide shows what its copy describes", () => {
+  const slide=(headline:string,points:string[])=>({role:"how-to" as const,subline:"",headline,points,visualPrompt:"젓가락으로 한 점을 집는 손",textPosition:"top" as const,layout:"frame" as const,keywords:["홍어"],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0});
+  const brief=(headline:string,points:string[])=>({topic:"홍어가 코를 찡하게 하는 이유",count:1,aspectRatio:"4:5" as const,slideIndex:4,slideTotal:5,styleAnchor:"따뜻한 조명",slide:slide(headline,points)});
+  it("puts the kimchi wrap and the boiled pork from the copy into the image prompt", () => {
+    // 사장님이 보내 준 실제 사례: "묵은지에 가볍게 감싸요"·"수육 한 조각을 곁들여요" 장인데 홍어만 든 사진이 나왔다.
+    const prompt=buildImagePrompt(brief("홍어 한 점을 묵은지에 가볍게 감싸요.",["홍어 한 점을 새콤한 묵은지 위에 올려 부드럽게 감싸요","홍어의 독특한 향 뒤로 담백한 수육 한 조각을 살짝 곁들여요"]));
+    expect(prompt).toContain("MUST SHOW");
+    expect(prompt).toContain("wrapped in or laid on a leaf of red aged kimchi");
+    expect(prompt).toContain("a slice of boiled pork belly together with the skate");
+    // 필수 장면은 공통 지시문보다 앞(장면 설명 바로 앞)에 온다.
+    expect(prompt.indexOf("MUST SHOW")).toBeLessThan(prompt.indexOf("슬라이드 역할"));
+  });
+  it("uses one samhap line instead of repeating pork and kimchi", () => {
+    const prompt=buildImagePrompt(brief("삼합은 이렇게 겹쳐 드세요",["묵은지 위에 수육과 홍어를 올려요"]));
+    expect(prompt).toContain("stacked together in one chopstick bite");
+    expect(prompt).not.toContain("a slice of boiled pork belly together with the skate");
+  });
+  it("adds nothing when the copy names no combination", () => {
+    expect(buildImagePrompt(brief("홍어 살은 씹을수록 찰져요",["얇게 썰려 결이 보여요"]))).not.toContain("MUST SHOW");
   });
 });

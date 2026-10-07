@@ -188,7 +188,9 @@ export const renderOmakase:CardRenderer=async(inputs,slide,index,total)=>{
   const shots=inputs.slice(0,2);
   // 사진 크기: 표지는 크게, 본문은 요점 수에 따라, 두 장이면 작은 두 장 나란히.
   const PW=shots.length>1?400:content.cover?560:520;
-  let PH=shots.length>1?480:content.cover?700:content.points.length>2?520:600;
+  // 두 장 상한 560(폭 400의 1.4배): 480에 걸리면 짧은 요점에서 남는 300px 남짓이 위아래로 갈라져 눈썹 아래가 비었다.
+  // 자리가 모자라면 아래에서 남는 높이로 줄어든다(최소 420).
+  let PH=shots.length>1?560:content.cover?700:content.points.length>2?520:600;
   const headline=await fitText(content.headline,{sizes:content.cover?[84,80]:shots.length?[60,56]:[76,68,60],width:content.cover?920:860,maxHeight:content.cover?280:shots.length?200:360,color:surface.ink,font:STYLE_FONTS.serif,align:"centre",spacing:16,emphasis:emphasisOf(content,surface.accent)});
   const subline=content.cover?await sublineLayer(content,surface):null;
   const pointLayers:Layer[]=[];

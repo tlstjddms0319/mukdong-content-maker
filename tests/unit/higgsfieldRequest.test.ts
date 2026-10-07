@@ -62,6 +62,22 @@ describe("Higgsfield image generation",()=>{
     expect(JSON.parse(String(submit.init?.body)).image_urls).toEqual(["https://cdn.example.com/ref.jpg"]);
   });
 
+  it("does not send the chosen cover as a reference for the next slides",async()=>{
+    // 표지 이어 가기(continuity)에 표지 이미지를 넘기면 이 모델이 같은 접시·같은 구도를 장마다 복사했다.
+    const calls:{url:string;init?:RequestInit}[]=[];
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+      calls.push({url,init});
+      if(url.endsWith("/xai/grok-imagine-image-2.0"))return json({status:"completed",request_id:"r3",images:[{url:"https://cdn.example.com/r3.png"}]});
+      if(url==="https://cdn.example.com/r3.png")return new Response(new Uint8Array(png));
+      throw new Error(`unexpected ${url}`);
+    }));
+    const { generateHiggsfieldImages }=await import("@/features/images/higgsfieldRequest");
+    await generateHiggsfieldImages({topic:"홍어",count:1,aspectRatio:"4:5",referenceImage:`data:image/png;base64,${png.toString("base64")}`,referenceMode:"continuity"});
+    expect(calls.some(call=>call.url.endsWith("/files/generate-upload-url"))).toBe(false);
+    const submit=calls.find(call=>call.url.endsWith("/xai/grok-imagine-image-2.0"))!;
+    expect(JSON.parse(String(submit.init?.body))).not.toHaveProperty("image_urls");
+  });
+
   it("uses Higgsfield first in automatic mode and falls back to Cloudflare when credits run out",async()=>{
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","account-123");
     vi.stubEnv("CLOUDFLARE_API_TOKEN","token-123");

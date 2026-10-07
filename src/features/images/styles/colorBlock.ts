@@ -85,12 +85,15 @@ async function keylineSticker(cutout:{data:Buffer;width:number;height:number},of
 // 사진 한 장을 스티커 한 장으로: 누끼가 되면 키라인 누끼 스티커, 안 되면 손으로 오린 듯한 블롭 스티커(seed로 모양 고정).
 // 블롭은 테두리가 둥글어 그림자가 무거워 보이기 쉬워 오프셋을 10으로 줄인다.
 // 스티커 높이는 대략 size+100(테두리 16×2·키라인·그림자·접촉 그림자 몫)이라 놓는 쪽에서 그만큼 빼고 size를 정한다.
-// 부품 대부분이 사진이므로 완성된 스티커 버퍼를 사진으로 등록한다(자동 검수의 사진 면적).
-async function stickerTile(input:Buffer,size:number,block:Block,seed:number):Promise<Layer&{cut:boolean}> {
+// 부품 대부분이 사진이므로 완성된 스티커 버퍼를 사진으로 등록한다(자동 검수의 사진 면적). 누끼는 음식 모양만 남아 상자 면적이
+// 작게 잡히므로 cutout, 블롭은 둥근 원에 가까워 circle 기준으로 잰다.
+// fitBlob: 블롭은 지름이 오린 크기의 83~92%라 같은 크기로 오리면 자리가 남는다. 한 장짜리처럼 높이로 크기가 정해지는 자리에서는
+// 92%로 나눈 크기로 오려 가장 큰 블롭도 자리에 꼭 맞게 한다(두 장 나란히는 폭이 빠듯해 그대로 둔다).
+async function stickerTile(input:Buffer,size:number,block:Block,seed:number,fitBlob=false):Promise<Layer&{cut:boolean}> {
   const cut=await cutoutPhoto(input,size);
-  const shape=cut??await blobCutout(input,size,seed);
+  const shape=cut??await blobCutout(input,fitBlob?Math.round(size/.92):size,seed);
   const sticker=await keylineSticker(await photoTone(shape,block.cool),cut?16:10);
-  registerPhoto(sticker.data);
+  registerPhoto(sticker.data,{shape:cut?"cutout":"circle"});
   return {...sticker,cut:Boolean(cut)};
 }
 // 알약·카드 그림자 두 겹: 아래에 넓고 옅게 번지는 주변광(softShadow), 위에 컬러 블록 문법의 딱딱한 검은 오프셋.
@@ -197,8 +200,9 @@ export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
     // 사진은 오른쪽 아래에 크게. 제목 아래 남는 공간(아래 경계 위까지)에 맞춰 크기를 정해 제목과 겹치지 않게 한다.
     // 스티커 아래 끝은 아래 경계 위 20px까지 허용하고, 스티커 몫(약 100)을 뺀 높이를 사진 크기로 쓴다.
     const room=bottom+20-(titleBottom+30)-100;
-    const size=Math.max(closing?260:380,Math.min(pills.length?640:820,room));
-    const sticker=await stickerTile(shots[0],size,block,index*7+(slide.variant??0));
+    // 요점 알약이 있는 장은 700px까지(예전 640px에서는 제목과 사진 사이가 200px 넘게 비었다). 알약은 사진 왼쪽 아래에 얹힌다.
+    const size=Math.max(closing?260:380,Math.min(pills.length?700:820,room));
+    const sticker=await stickerTile(shots[0],size,block,index*7+(slide.variant??0),true);
     // 누끼는 오른쪽 가장자리에 붙여 화면 밖으로 이어지는 느낌을, 블롭은 둥근 모양이라 여백을 조금 두고 띄운다.
     const left=sticker.cut?1080-sticker.info.width:1080-M+24-sticker.info.width;
     const photoTop=Math.max(titleBottom+30,bottom+(sticker.cut?0:20)-sticker.info.height);

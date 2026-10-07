@@ -1,7 +1,7 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { brandName, croppedPhoto, currentTone, svgLayer, textLayer, type CardRenderer, type Font, type Layer, type TextEmphasis } from "../render/primitives";
 import { cachedLayer, propLayer, textureLayer } from "../decor";
-import { registerPhoto } from "../render/audit";
+import { registerDecor, registerPhoto } from "../render/audit";
 import { STORE_NAME } from "../slideLayout";
 import { STYLE_FONTS, closingBlock, contentOf, emphasisOf, fitText, nextCue, snap } from "./shared";
 import { glowText, neonStroke, seeded } from "./handDrawn";
@@ -109,6 +109,10 @@ async function neonTitle(value:string,options:{sizes:number[];width:number;maxHe
   const shrunk=await sharp(tinted.data).extend({top:R,bottom:R,left:R,right:R,background:{r:0,g:0,b:0,alpha:0}})
     .resize(Math.round(W/small),Math.round(H/small)).blur(40/small).ensureAlpha().linear([1,1,1,.8],[0,0,0,0]).png().toBuffer();
   const reflection=await sharp(shrunk).resize(W,H).png().toBuffer({resolveWithObject:true});
+  // 번짐과 심을 한 장으로 합친 새 버퍼라 textLayer의 "글자" 등록이 사라져, 검수가 제목 자리를 통째로 빈 띠로 잡았다.
+  // 글자로 다시 등록하면 대비 검사가 심 둘레의 밝은 번짐을 "배경"으로 보아 네온 글자 전부를 대비 부족으로 친다.
+  // 그래서 빛나는 간판 그림(ornament)으로 등록한다: 빈 띠 계산에서는 찬 자리, 장식 겹침 검사에서는 빠진다.
+  registerDecor(result.data,"ornament");
   return {...result,pad,reflection:{...reflection,pad:R}};
 }
 
@@ -207,9 +211,10 @@ export const renderNeon:CardRenderer=async(inputs,slide,index,total)=>{
   if(shots.length){
     // 사진: 네온 테두리를 두른 액자. 두 장이면 나란히.
     // 사진이 주인공이므로 제목과 요점 사이 남는 높이를 사진이 다 쓴다(예전엔 760에서 멈춰 사진 아래 빈 띠가 생겼다).
-    // 한 장은 폭도 860을 꽉 채운다. 두 장(각 430)은 너무 길쭉하면 어색하므로 세로를 폭의 1.6배까지만 키우고 남는 만큼 가운데로 내린다.
+    // 한 장은 폭도 920을 꽉 채운다. 두 장(각 430)은 너무 길쭉하면 어색하므로 세로를 폭의 1.6배까지만 키우고 남는 만큼 가운데로 내린다.
     const room=footerTop-y-(pointsH?pointsH+40:0)-30-reserved;
-    const PW=shots.length>1?430:860;
+    // 한 장 폭 920(좌우 80): 860이면 긴 제목(세 줄) 표지에서 사진 면적이 38%로 기준(40%)에 못 미쳤다. 제목은 줄이지 않고 폭으로 메운다.
+    const PW=shots.length>1?430:920;
     const PH=Math.round(Math.max(300,shots.length>1?Math.min(PW*1.6,room):room));
     y+=Math.max(0,Math.round((room-PH)/2));
     const gap=40,rowW=shots.length*PW+(shots.length-1)*gap;

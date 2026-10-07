@@ -324,7 +324,8 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     if(shots.length){
       // 남는 높이에서 요점 자리를 뺀 만큼 사진 높이로. 요점이 길면(4개×2줄) 사진이 300까지 줄어든다.
       const room=FOOTER_TOP-y-(pointsH?pointsH+36:0)-12-reserve;
-      const PH=Math.round(Math.max(300,Math.min(shots.length>1?560:700,room)));
+      // 두 장 상한 660(폭 440의 1.5배): 560이면 짧은 요점에서 남는 240px가 사진 위아래로 갈라져 빈 띠가 둘 생겼다.
+      const PH=Math.round(Math.max(300,Math.min(shots.length>1?660:700,room)));
       const extra=Math.max(0,room-PH);
       const py=y+Math.round(extra/2);
       photoBox={x:M,y:py,w:W,h:PH};
