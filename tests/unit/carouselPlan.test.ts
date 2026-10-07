@@ -89,6 +89,22 @@ describe("carousel planning", () => {
     expect(body.provider).toBe("fallback");
     expect(body.plan.slideCount).toBe(3);
     expect(body.plan.slides[0].headline).toContain("홍어와 막걸리");
+    // 기본 문안으로 넘어간 이유를 화면에 보여 줄 수 있게 함께 보낸다.
+    expect(body.fallbackReason).toBe("error");
+    expect(body.fallbackMessage).toContain("다시");
+  });
+
+  it("repairs a provider plan with an over-long point instead of falling back", async () => {
+    // 사장님이 겪은 사례: 요점 한 줄이 40자를 넘었다는 이유만으로 AI 구성안 전체를 버리고 기본 문안을 썼다.
+    const plan=createFallbackCarouselPlan({topic:"과메기 한 점",slideCount:3});
+    const long={...plan,slides:plan.slides.map((slide,index)=>index===1?{...slide,headline:"찬바람에 말린 과메기의 맛",points:["찬 바닷바람에 얼었다 녹기를 되풀이하며 꾸덕하게 마른 과메기가 겨울 제철이에요"]}:slide)};
+    generateJson.mockResolvedValue(long).mockResolvedValueOnce(long);
+    const response=await POST(new Request("http://localhost/api/images/plan",{method:"POST",body:JSON.stringify({topic:"과메기 한 점",slideCount:3})}));
+    const body=await response.json();
+    expect(body.provider).not.toBe("fallback");
+    expect(body.fallbackReason).toBeUndefined();
+    expect(body.plan.slides[1].headline).toBe("찬바람에 말린 과메기의 맛");
+    expect(body.plan.slides[1].points[0].length).toBeLessThanOrEqual(40);
   });
 
   it("labels an invalid provider plan as fallback", async () => {

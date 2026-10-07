@@ -2,28 +2,38 @@ import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
-import { CarouselPlanInputSchema, CarouselPlanSchema, buildCarouselPlanPrompt, planCarousel } from "@/features/images/carousel";
+import { CarouselPlanInputSchema, buildCarouselPlanPrompt, planCarousel } from "@/features/images/carousel";
 import { guardSlidePoints } from "@/features/images/slidePoints";
 import { randomSeed } from "@/features/images/variety";
 import { reviewCarouselPlan } from "@/features/images/planReview";
+import { PLAN_FALLBACK_MESSAGES, lenientPlanSchema, planFallbackReason, type PlanFallbackReason } from "@/features/images/planRepair";
 
 export async function POST(request:Request) { const denied=await ownerApiError(); if(denied)return denied;
   const input=CarouselPlanInputSchema.safeParse(await request.json());
   if(!input.success)return NextResponse.json({message:"캐러셀 설정을 확인해 주세요."},{status:400});
 
   let provider:"gemini"|"groq"|"cloudflare"|"fallback"="fallback";
-  const requestedPlanSchema=CarouselPlanSchema.refine((plan)=>plan.slideCount===input.data.slideCount,{message:"요청한 슬라이드 수와 다릅니다."});
+  // AI 답은 검사 전에 고칠 수 있는 것(긴 요점·장 순서 이름·같은 장면 등)을 고쳐 쓴다(planRepair.ts). 고친 내용은 로그로 남긴다.
+  const fixes:string[]=[];
+  const requestedPlanSchema=lenientPlanSchema(input.data.slideCount,fixes);
+  let fallbackReason:PlanFallbackReason|null=null;
   const settings=await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:",error instanceof Error?error.message:String(error));return null;});
   const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
   const plan=await planCarousel(input.data,{
     generate:async()=>{
       const result=await client.generateJson(buildCarouselPlanPrompt(input.data),requestedPlanSchema);
-      const candidate=CarouselPlanSchema.parse(result);
+      // 제공자 클라이언트가 이미 검사했어도 한 번 더 같은 "고쳐 쓰기" 스키마로 읽는다(고친 값에 다시 써도 그대로다).
+      const candidate=requestedPlanSchema.parse(result);
       if(candidate.slideCount!==input.data.slideCount)throw new Error("wrong slide count");
       provider=client.provider??"gemini";
       return candidate;
     },
-  },{seed:randomSeed()});
+  },{seed:randomSeed(),onFallback:error=>{
+    fallbackReason=planFallbackReason(error);
+    const detail=error instanceof Error?error.message.replace(/\s+/g," ").slice(0,300):String(error);
+    console.warn(`[plan] AI 구성안을 못 써서 기본 문안으로 채웠어요(${fallbackReason}):`,detail);
+  }});
+  if(fixes.length)console.info(`[plan] AI 구성안을 고쳐 썼어요: ${[...new Set(fixes)].join(", ")}`);
   // AI가 쓴 구성안은 한 번 더 검수해서 상투어·반복·끝맺음 문제를 고친다(준비된 기본 문안은 이미 다듬어져 있어 건너뛴다).
   let review:{applied:boolean;before:number;after:number}|null=null;
   let finalPlan=plan;
@@ -33,5 +43,6 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     review={applied:result.applied,before:result.before,after:result.after};
     if(result.applied)console.info(`[plan-review] 문안 검수 적용: 문제 ${result.before}건 → ${result.after}건`);
   }
-  return NextResponse.json({plan:guardSlidePoints(finalPlan),provider,review});
+  const fallback=provider==="fallback"?{fallbackReason:fallbackReason??"error",fallbackMessage:PLAN_FALLBACK_MESSAGES[fallbackReason??"error"]}:{};
+  return NextResponse.json({plan:guardSlidePoints(finalPlan),provider,review,...fallback});
 }

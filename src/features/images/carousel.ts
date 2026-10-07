@@ -232,15 +232,19 @@ export function limitChopstickScenes(plan:CarouselPlan,topic:string):CarouselPla
   })};
 }
 
-export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,options:{seed?:number}={}):Promise<CarouselPlan> {
+// onFallback: AI 구성안을 못 써서 기본 문안으로 넘어갈 때 그 이유(오류)를 받는다. 예전에는 이유를 버려 로그에도 남지 않았다.
+export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,options:{seed?:number;onFallback?:(error:unknown)=>void}={}):Promise<CarouselPlan> {
   const parsed=CarouselPlanInputSchema.parse(input);
   const fallback=createFallbackCarouselPlan(parsed);
   const vary=(plan:CarouselPlan,isFallback:boolean)=>options.seed===undefined?plan:diversifyCarouselDesign(plan,options.seed,{fallback:isFallback});
   if(!ai)return vary(fallback,true);
   try {
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));
-    return plan.slideCount===parsed.slideCount ? vary(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic),false) : vary(fallback,true);
-  } catch {
+    if(plan.slideCount===parsed.slideCount)return vary(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic),false);
+    options.onFallback?.(new Error("wrong slide count"));
+    return vary(fallback,true);
+  } catch(error) {
+    options.onFallback?.(error);
     return vary(fallback,true);
   }
 }
