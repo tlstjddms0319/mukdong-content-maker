@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { STORE_MENU, heroMenu, josa, mainMenuOf, menuOf, menusInSeason } from "@/features/store/menu";
 
 describe("store menu", () => {
-  it("lists the six menus the owner named, each with a look and a category", () => {
-    expect(STORE_MENU.map(item=>item.name)).toEqual(["홍어회(삼합 포함)","홍어무침","홍어애탕","과메기","미나리전","배다리 막걸리"]);
+  it("lists the menus the owner named (홍어찜 from the shop poster), each with a look and a category", () => {
+    expect(STORE_MENU.map(item=>item.name)).toEqual(["홍어회(삼합 포함)","홍어무침","홍어애탕","홍어찜","과메기","미나리전","배다리 막걸리"]);
     expect(new Set(STORE_MENU.map(item=>item.id)).size).toBe(STORE_MENU.length);
     for(const item of STORE_MENU){
       expect(item.look.length).toBeGreaterThan(20);
@@ -42,5 +42,20 @@ describe("store menu", () => {
   it("attaches the right Korean particle", () => {
     expect(josa("과메기","이","가")).toBe("과메기가");
     expect(josa("미나리전","이","가")).toBe("미나리전이");
+  });
+});
+
+describe("hongeo-jjim (홍어찜)", () => {
+  it("is its own menu, not sliced hongeo-hoe", async () => {
+    const { buildImagePrompt }=await import("@/features/images/openaiRequest");
+    const { createFallbackCarouselPlan }=await import("@/features/images/carousel");
+    expect(menuOf("홍어찜 한 접시").map(item=>item.id)).toEqual(["hongeo-jjim"]);
+    const plan=createFallbackCarouselPlan({topic:"홍어찜은 어떤 맛일까?",slideCount:5});
+    expect(plan.slides.map(slide=>slide.headline).join(" ")).not.toContain("삼합");
+    const prompt=buildImagePrompt({topic:"홍어찜은 어떤 맛일까?",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:plan.styleAnchor,slide:plan.slides[1],design:plan.design});
+    expect(prompt).toContain("주인공은 홍어찜이다");
+    expect(prompt).toContain("홍어찜 장면은 익힌 살의 결");
+    expect(prompt).not.toContain("Skate texture:");
+    expect(prompt).not.toMatch(/삼합|수육|묵은지/);
   });
 });

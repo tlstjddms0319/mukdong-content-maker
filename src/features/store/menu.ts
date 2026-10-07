@@ -1,5 +1,5 @@
 // 묵동홍어마을 메뉴 목록. 주제 추천·구성안·이미지 지시문·표지 점검이 모두 이 한 곳을 본다.
-// 출처: 사장님이 알려 준 메뉴(2026-10-07). 네이버 플레이스 메뉴 페이지는 확인하지 못했다.
+// 출처: 사장님이 알려 준 메뉴(2026-10-07, 홍어찜은 가게 홍보 포스터 메뉴판에서 확인). 네이버 플레이스 메뉴 페이지는 확인하지 못했다.
 // 가격·구성·원산지는 확인 전이라 적지 않는다. 사진·그림 묘사(look)는 겉모습만 쓰고 재료·맛을 단정하지 않는다.
 //
 // 메뉴를 더하려면: 아래 STORE_MENU 목록에 한 줄을 복사해 id·이름·분류·찾을 낱말·겉모습·어울리는 계절만 바꿔 넣으면 된다.
@@ -46,6 +46,13 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     look:"Korean hongeo-aetang: a hot, steaming soup in an earthenware pot or deep bowl, cloudy reddish-brown broth with soft pieces and green leafy greens.",
     lookKo:"뚝배기나 깊은 그릇에 김이 오르는 탁한 붉은 갈색 국물과 푸른 잎채소가 보이는 탕",
     seasons:["가을","겨울"],moments:"찬바람 불 때, 따뜻한 국물이 당길 때",
+  },
+  {
+    id:"hongeo-jjim",name:"홍어찜",short:"홍어찜",category:"홍어 요리",
+    match:/홍어\s*찜/,
+    look:"Korean hongeo-jjim: steamed pieces of skate wing on a plate, the cooked flesh opaque ivory-white with visible parallel fibers, glistening with moisture.",
+    lookKo:"쪄서 익힌 홍어 날개 살 조각을 접시에 담은 모습(살이 불투명한 아이보리빛, 결이 보임)",
+    seasons:[],moments:"잔치·모임 상, 따뜻한 요리가 당길 때",
   },
   {
     id:"gwamegi",name:"과메기",short:"과메기",category:"제철 회",
