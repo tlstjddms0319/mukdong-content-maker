@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { access } from "node:fs/promises";
-import { MASCOT_FILE, MASCOT_POSES, blob, cornerMarks, dotGrid, doodleArrow, grainLayer, mascotFile, mascotLayer, ring, softShadow, sparkles, stickerBadge, washiTape, wavyUnderline } from "@/features/images/decor";
+import { MASCOT_FILE, MASCOT_POSES, PROPS, blob, cornerMarks, dotGrid, doodleArrow, grainLayer, mascotFile, mascotLayer, propFile, propLayer, ring, softShadow, sparkles, stickerBadge, washiTape, wavyUnderline } from "@/features/images/decor";
 
 const rasterize=(body:string)=>sharp(Buffer.from(`<svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">${body}</svg>`)).png().toBuffer({resolveWithObject:true});
 const inkOf=async(png:Buffer)=>{const {data}=await sharp(png).ensureAlpha().raw().toBuffer({resolveWithObject:true});let sum=0;for(let i=3;i<data.length;i+=4)sum+=data[i];return sum;};
@@ -73,5 +73,19 @@ describe("card decorations", () => {
     const hello=await mascotLayer({width:180,left:0,top:0,pose:"hello"});
     const tip=await mascotLayer({width:180,left:0,top:0,pose:"tip"});
     expect((hello!.input as Buffer).equals(tip!.input as Buffer)).toBe(false);
+  });
+});
+
+describe("food prop stickers", () => {
+  it("ships every prop as a transparent cut-out that propLayer can place", async () => {
+    for(const name of PROPS){
+      const {data,info}=await sharp(propFile(name)).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+      expect(data[3],name).toBe(0);
+      expect(data[(info.width*info.height-1)*4+3],name).toBe(0);
+      const layer=await propLayer(name,{width:120,left:500,top:600,anchor:"center"});
+      expect(layer,name).not.toBeNull();
+      expect(layer!.width,name).toBe(120);
+      expect(layer!.left,name).toBe(500-60);
+    }
   });
 });

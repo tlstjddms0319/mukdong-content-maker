@@ -1,71 +1,110 @@
 # 묵동 콘텐츠 메이커
 
-비전문 사용자도 주제 선택 → 이미지 제작 → 문안 확인 → 다운로드의 네 단계로 인스타그램 게시물 초안을 만드는 로컬 웹앱입니다.
+묵동홍어마을 인스타그램 게시물을 **주제 → 이미지 → 문안 → 최종 확인** 네 단계로 만드는 웹앱입니다.
+캐러셀 카드(1080×1350)를 서버에서 직접 그리고, 문안·해시태그를 쓰고, 한 달 게시 기획과 예약 자동 게시, 게시 뒤 성과 기록까지 한곳에서 관리합니다.
+
+- 공개 주소: <https://mukdong-content-maker-0319.onrender.com/> (관리자 암호 로그인)
+- 사용법과 실제 동작: [docs/APP_OPERATION_GUIDE.ko.md](docs/APP_OPERATION_GUIDE.ko.md)
+
+## 주요 기능
+
+| 영역 | 할 수 있는 일 |
+| --- | --- |
+| 주제 | 계절·명절, 반응 좋았던 지난 주제, 네이버 검색어 트렌드를 참고한 추천 3개. 직접 입력도 가능 |
+| 이미지 | 실제 사진 최대 10장으로 캐러셀(이미지 AI 비용 없음), AI 이미지 캐러셀(표지 후보 2장 → 나머지 장), 사진+AI, 무료 카드 편집 |
+| 카드 고치기 | 장마다 제목·요점을 고쳐 그 장만 다시 그리기(무료), 장 빼기·새 장 넣기(최대 10장), 디자인 계열·테마·글꼴 바꾸기 |
+| 문안 | 본문·해시태그·음악 분위기 추천, 부분 재생성(첫 문장·가게 연결·마무리·해시태그) |
+| 내보내기·게시 | 이미지·문안 ZIP 받기, 승인 후 Instagram 바로 게시, 게시 희망일시 예약 자동 게시(연결한 경우) |
+| 관리 | 내 초안(다시 열기·복제), 한 달 콘텐츠 기획, 성과 기록과 성과 돌아보기, 사진 보관함(태그·검색), 릴스(9:16) 만들기 |
+
+## 카드 디자인 엔진
+
+카드는 sharp(libvips) + Pango 글자 + SVG 장식으로 서버에서 그립니다(`src/features/images/`).
+
+- **디자인 계열 20종**: 기본 템플릿(레이아웃 18종 × 게시물 테마 6종)과 컬러 블록·웹툰·오마카세·타이포그래피·B급 키치·다이어리·도감·팝업북·필름·네온·한지·칠판·낙서·막걸리 라벨·모던 그리드·블랙&골드·수채화·티켓·매거진. 계열마다 색·사진 처리·글꼴·장식이 따로 있습니다(`styles/*.ts`).
+- **계열 고르기**: AI 구성안이 글에 맞는 계열을 고릅니다. 계열 친화도 표(`styleCatalog.ts`)가 어울리지 않는 조합(예: 잔칫상 글 + B급 키치)을 피하게 합니다. 격식 있는 글이면 장식을 줄인 절제 변형으로 그립니다.
+- **사진**: 따뜻한 색을 지키는 자동 보정, 음식 초점 크롭, 마무리 선명화. AI 사진과 실제 사진의 보정 강도를 다르게 둡니다.
+- **글자**: 제목 균형 줄바꿈, 핵심어 색 강조, 자간·숫자 폭 고정, 빠진 글자는 Pretendard로 자동 대체. 글꼴은 모두 OFL이고 라이선스와 함께 `assets/fonts/`에 있습니다.
+- **구성**: 표지 훅+부제, 표지 예고 띠("먹는 법 · 곁들임 · 방문 전 확인 — 5장"), 본문 장 "넘겨 보기", 마지막 장 가게 명함.
+- **질감과 입체**: 미리 구운 질감(한지·벽돌·나무·크라프트·리넨 등, `assets/design/textures`), 두 겹 그림자·안쪽 그림자·접촉 그림자, 금박 베벨·네온 반사.
+- **마스코트와 소품**: 홍어 마스코트 12포즈(`assets/design/mascot`)와 음식 소품 스티커 7종(`assets/design/props`). 장 역할에 맞는 포즈를 고릅니다.
+- **자동 검수**: 그린 카드마다 글자 넘침·겹침·대비·인스타 격자 안전 영역을 재고, 문제가 있으면 크기를 바꿔 다시 그립니다(`render/audit.ts`).
 
 ## 시작하기
 
-Node.js 20 이상이 필요합니다.
+Node.js 22 이상을 권장합니다(카드 품질 스크립트는 TypeScript 변환 모드를 씁니다).
 
-```powershell
+```bash
 npm install
-Copy-Item .env.example .env.local
+cp .env.example .env.local   # Windows PowerShell: Copy-Item .env.example .env.local
 npm run dev
 ```
 
-브라우저에서 `http://localhost:3000`을 엽니다. `.env.local`에 Gemini 키와 이미지 생성용 Cloudflare 계정 ID·Workers AI 토큰을 입력하세요. 주제와 문안은 기본적으로 무료 `gemini-3.5-flash-lite` 모델을 사용합니다. `GROQ_API_KEY`를 추가하면 무료 예비 작성자가 하나 더 생기고, `CLOUDFLARE_TEXT_MODEL`을 설정하면 이미지에 쓰는 같은 Cloudflare 계정으로 문안도 쓸 수 있습니다. 기본 이미지 설정은 Cloudflare 무료 할당량을 먼저 사용하고, 실패할 때 `OPENAI_API_KEY`가 있으면 OpenAI로 전환합니다. Cloudflare 유료 요금제를 사용하면 무료 할당량 초과분이 과금될 수 있습니다. 설정에서 `Cloudflare만`을 고르면 유료 OpenAI 대체 호출을 하지 않습니다. 키는 브라우저, 초안 파일, 로그에 저장하지 않습니다. 키가 없어도 기본 추천과 화면 흐름을 확인할 수 있습니다.
+브라우저에서 `http://localhost:3000`을 엽니다. 키가 하나도 없어도 앱에 준비된 기본 주제·문안과 실제 사진 캐러셀로 화면 흐름을 확인할 수 있습니다.
 
-## 관리자 로그인 설정
+### 관리자 로그인
 
-처음 한 번 PowerShell에서 `./scripts/setup-owner-password.ps1`을 실행하고 사용할 암호를 입력하세요. 스크립트가 `OWNER_PASSWORD_HASH`와 `AUTH_SECRET`을 로컬 `.env.local`에 자동 저장하며, 다른 설정은 유지합니다. 앱을 다시 시작하면 로그인 화면에 암호 입력란이 나타납니다. 실제 암호는 파일에 저장되지 않으므로 기억하거나 암호 관리자에 보관하세요. 설정 전에는 비공개 화면과 API를 사용할 수 없습니다. 배포할 때는 이 두 값을 배포 환경 변수에도 별도로 등록하고, `AUTH_URL`을 실제 공개 HTTPS 주소로 설정하세요. 로컬 `AUTH_URL`은 접속할 주소(`localhost` 또는 `127.0.0.1`)와 맞춰 설정합니다.
+PowerShell에서 `./scripts/setup-owner-password.ps1`을 한 번 실행하면 `OWNER_PASSWORD_HASH`와 `AUTH_SECRET`이 `.env.local`에 저장됩니다. PowerShell이 없으면 `printf '%s' '암호' | node scripts/hash-owner-password.mjs`가 출력하는 두 줄을 `.env.local`에 직접 넣습니다. 로그인은 최대 8시간 유지됩니다. 배포할 때는 두 값과 실제 HTTPS 주소의 `AUTH_URL`을 배포 환경 변수에 등록하세요.
 
-로그인 상태는 최초 로그인부터 최대 8시간 유지됩니다. 작업을 마친 뒤 상단의 **로그아웃**을 누르세요. 암호를 바꾸거나 비밀값이 노출됐다고 의심되면 설정 스크립트를 다시 실행하고 서버를 재시작하세요. 기존 로그인 상태는 무효화됩니다.
+### 환경 변수
 
-인터넷에 공개하기 전에는 HTTPS와 로그인 시도 제한을 제공하는 앞단 설정을 확인해야 합니다. 앱의 로그인 시도 제한은 한 서버 프로세스 안에서만 적용되므로, 공개 주소의 보호를 대신하지 않습니다.
+| 변수 | 용도 |
+| --- | --- |
+| `GEMINI_API_KEY` (`GEMINI_TEXT_MODEL`, `GEMINI_FALLBACK_TEXT_MODEL`) | 주제·문안·구성안. 표지 후보 점검 |
+| `GROQ_API_KEY` (`GROQ_TEXT_MODEL`) | 문안 예비 작성자(무료) |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (`CLOUDFLARE_TEXT_MODEL`) | 이미지 생성(무료 할당량), 선택 시 문안 |
+| `HF_API_KEY_ID`, `HF_API_KEY_SECRET` | Higgsfield 이미지 생성(유료 크레딧) |
+| `OPENAI_API_KEY` | 이미지 생성 대체(유료) |
+| `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | 영구 저장소(비공개 버킷 `mukdong-private`) |
+| `OWNER_PASSWORD_HASH`, `AUTH_SECRET`, `AUTH_URL` | 관리자 로그인 |
+| `INSTAGRAM_*`, `MEDIA_PUBLIC_BASE_URL`, `MEDIA_SIGNING_SECRET` | Instagram 게시·예약 자동 게시([설정 가이드](docs/INSTAGRAM_AUTOPUBLISH.ko.md)) |
+| `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` (`NAVER_API_STYLE`) | 네이버 검색어 트렌드로 주제 추천(선택) |
+| `DATA_DIR` | 로컬 저장 폴더(기본 `data/`) |
 
-## Instagram 수동 게시
+문안 AI는 `설정 → 문안 AI`에서 자동(Gemini → Groq → Cloudflare)·서비스 하나만을 고르고, 이미지 AI는 자동(Higgsfield → Cloudflare → OpenAI) 또는 서비스 하나만(Higgsfield·Cloudflare·OpenAI)을 고릅니다. 키는 서버 환경 변수에만 두고 브라우저·초안·로그에 저장하지 않습니다.
 
-최종 확인 화면은 게시물 주제와 대상에 맞춘 해시태그 묶음, 음악 분위기, Instagram 음악 검색어, 게시 순서를 제공합니다. **전체 묶음 받기** ZIP에는 이미지, 문안, 메타데이터와 `posting-guide.txt`가 들어갑니다. 네이버 플레이스 링크를 확인한 뒤 Instagram 앱에서 직접 게시하세요. 앱은 Instagram 연결 상태를 조회하거나 게시 API를 호출하지 않습니다.
+## 배포와 저장소
 
-`콘텐츠 자료`에는 첫 4주용 아이디어 12개가 들어 있습니다. 구성은 음식 탐색형 5개, 약속 결정형 4개, 호기심 입문형 3개이며 실사진 6개, 실사 릴스 3개, 일러스트 3개입니다. 카드에서 초안을 시작하면 대상과 촬영 힌트가 제작 화면으로 함께 전달됩니다.
-
-## 문안 AI 선택과 비교
-
-`설정 → 문안 AI`에서 `자동`(Gemini → Groq → Cloudflare 순서), `Gemini만`, `Groq만`, `Cloudflare만`을 고릅니다. 자동은 키가 있는 서비스만 시도하고, 한도 초과나 응답 오류가 나면 다음 서비스로 넘어간 뒤 모두 실패하면 준비된 문안을 씁니다. 문안 화면에는 어느 서비스가 썼는지 표시됩니다.
-
-무료 한도(2026-09-28 기준, 변동 가능): Gemini flash-lite는 모델별 하루 약 500회, Groq는 모델별 하루 1,000회, Cloudflare는 이미지와 합쳐 하루 10,000뉴런입니다. 세 서비스 모두 카드 없이 시작할 수 있습니다.
-
-같은 프롬프트로 세 서비스를 비교하려면 Node 24 이상에서 `npm run compare:text`를 실행하세요(Node의 TypeScript 변환 모드를 사용합니다). 서비스마다 주제 2회를 요청하고, 주제가 성공하면 그 주제로 문안 1건씩과 캐러셀 구성 1건을 이어서 요청합니다. 결과는 `output/text-provider-comparison-<날짜>/report.md`에 저장되며 키는 기록되지 않습니다.
+- **Render**: `master`에 머지하면 자동 배포됩니다. 무료 서버는 재시작 때 디스크가 지워집니다.
+- **Supabase**: 이름이 정확히 `mukdong-private`인 비공개 Storage 버킷을 만들고 `SUPABASE_URL`·`SUPABASE_SECRET_KEY`를 함께 설정하면 초안·설정·업로드 원본이 버킷에 영구 보관됩니다. 둘 중 하나만 있으면 임시 디스크로 조용히 되돌아가지 않고 오류를 냅니다. `설정 → 저장소 연결 확인`으로 상태를 볼 수 있습니다.
+- 로컬에서는 `data/`(Git 제외)에 저장됩니다. 백업은 앱을 끈 뒤 `data/` 폴더를 복사하세요.
+- 배포 뒤 실제 계정으로 확인할 항목: [docs/LIVE_CHECKLIST.ko.md](docs/LIVE_CHECKLIST.ko.md)
 
 ## 확인 명령
 
-```powershell
+```bash
 npm run lint
-npm test
+npm test               # vitest 단위 테스트
 npm run build
-npx playwright install chromium
-npx playwright test
+npm run test:e2e       # Playwright (처음 한 번 npx playwright install chromium)
 ```
 
-## 이미지와 문안 품질
+### 카드 품질 도구
 
-- 이미지 제목은 앱에 포함한 나눔고딕 글꼴로 렌더링합니다. `assets/fonts/`와 SIL OFL 라이선스를 함께 배포해야 하며, Next의 이미지 생성 경로 파일 추적에 포함되어 있습니다. 이미 저장된 JPG의 깨진 글자는 자동으로 바뀌지 않으므로 새로 생성해야 합니다.
-- AI 표지를 선택하면 제목을 넣기 전 원본을 다음 장의 참고 이미지로 사용합니다. 음식 모양과 장면의 일관성을 돕지만 실제 음식과 일치한다는 보장은 없습니다. 완성 후 `이 장만 다시 만들기`로 부분 수정하고 다시 선택해 저장하세요.
-- OpenAI 호출은 `gpt-image-1.5`를 사용합니다. 설정의 `OpenAI 이미지 품질`에서 표준/고품질을 선택할 수 있습니다. 고품질은 시간과 비용이 증가하며 Cloudflare 호출에는 적용되지 않습니다. 기존 제공자 선택과 Cloudflare-only 비용 경계는 유지합니다.
-- 문안 길이를 설정에서 선택할 수 있습니다. 기본은 본문 500~800자, 관련 해시태그는 3~5개입니다. 이전 버전에서 작동하지 않던 길이 설정은 최초 읽기 시 기본값으로 전환됩니다. 이후 저장한 선택은 유지됩니다.
-- 문안 실패 시 작성한 글을 보존하고 재시도를 안내합니다. 해시태그나 특정 문단의 재생성은 해당 부분만 바꿉니다. 부분 수정은 빈 줄로 나뉜 기본 문단 구조에서 사용하세요.
-- 자동 이미지 품질 검사는 아직 제공하지 않습니다. 서버는 분석하지 않은 이미지를 `좋음`으로 표시하지 않습니다.
-- API 비용 없이 글꼴 렌더링 확인: Node 24에서 `node scripts/verify-image-composition.mjs`. 결과는 `output/image-quality-check/`에 생성됩니다.
+TypeScript 소스를 바로 불러오므로 아래처럼 실행합니다.
 
-## 데이터 보관 및 백업
+```bash
+R="node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs"
+$R scripts/audit-cards.mjs [--style=계열] [--verbose] [--handle=계정]   # 전 계열·레이아웃 자동 검수(넘침·겹침·대비·몰래 축소·외톨이 줄)
+$R scripts/render-style-gallery.mjs [--stress] [계열]                   # 계열 갤러리 → output/style-gallery/
+$R scripts/render-template-gallery.mjs                                  # 템플릿 갤러리 → output/template-gallery/
+$R scripts/bench-cards.mjs [--compare=output/bench-baseline.json]       # 카드 렌더 시간(목표: 장당 2.5초 이하)
+node scripts/check-fonts.mjs                                            # 글꼴별 한글 음절 지원 범위
+node scripts/bake-textures.mjs                                          # 질감 자산 다시 굽기
+node scripts/extract-stickers.mjs <시트> <폴더> <이름,...>              # 흰 바탕 시트에서 스티커 오리기
+```
 
-설정·초안·미디어는 기본적으로 `data/` 아래에 저장되며 Git에서 제외됩니다. 백업하려면 앱을 종료한 뒤 `data/` 폴더 전체를 복사하세요. 업로드한 원본 사진은 별도 위치에 보존합니다.
+## 문서
 
-Render 무료 서버의 디스크는 재시작 시 지워집니다. 영구 보관하려면 Supabase 무료 프로젝트에서 이름이 정확히 `mukdong-private`인 **비공개 Storage bucket**을 만들고, Render 서비스의 Environment에 `SUPABASE_URL`과 `SUPABASE_SECRET_KEY`를 함께 설정하세요. 두 값 중 하나만 있으면 앱은 임시 디스크로 조용히 되돌아가지 않고 오류를 표시합니다. 비밀키는 브라우저 코드나 Git에 넣지 마세요. 연결 후 새로 저장하는 초안·설정·업로드 원본은 이 버킷에 보관됩니다. 기존 로컬 `data/` 파일은 자동으로 전송되지 않습니다. 롤백하려면 Render의 두 변수를 함께 제거하면 기존 로컬 저장 방식으로 돌아가지만, Supabase에 저장된 자료가 로컬로 자동 복사되지는 않습니다.
+- [사용법과 실제 동작](docs/APP_OPERATION_GUIDE.ko.md)
+- [실제 서비스 점검표](docs/LIVE_CHECKLIST.ko.md)
+- [Instagram 자동 게시 설정](docs/INSTAGRAM_AUTOPUBLISH.ko.md)
+- [무료 카드 편집](docs/FREE_IMAGE_CARDS.ko.md) · [무료 이미지 전략](docs/FREE_IMAGE_STRATEGY.ko.md)
+- [Higgsfield 인수인계](docs/HANDOVER_HIGGSFIELD.ko.md) · [호기심 주제 프롬프트](docs/CURIOSITY_TOPICS_PROMPT.ko.md)
+- [인스타그램 마케팅 계획서](묵동홍어마을_인스타그램_마케팅_계획서_v1.md)
 
-Supabase 무료 플랜은 저장 용량과 전송량 제한이 있으며, 일정 기간 사용하지 않으면 프로젝트가 일시정지될 수 있습니다. 이 경우 대시보드에서 재개해야 합니다. 이미지가 포함된 초안은 용량을 빨리 사용하므로 중요한 결과는 ZIP으로 내려받아 별도 보관하세요.
+## 주의
 
-`내 초안`에서 게시 희망일시(한국시간)와 최종 확인 상태를 저장할 수 있습니다. 이미지나 문안을 고치면 최종 확인 표시는 해제되고, 희망일시는 유지됩니다. 이 값은 예약 준비를 위한 메모이며 알림이나 자동 게시를 실행하지 않습니다.
-
-## 첫 버전 범위
-
-현재 버전은 초안 제작, 로컬 내보내기, 게시 희망일시 기록, 주제별 해시태그·음악 방향 추천과 수동 게시 안내를 지원합니다. Instagram 계정 연결, 실제 게시, 예약 실행과 실시간 트렌드 수집은 포함하지 않습니다.
+- AI 이미지는 실제 음식·가게와 다를 수 있습니다. 가격·영업시간·메뉴 구성·효능 같은 사실은 게시 전 사람이 확인하세요. 카드 장식에는 날짜·가격·연도 같은 숫자를 넣지 않습니다.
+- Higgsfield·OpenAI·Cloudflare 유료 요금제는 사용량만큼 비용이 생깁니다. 실제 사진 캐러셀과 카드 글자 고치기는 이미지 AI를 부르지 않습니다.
+- 공개 주소의 로그인 시도 제한은 서버 프로세스 하나 안에서만 적용됩니다. 공개 운영 전에는 HTTPS와 앞단 보호를 확인하세요.
