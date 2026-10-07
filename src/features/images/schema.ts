@@ -31,6 +31,8 @@ export const ImageBriefSchema = z.object({
   panorama:z.enum(["left","right"]).optional(),
   // photos와 같은 순서로, 사진을 얼마나 가까이 잘라 쓸지(사진이 적을 때 같은 사진을 다른 장에 다시 쓰기, render/photoView.ts).
   photoViews:z.array(z.enum(["full","close","detail"])).max(3).optional(),
+  // 이 장의 사진 칸 비율(가로÷세로). 서버가 이미지 AI를 부르기 전에 재서 채운다(photoWindow.ts). 이미지 AI가 이 비율로 그린다.
+  windowRatio:z.number().min(.3).max(3.5).optional(),
   // photos를 그릴 때 사진 보정(밝기·색)을 할지. 사장님 사진은 기본 보정, AI 이미지 밑바탕으로 글자만 다시 그릴 때는 false.
   enhance:z.boolean().optional(),
   // 사진 보정 방식: 사장님 사진 "real", AI가 만든 밑바탕 "ai", 보정 없음 "none". 없으면 enhance를 따른다(예전 요청 호환).

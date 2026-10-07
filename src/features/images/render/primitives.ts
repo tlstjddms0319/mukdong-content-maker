@@ -422,6 +422,9 @@ const softFinish=(input:Buffer)=>{const flags=qualityOfEnhanced(input)?.flags;re
 // 칸 크기로 자르기(확대·초점 반영). 결과는 아직 인코드하지 않은 sharp 파이프라인.
 async function cropTo(input:Buffer,width:number,height:number,options:PhotoCrop):Promise<Sharp> {
   const zoom=Math.min(1.3,Math.max(1,options.zoom??1));
+  // 검수용: 칸 비율에 맞추며 원본을 얼마나 남겼는지 적는다(검수 중이 아니면 버려진다).
+  const meta=await sharp(input).rotate().metadata().catch(()=>null);
+  if(meta?.width&&meta.height){const turned=(meta.orientation??1)>=5,sw=turned?meta.height:meta.width,sh=turned?meta.width:meta.height;const a=sw/sh,b=width/height;noteAudit({kind:"photo-crop",kept:Math.round(Math.min(a/b,b/a)/(zoom*zoom)*100)/100,width,height});}
   if(!options.focus&&zoom===1)return sharp(input).rotate().resize(width,height,{fit:"cover",position:options.position??"attention"});
   if(!options.focus){
     // 칸보다 zoom배 크게 attention으로 자른 뒤 가운데를 다시 잘라 낸다.

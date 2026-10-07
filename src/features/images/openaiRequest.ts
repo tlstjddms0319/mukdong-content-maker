@@ -1,3 +1,4 @@
+import { framingDirection, openaiSize } from "./imageAspect";
 import type { ImageBrief } from "./schema";
 import { IMAGE_STYLE_DIRECTIONS, resolveImageStyle } from "./style";
 import { CARD_LAYOUTS } from "./design";
@@ -164,6 +165,8 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     styleId==="photo" ? "" : `화풍: ${style.anchor}. 장면 설명이나 공통 스타일에 '사진'이라는 말이 있어도 사진처럼 만들지 말고 이 화풍으로 그릴 것.`,
     input.slide?.role==="detail"?"Macro detail: emphasize the actual texture of one bite with a gently blurred background. Keep the focal food clear of the title area; the plate may extend beyond the frame.":input.slide?.role==="overview"?"Top-down overview: keep the whole plate inside the central 75% crop-safe area, with sufficient depth of field to read the arrangement.":"Keep the main food inside the central 75% crop-safe area; use depth of field appropriate to this scene, without losing the food's recognizable shape.",
     input.variant ? `이 후보만의 구도: ${input.variant}.` : "",
+    // 카드의 사진 칸 비율에 맞춘 구도(가로 칸이면 접시 전체가 가장자리에서 잘리지 않게). 칸 비율을 모르면 넣지 않는다.
+    framingDirection(input.windowRatio,input.slide?.role==="detail"),
     // 사람이 먹고 있는 느낌은 장면 설명이 요구할 때만, 얼굴이 식별되지 않는 범위에서 넣는다.
     "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
     foodDirection(input),
@@ -184,7 +187,7 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
 };
 
 export function buildImageRequest(input: ImageBrief, quality:"medium"|"high"="medium") {
-  return { model:"gpt-image-1.5" as const, quality, prompt:buildImagePrompt(input), size:"1024x1536" as const, n:input.count };
+  return { model:"gpt-image-1.5" as const, quality, prompt:buildImagePrompt(input), size:openaiSize(input.windowRatio), n:input.count };
 }
 
 export async function buildImageEditRequest(input:ImageBrief&{referenceImage:string},quality:"medium"|"high"="medium") {
@@ -195,5 +198,5 @@ export async function buildImageEditRequest(input:ImageBrief&{referenceImage:str
   // 화풍 참고, 표지 이어 가기, 수정 요청, 그림 화풍에서는 낮춰서 장면이 바뀔 여지를 준다.
   const keepClose=(input.referenceMode??"source")==="source"&&!input.refinement&&resolveImageStyle(input)==="photo";
   const input_fidelity:"high"|"low"=keepClose?"high":"low";
-  return {model:"gpt-image-1.5" as const,quality,image,prompt:buildImagePrompt(input,true),size:"1024x1536" as const,n:input.count,input_fidelity};
+  return {model:"gpt-image-1.5" as const,quality,image,prompt:buildImagePrompt(input,true),size:openaiSize(input.windowRatio),n:input.count,input_fidelity};
 }

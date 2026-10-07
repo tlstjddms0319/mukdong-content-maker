@@ -1,5 +1,6 @@
 import "server-only";
 import sharp from "sharp";
+import { higgsfieldAspect } from "./imageAspect";
 import type { ImageBrief } from "./schema";
 import { buildImagePrompt, candidateBriefs } from "./openaiRequest";
 
@@ -104,26 +105,29 @@ async function waitForJob(job:Job,auth:string):Promise<string> {
 // 결과는 3:4로 오므로 게시물 비율(4:5, 1080×1350)로 잘라 JPEG data URL로 돌려준다.
 // 자르는 자리는 가운데가 아니라 attention(눈에 띄는 부분: 채도·밝기 대비가 큰 곳)으로 잡아, 접시가 위아래로 치우친 사진에서도
 // 주인공 음식이 잘리지 않게 한다. 3:4 → 4:5는 세로를 약 6%만 덜어 내므로 구도가 크게 바뀌지 않는다.
-async function downloadAsPost(url:string):Promise<string> {
+// 카드의 사진 칸 비율로 만든 그림(keepAspect)은 자르지 않고 그대로(긴 변 2160px 이하로만) 돌려준다. 칸 비율로 만든 그림을
+// 4:5로 또 자르면 다시 잘린다.
+async function downloadAsPost(url:string,keepAspect=false):Promise<string> {
   let response:Response;
   try { response=await fetch(url,{signal:AbortSignal.timeout(60_000)}); }
   catch { throw new HiggsfieldImageError(504,"timeout"); }
   if(!response.ok)throw new HiggsfieldImageError(502);
-  const jpeg=await sharp(Buffer.from(await response.arrayBuffer())).rotate().resize({...OUTPUT,fit:"cover",position:"attention"}).jpeg({quality:92}).toBuffer();
+  const image=sharp(Buffer.from(await response.arrayBuffer())).rotate();
+  const jpeg=await (keepAspect?image.resize({width:2160,height:2160,fit:"inside",withoutEnlargement:true}):image.resize({...OUTPUT,fit:"cover",position:"attention"})).jpeg({quality:92}).toBuffer();
   return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
 }
 
 async function generateOne(input:ImageBrief,auth:string,referenceUrl?:string):Promise<string> {
   const job=await api<Job>(MODEL_PATH,{method:"POST",body:{
     prompt:buildImagePrompt(input,Boolean(referenceUrl)),
-    // 이 모델이 받는 비율 목록에 4:5가 없어(1:1·3:4·2:3·9:16 등) 가장 가까운 3:4로 받아 자른다.
+    // 카드의 사진 칸 비율에 가장 가까운 비율로 만든다(이 모델은 4:5가 없어, 칸 비율을 모르면 3:4로 받아 4:5로 자른다).
     // 품질 값도 low·medium뿐이라 표지도 medium(가장 높은 값)으로 둔다.
-    aspect_ratio:"3:4",
+    aspect_ratio:higgsfieldAspect(input.windowRatio),
     resolution:"2k",
     quality:"medium",
     ...(referenceUrl?{image_urls:[referenceUrl]}:{}),
   }},auth);
-  return downloadAsPost(await waitForJob(job,auth));
+  return downloadAsPost(await waitForJob(job,auth),input.windowRatio!==undefined);
 }
 
 export async function generateHiggsfieldImages(input:ImageBrief):Promise<string[]> {

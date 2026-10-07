@@ -15,6 +15,7 @@ import { HiggsfieldConfigurationError, HiggsfieldImageError, HiggsfieldPartialIm
 import sharp from "sharp";
 import { prepareRemoteCutouts } from "@/features/images/remoteCutout";
 import { viewOf } from "@/features/images/render/photoView";
+import { photoWindowRatio } from "@/features/images/photoWindow";
 import { checkCoverCandidates, coverRank, expectedFoodFrom } from "@/features/images/coverCheck";
 
 type ImageProvider="higgsfield"|"cloudflare"|"openai";
@@ -93,12 +94,15 @@ export async function POST(request: Request) { const denied=await ownerApiError(
       cloudflare:generateCloudflareImages,
       openai:generateWithOpenAI,
     };
+    // 이 장의 사진 칸 비율을 미리 재서 이미지 AI가 그 비율로 만들게 한다(세로 그림을 가로 칸에 넣으며 접시가 잘리던 문제).
+    const windowRatio=parsed.data.slide?await photoWindowRatio(parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,cardOptions):undefined;
+    const brief:ImageBrief={...parsed.data,...(windowRatio?{windowRatio}:{})};
     let images:string[]=[];
     const used:ImageProvider[]=[];
     for(const [index,name] of chain.entries()){
       // 앞 제공자가 일부만 만들었으면 남은 장수만, 그리고 이어지는 후보 번호부터 요청한다.
       try {
-        const made=await generators[name]({...parsed.data,count:parsed.data.count-images.length,candidateOffset:images.length});
+        const made=await generators[name]({...brief,count:brief.count-images.length,candidateOffset:images.length});
         images=[...images,...made]; used.push(name);
         recordUsage({provider:USAGE_IDS[name],ok:true,units:made.length});
         break;
