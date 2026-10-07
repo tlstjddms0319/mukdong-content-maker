@@ -149,3 +149,44 @@ export function matchPhotosToSlides(plan:CarouselPlan,assignment:number[][],note
   }
   return {assignment:next,unused:unusedOf(next)};
 }
+
+// ── 사진이 적을 때 같은 사진을 다른 거리로 다시 쓰기 ─────────────────────────────────────────
+// 사진 1장으로 5장 캐러셀을 만들면 예전에는 표지 말고 네 장이 모두 글자 카드였다. 사진마다 "가까이(close)"와 "결 확대(detail)"
+// 두 번까지 더 쓸 수 있게 해(사진 한 장이 최대 세 장면), 글자 카드로 남은 장에 사진을 넣는다.
+// - 우선순위는 PHOTO_PRIORITY(결·한 접시·곁들임 먼저, 방문 안내는 마지막). 대형 숫자 장은 글자 그대로.
+// - detail 역할 장은 결 확대를 먼저, 나머지는 가까이를 먼저 쓴다.
+// - 어느 사진을 쓸지: 글과 맞는 사진(notes가 있으면) → 덜 쓴 사진 → 바로 앞뒤 장과 다른 사진 → 앞 사진.
+export type PhotoView="full"|"close"|"detail";
+export const PHOTO_VIEW_LABELS:Record<PhotoView,string>={full:"사진 그대로",close:"가까이",detail:"결 확대"};
+
+// 앞 항목부터 비교해 처음 다른 값이 큰 쪽이 앞선다.
+const outranks=(a:readonly number[],b:readonly number[])=>{for(let k=0;k<a.length;k++)if(a[k]!==b[k])return a[k]>b[k];return false;};
+
+export function fillWithPhotoViews(plan:CarouselPlan,assignment:number[][],photoCount:number,notes:readonly string[]=[]):{plan:CarouselPlan;assignment:number[][];views:PhotoView[][]} {
+  const slides=[...plan.slides];
+  const next=assignment.map(slots=>[...slots]);
+  const views:PhotoView[][]=assignment.map(slots=>slots.map(()=>"full" as const));
+  // 사진마다 이미 쓴 거리.
+  const used=Array.from({length:photoCount},()=>new Set<PhotoView>());
+  next.forEach(slots=>slots.forEach(photo=>used[photo]?.add("full")));
+  const order=slides.map((slide,i)=>({role:slide.role,i})).filter(item=>item.i>0&&!next[item.i].length&&!KEEP_TEXT.has(normalizeCardLayout(slides[item.i])))
+    .sort((a,b)=>PHOTO_PRIORITY.indexOf(a.role)-PHOTO_PRIORITY.indexOf(b.role)||a.i-b.i);
+  for(const {i,role} of order){
+    const prefer:PhotoView[]=role==="detail"?["detail","close"]:["close","detail"];
+    const neighbours=new Set([...(next[i-1]??[]),...(next[i+1]??[])]);
+    let best:{photo:number;view:PhotoView;rank:number[]}|null=null;
+    for(let photo=0;photo<photoCount;photo++){
+      const view=prefer.find(item=>!used[photo].has(item));
+      if(!view)continue;
+      // 높을수록 좋음: 글과 맞음, 덜 씀, 이웃과 다름, 앞 사진.
+      const rank=[photoMatchScore(slides[i],notes[photo]??""),-used[photo].size,neighbours.has(photo)?0:1,-photo];
+      if(!best||outranks(rank,best.rank))best={photo,view,rank};
+    }
+    if(!best)break;
+    used[best.photo].add(best.view);
+    next[i]=[best.photo];views[i]=[best.view];
+    const layout=SINGLE_LAYOUT;
+    slides[i]={...slides[i],layout,variant:Math.min(slides[i].variant??0,LAYOUT_VARIANTS[layout]-1)};
+  }
+  return {plan:{...plan,slides},assignment:next,views};
+}

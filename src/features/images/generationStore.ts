@@ -9,7 +9,7 @@ import type { SeasonMotif } from "./seasonMotif";
 import { AnalyzeResponseSchema, TOPIC_TAG, photoNote } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
 import { readJsonResponse } from "@/lib/http/readJson";
-import { fitPanorama, fitPlanToPhotos, matchPhotosToSlides, swapPhoto } from "./photoCarousel";
+import { fillWithPhotoViews, fitPanorama, fitPlanToPhotos, matchPhotosToSlides, swapPhoto, type PhotoView } from "./photoCarousel";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
 // 화면(ImageStudio)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
@@ -60,6 +60,7 @@ export type GenerationState={
   refinements:Record<number,string>;
   photos:StudioPhoto[];          // 실제 사진 캐러셀에 쓸 사진(올린 순서 = 장에 배치되는 순서)
   photoAssignment:number[][];    // 장마다 들어간 사진 번호(photos 기준). 사진 바꾸기에 쓴다.
+  photoViews:PhotoView[][];      // photoAssignment와 같은 모양: 그 칸의 사진을 얼마나 가까이 잘라 쓰는지. 없으면 사진 그대로.
   deckEdited:boolean;            // 사용자가 완성된 캐러셀에서 장을 빼거나 넣었는지. 그러면 장 수는 설정값이 아니라 지금 장 수다.
   deckStatus:string;             // 장을 빼고 넣은 뒤 장 번호를 다시 그리는 동안의 진행 안내.
   // 맨 뒤 가게 홍보 카드(사장님 결정: 모든 캐러셀 끝에 "묵동홍어마을" 홍보 카드 한 장, 이미지 AI 비용 없음).
@@ -70,7 +71,7 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",referenceWarning:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",referenceWarning:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],photoViews:[],
     // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 캐러셀로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
@@ -78,7 +79,7 @@ export function initialGenerationState(key:string,input:GenerationInput,approved
 }
 
 // 만든 것들만 비우고 모드·화풍·참고 사진은 남긴다(모드 카드나 표지 다시 만들기에서 쓰는 초기화).
-const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,planFallbackMessage:"",refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[],deckEdited:false,deckStatus:""};
+const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,planFallbackMessage:"",refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[],photoViews:[],deckEdited:false,deckStatus:""};
 
 let state:GenerationState=initialGenerationState("",EMPTY_INPUT);
 // 늦게 도착한 응답을 버리기 위한 토큰. 새 작업이 시작되거나 상태가 초기화될 때마다 올라간다.
@@ -410,9 +411,11 @@ export function movePhotoForward(index:number){
   run++;patch({photos,...CLEARED});
 }
 
-async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[]):Promise<ApprovedImage>{
+// 칸마다 자르는 거리(가까이·결 확대)가 하나라도 있으면 함께 보낸다. 모두 "사진 그대로"면 보내지 않는다.
+const viewsField=(views:readonly PhotoView[]|undefined)=>views?.some(view=>view!=="full")?{photoViews:[...views]}:{};
+async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[],views?:readonly PhotoView[]):Promise<ApprovedImage>{
   const slide=plan.slides[index];
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview)}:{}),...(panoramaSide(index,slots)?{panorama:panoramaSide(index,slots)}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views)}:{}),...(panoramaSide(index,slots)?{panorama:panoramaSide(index,slots)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 만들지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
@@ -453,12 +456,14 @@ export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
     const style=effectiveDesign((data.plan as CarouselPlan).design).style;
     const fitted=(state.panorama?fitPanorama:fitPlanToPhotos)(data.plan as CarouselPlan,photos.length,{maxPerSlide:!style||style==="template"?3:2});
     // 2) 장마다 사진 칸 수는 그대로 두고, 사진 내용이 그 장의 글과 맞는 사진을 넣는다(표지는 첫 사진 그대로).
-    const fit=photoNotes?{...fitted,...matchPhotosToSlides(fitted.plan,fitted.assignment,notes)}:fitted;
+    const matched=photoNotes?{...fitted,...matchPhotosToSlides(fitted.plan,fitted.assignment,notes)}:fitted;
+    // 3) 사진이 모자라 글자 카드로 남은 장에는 같은 사진을 "가까이"·"결 확대"로 다시 쓴다(사진 한 장이 최대 세 장면).
+    const fit=fillWithPhotoViews(matched.plan,matched.assignment,photos.length,notes);
     // 기본 문안이어도 비용이 들지 않으니 멈추지 않고, 안내만 남긴다.
-    patch({plan:fit.plan,planFallback:data.provider==="fallback",planFallbackMessage:data.provider==="fallback"?fallbackMessageOf(data):"",photoAssignment:fit.assignment,phase:"slides",...reviewNotice(data.review)});
+    patch({plan:fit.plan,planFallback:data.provider==="fallback",planFallbackMessage:data.provider==="fallback"?fallbackMessageOf(data):"",photoAssignment:fit.assignment,photoViews:fit.views,phase:"slides",...reviewNotice(data.review)});
     let next:ApprovedImage[]=[];
     for(let i=0;i<fit.plan.slides.length;i++){
-      const card=await composePhotoSlide(fit.plan,i,fit.assignment[i]);
+      const card=await composePhotoSlide(fit.plan,i,fit.assignment[i],fit.views[i]);
       if(token!==run)return;
       next=[...next,card];
       patch({slides:next,...(i===0?{cover:card}:{})});
@@ -481,11 +486,12 @@ export async function swapSlidePhoto(photoIndex:number){
   const token=++run;
   patch({phase:"slides",error:""});
   try{
+    // 사진을 직접 바꾼 장은 사진 그대로 쓴다(가까이·결 확대는 사진이 모자랄 때 자동으로만).
     const card=await composePhotoSlide(plan,index,slots);
     if(token!==run)return;
-    patch({slides:state.slides.map((item,i)=>i===index?card:item),photoAssignment:state.photoAssignment.map((item,i)=>i===index?slots:item),...(index===0?{cover:card}:{}),approved:false});
+    patch({slides:state.slides.map((item,i)=>i===index?card:item),photoAssignment:state.photoAssignment.map((item,i)=>i===index?slots:item),photoViews:state.slides.map((_,i)=>i===index?slots.map(()=>"full" as const):state.photoViews[i]??[]),...(index===0?{cover:card}:{}),approved:false});
     if(partner>=0&&state.photoAssignment[partner]){
-      const other=await composePhotoSlide(plan,partner,state.photoAssignment[partner]);
+      const other=await composePhotoSlide(plan,partner,state.photoAssignment[partner],state.photoViews[partner]);
       if(token!==run)return;
       patch({slides:state.slides.map((item,i)=>i===partner?other:item),...(partner===0?{cover:other}:{})});
     }
@@ -516,11 +522,11 @@ export function slideTextProblem(edit:SlideTextEdit):string|null {
 
 // 이 장의 밑바탕을 고른다. 다시 그릴 수 없으면(예: 저장된 초안에서 연 AI 카드) null.
 // photoKind: 사장님 사진이면 "real"(전체 보정), AI가 만든 밑바탕이면 "ai"(처음 그릴 때와 같은 약한 보정).
-function textEditBase(current:GenerationState,index:number):{photos:string[];photoKind:"real"|"ai"|"none"}|null {
+function textEditBase(current:GenerationState,index:number):{photos:string[];photoKind:"real"|"ai"|"none";views?:PhotoView[]}|null {
   const slide=current.plan?.slides[index];
   if(!slide||!current.slides[index])return null;
   const slots=current.photoAssignment[index];
-  if(slots?.length)return {photos:slots.map(i=>current.photos[i]?.preview).filter((preview):preview is string=>!!preview),photoKind:"real"};
+  if(slots?.length)return {photos:slots.map(i=>current.photos[i]?.preview).filter((preview):preview is string=>!!preview),photoKind:"real",views:current.photoViews[index]};
   if(current.slideLayout==="card"&&photosNeeded(normalizeCardLayout(slide))===0)return {photos:[],photoKind:"none"};
   const bases=current.slides[index].bases;
   return bases?.length?{photos:bases,photoKind:"ai"}:null;
@@ -529,9 +535,9 @@ export const canEditSlideText=(current:GenerationState,index:number)=>textEditBa
 
 // 밑바탕(사진·AI 원본·없음)으로 한 장을 다시 그린다. 이미지 AI를 부르지 않는다(비용 없음).
 // 장 번호·전체 장 수는 지금 상태(deckTotal)를 따른다.
-async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none"}):Promise<string>{
+async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none";views?:readonly PhotoView[]}):Promise<string>{
   const plan=state.plan!;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind}:{}),...(base.photoKind==="real"&&panoramaSide(index,state.photoAssignment[index]??[])?{panorama:panoramaSide(index,state.photoAssignment[index]??[])}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind,...(base.photoKind==="real"?viewsField(base.views):{})}:{}),...(base.photoKind==="real"&&panoramaSide(index,state.photoAssignment[index]??[])?{panorama:panoramaSide(index,state.photoAssignment[index]??[])}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 다시 그리지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
@@ -598,6 +604,7 @@ export async function removeSlide(index=activeSlideIndex(state)){
     slides:state.slides.filter(keep),
     plan:state.plan?{...state.plan,slides:state.plan.slides.filter(keep)}:undefined,
     photoAssignment:state.photoAssignment.filter(keep),
+    photoViews:state.slides.map((_,i)=>state.photoViews[i]??[]).filter(keep),
     refinements,deckEdited:true,approved:false,error:"",providerNotice:"",
     activeSlide:Math.min(index,state.slides.length-2),phase:"slides",deckStatus:"장을 빼고 장 번호를 맞추는 중",
   });
@@ -689,9 +696,10 @@ export async function addSlide(input:NewSlide){
   const placeholder:ApprovedImage={id:crypto.randomUUID(),source:input.source==="photo"?"photo":input.source==="ai"?sourceOf():"design",role:slide.role};
   const slides=[...state.slides];slides.splice(position,0,placeholder);
   const assignment=state.slides.map((_,i)=>state.photoAssignment[i]??[]);assignment.splice(position,0,slots);
+  const views=state.slides.map((_,i)=>state.photoViews[i]??[]);views.splice(position,0,slots.map(()=>"full" as const));
   const refinements=Object.fromEntries(Object.entries(state.refinements).map(([key,value])=>{const i=Number(key);return [i>=position?i+1:i,value];}));
   const token=++run;
-  patch({slides,photos,photoAssignment:assignment,refinements,plan:{...plan,slides:[...plan.slides.slice(0,position),slide,...plan.slides.slice(position)]},deckEdited:true,approved:false,activeSlide:position,error:"",providerNotice:"",phase:"slides",deckStatus:"새 장을 그리는 중"});
+  patch({slides,photos,photoAssignment:assignment,photoViews:views,refinements,plan:{...plan,slides:[...plan.slides.slice(0,position),slide,...plan.slides.slice(position)]},deckEdited:true,approved:false,activeSlide:position,error:"",providerNotice:"",phase:"slides",deckStatus:"새 장을 그리는 중"});
   try{
     const card=input.source==="ai"?await generate(slide,position+1):{...placeholder,preview:await renderCard(position,slide,{photos:slots.map(i=>photos[i].preview),photoKind:slots.length?"real":"none"})};
     if(token!==run)return;
@@ -701,7 +709,7 @@ export async function addSlide(input:NewSlide){
     // 새 장을 못 그렸으면 끼워 넣은 자리를 되돌린다(빈 장이 남지 않게).
     if(token===run){
       const at=state.slides.findIndex(item=>item.id===placeholder.id);
-      if(at>=0&&!state.slides[at].preview)patch({slides:state.slides.filter((_,i)=>i!==at),plan:{...state.plan!,slides:state.plan!.slides.filter((_,i)=>i!==at)},photoAssignment:state.photoAssignment.filter((_,i)=>i!==at),activeSlide:Math.max(0,at-1)});
+      if(at>=0&&!state.slides[at].preview)patch({slides:state.slides.filter((_,i)=>i!==at),plan:{...state.plan!,slides:state.plan!.slides.filter((_,i)=>i!==at)},photoAssignment:state.photoAssignment.filter((_,i)=>i!==at),photoViews:state.photoViews.filter((_,i)=>i!==at),activeSlide:Math.max(0,at-1)});
       patch({error:error instanceof Error?error.message:"새 장을 만들지 못했어요."});
     }
   }finally{

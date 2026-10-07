@@ -10,6 +10,7 @@ import { LibraryFilterBar } from "./LibraryFilterBar";
 import type { LibraryAsset } from "@/features/images/freeCards";
 import { filterLibrary, popularTags, usageLabel, type LibrarySort } from "@/features/images/libraryFilter";
 import { AnalyzeResponseSchema, type AnalyzeResponse } from "@/features/images/photoAnalysis";
+import { PHOTO_VIEW_LABELS } from "@/features/images/photoCarousel";
 import { MAX_STUDIO_PHOTOS, activeSlideIndex, approvedDeck, storeCardPending, deckComplete, addLibraryPhoto, canEditSlideText, addPhotos, approveRawPhotos, buildPhotoCarousel, recordPhotoUse, markApproved, movePhotoForward, removePhoto, setActiveSlide, swapSlidePhoto, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
 // 사진 품질·표지 추천(/api/images/analyze). score:false는 서버의 로컬 검사만(무료), true는 Gemini 식욕 점수까지(버튼으로만).
@@ -43,6 +44,8 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
   const filling=phase==="slides"&&!deckEdited&&slides.length<slideCount;
   const progress=deckStatus?deckStatus:phase==="uploading"?photoStatus||"사진을 저장하고 있어요":phase==="planning"?"캐러셀 구성을 만들고 있어요":filling?`${slides.length}/${slideCount}장 완성 · 사진을 카드에 앉히고 있어요`:phase==="slides"?`${activeIndex+1}번 장 사진을 바꾸고 있어요`:"";
   const usedInActive=photoAssignment[activeIndex]??[];
+  // 사진이 모자라 같은 사진을 가까이·결 확대로 다시 쓴 장이면 알려 준다.
+  const activeView=state.photoViews[activeIndex]?.[0];
   // 장 수보다 사진이 많아 이번 캐러셀에 들어가지 못한 사진(말없이 빠지지 않게 알려 준다). 장마다 사진 바꾸기로 넣을 수 있다.
   const placed=new Set(photoAssignment.flat());
   const unused=done?photos.map((_,index)=>index).filter(index=>!placed.has(index)):[];
@@ -90,7 +93,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
   return <div className="photo-studio">
     <div className="upload-zone" onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();void addPhotos([...event.dataTransfer.files]);}}>
       <strong>사진을 여기에 끌어놓으세요 (최대 {MAX_STUDIO_PHOTOS}장)</strong>
-      <span className="field-help">첫 번째 사진이 표지가 돼요. 사진이 장 수보다 적으면 남는 장은 글자 카드로, 많으면 한 장에 여러 컷을 넣어요.</span>
+      <span className="field-help">첫 번째 사진이 표지가 돼요. 사진이 장 수보다 적으면 같은 사진을 가까이·결 확대로 한 번씩 더 쓰고(사진 한 장이 최대 세 장면) 그래도 남는 장은 글자 카드로, 많으면 한 장에 여러 컷을 넣어요.</span>
       <input ref={inputRef} aria-label="사진 파일" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={event=>{void addPhotos([...(event.target.files??[])]);event.target.value="";}}/>
       <div className="photo-studio-actions">
         <button type="button" className="button secondary" disabled={busy||photos.length>=MAX_STUDIO_PHOTOS} onClick={()=>inputRef.current?.click()}>사진 올리기</button>
@@ -143,6 +146,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       </div>
       {done&&(usedInActive.length?<div className="photo-swap">
         <span>이 장 사진 바꾸기</span>
+        {activeView&&activeView!=="full"&&<span className="field-help">사진이 장 수보다 적어 {usedInActive[0]+1}번 사진을 &apos;{PHOTO_VIEW_LABELS[activeView]}&apos;로 한 번 더 썼어요.</span>}
         <div className="photo-library">{photos.map((photo,index)=><button key={photo.id} type="button" className="photo-thumb" aria-pressed={usedInActive[0]===index} disabled={busy} onClick={()=>void swapSlidePhoto(index)} aria-label={`${index+1}번 사진으로 바꾸기`}><Image src={photo.preview} alt="" width={80} height={80} unoptimized/></button>)}</div>
       </div>:<p className="field-help">이 장은 사진 없이 글자로 만든 카드예요.{plan?` (${plan.slides[activeIndex]?.headline})`:""}</p>)}
       {done&&plan?.slides[activeIndex]&&<SlideTextEditor key={`${activeIndex}|${plan.slides[activeIndex].headline}|${(plan.slides[activeIndex].points??[]).join("|")}`} index={activeIndex} headline={plan.slides[activeIndex].headline} points={plan.slides[activeIndex].points??[]} busy={busy} canEdit={canEditSlideText(state,activeIndex)}/>}
