@@ -229,11 +229,10 @@ export function grainLayer(options:{opacity?:number;width?:number;height?:number
 
 // 마스코트(홍어 캐릭터) 레이어. 자산 파일이 없으면 null을 돌려주고 카드는 마스코트 없이 그려진다.
 // 포즈별 투명 webp는 scripts/extract-mascot.mjs가 캐릭터 스티커 시트에서 오려 만든다.
-export const MASCOT_POSES=["hello","curious","tip","wow","love","bye"] as const;
-// 4단계(B10)에 hello를 참고해 다시 그린 같은 캐릭터의 포즈(scripts/extract-stickers.mjs로 시트에서 오림).
-// 자산 파일이 없으면 mascotLayer가 hello로 대신 그리므로, 이 포즈를 불러도 카드가 깨지지 않는다.
-export const EXTRA_POSES=["eating","cheers","point","think","rain","ok"] as const;
-export type MascotPose=typeof MASCOT_POSES[number]|typeof EXTRA_POSES[number];
+// eating·cheers·point·think·rain·ok는 4단계(B10)에 hello를 참고해 다시 그린 같은 캐릭터다
+// (scripts/extract-stickers.mjs로 흰 바탕 시트에서 오림, 출처는 assets/design/mascot/SOURCES.md).
+export const MASCOT_POSES=["hello","curious","tip","wow","love","bye","eating","cheers","point","think","rain","ok"] as const;
+export type MascotPose=typeof MASCOT_POSES[number];
 const MASCOT_DIR=path.join(process.cwd(),"assets/design/mascot");
 export const mascotFile=(pose:MascotPose)=>path.join(MASCOT_DIR,`${pose}.webp`);
 export const MASCOT_FILE=mascotFile("hello");
