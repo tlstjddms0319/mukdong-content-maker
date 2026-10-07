@@ -29,6 +29,8 @@ export const ImageBriefSchema = z.object({
   photos:z.array(z.string().regex(/^data:image\/(?:png|jpeg|webp);base64,/).max(8_000_000)).min(1).max(3).optional(),
   // 표지+2장 파노라마: 같은 사진을 표지(left)와 2번째 장(right)에 반씩 쓴다(render/panorama.ts).
   panorama:z.enum(["left","right"]).optional(),
+  // photos와 같은 순서로, 사진을 얼마나 가까이 잘라 쓸지(사진이 적을 때 같은 사진을 다른 장에 다시 쓰기, render/photoView.ts).
+  photoViews:z.array(z.enum(["full","close","detail"])).max(3).optional(),
   // photos를 그릴 때 사진 보정(밝기·색)을 할지. 사장님 사진은 기본 보정, AI 이미지 밑바탕으로 글자만 다시 그릴 때는 false.
   enhance:z.boolean().optional(),
   // 사진 보정 방식: 사장님 사진 "real", AI가 만든 밑바탕 "ai", 보정 없음 "none". 없으면 enhance를 따른다(예전 요청 호환).
