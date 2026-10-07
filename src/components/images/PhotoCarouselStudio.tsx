@@ -144,7 +144,7 @@ export function PhotoCarouselStudio({state,slideCount,onApprove}:{state:Generati
       {done&&plan?.slides[activeIndex]&&<SlideTextEditor key={`${activeIndex}|${plan.slides[activeIndex].headline}|${(plan.slides[activeIndex].points??[]).join("|")}`} index={activeIndex} headline={plan.slides[activeIndex].headline} points={plan.slides[activeIndex].points??[]} busy={busy} canEdit={canEditSlideText(state,activeIndex)}/>}
       {(done||(busy&&deckEdited))&&<DeckEditor state={state}/>}
       {done&&<div className="photo-studio-actions">
-        <button type="button" className="button secondary" disabled={busy||!photos.length} onClick={()=>void buildPhotoCarousel()}>다시 만들기</button>
+        <button type="button" className="button secondary" disabled={busy||!photos.length} onClick={()=>void buildPhotoCarousel({panorama:state.panorama&&coverWide})}>다시 만들기</button>
         <button type="button" className="button primary" disabled={approved||busy||storeCardPending(state)} onClick={()=>{markApproved();onApprove(approvedDeck(state));recordPhotoUse(photoAssignment.flat().map(i=>photos[i]?.id));}}>이 캐러셀 사용</button>
       </div>}
     </>}

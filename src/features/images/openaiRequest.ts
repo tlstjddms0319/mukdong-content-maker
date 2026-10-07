@@ -19,7 +19,8 @@ export function sceneHero(input:ImageBrief):StoreMenuItem|undefined {
 function showsSkate(input:ImageBrief,hero:StoreMenuItem|undefined):boolean {
   if(hero?.id.startsWith("hongeo-"))return true;
   // 메뉴를 못 찾은 장(주제)은 다른 메뉴와 부딪힐 일이 없으니 장면 설명까지 본다(예전과 같이).
-  if(!hero)return /홍어|삼합/.test(input.slide?slideTextOf(input):topicTextOf(input));
+  // 가게 이름 "묵동홍어마을"은 홍어 장면이 아니다(copyMentionsSkate가 걸러 낸다).
+  if(!hero)return copyMentionsSkate(input.slide?slideTextOf(input):topicTextOf(input));
   return copyMentionsSkate(input.slide?[input.slide.headline,...input.slide.points].join(" "):topicTextOf(input));
 }
 
@@ -88,7 +89,7 @@ export function sceneMustShow(input:ImageBrief):string {
   if(!slide)return "";
   const text=[slide.headline,...slide.points].join(" ");
   const hero=sceneHero(input);
-  const skate=!hero||hero.id==="hongeo-hoe"||/홍어|삼합/.test(text);
+  const skate=!hero||hero.id==="hongeo-hoe"||copyMentionsSkate(text);
   const skateActions=skate?SKATE_ACTIONS.filter(([pattern])=>pattern.test(text)).map(([,description])=>description):[];
   // 삼합이면 수육·묵은지 문장은 삼합 문장에 이미 들어 있으므로 겹쳐 쓰지 않는다.
   const unique=skateActions.some(item=>item.startsWith("삼합"))?skateActions.filter(item=>!item.startsWith("수육")&&!item.startsWith("묵은지")):skateActions;

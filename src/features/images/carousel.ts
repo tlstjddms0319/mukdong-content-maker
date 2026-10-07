@@ -225,7 +225,7 @@ export function sceneFromCopy(slide:CarouselSlidePlan,topic:string):string {
     :/(함께|여럿|모임|친구|가족)/.test(text)?`여럿이 둘러앉은 식탁 가운데 놓인 ${dish} 한 상, 사람은 손과 어깨까지만`
     :hero&&!skate?`${josa(hero.lookKo,"을","를")} 낮은 각도에서 가까이 담은 모습`
     :"홍어 접시와 곁들임이 놓인 식탁을 45도에서 담은 모습";
-  return `${subject}. ${topic} 이야기의 "${slide.headline}" 장면. 젓가락으로 집어 든 장면이 아니며 얼굴은 나오지 않음`.slice(0,600);
+  return `${subject}. ${topic} 이야기의 "${slide.headline}" 장면. 음식은 접시 위에 놓여 있고 얼굴은 나오지 않음`.slice(0,600);
 }
 export function limitChopstickScenes(plan:CarouselPlan,topic:string):CarouselPlan {
   let seen=false;
@@ -239,8 +239,9 @@ export function limitChopstickScenes(plan:CarouselPlan,topic:string):CarouselPla
 // 장면이 그 게시물의 메뉴를 벗어나지 않게(sceneFoods.ts). 과메기·미나리전·막걸리처럼 홍어가 아닌 메뉴 이야기에서
 // 장 글(제목·요점)에 없는 홍어·삼합·수육·묵은지가 장면 설명에만 들어 있으면, 그 장의 글로 장면을 다시 짓는다.
 // 전 장 공통 스타일(styleAnchor)에서는 음식 이름을 걷어 내 색·빛·그릇·테이블만 남긴다(모든 장에 실려 가므로).
-export function keepScenesOnMenu(plan:CarouselPlan,topic:string):CarouselPlan {
-  const topicMenu=mainMenuOf(topic);
+// menu: 이 캐러셀의 주인공 메뉴(carouselMenu: 주제·내용 메모·이미지 설명). 주지 않으면 주제에서만 찾는다.
+export function keepScenesOnMenu(plan:CarouselPlan,topic:string,menu:StoreMenuItem|undefined=mainMenuOf(topic)):CarouselPlan {
+  const topicMenu=menu;
   return {...plan,styleAnchor:foodFreeAnchor(plan.styleAnchor),slides:plan.slides.map(slide=>{
     if(!isOtherMenu(topicMenu)||!SKATE_TABLE.test(slide.visualPrompt))return slide;
     if(copyMentionsSkate([slide.headline,...slide.points].join(" ")))return slide;
@@ -256,7 +257,7 @@ export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,op
   if(!ai)return vary(fallback,true);
   try {
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));
-    if(plan.slideCount===parsed.slideCount)return vary(keepScenesOnMenu(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic),parsed.topic),false);
+    if(plan.slideCount===parsed.slideCount)return vary(keepScenesOnMenu(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic),parsed.topic,carouselMenu(parsed)),false);
     options.onFallback?.(new Error("wrong slide count"));
     return vary(fallback,true);
   } catch(error) {

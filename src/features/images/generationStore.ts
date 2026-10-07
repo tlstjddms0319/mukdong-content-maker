@@ -142,11 +142,16 @@ export const deckTotal=(current:GenerationState)=>current.deckEdited?current.sli
 // 캐러셀이 다 만들어졌는지(장 빼기·넣기 뒤에는 장 수가 설정값과 달라도 완성).
 export const deckComplete=(current:GenerationState)=>current.slides.length>0&&(current.deckEdited||current.slides.length===current.input.slideCount);
 // 홍보 카드를 붙이는 캐러셀인지: 구성안으로 그린 캐러셀(실제 사진 카드·AI)만. 무료 카드·사진 그대로는 붙이지 않는다.
-export const storeCardOn=(current:GenerationState)=>current.storeCard.include&&Boolean(current.plan)&&current.mode!=="free";
+// 인스타그램 캐러셀·초안 저장은 한 게시물에 10장까지라, 내용이 10장이면 홍보 카드를 붙이지 않는다(9장 이하일 때만).
+// 9↔10장을 오가도 전체 장 수가 10으로 같아 장 번호를 다시 그릴 필요가 없다.
+export const STORE_CARD_MAX_CONTENT=9;
+export const storeCardOn=(current:GenerationState)=>current.storeCard.include&&Boolean(current.plan)&&current.mode!=="free"&&deckTotal(current)<=STORE_CARD_MAX_CONTENT;
 // 게시물 전체 장 수(홍보 카드 포함). 카드에 찍히는 장 번호 "n / 전체"가 이 수를 쓴다.
 export const postTotal=(current:GenerationState)=>deckTotal(current)+(storeCardOn(current)?1:0);
 // "이 캐러셀 사용"으로 넘길 이미지: 내용 장 + (붙였으면) 맨 뒤 홍보 카드.
-export const approvedDeck=(current:GenerationState):ApprovedImage[]=>[...current.slides,...(storeCardOn(current)&&current.storeCard.image?[current.storeCard.image]:[])];
+// 홍보 카드 그림이 지금 디자인·장 수로 그린 것일 때만 붙인다(다시 그리기에 실패해 옛 장 번호가 남은 카드는 빼고).
+const storeCardKey=(current:GenerationState)=>current.plan?JSON.stringify([effectiveDesign(current.plan.design,current),postTotal(current)]):"";
+export const approvedDeck=(current:GenerationState):ApprovedImage[]=>[...current.slides,...(storeCardOn(current)&&current.storeCard.image&&current.storeCard.key===storeCardKey(current)?[current.storeCard.image]:[])];
 // 홍보 카드를 그리는 중인지. 그리는 동안 "이 캐러셀 사용"을 막는다(카드에는 이미 "n / 전체+1"이 찍혀 있어 빠지면 장 번호가 어긋난다).
 export const storeCardPending=(current:GenerationState)=>storeCardOn(current)&&Boolean(current.storeCard.pending);
 let storeRun=0;
@@ -154,7 +159,7 @@ let storeRun=0;
 export async function ensureStoreCard(){
   if(!storeCardOn(state)||!deckComplete(state)||!state.plan)return;
   const design=effectiveDesign(state.plan.design),total=postTotal(state);
-  const key=JSON.stringify([design,total]);
+  const key=storeCardKey(state);
   if(state.storeCard.image&&state.storeCard.key===key)return;
   const mine=++storeRun;
   patch({storeCard:{...state.storeCard,pending:true}});
@@ -403,12 +408,19 @@ export async function swapSlidePhoto(photoIndex:number){
   const index=activeSlideIndex(state);
   if(!plan||!photoAssignment[index]?.length)return;
   const slots=swapPhoto(photoAssignment[index],photoIndex);
+  // 파노라마(표지+2장)의 한쪽 사진을 바꾸면 짝이 된 다른 장도 평소 디자인으로 다시 그린다(반쪽 사진만 남지 않게).
+  const partner=index<=1&&panoramaSide(index,photoAssignment[index])?1-index:-1;
   const token=++run;
   patch({phase:"slides",error:""});
   try{
     const card=await composePhotoSlide(plan,index,slots);
     if(token!==run)return;
     patch({slides:state.slides.map((item,i)=>i===index?card:item),photoAssignment:state.photoAssignment.map((item,i)=>i===index?slots:item),...(index===0?{cover:card}:{}),approved:false});
+    if(partner>=0&&state.photoAssignment[partner]){
+      const other=await composePhotoSlide(plan,partner,state.photoAssignment[partner]);
+      if(token!==run)return;
+      patch({slides:state.slides.map((item,i)=>i===partner?other:item),...(partner===0?{cover:other}:{})});
+    }
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"사진을 바꾸지 못했어요."});
   }finally{
@@ -572,6 +584,8 @@ export async function addSlide(input:NewSlide){
   // 요청으로 읽기: 문안 AI가 카드 제목·요점·사진 장면을 짓는다(실패하면 서버가 규칙으로 지은 문구를 준다).
   let drafted:Partial<Pick<NewSlide,"headline"|"points">>&{visualPrompt?:string;keywords?:string[]}={};
   if(!input.verbatim&&input.source!=="raw"){
+    // 응답을 기다리는 사이 다른 초안으로 바뀌면(ensureGeneration·reset) 옛 구성안을 새 초안에 쓰지 않게 한다.
+    const token=++run;
     patch({phase:"slides",deckStatus:"요청에 맞게 새 장 문구를 짓는 중…",error:""});
     try{
       const response=await fetch("/api/images/slide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
@@ -579,6 +593,7 @@ export async function addSlide(input:NewSlide){
         previous:plan.slides[position-1]?.headline??"",next:plan.slides[position]?.headline??"",source:input.source,
       })});
       const data=await readJsonResponse(response);
+      if(token!==run)return;
       if(!response.ok||!data.draft)throw new Error(data.message||"새 장 문구를 짓지 못했어요.");
       // 가게 홍보 카드를 원하는 요청이면 새 장을 따로 만들지 않고 맨 뒤 홍보 카드(낙관·가게 이름·마스코트)를 켠다.
       if(data.draft.kind==="store"){
@@ -588,9 +603,10 @@ export async function addSlide(input:NewSlide){
       }
       drafted={headline:data.draft.headline,points:data.draft.points,visualPrompt:data.draft.visualPrompt,keywords:data.draft.keywords};
     }catch(error){
-      patch({phase:"idle",deckStatus:"",error:error instanceof Error?error.message:"새 장 문구를 짓지 못했어요."});
+      if(token===run)patch({phase:"idle",deckStatus:"",error:error instanceof Error?error.message:"새 장 문구를 짓지 못했어요."});
       return;
     }
+    if(token!==run)return;
     patch({phase:"idle",deckStatus:""});
   }
   const slide=newSlidePlan({...input,...drafted},plan.slides[position-1]);

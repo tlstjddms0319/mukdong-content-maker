@@ -29,10 +29,11 @@ const emptyMonth=(month:string):UsageMonth=>({month,days:{},lastQuota:{},lastErr
 export type UsageStore={read(name:string):Promise<string|null>;write(name:string,value:string):Promise<void>};
 export function usageStore(root=process.env.DATA_DIR??path.join(process.cwd(),"data")):UsageStore {
   const remote=remoteStore();
-  if(remote)return {read:name=>remote.read(name).catch(()=>null),write:(name,value)=>remote.write(name,value,"application/json")};
+  // 읽기 오류(5xx·인증·네트워크)는 그대로 던진다. 빈 장부로 여기고 덮어쓰면 이번 달 기록이 사라진다(없는 파일은 read가 null).
+  if(remote)return {read:name=>remote.read(name),write:(name,value)=>remote.write(name,value,"application/json")};
   const file=(name:string)=>path.join(root,...name.split("/"));
   return {
-    async read(name){try{return await readFile(file(name),"utf8");}catch{return null;}},
+    async read(name){try{return await readFile(file(name),"utf8");}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return null;throw error;}},
     async write(name,value){const target=file(name);await mkdir(path.dirname(target),{recursive:true});const temporary=`${target}.${process.pid}.tmp`;await writeFile(temporary,value);await rename(temporary,target);},
   };
 }
@@ -43,7 +44,8 @@ export function applyEvent(month:UsageMonth,event:UsageEvent,now:Date):UsageMont
   const counters={...month.days[day]};
   const current=counters[event.provider]??{calls:0,failures:0,quota:0,units:0};
   const quota=event.quota??(event.status===429);
-  counters[event.provider]={calls:current.calls+1,failures:current.failures+(event.ok?0:1),quota:current.quota+(quota?1:0),units:current.units+(event.ok?event.units??1:0)};
+  // units: 성공이면 기본 1, 실패여도 일부 만든 장수(event.units)가 있으면 센다.
+  counters[event.provider]={calls:current.calls+1,failures:current.failures+(event.ok?0:1),quota:current.quota+(quota?1:0),units:current.units+(event.units??(event.ok?1:0))};
   return {
     ...month,
     days:{...month.days,[day]:counters},

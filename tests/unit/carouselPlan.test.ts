@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildCarouselPlanPrompt, createFallbackCarouselPlan, limitChopstickScenes, planCarousel, rolesForCount } from "@/features/images/carousel";
+import { buildCarouselPlanPrompt, createFallbackCarouselPlan, CHOPSTICK_SCENE, limitChopstickScenes, planCarousel, rolesForCount } from "@/features/images/carousel";
 import { POST } from "@/app/api/images/plan/route";
 
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
@@ -257,6 +257,8 @@ describe("chopstick scenes", () => {
     const limited=limitChopstickScenes(plan,"홍어가 코를 찡하게 하는 이유");
     expect(limited.slides.filter(slide=>slide.visualPrompt===lifted)).toHaveLength(1);
     expect(limited.slides[3].visualPrompt).toContain("묵은지 잎에 홍어 한 점을 싸서");
-    expect(limited.slides[3].visualPrompt).toContain("젓가락으로 집어 든 장면이 아니며");
+    expect(limited.slides[3].visualPrompt).toContain("음식은 접시 위에 놓여 있고");
+    // 다시 지은 장면은 젓가락 장면으로 잡히지 않아야 이미지 지시문에 "젓가락으로 집지 말 것"이 붙는다.
+    expect(CHOPSTICK_SCENE.test(limited.slides[3].visualPrompt)).toBe(false);
   });
 });

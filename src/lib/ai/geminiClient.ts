@@ -1,6 +1,7 @@
 import "server-only";
 import type { z } from "zod";
 import { TextAiHttpError } from "./errors";
+import { recordUsage } from "@/lib/usage/ledger";
 import { OptionalFieldsError, toStrictJsonSchema } from "./jsonSchema";
 
 export class GeminiConfigurationError extends Error {
@@ -43,7 +44,11 @@ export function createGeminiClient(options: { apiKey?:string; model?:string; fal
       let response = await send(model);
       if (response.status===503) response = await send(model);
       // Free quotas are counted per model, so a second flash-lite model doubles the daily headroom.
-      if (response.status===429 && fallbackModel && fallbackModel!==model) response = await send(fallbackModel);
+      if (response.status===429 && fallbackModel && fallbackModel!==model) {
+        // 첫 모델의 무료 한도가 찬 것을 사용량 장부에 남긴다(두 번째 모델이 성공하면 textClient는 성공만 본다).
+        recordUsage({ provider:"gemini", ok:false, status:429 });
+        response = await send(fallbackModel);
+      }
       if (!response.ok) throw new TextAiHttpError("Gemini", response.status);
       const body = await response.json() as { candidates?:Array<{ content?:{ parts?:Array<{ text?:string }> } }> };
       const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("");

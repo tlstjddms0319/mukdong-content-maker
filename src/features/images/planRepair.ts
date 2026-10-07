@@ -3,6 +3,7 @@ import { CarouselPlanSchema, SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, role
 import { CardLayoutSchema, PaletteIdSchema } from "./design";
 import { StyleIdSchema, normalizeStyleId } from "./styleCatalog";
 import { ThemeIdSchema } from "./themes";
+import { SeasonMotifSchema } from "./seasonMotif";
 import { BodyFontIdSchema, SlideBodyFontSchema, SlideTitleFontSchema, TitleFontIdSchema } from "./typography";
 import { TextAiHttpError } from "@/lib/ai/errors";
 
@@ -45,7 +46,7 @@ export function repairPlanJson(raw:unknown,slideCount:number,fixes:string[]=[]):
   const design:Record<string,unknown>=isRecord(plan.design)?{...plan.design}:{};
   if(!valid(PaletteIdSchema,design.palette)){if(design.palette!==undefined)fixes.push("design.palette");design.palette="warm";}
   design.style=normalizeStyleId(design.style);
-  for(const [key,schema] of [["style",StyleIdSchema],["theme",ThemeIdSchema],["titleFont",TitleFontIdSchema],["bodyFont",BodyFontIdSchema],["tone",z.enum(["loud","calm"])]] as const){
+  for(const [key,schema] of [["style",StyleIdSchema],["theme",ThemeIdSchema],["titleFont",TitleFontIdSchema],["bodyFont",BodyFontIdSchema],["tone",z.enum(["loud","calm"])],["season",SeasonMotifSchema]] as const){
     if(design[key]!==undefined&&!valid(schema,design[key])){fixes.push(`design.${key}`);delete design[key];}
   }
   plan.design=design;
