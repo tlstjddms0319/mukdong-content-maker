@@ -62,7 +62,7 @@ export function DeckEditor({state}:{state:GenerationState}){
     </div>
     {active===0&&<p className="field-help">표지는 뺄 수 없어요. 다른 장을 고르면 뺄 수 있어요.</p>}
     {plan&&<div className="deck-store-card">
-      <label><input type="checkbox" checked={state.storeCard.include} disabled={busy} onChange={event=>void setStoreCardIncluded(event.target.checked)}/> 맨 뒤에 가게 홍보 카드 붙이기 (무료)</label>
+      <label className="deck-store-toggle"><input type="checkbox" checked={state.storeCard.include} disabled={busy} onChange={event=>void setStoreCardIncluded(event.target.checked)}/><span>맨 뒤에 가게 홍보 카드 붙이기 (무료)</span></label>
       {storeCardOn(state)&&(state.storeCard.image?.preview
         ?<Image src={state.storeCard.image.preview} alt="맨 뒤 가게 홍보 카드 미리보기" width={108} height={135} unoptimized/>
         :<span className="field-help">홍보 카드를 그리는 중…</span>)}

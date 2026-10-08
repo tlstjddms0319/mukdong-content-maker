@@ -49,7 +49,8 @@ describe("SettingsForm", () => {
   it("starts with previously saved settings", () => {
     render(<SettingsForm initialSettings={{ ...DEFAULT_SETTINGS, imageAspectRatio:"1:1", copyLength:"detailed" }} />);
     expect(screen.queryByLabelText("이미지 비율")).not.toBeInTheDocument();
-    expect(screen.getByText(/추후 적용할 옵션/)).toBeInTheDocument();
+    // 저장만 되고 결과에 쓰이지 않던 "추후 적용할 옵션" 칸은 없앴다(사장님 화면을 줄이기).
+    expect(screen.queryByText(/추후 적용할 옵션/)).not.toBeInTheDocument();
   });
 
   it("preserves inactive saved values when restoring active defaults", async () => {

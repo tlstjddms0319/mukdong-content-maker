@@ -6,7 +6,7 @@ describe("prepared content topics", () => {
     expect(LIBRARY_TOPICS).toHaveLength(12);
     expect(new Set(LIBRARY_TOPICS.map(card => card.title)).size).toBe(12);
     expect(LIBRARY_TOPICS.reduce<Record<string,number>>((counts,card)=>({...counts,[card.audience]:(counts[card.audience]??0)+1}),{})).toEqual({A:5,B:4,C:3});
-    expect(LIBRARY_TOPICS.reduce<Record<string,number>>((counts,card)=>({...counts,[card.format]:(counts[card.format]??0)+1}),{})).toEqual({photo:6,reel:3,illustration:3});
+    expect(LIBRARY_TOPICS.reduce<Record<string,number>>((counts,card)=>({...counts,[card.format]:(counts[card.format]??0)+1}),{})).toEqual({photo:9,illustration:3});
     for (const card of LIBRARY_TOPICS) {
       expect(card.title.trim().length).toBeGreaterThan(0);
       expect(card.title.length).toBeLessThanOrEqual(120);
