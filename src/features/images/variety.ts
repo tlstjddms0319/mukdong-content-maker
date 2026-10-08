@@ -2,7 +2,7 @@ import type { CarouselPlan, CarouselRole } from "./carousel";
 import { LAYOUT_VARIANTS, PaletteIdSchema, defaultCardLayout, normalizeCardLayout, type CardLayout, type DesignSpec, type PaletteId } from "./design";
 import { ThemeIdSchema } from "./themes";
 import { suggestSeasonMotif } from "./seasonMotif";
-import { CALM_WORDS, RESTRAINABLE_STYLES, StyleIdSchema, styleAffinity, type StyleId } from "./styleCatalog";
+import { CALM_WORDS, PICKABLE_STYLES, RESTRAINABLE_STYLES, styleAffinity, type StyleId } from "./styleCatalog";
 import type { BodyFontId, TitleFontId } from "./typography";
 
 // 캐러셀마다 템플릿이 달라 보이게 하는 장치.
@@ -41,11 +41,11 @@ const EMOTIONAL_ROLES=new Set<CarouselRole>(["cover","mood","occasion"]);
 export const randomSeed=()=>Math.floor(Math.random()*2**31);
 const pick=<T,>(items:readonly T[],seed:number,offset=0)=>items[(seed+offset)%items.length];
 
-// 기본 템플릿(template)을 뺀 계열 중 글과 어울리는 것을 고른다. 피할 낱말이 더 많은(점수 음수) 계열은 빼고,
+// 기본 템플릿(template)과 갈래 전용 계열(사진 중심·글 중심)을 뺀 계열 중 글과 어울리는 것을 고른다. 피할 낱말이 더 많은(점수 음수) 계열은 빼고,
 // 남은 계열 중 점수가 가장 높은 무리(1점 차이까지)에서 시드로 하나. 낱말 하나 차이로 늘 같은 계열만 나오지 않게 무리로 고른다.
 export function pickFittingStyle(text:string,seed:number):StyleId {
-  const scored=StyleIdSchema.options.map(id=>({id,score:styleAffinity(id,text)})).filter(item=>item.score>=0);
-  if(!scored.length)return pick(StyleIdSchema.options,seed,7);
+  const scored=PICKABLE_STYLES.map(id=>({id,score:styleAffinity(id,text)})).filter(item=>item.score>=0);
+  if(!scored.length)return pick(PICKABLE_STYLES,seed,7);
   const best=Math.max(...scored.map(item=>item.score));
   return pick(scored.filter(item=>item.score>=best-1).map(item=>item.id),seed,7);
 }

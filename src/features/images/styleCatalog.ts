@@ -3,7 +3,7 @@ import { z } from "zod";
 // 스타일 계열. 게시물 전체의 디자인 방향을 통째로 정한다. "template"은 레이아웃(18종)+게시물 테마로 그리는 기본 방식이고,
 // 나머지는 계열마다 색·사진 처리·글꼴·장식을 모두 따로 가진 디자인이다(그리기 코드는 styles/*.ts).
 // 이 파일은 화면 코드도 불러오므로 그리기 코드(sharp 등)를 넣지 않는다.
-export const StyleIdSchema=z.enum(["template","colorblock","webtoon","omakase","typography","kitsch","diary","infographic","popup","film","neon","hanji","chalkboard","doodle","label","grid","gold","watercolor","ticket","editorial"]);
+export const StyleIdSchema=z.enum(["template","colorblock","webtoon","omakase","typography","kitsch","diary","infographic","popup","film","neon","hanji","chalkboard","doodle","label","grid","gold","watercolor","ticket","editorial","photo-focus","text-focus"]);
 export type StyleId=z.infer<typeof StyleIdSchema>;
 
 // 없앤 계열(뉴트로 픽셀 y2k, 신문 newspaper)이 저장된 초안·한 달 기획·주소에 남아 있어도 열리도록 비슷한 새 계열로 바꿔 읽는다.
@@ -11,6 +11,13 @@ export type StyleId=z.infer<typeof StyleIdSchema>;
 export const RETIRED_STYLES:Record<string,StyleId>={y2k:"neon",newspaper:"hanji"};
 export const normalizeStyleId=(value:unknown)=>typeof value==="string"&&value in RETIRED_STYLES?RETIRED_STYLES[value]:value;
 export const StoredStyleIdSchema=z.preprocess(normalizeStyleId,StyleIdSchema);
+
+// 갈래 전용 계열(계획서 SIMPLIFY_PLAN: 사진 중심·글 중심). 사장님이 고른 갈래(track)만 이 계열을 정한다.
+// 구성안 AI의 계열 안내문, 글에 맞는 계열 고르기·무작위 섞기(variety.ts), 한 달 기획 계열 돌리기, 화면의 계열 고르기에는 넣지 않는다.
+// 예전 계열은 저장된 초안을 다시 열 때를 위해 그대로 둔다.
+export const TRACK_STYLES:ReadonlySet<StyleId>=new Set<StyleId>(["photo-focus","text-focus"]);
+// AI·무작위·한 달 기획·화면이 고를 수 있는 계열(갈래 전용 계열을 뺀 목록).
+export const PICKABLE_STYLES:readonly StyleId[]=StyleIdSchema.options.filter(id=>!TRACK_STYLES.has(id));
 
 export const STYLES:Record<StyleId,{label:string;when:string;photoHint:string}>={
   template:{label:"기본 템플릿",when:"레이아웃과 게시물 테마를 장마다 섞는 기본 카드뉴스",photoHint:""},
@@ -53,6 +60,11 @@ export const STYLES:Record<StyleId,{label:string;when:string;photoHint:string}>=
     photoHint:"Magazine-cover style: the dish large and centered, the top 20% left empty for a masthead, dramatic but clean lighting, vertical composition."},
   film:{label:"감성 필름",when:"비 오는 날, 술 한잔, 하루의 끝 같은 감성 이야기. 필름 띠, 바랜 색감 사진, 영화 자막 같은 문장",
     photoHint:"Cinematic, moody scene with warm practical lights and natural shadows, like a still frame from a film."},
+  // 갈래 전용(위 TRACK_STYLES). when은 화면·검수 스크립트 설명용이고 AI 안내문에는 나가지 않는다.
+  "photo-focus":{label:"사진 중심",when:"사진이 주인공. 넓은 크림 여백의 둥근 액자 사진과 꽉 찬 사진을 번갈아, 한 줄 명조 제목과 짧은 글 한 줄",
+    photoHint:"Premium, appetizing food photo: the dish is the clear hero, close and sharp, warm natural side light, rich but true colors, gentle shallow depth of field, clean uncluttered background. Keep the lower third of the frame calm because a soft gradient and a one-line title sit there."},
+  "text-focus":{label:"글 중심",when:"큰 글자 세 줄. 표지만 사진, 본문은 크림·겨자·밤색 바탕에 제목 한 줄과 짧은 글 두 줄",
+    photoHint:"Appetizing hero photo of the dish for a cover: warm natural light, the dish centered in the middle band of the frame with some space above it, simple background. The bottom of the frame will be cropped for a text panel."},
 };
 
 // 계열 친화도 표(계획서 B11). fits는 그 계열이 잘 어울리는 글의 낱말, avoid는 어울리지 않는 낱말이다.
@@ -80,6 +92,9 @@ export const STYLE_FIT:Record<StyleId,{fits:string[];avoid:string[]}>={
   ticket:{fits:["방문","오시는 길","예약","초대","모임","안내"],avoid:["추모","제사"]},
   editorial:{fits:["특집","베스트","시즌","정리","한 마디"],avoid:["제사","추모"]},
   film:{fits:["비 오는","술 한잔","하루","감성","저녁","추억"],avoid:["할인","이벤트","신메뉴"]},
+  // 갈래 전용 계열은 글로 고르지 않는다(갈래가 정한다).
+  "photo-focus":{fits:[],avoid:[]},
+  "text-focus":{fits:[],avoid:[]},
 };
 // 장식이 많아 절제 변형(design.tone="calm")을 가진 계열.
 export const RESTRAINABLE_STYLES=new Set<StyleId>(["kitsch","popup","neon","chalkboard"]);
@@ -93,8 +108,8 @@ export function styleAffinity(id:StyleId,text:string):number {
 }
 
 export function styleCatalogText():string {
-  const styles=StyleIdSchema.options.map(id=>{const avoid=STYLE_FIT[id].avoid;return `${id}(${STYLES[id].label}: ${STYLES[id].when}${avoid.length?` / 피할 글: ${avoid.join("·")}`:""})`;}).join(", ");
+  const styles=PICKABLE_STYLES.map(id=>{const avoid=STYLE_FIT[id].avoid;return `${id}(${STYLES[id].label}: ${STYLES[id].when}${avoid.length?` / 피할 글: ${avoid.join("·")}`:""})`;}).join(", ");
   return `design.style은 게시물 전체의 디자인 방향으로 다음 중 하나: ${styles}. 지난 게시물과 다른 느낌이 나도록 주제에 맞는 계열을 고르세요. template이 아니면 각 slide의 layout은 사진 장 수(0~3장)만 정하는 데 쓰입니다.`;
 }
 
-export const STYLE_OPTIONS=StyleIdSchema.options.map(id=>[id,STYLES[id].label,STYLES[id].when] as const);
+export const STYLE_OPTIONS=PICKABLE_STYLES.map(id=>[id,STYLES[id].label,STYLES[id].when] as const);

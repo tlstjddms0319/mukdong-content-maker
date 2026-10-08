@@ -17,13 +17,13 @@ export function SlideTextEditor({index,headline,points,busy,canEdit}:Props){
   // 과장·단정 표현(예: "누구나 좋아해요")은 막지 않고 알려만 준다. 게시 전 검사에서도 다시 걸린다.
   const claims=checkTextClaims([title,...edit.points].join("\n")).blocked;
   const changed=title.trim()!==headline||edit.points.map(point=>point.trim()).filter(Boolean).join("\n")!==points.join("\n");
-  if(!canEdit)return <p className="field-help">이 장은 글자만 다시 그릴 수 없어요(밑바탕 사진이 없어요). 바꾸려면 ‘이 장만 다시 만들기’를 써 주세요.</p>;
+  if(!canEdit)return <p className="field-help">이 장은 글자만 따로 고칠 수 없어요. 바꾸려면 ‘이 장 다시 만들기’를 눌러 주세요.</p>;
   return <details className="slide-text-editor">
     <summary>{index+1}번 장 글자 고치기 (무료)</summary>
     <label htmlFor={`${id}-title`}>카드 제목 <small>{title.trim().length}/42</small></label>
     <input id={`${id}-title`} maxLength={60} value={title} disabled={busy} onChange={event=>setTitle(event.target.value)}/>
     {index>0||points.length>0?<>
-      <label htmlFor={`${id}-points`}>카드 요점 <small>한 줄에 하나, {SLIDE_POINT_MAX_COUNT}줄·줄마다 {SLIDE_POINT_MAX_LENGTH}자까지</small></label>
+      <label htmlFor={`${id}-points`}>카드 짧은 글 <small>한 줄에 하나, {SLIDE_POINT_MAX_COUNT}줄·줄마다 {SLIDE_POINT_MAX_LENGTH}자까지</small></label>
       <textarea id={`${id}-points`} rows={4} value={body} disabled={busy} onChange={event=>setBody(event.target.value)}/>
     </>:null}
     {problem&&<p role="alert">{problem}</p>}

@@ -85,7 +85,7 @@ export async function checkRemoteStore(): Promise<StoreCheck> {
   let store: ReturnType<typeof remoteStore>;
   try { store = remoteStore(); }
   catch (error) { return { configured: false, ok: false, message: error instanceof Error && /URL/.test(error.message) ? "SUPABASE_URL이 비어 있어요. 두 값을 함께 넣어 주세요." : "SUPABASE_SECRET_KEY가 비어 있어요. 두 값을 함께 넣어 주세요." }; }
-  if (!store) return { configured: false, ok: false, message: "영구 저장소가 설정되지 않았어요. 서버가 재시작되면 초안과 연결 정보가 지워져요." };
+  if (!store) return { configured: false, ok: false, message: "영구 저장소가 설정되지 않았어요. 서버가 다시 켜지면 게시물과 연결 정보가 지워져요." };
   const name = `health/check-${Date.now()}.txt`;
   try {
     await store.write(name, "ok", "text/plain");

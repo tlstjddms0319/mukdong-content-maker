@@ -2,15 +2,18 @@ import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
-import { CarouselPlanInputSchema, buildCarouselPlanPrompt, carouselMenu, keepScenesOnMenu, planCarousel } from "@/features/images/carousel";
+import { CarouselPlanInputSchema, buildCarouselPlanPrompt, carouselMenu, keepScenesOnMenu, planCarousel, withTrackCount } from "@/features/images/carousel";
+import { applyTrack } from "@/features/images/track";
 import { guardSlidePoints } from "@/features/images/slidePoints";
 import { randomSeed } from "@/features/images/variety";
 import { reviewCarouselPlan } from "@/features/images/planReview";
 import { PLAN_FALLBACK_MESSAGES, lenientPlanSchema, planFallbackReason, type PlanFallbackReason } from "@/features/images/planRepair";
 
 export async function POST(request:Request) { const denied=await ownerApiError(); if(denied)return denied;
-  const input=CarouselPlanInputSchema.safeParse(await request.json());
-  if(!input.success)return NextResponse.json({message:"캐러셀 설정을 확인해 주세요."},{status:400});
+  const parsed=CarouselPlanInputSchema.safeParse(await request.json());
+  if(!parsed.success)return NextResponse.json({message:"만들기 설정을 확인해 주세요."},{status:400});
+  // 갈래(사진 중심·글 중심)가 오면 장 수는 5장으로 고정한다(track.ts). AI에 보내는 장 수·검사 기준도 같은 값을 쓴다.
+  const input={data:withTrackCount(parsed.data)};
 
   let provider:"gemini"|"groq"|"cloudflare"|"fallback"="fallback";
   // AI 답은 검사 전에 고칠 수 있는 것(긴 요점·장 순서 이름·같은 장면 등)을 고쳐 쓴다(planRepair.ts). 고친 내용은 로그로 남긴다.
@@ -40,7 +43,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   if(provider!=="fallback"){
     // 검수에도 구성안과 같은 주인공 메뉴·사진 설명·내용 메모를 준다. 검수가 글을 바꾸면 장면이 메뉴를 벗어나지 않았는지 한 번 더 맞춘다.
     const menu=carouselMenu(input.data);
-    const result=await reviewCarouselPlan(plan,input.data.topic,{review:(prompt,schema)=>client.generateJson(prompt,schema)},{menu,photoNotes:input.data.photoNotes,contentBrief:input.data.contentBrief});
+    const result=await reviewCarouselPlan(plan,input.data.topic,{review:(prompt,schema)=>client.generateJson(prompt,schema)},{menu,photoNotes:input.data.photoNotes,contentBrief:input.data.contentBrief,track:input.data.track});
     finalPlan=result.applied?keepScenesOnMenu(result.plan,input.data.topic,menu):result.plan;
     review={applied:result.applied,before:result.before,after:result.after};
     if(result.applied)console.info(`[plan-review] 문안 검수 적용: 문제 ${result.before}건 → ${result.after}건`);
@@ -48,5 +51,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   const fallback=provider==="fallback"?{fallbackReason:fallbackReason??"error",fallbackMessage:PLAN_FALLBACK_MESSAGES[fallbackReason??"error"]}:{};
   // 카드에 찍히는 글을 마지막으로 거른다. 큰 숫자는 주제·메모·사진 설명에 있는 것만 남긴다.
   const sources={topic:input.data.topic,contentBrief:input.data.contentBrief,imageBrief:input.data.imageBrief,photoNotes:input.data.photoNotes};
-  return NextResponse.json({plan:guardSlidePoints(finalPlan,sources),provider,review,...fallback});
+  const guarded=guardSlidePoints(finalPlan,sources);
+  // 갈래 규칙은 검수·거르기가 글을 바꾼 뒤에 마지막으로 한 번 더 맞춘다(제목이 요점으로 바뀌어도 길이·개수가 지켜지게).
+  return NextResponse.json({plan:input.data.track?applyTrack(guarded,input.data.track):guarded,provider,review,...fallback});
 }

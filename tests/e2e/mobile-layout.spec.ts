@@ -12,7 +12,7 @@ async function expectPhoneFriendly(page:Page,where:string){
     const width=document.documentElement.clientWidth;
     const found:string[]=[];
     if(document.documentElement.scrollWidth>width)found.push(`가로 넘침 ${document.documentElement.scrollWidth}px > ${width}px`);
-    const name=(el:Element)=>(el.getAttribute("aria-label")||(el as HTMLElement).innerText||"").trim().slice(0,24);
+    const name=(el:Element)=>(el.getAttribute("aria-label")||(el as HTMLElement).innerText||el.outerHTML.slice(0,80)).trim().slice(0,80);
     for(const el of document.querySelectorAll("a,button,select,input:not([type=file]),textarea,summary")){
       // 체크박스·라디오는 감싼 글자(label)까지 누를 수 있으므로 label 크기로 잰다.
       const target=(el as HTMLInputElement).type==="checkbox"||(el as HTMLInputElement).type==="radio"?el.closest("label")??el:el;
@@ -30,33 +30,52 @@ async function expectPhoneFriendly(page:Page,where:string){
 
 test("every main screen fits a phone and has finger-sized controls", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name!=="mobile","휴대폰 기기 설정으로만 확인한다.");
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
   await page.setViewportSize({ width:360, height:780 });
   await loginAsOwner(page);
-  await expectPhoneFriendly(page,"주제 단계");
-  // 메뉴 다섯 개가 옆으로 밀지 않아도 모두 보여야 한다.
-  for(const label of ["만들기","내 초안","이미지 제작실","콘텐츠 자료","설정"])await expect(page.getByRole("navigation",{name:"주요 메뉴"}).getByRole("link",{name:label})).toBeInViewport();
-  for(const path of ["/drafts","/images","/library","/help","/settings"]){
+  await expectPhoneFriendly(page,"1단계");
+  // 메뉴 네 칸(만들기·내 게시물·설정·더보기)이 옆으로 밀지 않아도 모두 보여야 한다.
+  const nav=page.getByRole("navigation",{name:"주요 메뉴"});
+  for(const label of ["만들기","내 게시물","설정"])await expect(nav.getByRole("link",{name:label})).toBeInViewport();
+  await expect(nav.getByText("더보기")).toBeInViewport();
+  await nav.getByText("더보기").click();
+  for(const label of ["한 달 계획","콘텐츠 자료","이미지 모음","도움말"])await expect(nav.getByRole("link",{name:label})).toBeInViewport();
+  await expectPhoneFriendly(page,"더보기 펼침");
+  for(const path of ["/drafts","/plan","/images","/library","/help","/settings"]){
     await page.goto(path);
     await expect(page.getByRole("heading",{level:1})).toBeVisible();
     await expectPhoneFriendly(page,path);
   }
+  // 설정의 관리자용 설정을 펼쳐도 화면이 밀리지 않는다.
+  await page.getByText("관리자용 설정",{exact:true}).click();
+  await expectPhoneFriendly(page,"관리자용 설정");
 
-  // 실제 사진 여러 장으로 캐러셀까지: 사진 칸·미리보기가 가장 넓어지는 화면이다.
+  // 사진 세 장으로 사진 중심 게시물까지: 사진 칸·미리보기가 가장 넓어지는 화면이다.
   await page.goto("/");
-  await page.getByRole("button", { name: "이미지 선택" }).click();
-  await page.getByRole("button", { name: "실제 사진 사용" }).click();
+  const next=await page.getByRole("button", { name: "다음" }).boundingBox();
+  expect(next?.height??0).toBeGreaterThanOrEqual(52);
+  await page.getByRole("button", { name: "다음" }).click();
+  await expectPhoneFriendly(page,"2단계");
+  // 단계 표시는 한 줄: 좁은 휴대폰에서는 짧은 이름(1 주제 · 2 만들기 · 3 올리기)을 쓰고, 버튼 이름은 긴 이름 그대로다.
+  const steps=page.getByRole("list",{name:"만드는 순서"});
+  await expect(steps).toHaveText(/1 주제\s*2 만들기\s*3 올리기/,{useInnerText:true});
+  const tops=await steps.getByRole("listitem").evaluateAll(items=>items.map(item=>Math.round(item.getBoundingClientRect().top)));
+  expect(new Set(tops).size,"단계 세 개가 한 줄").toBe(1);
+  await expect(steps.getByRole("button",{name:"1 무엇을 올릴까요"})).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("phone-step2.png") });
+  expect((await page.getByRole("button", { name: "만들기", exact: true }).boundingBox())?.height??0).toBeGreaterThanOrEqual(52);
   await page.getByLabel("사진 파일").setInputFiles(["assets/design/samples/hands-makgeolli.jpg","assets/design/samples/studio-hongeo.jpg","assets/design/samples/table-topdown.jpg"]);
   await expect(page.getByRole("list", { name: "고른 사진" }).getByRole("listitem")).toHaveCount(3, { timeout: 60_000 });
   await expectPhoneFriendly(page,"사진 고른 뒤");
-  await page.getByRole("button", { name: /사진 3장으로 .*캐러셀 만들기/ }).click();
-  await expect(page.getByRole("button", { name: "이 캐러셀 사용" })).toBeVisible({ timeout: 120_000 });
-  await expectPhoneFriendly(page,"캐러셀 완성");
-  await page.screenshot({ path: testInfo.outputPath("phone-carousel.png"), fullPage: true });
-  await page.getByRole("button", { name: "이 캐러셀 사용" }).click();
-  await page.getByRole("button", { name: "문안 만들기" }).click();
-  await expectPhoneFriendly(page,"문안 단계");
-  await page.getByLabel("게시물 문안").fill("홍어 한 점은 이렇게 드세요.\n\n#홍어 #묵동맛집 #묵동홍어마을");
-  await page.getByRole("button", { name: "최종 화면 보기" }).click();
-  await expectPhoneFriendly(page,"최종 확인");
+  await page.getByRole("button", { name: "만들기", exact: true }).click();
+  await page.getByRole("heading", { name: /만들고 있어요|확인하고 올리기/ }).waitFor();
+  await expectPhoneFriendly(page,"만드는 중");
+  await expect(page.getByRole("heading", { name: "확인하고 올리기" })).toBeVisible({ timeout: 180_000 });
+  await expectPhoneFriendly(page,"3단계");
+  // 주인공 버튼은 52px 이상.
+  const saveBox=await page.getByRole("button",{name:"휴대폰에 저장하기"}).boundingBox();
+  expect(saveBox?.height??0).toBeGreaterThanOrEqual(52);
+  await page.screenshot({ path: testInfo.outputPath("phone-review.png"), fullPage: true });
+  await page.getByText("더보기",{exact:true}).last().click();
+  await expectPhoneFriendly(page,"3단계 더보기");
 });

@@ -10,7 +10,7 @@ describe("ExportActions", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { clipboard:{ writeText } });
     render(<ExportActions caption="지금 편집한 문안" images={[{url:"data:image/png;base64,AQID",source:"ai-generated"}]} />);
-    fireEvent.click(screen.getByRole("button", { name:"문안 복사" }));
+    fireEvent.click(screen.getByRole("button", { name:"글 복사" }));
     expect(writeText).toHaveBeenCalledWith("지금 편집한 문안");
   });
 
@@ -21,7 +21,7 @@ describe("ExportActions", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function(this:HTMLAnchorElement) {downloads.push(this.download);});
     vi.stubGlobal("URL", { createObjectURL, revokeObjectURL:vi.fn() });
     render(<ExportActions caption="문안" images={[{url:"data:image/png;base64,AQID",source:"photo"},{url:"data:image/png;base64,BAUG",source:"ai-generated"}]} />);
-    fireEvent.click(screen.getByRole("button", { name:"표지 이미지 받기" }));
+    fireEvent.click(screen.getByRole("button", { name:"첫 장만 받기" }));
     fireEvent.click(screen.getByRole("button", { name:"전체 묶음 받기" }));
     await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
     expect(blobs[0]).toHaveProperty("type", "image/jpeg");
@@ -41,9 +41,11 @@ describe("ExportActions", () => {
   it("shows manual posting help instead of an Instagram publish action", () => {
     render(<ExportActions caption="문안" topic="동네 모임 저녁 홍어 한 상" audience="B" images={[{url:"data:image/png;base64,AQID",source:"photo"}]} />);
 
-    expect(screen.getByRole("heading", { name:"Instagram 앱에서 직접 게시해요" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name:"인스타그램 앱에서 직접 올리기" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name:"# 태그 복사" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/해시태그|문안|API/);
     expect(screen.getByText("밝은 레트로·펑크")).toBeInTheDocument();
     expect(screen.getByText("#모임맛집")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name:/Instagram에 게시/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name:/바로 올리기/ })).not.toBeInTheDocument();
   });
 });

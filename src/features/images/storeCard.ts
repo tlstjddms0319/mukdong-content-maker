@@ -97,6 +97,11 @@ export const STORE_TOKENS:Record<Exclude<StyleId,"template">,StoreTokens>={
   // 푸드 매거진: 흰 지면, 굵은 명조 제호, 머리·바닥 가는 선, 빨강 포인트.
   editorial:token({base:"#FFFFFF",ink:"#111111",sub:"#1A1A1A",accent:"#D22B2B",chip:"#D22B2B",title:F.serifHeavy,body:F.sansSemi,label:F.mono,tracking:.02,inset:{x:80,top:92,bottom:96},
     textures:[{name:"linen",opacity:.26}]}),
+  // 사진 중심: 크림 종이, 가게 밤색 글자, 함렛 명조 워드마크(styles/photoFocus.ts·trackKit.ts의 색).
+  "photo-focus":token({base:"#F5EFE5",ink:"#2F231E",sub:"#5E4E45",accent:"#A9472A",chip:"#4F3C39",title:F.modernSerif,body:F.sans,label:F.sansSemi,tracking:.1,wordSizes:[112,104,96,88,80],inset:{x:96,top:84,bottom:76},
+    textures:[{name:"linen",opacity:.22}]}),
+  // 글 중심: 가게 밤색 바탕, 크림 글자, 겨자 강조, 굵은 프리텐다드 워드마크(styles/textFocus.ts).
+  "text-focus":token({base:"#4F3C39",ink:"#F8F1E6",sub:"#E3D5C2",accent:"#E9BC5C",chip:"#E9BC5C",title:F.sansBold,body:F.sans,label:F.sansSemi,tracking:.02}),
 };
 
 // template: 색 조합과 고른 글꼴(FONTS 역할 객체 → 렌더 설정의 글꼴로 바뀐다)을 따른다.
@@ -434,6 +439,16 @@ const DECOR:Record<StyleId,(input:DecoInput)=>Deco>={
     return {under:`<path d="M64 56H1016M64 1272H1016" stroke="#111111" stroke-width="3"/><path d="M64 64H1016" stroke="#D9D9D9" stroke-width="1.5"/>`
       +`<rect x="${540-60}" y="${w.y+w.h+22}" width="120" height="7" fill="#D22B2B"/>`
       +`<circle cx="${mascotCenter(places).cx}" cy="${mascotCenter(places).cy}" r="${Math.min(mascotCenter(places).r*.95,320)}" fill="#EDEDED"/>`,over:""};
+  },
+  // 사진 중심: 크림 종이에 한 톤 짙은 큰 원(접시 자리)과 워드마크 아래 짧은 적갈 선.
+  "photo-focus":({places})=>{
+    const w=places.word,m=mascotCenter(places);
+    return {under:`<rect x="${540-36}" y="${w.y+w.h+22}" width="72" height="6" rx="3" fill="#A9472A"/><circle cx="${m.cx}" cy="${m.cy}" r="${Math.min(m.r*.95,320)}" fill="#EAE0D0"/>`,over:""};
+  },
+  // 글 중심: 밤색 바탕에 한 톤 밝은 큰 원과 겨자 막대.
+  "text-focus":({places})=>{
+    const w=places.word,m=mascotCenter(places);
+    return {under:`<rect x="${540-36}" y="${w.y+w.h+22}" width="72" height="8" rx="4" fill="#E9BC5C"/><circle cx="${m.cx}" cy="${m.cy}" r="${Math.min(m.r*.95,320)}" fill="#5C4844"/>`,over:""};
   },
 };
 

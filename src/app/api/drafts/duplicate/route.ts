@@ -9,10 +9,10 @@ import { duplicateDraft } from "@/features/drafts/duplicate";
 export async function POST(request:Request){
   const denied=await ownerApiError();if(denied)return denied;
   const body=z.object({id:z.string().uuid()}).safeParse(await request.json().catch(()=>null));
-  if(!body.success)return NextResponse.json({error:"복제할 초안을 확인해 주세요."},{status:400,headers:{"Cache-Control":"no-store"}});
+  if(!body.success)return NextResponse.json({error:"복제할 게시물을 확인해 주세요."},{status:400,headers:{"Cache-Control":"no-store"}});
   const repository=createDraftRepository();
   const source=await repository.readDraft(body.data.id);
-  if(!source)return NextResponse.json({error:"초안을 찾을 수 없습니다."},{status:404,headers:{"Cache-Control":"no-store"}});
+  if(!source)return NextResponse.json({error:"게시물을 찾지 못했어요. 내 게시물에서 다시 골라 주세요."},{status:404,headers:{"Cache-Control":"no-store"}});
   const copy=await repository.saveDraft(duplicateDraft(source,{id:randomUUID(),now:new Date().toISOString(),newId:randomUUID}));
   return NextResponse.json({id:copy.id},{status:201,headers:{"Cache-Control":"no-store"}});
 }

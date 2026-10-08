@@ -5,6 +5,11 @@ test("settings explains AI connection without exposing a key", async ({ page }) 
   await loginAsOwner(page);
   await page.route("**/api/settings",route=>route.fulfill({json:{saved:true}}));
   await page.goto("/settings");
+  // 사장님 화면에는 인스타그램 연결과 브랜드 키트만 보이고, 기술 항목은 접힌 관리자용 설정 안에 있다.
+  await expect(page.getByRole("heading",{name:"인스타그램 연결"})).toBeVisible();
+  await expect(page.getByLabel("Instagram 계정")).toBeVisible();
+  await expect(page.getByText(/Gemini (키 설정됨|키 필요)/)).toBeHidden();
+  await page.getByText("관리자용 설정",{exact:true}).click();
   await expect(page.getByText(/Gemini (키 설정됨|키 필요)/)).toBeVisible();
   await expect(page.getByText(/OpenAI (키 설정됨|키 필요)/)).toBeVisible();
   await expect(page.getByText(/Groq (키 설정됨|키 필요)/)).toBeVisible();
@@ -25,6 +30,7 @@ test("settings explains AI connection without exposing a key", async ({ page }) 
 test("AI connection check runs on the server and shows each provider without keys", async ({ page }) => {
   await loginAsOwner(page);
   await page.goto("/settings");
+  await page.getByText("관리자용 설정",{exact:true}).click();
   const card=page.getByRole("region",{name:"AI 연결 실제 점검"});
   await card.getByRole("button",{name:"AI 연결 점검하기"}).click();
   // 테스트 서버에는 키가 없으므로 모두 "건너뜀"이고, 키를 넣으라는 안내가 나온다.

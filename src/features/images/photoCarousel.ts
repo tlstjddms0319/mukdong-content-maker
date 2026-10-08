@@ -1,6 +1,7 @@
 import { LAYOUT_VARIANTS, normalizeCardLayout, photosNeeded, type CardLayout } from "./design";
 import type { CarouselPlan, CarouselRole, CarouselSlidePlan } from "./carousel";
 import { menuOf } from "@/features/store/menu";
+import type { CarouselTrack } from "./track";
 
 // 실제 사진 여러 장으로 캐러셀을 만들 때, 구성안(AI가 장마다 고른 레이아웃)을 가진 사진 수에 맞춘다.
 // 화면 코드에서도 쓰므로 서버 전용 모듈(sharp 등)을 불러오지 않는다.
@@ -30,11 +31,20 @@ const EXPANDABLE:CarouselRole[]=["overview","detail","pairing","mood","occasion"
 const KEEP_TEXT:ReadonlySet<CardLayout>=new Set(["stat"]);
 
 export type PhotoFit={plan:CarouselPlan;assignment:number[][];unused:number[]};
-export type PhotoFitOptions={maxPerSlide?:2|3};
+// track: 갈래(track.ts). 갈래 디자인은 장마다 사진 수만 본다.
+//   사진 중심: 한 장에 사진은 1장까지(콜라주·폴라로이드로 키우지 않는다). 사진이 모자란 장은 사진 없는 장(browser).
+//   글 중심  : 표지에만 첫 사진, 본문 장은 사진 0장(글이 주인공). 나머지 사진은 unused로 남는다.
+export type PhotoFitOptions={maxPerSlide?:2|3;track?:CarouselTrack};
+// 갈래 디자인에서 사진 없는 장의 layout(사진 0장을 뜻하는 이름일 뿐, 역할별 글자 레이아웃은 쓰지 않는다).
+const TRACK_TEXT_LAYOUT:CardLayout="browser";
 
 export function fitPlanToPhotos(plan:CarouselPlan,photoCount:number,options:PhotoFitOptions={}):PhotoFit {
   if(photoCount<1)throw new Error("사진이 1장 이상 필요해요.");
-  const max=options.maxPerSlide??3;
+  if(options.track==="text"){
+    const slides=plan.slides.map((slide,i)=>i===0?{...slide,layout:photosNeeded(normalizeCardLayout(slide))===1?normalizeCardLayout(slide):"fullscreen" as CardLayout,variant:0}:{...slide,layout:TRACK_TEXT_LAYOUT,variant:0});
+    return {plan:{...plan,slides},assignment:slides.map((_,i)=>i===0?[0]:[]),unused:Array.from({length:photoCount-1},(_,k)=>k+1)};
+  }
+  const max=options.track==="photo"?1:options.maxPerSlide??3;
   const slides=plan.slides.map(slide=>({...slide,layout:normalizeCardLayout(slide)}));
   // 장마다 원래 원하던 사진 수(최소 0, 최대 max). 표지는 최소 1장.
   const want=slides.map((slide,i)=>Math.min(max,Math.max(i===0?1:0,photosNeeded(slide.layout))));
@@ -64,7 +74,7 @@ export function fitPlanToPhotos(plan:CarouselPlan,photoCount:number,options:Phot
     const count=give[i];
     let layout=slide.layout;
     if(photosNeeded(layout)!==count){
-      layout=count===0?TEXT_LAYOUT[slide.role]:count===1?SINGLE_LAYOUT:count===2?(slide.layout==="versus"?"versus":"polaroid"):"collage";
+      layout=count===0?(options.track?TRACK_TEXT_LAYOUT:TEXT_LAYOUT[slide.role]):count===1?SINGLE_LAYOUT:count===2?(slide.layout==="versus"?"versus":"polaroid"):"collage";
     }
     // 바뀐 레이아웃의 변형 개수를 넘지 않게 변형 번호를 맞춘다.
     const variant=Math.min(slide.variant??0,LAYOUT_VARIANTS[layout]-1);
@@ -74,19 +84,6 @@ export function fitPlanToPhotos(plan:CarouselPlan,photoCount:number,options:Phot
   let next=0;
   const assignment=give.map(count=>Array.from({length:count},()=>next++));
   return {plan:{...plan,slides:fitted},assignment,unused:Array.from({length:photoCount-next},(_,k)=>next+k)};
-}
-
-// 표지+2장 파노라마(render/panorama.ts): 표지 사진을 2번째 장에도 한 번 더 쓴다(두 장이 반씩 나눠 그린다).
-// 나머지 장은 2번째 장을 뺀 구성안으로 평소처럼 사진을 나눈 뒤, 2번째 장을 표지 사진(0번) 한 장짜리로 다시 끼운다.
-export function fitPanorama(plan:CarouselPlan,photoCount:number,options:PhotoFitOptions={}):PhotoFit {
-  if(plan.slides.length<2)return fitPlanToPhotos(plan,photoCount,options);
-  const rest=fitPlanToPhotos({...plan,slides:[plan.slides[0],...plan.slides.slice(2)]},photoCount,options);
-  const second={...plan.slides[1],layout:SINGLE_LAYOUT,variant:0};
-  return {
-    plan:{...rest.plan,slides:[rest.plan.slides[0],second,...rest.plan.slides.slice(1)]},
-    assignment:[rest.assignment[0],[0],...rest.assignment.slice(1)],
-    unused:rest.unused,
-  };
 }
 
 // 한 장의 사진을 바꿀 때: 그 장의 첫 칸을 고른 사진으로 바꾸고, 같은 사진이 다른 칸에 있으면 자리를 맞바꾼다.
@@ -102,7 +99,7 @@ export function swapPhoto(slots:number[],photoIndex:number,slot=0):number[] {
 // fitPlanToPhotos는 장마다 사진 "몇 장"을 정하고 올린 순서대로 나눠 준다. 사진마다 보이는 것(notes, AI가 읽은 음식·장면)을
 // 알면, 그 칸 수는 그대로 두고 어느 사진을 어느 장에 넣을지를 글과 겹치는 정도로 다시 고른다.
 // 예: "사발에 따르면 이런 빛이에요" 장에는 홍어 접시보다 막걸리 사발이 보이는 사진.
-// - 표지 첫 칸은 사장님이 고른 첫 사진 그대로(파노라마의 2번째 장도 표지 사진을 그대로 쓴다).
+// - 표지 첫 칸은 사장님이 고른 첫 사진 그대로.
 // - 점수가 같으면 원래 배치(올린 순서)를 지킨다. 사진 내용을 하나도 모르면 아무것도 바꾸지 않는다.
 // - 칸보다 사진이 많으면 글과 가장 덜 맞는 사진이 unused로 남는다.
 
@@ -162,10 +159,12 @@ export const PHOTO_VIEW_LABELS:Record<PhotoView,string>={full:"사진 그대로"
 // 앞 항목부터 비교해 처음 다른 값이 큰 쪽이 앞선다.
 const outranks=(a:readonly number[],b:readonly number[])=>{for(let k=0;k<a.length;k++)if(a[k]!==b[k])return a[k]>b[k];return false;};
 
-export function fillWithPhotoViews(plan:CarouselPlan,assignment:number[][],photoCount:number,notes:readonly string[]=[]):{plan:CarouselPlan;assignment:number[][];views:PhotoView[][]} {
+// track "text"(글 중심)이면 본문 장은 사진 없이 두므로 채우지 않는다.
+export function fillWithPhotoViews(plan:CarouselPlan,assignment:number[][],photoCount:number,notes:readonly string[]=[],track?:CarouselTrack):{plan:CarouselPlan;assignment:number[][];views:PhotoView[][]} {
   const slides=[...plan.slides];
   const next=assignment.map(slots=>[...slots]);
   const views:PhotoView[][]=assignment.map(slots=>slots.map(()=>"full" as const));
+  if(track==="text")return {plan:{...plan,slides},assignment:next,views};
   // 사진마다 이미 쓴 거리.
   const used=Array.from({length:photoCount},()=>new Set<PhotoView>());
   next.forEach(slots=>slots.forEach(photo=>used[photo]?.add("full")));

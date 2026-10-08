@@ -12,13 +12,13 @@ import { z } from "zod";
 // 실패 이유를 사장님 화면에 짧게, 서버 로그에는 원문을 남긴다(예전에는 모든 실패가 같은 문구였다).
 type CopyFailure="no-ai"|"quota"|"key"|"busy"|"format"|"quality"|"error";
 const FAILURE_MESSAGES:Record<CopyFailure,string>={
-  "no-ai":"문안 AI가 설정되어 있지 않아요(설정 → AI 연결 점검).",
-  quota:"문안 AI 오늘 사용량을 다 썼어요. 잠시 뒤나 내일 다시 해 보세요.",
-  key:"문안 AI 키가 맞지 않아요(설정 → AI 연결 점검).",
-  busy:"문안 AI 서버가 잠시 바빠요. 조금 뒤 다시 해 보세요.",
-  format:"AI가 보낸 문안 형식이 맞지 않았어요. 다시 만들면 대개 됩니다.",
-  quality:"AI 문안에 확인되지 않은 단정 표현이 남아 쓰지 않았어요. 다시 만들거나 직접 작성해 주세요.",
-  error:"문안 AI 연결에 문제가 있었어요. 다시 해 보세요.",
+  "no-ai":"글 쓰는 AI가 설정되어 있지 않아요(설정 → AI 연결 점검).",
+  quota:"글 쓰는 AI의 오늘 사용량을 다 썼어요. 잠시 뒤나 내일 다시 해 보세요.",
+  key:"글 쓰는 AI 키가 맞지 않아요(설정 → AI 연결 점검).",
+  busy:"글 쓰는 AI가 잠시 바빠요. 조금 뒤 다시 해 보세요.",
+  format:"AI가 보낸 글 형식이 맞지 않았어요. 다시 만들면 대개 됩니다.",
+  quality:"AI 글에 확인되지 않은 단정 표현이 남아 쓰지 않았어요. 다시 만들거나 직접 작성해 주세요.",
+  error:"글 쓰는 AI 연결에 문제가 있었어요. 다시 해 보세요.",
 };
 class CopyQualityError extends Error { constructor(readonly issues:string[]){super(`copy quality: ${issues.join(" / ").slice(0,300)}`);this.name="CopyQualityError";} }
 function failureOf(error:unknown):CopyFailure {
@@ -33,7 +33,7 @@ const RequestSchema=CopyInputSchema.extend({focus:z.enum(["hook","store_connecti
 
 export async function POST(request:Request) { const denied=await ownerApiError(); if(denied)return denied;
   const input=RequestSchema.safeParse(await request.json().catch(()=>null));
-  if(!input.success)return NextResponse.json({message:"주제와 문안을 확인해 주세요."},{status:400});
+  if(!input.success)return NextResponse.json({message:"주제와 글을 확인해 주세요."},{status:400});
   try {
     // An unreadable settings file must not stop the writer; defaults keep the caption flow alive.
     const settings=await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:",error instanceof Error?error.message:String(error));return null;});
@@ -41,7 +41,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
     const prompt=buildCopyPrompt(input.data,copyLength);
     if(input.data.focus){
-      if(!input.data.currentText?.trim())return NextResponse.json({message:"먼저 문안을 만들어 주세요."},{status:400});
+      if(!input.data.currentText?.trim())return NextResponse.json({message:"먼저 글을 써 주세요."},{status:400});
       const context=prompt+"\n현재 문안(내용 참고용): "+JSON.stringify(input.data.currentText)+"\n"+input.data.focus+" 부분만 새롭게 작성하세요. 부분 수정에는 전체 본문 길이 기준을 적용하지 않습니다. 다른 부분은 출력하지 마세요.";
       if(input.data.focus==="hashtags"){
         const result=await client.generateJson(context+' JSON 필드는 hashtags(배열)만 반환하세요. 본문 주제를 나타내는 태그 3개만 쓰고 가게·지역 태그는 쓰지 마세요.',z.object({hashtags:z.array(z.string()).min(1).max(10)}));
@@ -93,6 +93,6 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   }catch(error){
     const reason=failureOf(error);
     console.warn(`[copy] AI 문안을 쓰지 못했어요(${reason}):`,error instanceof Error?error.message.replace(/\s+/g," ").slice(0,300):String(error));
-    return NextResponse.json({message:`AI 문안을 완성하지 못했어요. 기존 글은 그대로 두었어요. 이유: ${FAILURE_MESSAGES[reason]}`,reason,retryable:reason!=="key"&&reason!=="no-ai"},{status:502});
+    return NextResponse.json({message:`AI가 글을 다 쓰지 못했어요. 기존 글은 그대로 두었어요. 이유: ${FAILURE_MESSAGES[reason]}`,reason,retryable:reason!=="key"&&reason!=="no-ai"},{status:502});
   }
 }

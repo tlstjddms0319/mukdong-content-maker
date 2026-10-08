@@ -1,27 +1,35 @@
 "use client";
-import { useEffect,useState } from "react";
+import { useEffect,useRef,useState } from "react";
 import type { PublicInstagramConnection } from "@/features/instagram/schema";
 import type { PublishStatus } from "@/features/instagram/publicationState";
 import { readJsonResponse } from "@/lib/http/readJson";
 
-// 최종 확인 화면의 "승인하고 Instagram에 게시".
-// - 연결 상태와 함께 이 초안의 게시 기록을 먼저 읽어, 이미 올린 초안이면 버튼 대신 그 사실을 보여 준다.
-// - 서버가 "이미 게시된 초안"이라고 답하면(alreadyPublished) 새로 올린 것처럼 "게시 완료"라고 하지 않는다.
-//   (게시 뒤 문안을 고치고 다시 눌러도 Instagram에는 올라가지 않으므로, 복제해서 새 초안으로 올리라고 안내한다.)
+// 확인 화면의 큰 버튼 "인스타그램에 바로 올리기".
+// - 연결 상태와 이 게시물의 올린 기록을 먼저 읽어, 이미 올린 게시물이면 버튼 대신 그 사실을 보여 준다.
+// - 누르면 한 번 더 묻고(확인 창) 올린다. 실수로 눌러 올라가지 않게.
+// - 서버가 "이미 올린 게시물"이라고 답하면(alreadyPublished) 새로 올린 것처럼 말하지 않는다
+//   (올린 뒤 글을 고치고 다시 눌러도 인스타그램에는 올라가지 않으므로, 내 게시물에서 '복제'로 새로 올리라고 안내한다).
+// - 연결이 안 돼 있으면 버튼을 흐리게 두고 한 줄로 설정에서 연결하라고 알린다.
+// onBeforePublish: 올리기 전에 고친 글을 저장한다(실패하면 올리지 않는다).
+// onReady: 바로 올릴 수 있는지(연결됨) 알려 준다. 못 올리면 부모가 "휴대폰에 저장하기"를 주인공 버튼으로 바꾼다.
 type PanelState="idle"|"publishing"|"published"|"already"|"error";
 
-export function InstagramPublish({draftId,caption,imageUrls}:{draftId?:string;caption:string;imageUrls:string[]}){
+export function InstagramPublish({draftId,caption,imageUrls,primary=true,onBeforePublish,onReady}:{draftId?:string;caption:string;imageUrls:string[];primary?:boolean;onBeforePublish?:()=>Promise<boolean>;onReady?:(ready:boolean)=>void}){
   const [connection,setConnection]=useState<PublicInstagramConnection|null>(null);
   const [record,setRecord]=useState<PublishStatus|null>(null);
   const [state,setState]=useState<PanelState>("idle");
   const [message,setMessage]=useState("");
-  const cover=imageUrls[0];
+  // 서버가 준 이유(문안·HTTPS 주소·서버 설정 같은 말이 섞여 있다)는 "자세한 이유"로 접어 둔다.
+  const [detail,setDetail]=useState("");
+  // 연결 상태는 화면을 열 때 한 번만 읽는다(부모가 onReady를 새로 만들어도 다시 묻지 않게 ref로 부른다).
+  const readyRef=useRef(onReady);
+  useEffect(()=>{readyRef.current=onReady;},[onReady]);
   useEffect(()=>{
     let active=true;
-    fetch("/api/instagram/status").then(readJsonResponse).then(value=>{if(active)setConnection(value);}).catch(()=>{if(active)setConnection({connected:false});});
+    fetch("/api/instagram/status").then(readJsonResponse).then(value=>{if(active){setConnection(value);readyRef.current?.(Boolean(value?.connected)&&!value?.needsReconnect);}}).catch(()=>{if(active){setConnection({connected:false});readyRef.current?.(false);}});
     return()=>{active=false;};
   },[]);
-  // 연결돼 있을 때만 이 초안의 게시 기록을 묻는다(게시 상태를 못 읽어도 버튼은 그대로 쓸 수 있다).
+  // 연결돼 있을 때만 이 게시물의 올린 기록을 묻는다(기록을 못 읽어도 버튼은 그대로 쓸 수 있다).
   useEffect(()=>{
     if(!connection?.connected||!draftId)return;
     let active=true;
@@ -29,32 +37,37 @@ export function InstagramPublish({draftId,caption,imageUrls}:{draftId?:string;ca
     return()=>{active=false;};
   },[connection,draftId]);
   const publish=async()=>{
-    setState("publishing");setMessage("");
+    if(!connection?.connected)return;
+    if(!window.confirm(`@${connection.username}에 사진 ${imageUrls.length}장과 글을 지금 올릴까요?`))return;
+    setState("publishing");setMessage("");setDetail("");
     try{
+      if(onBeforePublish&&!await onBeforePublish())throw new Error("고친 글을 저장하지 못해 올리지 않았어요. 잠시 뒤 다시 눌러 주세요.");
       const currentId=draftId??localStorage.getItem("mukdong-current-draft");
-      if(!currentId)throw new Error("저장된 초안을 찾지 못했어요.");
+      if(!currentId)throw new Error("저장된 게시물을 찾지 못했어요. 내 게시물에서 다시 열어 주세요.");
       const response=await fetch("/api/instagram/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draftId:currentId,approved:true,caption})});
       const data=await readJsonResponse(response);
-      if(!response.ok)throw new Error(data.error||data.message||"게시하지 못했어요.");
-      setMessage(data.mediaId??"");
+      if(!response.ok){
+        // 사장님에게는 무엇을 누르면 되는지만 한 줄로. 바로 올리기가 막혀도 '휴대폰에 저장하기'로 올릴 수 있다고 알려 준다.
+        setDetail(String(data.error||data.message||""));
+        throw new Error(response.status===401?"인스타그램 연결이 끝났어요. 설정에서 다시 연결해 주세요. 지금은 '휴대폰에 저장하기'로 올릴 수 있어요."
+          :response.status===409?"지금 올리는 중이에요. 잠시 뒤 인스타그램 앱에서 확인해 주세요."
+          :"바로 올리지 못했어요. 잠시 뒤 다시 눌러 주세요. 급하면 '휴대폰에 저장하기'로 올려 주세요.");
+      }
       setState(data.alreadyPublished?"already":"published");
-    }catch(error){setMessage(error instanceof Error?error.message:"게시하지 못했어요.");setState("error");}
+    }catch(error){setMessage(error instanceof Error?error.message:"바로 올리지 못했어요. 잠시 뒤 다시 눌러 주세요.");setState("error");}
   };
-  const alreadyNote=<p role="status"><strong>이미 게시된 초안이에요.</strong> 다시 올리지 않았어요. 고친 내용을 올리려면 내 초안에서 ‘복제’로 새 초안을 만들어 게시해 주세요.</p>;
-  return <section className="publish-panel" aria-labelledby="publish-title">
-    <div><p className="eyebrow">Instagram 게시</p><h2 id="publish-title">마지막 승인 후 게시해요</h2></div>
-    {!connection?<p role="status">연결 상태 확인 중…</p>
-      :!connection.connected?<p>설정 화면에서 Instagram을 연결하면 여기서 바로 게시할 수 있어요. 지금은 파일을 내려받아 직접 게시할 수 있어요.</p>
+  const already=state==="already"||(state==="idle"&&record?.state==="published");
+  const ready=Boolean(connection?.connected)&&!connection?.needsReconnect;
+  return <div className="share-action">
+    {state==="published"?<p role="status" className="share-done"><strong>인스타그램에 올렸어요.</strong> 인스타그램 앱에서 확인해 보세요.</p>
+      :already?<p role="status" className="share-done"><strong>이미 올린 게시물이에요.</strong> 다시 올리지 않았어요. 고쳐서 또 올리려면 내 게시물에서 ‘복제’를 눌러 새로 만들어 주세요.</p>
       :<>
-        <div className="publish-summary"><div className="publish-thumb" aria-label="게시 대표 이미지" style={cover?{backgroundImage:`url(${cover})`}:undefined}/><div><strong>@{connection.username}에 게시</strong><p>이미지 {imageUrls.length}장</p><p>{caption.slice(0,80)}{caption.length>80?"…":""}</p></div></div>
-        {state==="published"?<p role="status"><strong>게시 완료</strong>{message&&<> · 미디어 ID {message}</>}</p>
-          :state==="already"||(state==="idle"&&record?.state==="published")?alreadyNote
-          :<>
-            {record&&record.state!=="none"&&record.state!=="scheduled"&&<p className="field-help">게시 기록 · {record.label}{record.detail?` · ${record.detail}`:""}</p>}
-            <p className="publish-warning">이 버튼을 눌러야 실제 게시됩니다.</p>
-            <button type="button" className="button publish-button" disabled={state==="publishing"} onClick={publish}>{state==="publishing"?"Instagram에서 처리 중…":"승인하고 Instagram에 게시"}</button>
-          </>}
-        {state==="error"&&<p role="alert">{message}</p>}
+        <button type="button" className={`button big ${primary?"primary":"secondary"} share-button`} disabled={!ready||state==="publishing"||!imageUrls.length} onClick={()=>void publish()}>{state==="publishing"?"인스타그램에 올리는 중…":"인스타그램에 바로 올리기"}</button>
+        {!connection?<p className="field-help" role="status">인스타그램 연결을 확인하고 있어요…</p>
+          :!connection.connected?<p className="field-help">설정에서 인스타그램을 연결하면 바로 올릴 수 있어요</p>
+          :connection.needsReconnect?<p className="field-help">인스타그램 연결 기간이 끝났어요. 설정에서 다시 연결해 주세요</p>
+          :<p className="field-help">@{connection.username} 계정에 올라가요</p>}
       </>}
-  </section>;
+    {state==="error"&&<div role="alert"><p>{message}</p>{detail&&<details><summary>자세한 이유</summary><p>{detail}</p></details>}</div>}
+  </div>;
 }

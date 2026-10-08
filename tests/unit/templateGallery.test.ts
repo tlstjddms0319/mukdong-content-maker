@@ -6,7 +6,6 @@ import { ThemeIdSchema } from "@/features/images/themes";
 import { buildCarouselPlanPrompt, type CarouselPlan } from "@/features/images/carousel";
 import { composeSlideImage } from "@/features/images/composeSlide";
 import { themeCatalogText } from "@/features/images/themes";
-import { effectiveDesign } from "@/features/images/generationStore";
 
 const slide:CarouselPlan["slides"][number]={role:"pairing",subline:"",headline:"홍어 한 점은 씹을수록 진한 감칠맛이 올라와요",points:["홍어 살은 얇게 썰려 결이 비쳐 보여요","홍어를 묵은지에 싸 한입에 넣어요","막걸리 한 모금으로 마무리해요"],visualPrompt:"홍어회 접시 사진",textPosition:"bottom",layout:"frame",keywords:["홍어","가오리"],figure:"7일",titleFont:"auto",bodyFont:"auto",variant:0};
 const photo=(color:string)=>sharp({create:{width:90,height:120,channels:3,background:color}}).png().toBuffer();
@@ -33,12 +32,9 @@ describe("template gallery", () => {
     expect(new Set(looks.map(image=>image.toString("base64"))).size).toBe(ThemeIdSchema.options.length);
   },60_000);
 
-  it("offers the new layouts and themes to the plan AI and lets the owner pick a theme", () => {
+  it("offers the new layouts and themes to the plan AI", () => {
     const prompt=buildCarouselPlanPrompt({topic:"비 오는 날 홍어",slideCount:5});
     for(const layout of ["magazine","split","polaroid","receipt","checklist","timeline","poster","circle"] as const)expect(prompt).toContain(`${layout}(${CARD_LAYOUTS[layout].label}`);
     expect(prompt).toContain(themeCatalogText());
-    const recommended={palette:"warm" as const,style:"template" as const,theme:"magazine" as const,titleFont:"plex" as const,bodyFont:"plex" as const,tone:"loud" as const,season:"none" as const};
-    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"auto"})).toEqual(recommended);
-    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"retro"}).theme).toBe("retro");
   });
 });

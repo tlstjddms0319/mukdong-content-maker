@@ -2,10 +2,7 @@
 // 두 장은 따로 그려지지만 이음선에서 사진·그늘·가로선이 맞물려야 한다.
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { createFallbackCarouselPlan } from "@/features/images/carousel";
-import { photosNeeded } from "@/features/images/design";
 import { composeSlideCard } from "@/features/images/composeSlide";
-import { fitPanorama, fitPlanToPhotos } from "@/features/images/photoCarousel";
 import { panoramaReady } from "@/features/images/render/panorama";
 
 // 가로 2400×1500: 왼쪽에서 오른쪽으로 색이 천천히 바뀌는 사진(이음선 양쪽 색이 이어지는지 보기 좋다).
@@ -42,17 +39,5 @@ describe("cover panorama", () => {
     const asked=await composeSlideCard([tall],cover,1,5,"card",{palette:"warm"},{panorama:"left"});
     const usual=await composeSlideCard([tall],cover,1,5,"card",{palette:"warm"},{});
     expect(asked.image.equals(usual.image)).toBe(true);
-  });
-
-  it("gives slide 2 the cover photo and shares the other photos as usual", () => {
-    const plan=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:5});
-    const fit=fitPanorama(plan,3);
-    expect(fit.plan.slides.map(slide=>slide.role)).toEqual(plan.slides.map(slide=>slide.role));
-    expect(fit.assignment[0]).toEqual([0]);
-    expect(fit.assignment[1]).toEqual([0]);
-    const rest=fitPlanToPhotos({...plan,slides:[plan.slides[0],...plan.slides.slice(2)]},3);
-    expect(fit.assignment.slice(2)).toEqual(rest.assignment.slice(1));
-    // 2번째 장은 사진 한 장짜리 레이아웃(파노라마로 그리지 못할 때도 표지 사진 한 장으로 자연스럽게).
-    expect(photosNeeded(fit.plan.slides[1].layout)).toBe(1);
   });
 });

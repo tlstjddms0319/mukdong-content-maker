@@ -46,7 +46,7 @@ export const DraftSchema = z.object({
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 }).superRefine((draft,ctx)=>{
-  if(draft.final_review_complete&&(!draft.planned_publish_at||!draft.caption?.trim()||!draft.selected_media_id))ctx.addIssue({code:"custom",path:["final_review_complete"],message:"이미지·문안·희망일시를 확인해 주세요."});
+  if(draft.final_review_complete&&(!draft.planned_publish_at||!draft.caption?.trim()||!draft.selected_media_id))ctx.addIssue({code:"custom",path:["final_review_complete"],message:"사진·글·올릴 날짜를 확인해 주세요."});
   if(!draft.selected_media_ids)return;
   if(draft.selected_media_id===null||draft.selected_media_ids[0]!==draft.selected_media_id)ctx.addIssue({code:"custom",path:["selected_media_ids"],message:"첫 선택 이미지를 확인해 주세요."});
   if(new Set(draft.selected_media_ids).size!==draft.selected_media_ids.length)ctx.addIssue({code:"custom",path:["selected_media_ids"],message:"선택 이미지는 중복될 수 없습니다."});

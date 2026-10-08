@@ -47,21 +47,32 @@ function describeCallback(search:string):{ok:boolean;message:string}|null{
 
 export type { InstagramStatus };
 
-export function InstagramConnectionCard(){
+// 사장님이 보는 화면에 쓰는 쉬운 안내(어디를 누르면 되는지만). 원인과 서버 설정 이름은 관리자용(part="server")에서만 보여 준다.
+function plainCallback(search:string):{ok:boolean;message:string}|null{
+  const result=describeCallback(search);
+  if(!result||result.ok)return result;
+  const reason=new URLSearchParams(search).get("reason");
+  if(reason==="cancelled")return {ok:false,message:"연결을 취소했어요. ‘인스타그램 연결하기’를 다시 누르고 허용을 눌러 주세요."};
+  return {ok:false,message:"인스타그램 연결에 실패했어요. 잠시 뒤 ‘인스타그램 연결하기’를 다시 눌러 주세요. 계속 안 되면 아래 ‘관리자용 설정’을 확인해 주세요."};
+}
+
+// 설정 화면의 인스타그램 연결. part="main"(기본)은 사장님용: 연결 상태·연결하기·연결 끊기만.
+// part="server"는 관리자용 설정 안: 연결 실패 원인, 게시 서버 설정 항목, 자동 게시 동작 설명.
+export function InstagramConnectionCard({part="main"}:{part?:"main"|"server"}){
   const [status,setStatus]=useState<InstagramStatus|null>(null);
   const [error,setError]=useState("");
   const [busy,setBusy]=useState(false);
   // 서버 렌더링에는 주소창이 없으니 빈 쿼리로 그리고, 브라우저에서 hydration 뒤에 실제 쿼리를 읽는다.
   const search=useSyncExternalStore(noSubscribe,()=>window.location.search,()=>"");
-  const callbackResult=describeCallback(search);
   useEffect(()=>{let active=true;fetch("/api/instagram/status").then(response=>{
     if(!response.ok)throw new Error();return response.json();
-  }).then(value=>{if(active)setStatus(value);}).catch(()=>{if(active)setError("연결 상태를 확인하지 못했어요.");});return()=>{active=false;};},[]);
+  }).then(value=>{if(active)setStatus(value);}).catch(()=>{if(active)setError("연결 상태를 확인하지 못했어요. 잠시 뒤 화면을 다시 열어 주세요.");});return()=>{active=false;};},[]);
 
   const disconnect=async()=>{
+    if(!window.confirm("인스타그램 연결을 끊을까요? 끊으면 바로 올리기와 예약 올리기가 멈춰요."))return;
     setBusy(true);setError("");
     try{const response=await fetch("/api/instagram/connection",{method:"DELETE"});if(!response.ok)throw new Error();setStatus(current=>({connected:false,setup:current?.setup}));}
-    catch{setError("연결을 해제하지 못했어요. 다시 시도해 주세요.");}
+    catch{setError("연결을 끊지 못했어요. 다시 눌러 주세요.");}
     finally{setBusy(false);}
   };
 
@@ -70,12 +81,19 @@ export function InstagramConnectionCard(){
   // 앱 ID·비밀키·연결 완료 주소가 없으면 연결 시작 주소가 오류만 돌려주므로 버튼을 막고 이유를 보여 준다.
   const canConnect=!status?.setup||Boolean(status.setup.appId&&status.setup.appSecret&&status.setup.redirectUri);
 
-  return <section className="settings-section instagram-settings"><div><h2>Instagram 연결</h2><p>연결하면 최종 확인 화면에서 바로 게시하거나, 내 초안에서 정한 시각에 자동으로 게시할 수 있어요.</p></div><div className="connection-panel">
-    {callbackResult&&<p role={callbackResult.ok?"status":"alert"}>{callbackResult.message}</p>}
+  if(part==="server"){
+    const callbackResult=describeCallback(search);
+    return <section className="settings-section instagram-settings"><div><h2>Instagram 게시 서버</h2><p>Meta 앱·서버 설정 상태와 연결 실패 원인이에요.</p></div><div className="connection-panel">
+      {callbackResult&&!callbackResult.ok&&<p role="alert">{callbackResult.message}</p>}
+      {status&&<div className="connection-card"><span className={`status-dot${status.setup&&!missingSetup.length?" on":""}`}/><div><strong>게시 서버 설정</strong><p>{!status.setup?"설정 상태를 확인하지 못했어요.":missingSetup.length?"게시 서버 설정이 더 필요해요.":"필수 설정 항목이 모두 채워졌어요."}</p>{missingSetup.length>0&&<ul className="connection-missing">{missingSetup.map(item=><li key={item.key}>{item.label}</li>)}</ul>}{!canConnect&&<p className="connection-help">Meta 앱 ID·비밀키·연결 완료 주소를 서버 환경변수에 넣으면 연결할 수 있어요.</p>}<p className="connection-help">설정값 유무와 HTTPS 주소 형식만 확인해요. 실제 외부 접근과 게시 성공은 아직 검증하지 않았어요.</p></div></div>}
+      <p className="connection-help">연결한 뒤에는 두 가지 방법으로 게시돼요. 확인 화면의 ‘인스타그램에 바로 올리기’ 버튼으로 바로 게시하거나, 내 게시물에서 올릴 날짜를 정하고 ‘최종 확인 완료’를 켜 두면 그 시각에 자동으로 게시됩니다. 무료 서버는 잠들어 있는 동안 게시하지 못하므로 외부 깨우기(5분마다 /api/instagram/scheduler 호출)를 걸어 두세요. 6시간 넘게 늦어진 글은 게시하지 않고 ‘예약 놓침’으로 남겨요. 자동 게시를 멈추려면 서버 환경변수 INSTAGRAM_AUTOPUBLISH=off 로 두세요(토큰 갱신은 계속해요).</p>
+    </div></section>;
+  }
+  const callbackResult=plainCallback(search);
+  return <section className="settings-section instagram-settings"><div><h2>인스타그램 연결</h2><p>연결해 두면 확인 화면에서 ‘인스타그램에 바로 올리기’를 누를 수 있어요.</p></div><div className="connection-panel">
+    {callbackResult&&<p role={callbackResult.ok?"status":"alert"}>{callbackResult.ok?"인스타그램 계정을 연결했어요.":callbackResult.message}</p>}
     {!status&&!error&&<p role="status">연결 상태 확인 중…</p>}
-    {status?.connected?<><div className="connection-card"><span className="status-dot on"/><div><strong>@{status.username} 연결됨</strong><p>{status.needsReconnect?"연결 기간이 끝났어요. 다시 연결해 주세요.":"계정 연결이 유지되고 있어요."}</p></div></div><div className="connection-actions">{status.needsReconnect&&<a className="button primary" href="/api/instagram/connect">다시 연결</a>}<button type="button" className="button secondary" disabled={busy} onClick={disconnect}>{busy?"해제 중…":"연결 해제"}</button></div></>:status&&<><div className="connection-card"><span className="status-dot"/><div><strong>아직 연결되지 않았어요</strong><p>프로페셔널 계정(비즈니스 또는 크리에이터)을 연결해 주세요.</p></div></div>{canConnect?<a className="button primary" href="/api/instagram/connect">Instagram 연결</a>:<><button type="button" className="button primary" disabled>Instagram 연결</button><p className="connection-help">Meta 앱 ID·비밀키·연결 완료 주소를 서버 환경변수에 넣으면 연결할 수 있어요.</p></>}</>}
-    {status&&<div className="connection-card"><span className={`status-dot${status.setup&&!missingSetup.length?" on":""}`}/><div><strong>게시 서버 설정</strong><p>{!status.setup?"설정 상태를 확인하지 못했어요.":missingSetup.length?"게시 서버 설정이 더 필요해요.":"필수 설정 항목이 모두 채워졌어요."}</p>{missingSetup.length>0&&<ul className="connection-missing">{missingSetup.map(item=><li key={item.key}>{item.label}</li>)}</ul>}<p className="connection-help">설정값 유무와 HTTPS 주소 형식만 확인해요. 실제 외부 접근과 게시 성공은 아직 검증하지 않았어요.</p></div></div>}
+    {status?.connected?<><div className="connection-card"><span className="status-dot on"/><div><strong>@{status.username} 연결됨</strong><p>{status.needsReconnect?"연결 기간이 끝났어요. ‘다시 연결’을 눌러 주세요.":"잘 연결돼 있어요."}</p></div></div><div className="connection-actions">{status.needsReconnect&&<a className="button primary" href="/api/instagram/connect">다시 연결</a>}<button type="button" className="button secondary" disabled={busy} onClick={()=>void disconnect()}>{busy?"끊는 중…":"연결 끊기"}</button></div></>:status&&<><div className="connection-card"><span className="status-dot"/><div><strong>아직 연결되지 않았어요</strong><p>가게 인스타그램(프로페셔널 계정)으로 로그인해 연결해 주세요.</p></div></div>{canConnect?<a className="button primary big" href="/api/instagram/connect">인스타그램 연결하기</a>:<><button type="button" className="button primary big" disabled>인스타그램 연결하기</button><p className="connection-help">관리자 설정이 끝나면 연결할 수 있어요. 아래 ‘관리자용 설정’을 확인해 주세요.</p></>}</>}
     {error&&<p role="alert">{error}</p>}
-    <p className="connection-help">연결한 뒤에는 두 가지 방법으로 게시돼요. 최종 확인 화면의 ‘승인하고 Instagram에 게시’ 버튼으로 바로 게시하거나, 내 초안의 초안 카드에서 게시 희망일시를 정하고 ‘최종 확인 완료’를 켜 두면 그 시각에 자동으로 게시됩니다. 무료 서버는 잠들어 있는 동안 게시하지 못하므로 외부 깨우기(5분마다 /api/instagram/scheduler 호출)를 걸어 두세요. 6시간 넘게 늦어진 글은 게시하지 않고 ‘예약 놓침’으로 남겨요. 자동 게시를 멈추려면 서버 환경변수 INSTAGRAM_AUTOPUBLISH=off 로 두세요(토큰 갱신은 계속해요).</p>
   </div></section>;
 }

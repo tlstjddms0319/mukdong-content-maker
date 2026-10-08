@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
 import { ImageBriefSchema } from "@/features/images/schema";
-import { addLibraryPhoto, addSlide, approvedDeck, postTotal, setStoreCardIncluded, setTitleFont, swapSlidePhoto, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
+import { addLibraryPhoto, addSlide, approvedDeck, postTotal, setStoreCardIncluded, swapSlidePhoto, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
 
 const photo=(n:number)=>`data:image/jpeg;base64,PHOTO${n}`;
 const card=(n:number)=>`data:image/jpeg;base64,CARD${n}`;
@@ -87,18 +87,6 @@ describe("deck editing", () => {
     expect(bodies.map(body=>[body.slideIndex,body.slideTotal])).toEqual([[6,6]]);
   });
 
-  it("redraws every slide in the new font when the font changed after the deck was finished", async () => {
-    // 다 만든 뒤 글꼴을 바꾸고 장을 빼면, 예전에는 번호가 바뀐 장만 새 글꼴로 그려져 한 캐러셀에 글꼴이 섞였다.
-    const {hook,bodies}=await builtDeck();
-    act(()=>setTitleFont("jua"));
-    act(()=>setActiveSlide(3));
-    await act(async()=>{await removeSlide();});
-    expect(hook.result.current.slides).toHaveLength(4);
-    // 남은 4장을 모두 같은 새 글꼴로 다시 그린다(2번 장도 포함).
-    expect(bodies.map(body=>body.slideIndex)).toEqual([1,2,3,4]);
-    expect(bodies.every(body=>(body.design as {titleFont?:string}).titleFont==="jua")).toBe(true);
-  });
-
   it("adds a text-only card without photos", async () => {
     const {hook,bodies}=await builtDeck();
     await act(async()=>{await addSlide({headline:"가기 전에 확인해요",points:["처음이라면 덜 삭힌 걸로"],source:"text",verbatim:true});});
@@ -175,45 +163,9 @@ describe("store promo card", () => {
   });
 });
 
-describe("cover panorama requests", () => {
-  afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
-  async function build(options?:{panorama?:boolean}){
-    const plan=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:5});
-    const bodies:Array<Record<string,unknown>>=[];
-    let n=0;
-    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
-      if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
-      // 사진 내용 읽기(사진을 글이 맞는 장에 넣기). 여기서는 실패로 두어 올린 순서대로 배치한다.
-      if(url==="/api/images/analyze")return {ok:false,json:async()=>({})};
-      if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
-      bodies.push(JSON.parse(String(init?.body)));
-      return {ok:true,json:async()=>({images:[card(++n)],source:"photo"})};
-    }));
-    const hook=renderHook(()=>useGenerationState());
-    act(()=>{ensureGeneration("pano|5",{topic:"홍어 한 점",slideCount:5});[1,2,3].forEach(i=>addLibraryPhoto({id:`p${i}`,preview:photo(i),name:`사진${i}`}));});
-    await act(async()=>{await buildPhotoCarousel(options);});
-    await waitFor(()=>expect(hook.result.current.slides).toHaveLength(5));
-    return {hook,bodies};
-  }
-  it("draws the cover and slide 2 as two halves of the cover photo when asked", async () => {
-    const {hook,bodies}=await build({panorama:true});
-    expect(bodies[0]).toMatchObject({slideIndex:1,panorama:"left",photos:[photo(1)]});
-    expect(bodies[1]).toMatchObject({slideIndex:2,panorama:"right",photos:[photo(1)]});
-    expect(bodies.slice(2).every(body=>body.panorama===undefined)).toBe(true);
-    // 나머지 사진(2·3번)은 그대로 뒤 장들에 쓰인다.
-    expect(bodies.slice(2).flatMap(body=>(body.photos as string[]|undefined)??[])).toEqual(expect.arrayContaining([photo(2),photo(3)]));
-    // 2번째 장 사진을 바꾸면 파노라마가 풀리고 표지도 평소 디자인으로 다시 그린다.
-    expect(hook.result.current.photoAssignment[1]).toEqual([0]);
-  });
-  it("stays off unless asked", async () => {
-    const {bodies}=await build();
-    expect(bodies.every(body=>body.panorama===undefined)).toBe(true);
-  });
-});
-
 describe("review fixes in the deck", () => {
   afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
-  async function build(slideCount:5|10,options?:{panorama?:boolean}){
+  async function build(slideCount:5|10){
     const plan=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount});
     const bodies:Array<Record<string,unknown>>=[];
     let n=0;
@@ -227,7 +179,7 @@ describe("review fixes in the deck", () => {
     }));
     const hook=renderHook(()=>useGenerationState());
     act(()=>{ensureGeneration(`r|${slideCount}`,{topic:"홍어 한 점",slideCount});[1,2,3].forEach(i=>addLibraryPhoto({id:`p${i}`,preview:photo(i),name:`사진${i}`}));});
-    await act(async()=>{await buildPhotoCarousel(options);});
+    await act(async()=>{await buildPhotoCarousel();});
     await waitFor(()=>expect(hook.result.current.slides).toHaveLength(slideCount));
     return {hook,bodies};
   }
@@ -236,33 +188,20 @@ describe("review fixes in the deck", () => {
     expect(bodies.every(body=>body.slideTotal===10&&!body.storeCard)).toBe(true);
     expect(approvedDeck(hook.result.current)).toHaveLength(10);
   });
-  it("redraws the panorama partner when one side's photo is swapped", async () => {
-    const {hook,bodies}=await build(5,{panorama:true});
+  it("swaps the photo on the current slide and redraws only that slide", async () => {
+    const {hook,bodies}=await build(5);
     bodies.length=0;
     act(()=>setActiveSlide(1));
-    await act(async()=>{await swapSlidePhoto(2);});
-    await waitFor(()=>expect(bodies).toHaveLength(2));
-    expect(bodies[0]).toMatchObject({slideIndex:2});
-    expect(bodies[0].panorama).toBeUndefined();
-    expect(bodies[1]).toMatchObject({slideIndex:1});
-    expect(bodies[1].panorama).toBeUndefined();
-    expect(hook.result.current.photoAssignment[1]).toEqual([2]);
+    const before=hook.result.current.photoAssignment[1][0];
+    const next=(before+1)%3;
+    await act(async()=>{await swapSlidePhoto(next);});
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({slideIndex:2,photos:[photo(next+1)]});
+    expect(hook.result.current.photoAssignment[1][0]).toBe(next);
   });
-  it("redraws the panorama cover as a single card when slide 2 is removed even if nothing else on the cover changes", async () => {
-    // 10장 → 9장(홍보 카드 끔)으로 만든 뒤 2번째 장을 빼면 9장 → 8장: 표지의 장 번호·예고 띠("넘겨 보세요")는 그대로다.
-    // 예전에는 그래서 표지를 다시 그리지 않아, 짝(2번째 장)이 사라진 표지가 파노라마 왼쪽 반쪽으로 남았다.
-    const {hook,bodies}=await build(10,{panorama:true});
-    await act(async()=>{await setStoreCardIncluded(false);});
-    act(()=>setActiveSlide(5));
-    await act(async()=>{await removeSlide();});
-    expect(hook.result.current.slides).toHaveLength(9);
-    bodies.length=0;
-    act(()=>setActiveSlide(1));
-    await act(async()=>{await removeSlide();});
-    expect(hook.result.current.slides).toHaveLength(8);
-    const cover=bodies.find(body=>body.slideIndex===1);
-    expect(cover).toBeDefined();
-    expect(cover!.panorama).toBeUndefined();
+  it("never asks the server for the old cover panorama", async () => {
+    // 파노라마 고르기는 예전 사진 화면과 함께 없어졌다. 사진 묶음은 늘 평소 디자인으로 그린다.
+    const {bodies}=await build(5);
     expect(bodies.every(body=>body.panorama===undefined)).toBe(true);
   });
 });

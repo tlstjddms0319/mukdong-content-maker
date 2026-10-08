@@ -6,8 +6,8 @@ import Link from "next/link";
 export default function AppError({retry}:{error:Error&{digest?:string};retry:()=>void}) {
   return <main className="state-page"><div className="state-card" role="alert">
     <h1>화면을 열지 못했어요</h1>
-    <p>잠시 뒤 다시 시도해 주세요. 계속되면 설정 → 저장소 연결 확인에서 Supabase 연결을 확인해 주세요(프로젝트가 일시정지됐거나 키가 하나만 들어가 있을 수 있어요).</p>
-    <button type="button" className="button secondary" onClick={retry}>다시 시도</button>
+    <p>잠시 뒤 ‘다시 시도’를 눌러 주세요. 계속되면 설정 맨 아래 ‘관리자용 설정’에서 저장소를 확인해 달라고 관리하는 분께 알려 주세요.</p>
+    <button type="button" className="button primary" onClick={retry}>다시 시도</button>
     <Link className="button secondary" href="/settings">설정 열기</Link>
   </div></main>;
 }

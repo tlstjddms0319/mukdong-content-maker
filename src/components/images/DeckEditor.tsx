@@ -19,7 +19,7 @@ export function DeckEditor({state}:{state:GenerationState}){
   const full=slides.length>=MAX_DECK_SLIDES;
   // AI 이미지로 새 장을 만드는 길은 AI·사진+AI 캐러셀에서만 보인다(실제 사진 캐러셀에서 몰래 비용이 들지 않게).
   const sources:[NewSlideSource,string][]=plan
-    ?[["photo","사진으로"],...(mode==="ai"||mode==="mix"?[["ai","AI 이미지로 (비용 발생)"] as [NewSlideSource,string]]:[]),["text","글자 카드로"]]
+    ?[["photo","사진으로"],...(mode==="ai"?[["ai","AI 이미지로 (비용 발생)"] as [NewSlideSource,string]]:[]),["text","글자 카드로"]]
     :[["raw","사진 그대로"]];
   const [open,setOpen]=useState(false);
   const [chosen,setSource]=useState<NewSlideSource>(sources[0][0]);
@@ -66,7 +66,7 @@ export function DeckEditor({state}:{state:GenerationState}){
       {storeCardOn(state)&&(state.storeCard.image?.preview
         ?<Image src={state.storeCard.image.preview} alt="맨 뒤 가게 홍보 카드 미리보기" width={108} height={135} unoptimized/>
         :<span className="field-help">홍보 카드를 그리는 중…</span>)}
-      {state.storeCard.include&&deckTotal(state)>STORE_CARD_MAX_CONTENT&&<span className="field-help">인스타그램은 한 게시물에 10장까지라, 10장 캐러셀에는 홍보 카드를 붙이지 않아요.</span>}
+      {state.storeCard.include&&deckTotal(state)>STORE_CARD_MAX_CONTENT&&<span className="field-help">인스타그램은 한 게시물에 10장까지라, 10장짜리 게시물에는 홍보 카드를 붙이지 않아요.</span>}
     </div>}
     {open&&!full&&<div className="deck-new-slide">
       <div className="option-picker" role="group" aria-label="새 장 만들기 방식">
@@ -75,10 +75,10 @@ export function DeckEditor({state}:{state:GenerationState}){
       </div>
       {needsText&&<>
         <label className="deck-verbatim"><input type="checkbox" checked={verbatim} disabled={busy} onChange={event=>setVerbatim(event.target.checked)}/> 적은 글을 카드 문구로 그대로 쓰기</label>
-        {!verbatim&&<p className="field-help">원하는 장을 편하게 적어 주세요. AI가 요청에 맞게 카드 제목·요점과 사진 장면을 지어요(예: “묵은지에 홍어를 싸 먹는 법을 보여 줘”).</p>}
+        {!verbatim&&<p className="field-help">원하는 장을 편하게 적어 주세요. AI가 요청에 맞게 카드 제목·짧은 글과 사진 장면을 지어요(예: “묵은지에 홍어를 싸 먹는 법을 보여 줘”).</p>}
         <label htmlFor={`${id}-title`}>{verbatim?"카드 제목":"카드 제목 또는 요청"} {verbatim&&<small>{title.trim().length}/42</small>}</label>
         <input id={`${id}-title`} maxLength={verbatim?60:200} value={title} disabled={busy} placeholder={verbatim?"예: 묵은지에 싸 먹으면 더 맛있어요":"예: 미나리전과 막걸리를 같이 소개해 줘"} onChange={event=>setTitle(event.target.value)}/>
-        <label htmlFor={`${id}-points`}>{verbatim?"카드 요점":"카드 요점 또는 더 원하는 내용"} <small>{verbatim?`한 줄에 하나, ${SLIDE_POINT_MAX_COUNT}줄·줄마다 ${SLIDE_POINT_MAX_LENGTH}자까지(비워도 돼요)`:"비워도 돼요"}</small></label>
+        <label htmlFor={`${id}-points`}>{verbatim?"카드 짧은 글":"카드 짧은 글 또는 더 원하는 내용"} <small>{verbatim?`한 줄에 하나, ${SLIDE_POINT_MAX_COUNT}줄·줄마다 ${SLIDE_POINT_MAX_LENGTH}자까지(비워도 돼요)`:"비워도 돼요"}</small></label>
         <textarea id={`${id}-points`} rows={3} value={body} disabled={busy} onChange={event=>setBody(event.target.value)}/>
         {(title.trim()||body.trim())&&problem&&<p role="alert">{problem}</p>}
       </>}

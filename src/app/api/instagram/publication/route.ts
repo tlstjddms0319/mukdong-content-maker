@@ -15,7 +15,7 @@ const Resolve=z.object({draftId:Id,outcome:z.enum(["published","failed"])});
 
 export async function GET(request:Request){ const denied=await ownerApiError(); if(denied)return denied;
   const draftId=Id.safeParse(new URL(request.url).searchParams.get("draftId"));
-  if(!draftId.success)return NextResponse.json({error:"초안 ID를 확인해 주세요.",message:"초안 ID를 확인해 주세요."},{status:400,...noStore});
+  if(!draftId.success)return NextResponse.json({error:"게시물 번호를 확인해 주세요.",message:"게시물 번호를 확인해 주세요."},{status:400,...noStore});
   const [draft,publication]=await Promise.all([createDraftRepository().readDraft(draftId.data),createInstagramRepository().readPublication(draftId.data)]);
   return NextResponse.json(publishStatusOf(draft??{},publication,Date.now()),noStore);
 }

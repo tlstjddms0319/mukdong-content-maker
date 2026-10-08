@@ -5,17 +5,22 @@ import { InstagramConnectionCard } from "@/components/settings/InstagramConnecti
 describe("InstagramConnectionCard",()=>{
   afterEach(()=>{vi.unstubAllGlobals();window.history.replaceState(null,"","/");});
 
-  it("Instagram에서 돌아온 실패 사유를 확인할 항목으로 안내한다",async()=>{
+  it("사장님 화면에는 실패 원인 대신 무엇을 누르면 되는지만, 관리자용에는 확인할 항목을 보여 준다",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:false})}));
     window.history.replaceState(null,"","/settings?instagram=error&reason=token");
-    render(<InstagramConnectionCard/>);
+    const {unmount}=render(<InstagramConnectionCard/>);
+    const plain=await screen.findByRole("alert");
+    expect(plain).toHaveTextContent("다시 눌러 주세요");
+    expect(plain).not.toHaveTextContent(/시크릿|Render|INSTAGRAM_/);
+    unmount();
+    render(<InstagramConnectionCard part="server"/>);
     expect(await screen.findByRole("alert")).toHaveTextContent("Instagram 앱 시크릿");
   });
 
-  it("서버가 알아낸 토큰 거절 원인(hint)이 있으면 그 항목만 콕 집어 안내한다",async()=>{
+  it("서버가 알아낸 토큰 거절 원인(hint)이 있으면 관리자용에 그 항목만 콕 집어 안내한다",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:false})}));
     window.history.replaceState(null,"","/settings?instagram=error&reason=token&hint=redirect");
-    render(<InstagramConnectionCard/>);
+    render(<InstagramConnectionCard part="server"/>);
     expect(await screen.findByRole("alert")).toHaveTextContent("INSTAGRAM_REDIRECT_URI");
   });
 
@@ -23,42 +28,46 @@ describe("InstagramConnectionCard",()=>{
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:false})}));
     render(<InstagramConnectionCard/>);
     expect(await screen.findByText("아직 연결되지 않았어요")).toBeInTheDocument();
-    expect(screen.getByRole("link",{name:"Instagram 연결"})).toHaveAttribute("href","/api/instagram/connect");
+    expect(screen.getByRole("link",{name:"인스타그램 연결하기"})).toHaveAttribute("href","/api/instagram/connect");
+    // 사장님 화면에는 서버 설정 목록이 없다.
+    expect(screen.queryByText("게시 서버 설정")).not.toBeInTheDocument();
   });
 
-  it("연결에 필요한 서버 설정이 없으면 연결 버튼을 막고 이유를 보여준다",async()=>{
+  it("연결에 필요한 서버 설정이 없으면 연결 버튼을 막고, 이유는 관리자용에서 보여준다",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:false,setup:{appId:false,appSecret:false,redirectUri:false,mediaHttpsUrl:false,signingKey:false}})}));
-    render(<InstagramConnectionCard/>);
-    expect(await screen.findByRole("button",{name:"Instagram 연결"})).toBeDisabled();
-    expect(screen.queryByRole("link",{name:"Instagram 연결"})).not.toBeInTheDocument();
-    expect(screen.getByText(/서버 환경변수에 넣으면 연결할 수 있어요/)).toBeInTheDocument();
+    const {unmount}=render(<InstagramConnectionCard/>);
+    expect(await screen.findByRole("button",{name:"인스타그램 연결하기"})).toBeDisabled();
+    expect(screen.queryByRole("link",{name:"인스타그램 연결하기"})).not.toBeInTheDocument();
+    expect(screen.getByText(/관리자용 설정/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("환경변수");
+    unmount();
+    render(<InstagramConnectionCard part="server"/>);
+    expect(await screen.findByText(/서버 환경변수에 넣으면 연결할 수 있어요/)).toBeInTheDocument();
   });
 
-  it("계정이 연결되어도 게시 서버 설정이 빠졌으면 항목을 따로 안내한다",async()=>{
+  it("계정이 연결되어도 게시 서버 설정이 빠졌으면 관리자용에 항목을 따로 안내한다",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({
       connected:true,username:"mukdong",needsReconnect:false,
       setup:{appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:false,signingKey:false},
     })}));
-    render(<InstagramConnectionCard/>);
-
+    render(<><InstagramConnectionCard/><InstagramConnectionCard part="server"/></>);
     expect(await screen.findByText("@mukdong 연결됨")).toBeInTheDocument();
-    expect(screen.getByText("게시 서버 설정이 더 필요해요.")).toBeInTheDocument();
+    expect(await screen.findByText("게시 서버 설정이 더 필요해요.")).toBeInTheDocument();
     expect(screen.getByText("공개 이미지 HTTPS 주소")).toBeInTheDocument();
     expect(screen.getByText("이미지 보안 키")).toBeInTheDocument();
-    expect(screen.queryByText("게시 준비가 되었어요.")).not.toBeInTheDocument();
   });
 
-  it("연결된 계정은 토큰 없이 사용자명만 보여주고 해제할 수 있다",async()=>{
+  it("연결된 계정은 토큰 없이 사용자명만 보여주고, 한 번 물은 뒤 연결을 끊을 수 있다",async()=>{
     const request=vi.fn()
       .mockResolvedValueOnce({ok:true,json:async()=>({connected:true,username:"mukdong",expiresAt:"2026-10-01T00:00:00.000Z",needsReconnect:false,setup:{appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:true,signingKey:true}})})
       .mockResolvedValueOnce({ok:true,json:async()=>({connected:false})});
     vi.stubGlobal("fetch",request);
+    vi.stubGlobal("confirm",vi.fn(()=>true));
     render(<InstagramConnectionCard/>);
     expect(await screen.findByText("@mukdong 연결됨")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("accessToken");
-    fireEvent.click(screen.getByRole("button",{name:"연결 해제"}));
+    fireEvent.click(screen.getByRole("button",{name:"연결 끊기"}));
     await waitFor(()=>expect(request).toHaveBeenCalledWith("/api/instagram/connection",{method:"DELETE"}));
     expect(await screen.findByText("아직 연결되지 않았어요")).toBeInTheDocument();
-    expect(screen.getByText("필수 설정 항목이 모두 채워졌어요.")).toBeInTheDocument();
   });
 });

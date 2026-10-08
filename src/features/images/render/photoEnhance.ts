@@ -130,10 +130,12 @@ const FOOD_WORDS:Record<FoodLook,string[]>={
 };
 // 같은 글에 여러 메뉴가 나오면 먼저 나온 메뉴를 고른다. 단 삼합은 홍어를 품고 있어 삼합이 보이면 삼합.
 // "전"은 한 글자라 "전통·이전" 같은 낱말에 섞이지 않게, 낱말 하나가 정확히 "전"이거나 "~전"으로 끝나는 메뉴 이름일 때만 본다.
+// "전에"는 거의 늘 "가기 전에"(~하기 앞서)라서 메뉴로 보지 않는다. 예전에는 이 말로 전 보정(윤기)을 걸어
+// 하얀 홍어·가오리 살 사진의 JPEG 계단이 도드라졌다(갈래 마지막 장 "가기 전에 이것만 보세요").
 export function foodLookOf(text:string):FoodLook|null {
   const normalized=text.normalize("NFKC");
   const tokens=normalized.split(/[^가-힣a-zA-Z0-9]+/).filter(Boolean);
-  const indexOf=(word:string)=>word.length===1?tokens.some(token=>token===word||token===`${word}을`||token===`${word}이`||token===`${word}은`||token===`${word}에`)?normalized.indexOf(word):-1:normalized.indexOf(word);
+  const indexOf=(word:string)=>word.length===1?tokens.some(token=>token===word||token===`${word}을`||token===`${word}이`||token===`${word}은`)?normalized.indexOf(word):-1:normalized.indexOf(word);
   let best:{look:FoodLook;at:number}|null=null;
   for(const look of Object.keys(FOOD_WORDS) as FoodLook[]){
     const hits=FOOD_WORDS[look].map(indexOf).filter(at=>at>=0);

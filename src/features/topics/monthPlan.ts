@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { StoredStyleIdSchema, StyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
+import { PICKABLE_STYLES, StoredStyleIdSchema, type StyleId } from "@/features/images/styleCatalog";
 import { TopicSuggestionSchema, type TopicSuggestion } from "./schema";
 import { isOtherMenuTopic } from "./service";
 
@@ -60,10 +60,10 @@ export function pickWeekTopics(topics:TopicSuggestion[],count:number,used:Set<st
   function score(topic:TopicSuggestion){return topic.season?1:0;}
 }
 
-// 게시물마다 디자인 계열을 돌려 가며 추천한다. 기본 템플릿은 빼고, 같은 계열이 연달아 나오지 않게 한다.
+// 게시물마다 디자인 계열을 돌려 가며 추천한다. 기본 템플릿과 갈래 전용 계열(사진 중심·글 중심)은 빼고, 같은 계열이 연달아 나오지 않게 한다.
 // 시작 위치는 달마다 달라서(달 번호 기준) 매달 같은 순서로 반복되지 않는다.
 export function rotateStyles(count:number,month:string):StyleId[] {
-  const styles=StyleIdSchema.options.filter(id=>id!=="template");
+  const styles=PICKABLE_STYLES.filter(id=>id!=="template");
   const offset=Number(month.slice(5,7))*3+Number(month.slice(0,4));
   return Array.from({length:count},(_,i)=>styles[(offset+i*5)%styles.length]);
 }

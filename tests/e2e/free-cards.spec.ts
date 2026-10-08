@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import JSZip from "jszip";
 import { loginAsOwner } from "./helpers";
@@ -11,8 +12,13 @@ test("edits three free card layouts, preserves the library and exports saved des
   await page.route("**/api/images/generate",route=>route.abort());
   await page.route("**/api/images/plan",route=>route.abort());
   await loginAsOwner(page);
-  await page.getByRole("button",{name:"이미지 선택"}).click();
-  await page.getByRole("button",{name:"무료 카드 편집",exact:true}).click();
+  // 글자 카드는 확인 화면의 더보기 안에 있다. 사진 한 장짜리 게시물을 만들어 두고 연다.
+  const draftId=randomUUID(),mediaId=randomUUID();
+  expect((await page.request.post("/api/drafts",{data:{id:draftId,status:"ready",topic:`글자 카드 확인 ${testInfo.project.name}`,audience:"A",media_candidates:[{id:mediaId,source:"photo",file_id:"data:image/png;base64,iVBORw0KGgo=",purpose:"instagram-primary"}],selected_media_id:mediaId,copy:null,caption:"처음 글",facts_to_verify:[],store_profile_version:"2026-09-10",created_at:"2026-09-22T00:00:00.000Z",updated_at:"2026-09-22T00:00:00.000Z"}})).status()).toBe(201);
+  await page.goto(`/?draft=${draftId}`);
+  await expect(page.getByRole("heading",{name:"확인하고 올리기"})).toBeVisible();
+  await page.getByText("더보기",{exact:true}).last().click();
+  await page.getByText("글자 카드로 직접 만들기").click();
   await page.getByRole("button",{name:"글자형",exact:true}).click();
   await page.getByLabel("짧은 설명 (선택)").fill("함께 먹는 재료를 하나씩 살펴보면, 익숙한 한입도 다르게 느껴질 수 있어요.");
 
@@ -49,13 +55,14 @@ test("edits three free card layouts, preserves the library and exports saved des
   expect(compared.assetIds).toHaveLength(2);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 
-  // DraftWizard only checks response.ok and never reads the echoed draft (~350KB of card previews), so Chromium
+  // The wizard only checks response.ok and never reads the echoed draft (~350KB of card previews), so Chromium
   // never marks that response finished and response.json() would hang. Read the request payload and the persisted draft instead.
   const saveRequest=page.waitForRequest(request=>request.url().endsWith("/api/drafts")&&request.method()==="POST");
   await page.getByRole("button",{name:"카드 3장 사용"}).click();
   const sent=await saveRequest;
   expect((await sent.response())?.status()).toBe(201);
-  await expect(page.getByText("이미지 3장을 저장했어요.")).toBeVisible();
+  await expect(page.getByText("바뀐 사진을 저장했어요.")).toBeVisible();
+  await expect(page.getByLabel("모든 장").getByRole("button")).toHaveCount(3);
   const saved=await (await page.request.get(`/api/drafts?id=${encodeURIComponent(sent.postDataJSON().id)}`)).json();
   expect(saved.media_candidates.map((media:{source:string})=>media.source)).toEqual(["design","design","design"]);
   expect(saved.selected_media_ids).toHaveLength(3);
@@ -63,6 +70,8 @@ test("edits three free card layouts, preserves the library and exports saved des
   expect((await page.request.patch("/api/drafts",{data:{id:saved.id,caption}})).status()).toBe(200);
   await page.goto(`/?draft=${saved.id}`);
   await expect(page.getByText("1 / 3",{exact:true})).toBeVisible();
+  await page.getByText("더보기",{exact:true}).last().click();
+  await page.getByText("파일로 받기 · # 태그 · 음악").click();
   const downloadPromise=page.waitForEvent("download");
   await page.getByRole("button",{name:"전체 묶음 받기"}).click();
   const download=await downloadPromise,stream=await download.createReadStream();
@@ -70,8 +79,8 @@ test("edits three free card layouts, preserves the library and exports saved des
   const zip=await JSZip.loadAsync(Buffer.concat(chunks));
   expect(JSON.parse(await zip.file("metadata.json")!.async("string")).slides.map((slide:{source:string})=>slide.source)).toEqual(["design","design","design"]);
   expect(await zip.file("caption.txt")!.async("string")).toBe(caption);
-  await page.getByRole("button",{name:"2 이미지"}).click();
-  await page.getByRole("button",{name:"무료 카드 편집",exact:true}).click();
+  // 다시 열어도 보관한 사진은 글자 카드 화면에 그대로 있다.
+  await page.getByText("글자 카드로 직접 만들기").click();
   await expect(page.locator(".asset-card").filter({hasText:names[0]})).toBeVisible();
   expect(paidRequests).toEqual([]);
 });

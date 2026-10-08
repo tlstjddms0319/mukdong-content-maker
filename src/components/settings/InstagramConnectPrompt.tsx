@@ -30,9 +30,9 @@ export function InstagramConnectPrompt(){
   const reconnect=status.connected&&status.needsReconnect;
   return <div className="modal-backdrop" onClick={later}>
     <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="instagram-prompt-title" onClick={event=>event.stopPropagation()}>
-      <h2 id="instagram-prompt-title">{reconnect?"Instagram 연결 기간이 끝났어요":"Instagram을 연결할까요?"}</h2>
-      <p>{reconnect?`@${status.username} 계정을 다시 연결하면 바로 게시와 예약 게시를 계속 쓸 수 있어요.`:"연결해 두면 완성한 카드뉴스를 이 화면에서 바로 게시하거나, 정한 시각에 자동으로 올릴 수 있어요."}</p>
-      {status.setup&&status.setup.persistentStorage===false&&<p className="connection-help">지금은 서버에 영구 저장소(Supabase)가 설정돼 있지 않아, 서버가 재시작되면 연결이 다시 풀려요. 설정 화면의 안내를 확인해 주세요.</p>}
+      <h2 id="instagram-prompt-title">{reconnect?"인스타그램 연결 기간이 끝났어요":"인스타그램을 연결할까요?"}</h2>
+      <p>{reconnect?`@${status.username} 계정을 다시 연결하면 바로 게시와 예약 게시를 계속 쓸 수 있어요.`:"연결해 두면 만든 게시물을 이 앱에서 바로 올리거나, 정한 시각에 저절로 올릴 수 있어요."}</p>
+      {status.setup&&status.setup.persistentStorage===false&&<p className="connection-help">지금은 연결이 오래 보관되지 않아 서버가 다시 켜지면 풀릴 수 있어요(관리하는 분: 설정 → 관리자용 설정 → 영구 저장소).</p>}
       <div className="modal-actions">
         <button type="button" className="button secondary" onClick={later}>나중에</button>
         <a className="button primary" href="/api/instagram/connect" onClick={rememberDismissed}>{reconnect?"다시 연결":"지금 연결"}</a>

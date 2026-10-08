@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
 import { photosNeeded } from "@/features/images/design";
-import { fitPlanToPhotos, matchPhotosToSlides, photoMatchScore, swapPhoto } from "@/features/images/photoCarousel";
+import { fillWithPhotoViews, fitPlanToPhotos, matchPhotosToSlides, photoMatchScore, swapPhoto } from "@/features/images/photoCarousel";
+import { applyTrack } from "@/features/images/track";
 import { contentOf } from "@/features/images/styles/shared";
 
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
@@ -11,6 +12,39 @@ vi.mock("server-only",()=>({}));
 
 const base=(slideCount:3|5|7|10)=>createFallbackCarouselPlan({topic:"홍어 한 점",slideCount});
 const used=(assignment:number[][])=>assignment.flat();
+
+describe("fitting a track plan to the owner's photos", () => {
+  // 갈래 구성안(applyTrack을 거친 5장). 사진 중심은 장마다 사진 1장까지, 글 중심은 표지에만 사진.
+  const tracked=(track:"photo"|"text")=>applyTrack(base(5),track);
+  it("photo track: at most one photo per slide, even with many photos, and never a collage", () => {
+    const {plan,assignment,unused}=fitPlanToPhotos(tracked("photo"),8,{track:"photo"});
+    expect(assignment.every(slots=>slots.length===1)).toBe(true);
+    expect(used(assignment)).toEqual([0,1,2,3,4]);
+    expect(unused).toEqual([5,6,7]);
+    plan.slides.forEach((slide,i)=>expect(photosNeeded(slide.layout)).toBe(assignment[i].length));
+    expect(plan.slides.some(slide=>slide.layout==="collage"||slide.layout==="polaroid"||slide.layout==="versus")).toBe(false);
+  });
+  it("photo track: with few photos, reuses them closer up (one per slide) and leaves the rest photo-less", () => {
+    const fitted=fitPlanToPhotos(tracked("photo"),2,{track:"photo"});
+    expect(fitted.assignment.map(slots=>slots.length)).toEqual([1,1,0,0,0]);
+    // 사진이 없는 장은 갈래 디자인의 "사진 없는 장"(browser)으로 둔다(역할별 글자 레이아웃 아님).
+    expect(fitted.plan.slides.slice(2).every(slide=>slide.layout==="browser")).toBe(true);
+    const filled=fillWithPhotoViews(fitted.plan,fitted.assignment,2,[],"photo");
+    expect(filled.assignment.every(slots=>slots.length<=1)).toBe(true);
+    expect(filled.assignment.filter(slots=>slots.length).length).toBeGreaterThan(2);
+    filled.plan.slides.forEach((slide,i)=>expect(photosNeeded(slide.layout)).toBe(filled.assignment[i].length));
+  });
+  it("text track: the first photo goes on the cover only and body slides stay without photos", () => {
+    const fitted=fitPlanToPhotos(tracked("text"),4,{track:"text"});
+    expect(fitted.assignment).toEqual([[0],[],[],[],[]]);
+    expect(fitted.unused).toEqual([1,2,3]);
+    expect(photosNeeded(fitted.plan.slides[0].layout)).toBe(1);
+    expect(fitted.plan.slides.slice(1).every(slide=>photosNeeded(slide.layout)===0)).toBe(true);
+    // 사진이 모자라도 본문 장에 같은 사진을 다시 쓰지 않는다(글이 주인공).
+    const filled=fillWithPhotoViews(fitted.plan,fitted.assignment,4,[],"text");
+    expect(filled.assignment).toEqual([[0],[],[],[],[]]);
+  });
+});
 
 describe("fitting a carousel plan to real photos", () => {
   it("puts the first photo on the cover and turns photo-less slides into text cards", () => {

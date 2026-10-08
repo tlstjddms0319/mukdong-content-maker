@@ -6,5 +6,5 @@ export function storageIsEphemeral(env:Record<string,string|undefined>=process.e
 
 export function StorageWarning(){
   if(!storageIsEphemeral())return null;
-  return <p className="storage-warning" role="status">지금은 영구 저장소(Supabase)가 연결되지 않아, 서버가 다시 켜지면 초안이 지워질 수 있어요. 다 만든 게시물은 ‘전체 묶음 받기’로 꼭 내려받아 두세요. 연결 방법은 설정 → 저장소 연결 확인에 있어요.</p>;
+  return <p className="storage-warning" role="status">지금은 만든 게시물이 오래 보관되지 않아요. 서버가 다시 켜지면 지워질 수 있으니, 다 만든 게시물은 ‘휴대폰에 저장하기’로 꼭 저장해 두세요. (관리하는 분: 설정 → 관리자용 설정 → 영구 저장소)</p>;
 }
