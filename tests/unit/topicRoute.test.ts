@@ -13,6 +13,8 @@ vi.mock("@/lib/ai/geminiClient", () => ({
 
 import { POST } from "@/app/api/topics/route";
 import { topicAnglesForRound } from "@/features/topics/service";
+import { RATE_LIMITED_COOLDOWN_SECONDS, TOPIC_REFRESH_GAP_SECONDS, resetTopicPace } from "@/features/topics/refreshPace";
+import { TextAiHttpError } from "@/lib/ai/errors";
 
 const topics = ["치즈는 익숙한데 다른 발효 음식은 왜 낯설까?", "같은 음식을 먹는데 왜 취향은 갈릴까?", "홍어의 톡 쏘는 향은 어디서 올까?"].map((title,index) => ({
   id:String(index + 1),
@@ -25,6 +27,8 @@ const topics = ["치즈는 익숙한데 다른 발효 음식은 왜 낯설까?",
 
 describe("topic route", () => {
   beforeEach(() => {
+    // 추천 간격 기록은 테스트마다 비운다(연달아 부르면 간격 규칙에 걸린다).
+    resetTopicPace();
     generateJson.mockReset().mockImplementation(async (_prompt, schema) => schema.parse(topics));
   });
 
@@ -71,5 +75,27 @@ describe("topic route", () => {
       body:JSON.stringify({ storeProfile:{ name:"묵동홍어마을" }, recommendationRound:2, recentTitles:["수육에는 왜 김치를 곁들일까?"] }),
     }));
     expect(String(generateJson.mock.calls[0][0])).toContain('"recentTitles":["수육에는 왜 김치를 곁들일까?"]');
+  });
+  it("asks the screen to wait between refreshes instead of calling the AI again right away", async () => {
+    const post = () => POST(new Request("http://localhost/api/topics", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ storeProfile:{ name:"묵동홍어마을" }, recommendationRound:1, excludeTitles:["지금 보이는 주제"] }) }));
+    const first = await (await post()).json();
+    expect(first.cooldownSeconds).toBe(TOPIC_REFRESH_GAP_SECONDS);
+    const calls = generateJson.mock.calls.length;
+    const again = await post();
+    expect(again.status).toBe(429);
+    const body = await again.json();
+    expect(body).toMatchObject({ paced:true });
+    expect(body.cooldownSeconds).toBeGreaterThan(0);
+    expect(body.cooldownSeconds).toBeLessThanOrEqual(TOPIC_REFRESH_GAP_SECONDS);
+    // 기다리라는 답에는 AI를 부르지 않는다.
+    expect(generateJson.mock.calls.length).toBe(calls);
+  });
+
+  it("waits a full minute after the AI hit its per-minute limit", async () => {
+    generateJson.mockRejectedValue(new TextAiHttpError("Gemini", 429));
+    const response = await POST(new Request("http://localhost/api/topics", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ storeProfile:{ name:"묵동홍어마을" }, recommendationRound:1 }) }));
+    const body = await response.json();
+    expect(body.source).toBe("fallback");
+    expect(body.cooldownSeconds).toBe(RATE_LIMITED_COOLDOWN_SECONDS);
   });
 });

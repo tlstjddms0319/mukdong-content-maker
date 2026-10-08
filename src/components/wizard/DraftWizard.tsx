@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { WizardShell, type WizardStep } from "./WizardShell";
 import { MakeStep } from "./MakeStep";
+import { TrendLine } from "./TrendLine";
+import type { TrendStatus } from "@/features/topics/naverTrend";
 import { ReviewStep, type CaptionStatus } from "./ReviewStep";
 import type { TopicSuggestion } from "@/features/topics/schema";
 import { fallbackTopics } from "@/features/topics/service";
@@ -57,6 +59,19 @@ export function DraftWizard() {
   const [topics,setTopics]=useState(DEFAULT_TOPICS);
   const [topicsLoading,setTopicsLoading]=useState(false);
   const [topicsFallback,setTopicsFallback]=useState(false);
+  // 네이버 검색 흐름(요즘 검색이 늘어난 음식 말)을 이번 추천에 반영했는지 사장님이 알 수 있게 서버가 알려 준 그대로 둔다.
+  const [trendInfo,setTrendInfo]=useState<{status:TrendStatus;keywords:string[]}|null>(null);
+  // "다른 주제 보기"를 다시 누를 수 있는 시각(ms). 서버가 무료 AI 분당 한도를 따져 알려 준 초(cooldownSeconds)로 정한다.
+  // 기다리는 동안 버튼에 남은 초를 보여 준다(연달아 누르면 AI가 한도에 걸려 준비된 주제·네이버 반영 빠짐이 생겼다).
+  const [refreshAt,setRefreshAt]=useState(0);
+  const [clock,setClock]=useState(()=>Date.now());
+  const refreshWait=Math.max(0,Math.ceil((refreshAt-clock)/1000));
+  useEffect(()=>{
+    if(refreshAt<=Date.now())return;
+    const timer=window.setInterval(()=>{const now=Date.now();setClock(now);if(now>=refreshAt)window.clearInterval(timer);},500);
+    return()=>window.clearInterval(timer);
+  },[refreshAt]);
+  const holdRefresh=(seconds:unknown)=>{const value=typeof seconds==="number"&&Number.isFinite(seconds)?Math.min(120,Math.max(0,seconds)):0;const now=Date.now();setClock(now);setRefreshAt(now+value*1000);};
   const [recommendationRound,setRecommendationRound]=useState(0);
   // 한 달 계획의 게시일 칸에서 시작한 게시물이면 그 날짜. 저장할 때 날짜를 초안에 남겨 계획표와 이어 준다.
   const [planLink,setPlanLink]=useState<{date:string}|null>(null);
@@ -138,10 +153,13 @@ export function DraftWizard() {
     setTopicsLoading(true);
     try{
       const response=await fetch("/api/topics", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({storeProfile:{name:"묵동홍어마을"},recommendationRound:round,excludeTitles,recentTitles:readRecentTopics()}) });
+      // 너무 빨리 다시 누른 경우(서버가 AI를 부르지 않음): 지금 추천을 그대로 두고 남은 초만 받는다.
+      if(response.status===429){const data=await readJsonResponse(response).catch(()=>({}));if(requestId===topicRequestRef.current)holdRefresh((data as {cooldownSeconds?:unknown}).cooldownSeconds??10);return;}
       if(!response.ok) throw new Error();
       const data=await readJsonResponse(response);
+      if(requestId===topicRequestRef.current)holdRefresh(data.cooldownSeconds);
       if(requestId===topicRequestRef.current&&Array.isArray(data.topics)&&data.topics.length===3){
-        setTopics(data.topics);setTopicsFallback(data.source==="fallback");rememberTopics(data.topics.map((item:TopicSuggestion)=>item.title));rememberRound(round);
+        setTopics(data.topics);setTopicsFallback(data.source==="fallback");setTrendInfo(typeof data.trendStatus==="string"?{status:data.trendStatus as TrendStatus,keywords:Array.isArray(data.trends)?data.trends.map((trend:{keyword:string})=>trend.keyword).filter(Boolean):[]}:null);rememberTopics(data.topics.map((item:TopicSuggestion)=>item.title));rememberRound(round);
         // 1단계에 머물러 있고 그사이 주제를 직접 바꾸지 않았을 때만 첫 추천으로 자동 선택한다.
         if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest&&!unsavedRef.current)changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",false,data.topics[0].summary ?? "");
         setRecommendationRound(round);
@@ -361,9 +379,10 @@ export function DraftWizard() {
     <h1>무엇을 올릴까요?</h1>
     <p className="lead">추천 주제 하나를 누르거나, 아래 칸에 직접 쓰세요.</p>
     {planNote}
-    <div className="topic-tools"><button type="button" className="button secondary" disabled={topicsLoading} onClick={()=>void loadTopics(recommendationRound + 1,topics.map(item=>item.title))}>다른 주제 보기</button>{topicsLoading&&<GenerationProgress label="추천 주제를"/>}</div>
+    <div className="topic-tools"><button type="button" className="button secondary" disabled={topicsLoading||refreshWait>0} onClick={()=>void loadTopics(recommendationRound + 1,topics.map(item=>item.title))}>{refreshWait>0?`다른 주제 보기 (${refreshWait}초)`:"다른 주제 보기"}</button>{topicsLoading&&<GenerationProgress label="추천 주제를"/>}{!topicsLoading&&refreshWait>0&&<span className="field-help refresh-wait">AI가 쉬지 않게 {refreshWait}초 뒤에 다시 볼 수 있어요.</span>}</div>
     {topicsFallback&&!topicsLoading&&<p role="status" className="field-help">추천을 불러오지 못해 준비된 주제를 보여 드려요. 잠시 뒤 &apos;다른 주제 보기&apos;를 눌러 보세요.</p>}
-    <div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><span className="topic-badges"><span className="soft-badge">{topicCardLabel(index)}</span>{item.season&&<span className="season-badge">이번 철 · {item.season}</span>}</span><strong>{item.title}</strong><span>{item.summary}</span></button>)}</div>
+    {trendInfo&&!topicsLoading&&<TrendLine info={trendInfo} used={topics.filter(item=>item.trend).map(item=>item.trend)} prepared={topicsFallback}/>}
+    <div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><span className="topic-badges"><span className="soft-badge">{topicCardLabel(index)}</span>{item.season&&<span className="season-badge">이번 철 · {item.season}</span>}{item.trend&&<span className="season-badge trend-badge">요즘 많이 찾는 말 · {item.trend}</span>}</span><strong>{item.title}</strong></button>)}</div>
     <label className="custom-topic"><span>직접 쓰기</span><input maxLength={120} value={topic} placeholder="예: 비 오는 날 홍어전" onChange={e=>editTopicText(e.target.value)} /></label>
     <div className="bottom-action"><span/><button type="button" className="button primary big" disabled={!topic.trim()} onClick={goNext}>다음</button></div>
   </WizardShell>;

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { loginAsOwner } from "./helpers";
 import { fallbackTopics } from "../../src/features/topics/service";
 
-// 질문형 추천 3개가 설명과 함께 보이고, 새로고침하면 다음 추천 방향의 다른 묶음이 나온다.
+// 질문형 추천 3개가 제목만 보이고, 새로고침하면 다음 추천 방향의 다른 묶음이 나온다.
 // 첫 화면의 추천 방향은 방문할 때마다 바뀌므로(같은 주제 반복 방지), 실제로 보낸 방향 번호로 기대값을 만든다.
 test("shows question outlines and refreshes to another set", async ({page},testInfo)=>{
   const rounds:number[]=[];
@@ -21,7 +21,8 @@ test("shows question outlines and refreshes to another set", async ({page},testI
   const first=fallbackTopics(round);
   await expect(page.getByLabel("직접 쓰기")).toHaveValue(first[0].title);
   await expect(page.locator(".topic-card")).toHaveCount(3);
-  for(const topic of first)await expect(page.locator(".topic-card").filter({hasText:topic.title})).toContainText(topic.summary);
+  // 카드에는 주제 제목만. 긴 설명은 화면에 보이지 않고, 고르면 저장돼 글 쓸 때만 쓰인다.
+  for(const topic of first){const card=page.locator(".topic-card").filter({hasText:topic.title});await expect(card).toHaveCount(1);await expect(card).not.toContainText(topic.summary);}
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:testInfo.outputPath("curiosity-topics.png"),fullPage:true});
   await page.getByRole("button",{name:"다른 주제 보기"}).click();

@@ -650,15 +650,40 @@ describe("DraftWizard",()=>{
     expect(screen.getByRole("button",{name:"3 확인하고 올리기"})).toBeDisabled();
   });
 
-  it("labels recommendation cards A, B, C in screen order with only the season badge",async()=>{
-    const topics=[{id:"one",title:"첫 주제",summary:"",reason:"이유",audience:"B",imageBrief:"",season:"가을",trend:"방어"},{id:"two",title:"둘째 주제",summary:"",reason:"이유",audience:"B",imageBrief:""},{id:"three",title:"셋째 주제",summary:"",reason:"이유",audience:"A",imageBrief:""}];
+  it("labels recommendation cards A, B, C, shows only the title, and says when a Naver search word was used",async()=>{
+    const topics=[{id:"one",title:"첫 주제",summary:"이 긴 설명은 화면에 보이지 않고 글을 쓸 때만 쓰인다",reason:"이유",audience:"B",imageBrief:"",season:"가을",trend:"방어"},{id:"two",title:"둘째 주제",summary:"",reason:"이유",audience:"B",imageBrief:""},{id:"three",title:"셋째 주제",summary:"",reason:"이유",audience:"A",imageBrief:""}];
     vi.stubGlobal("fetch",vi.fn(async(url:string)=>url==="/api/topics"?{ok:true,json:async()=>({topics,trends:[{keyword:"방어",growth:1.4}],trendStatus:"ok"})}:{ok:false,json:async()=>({})}));
     render(<DraftWizard/>);
     await screen.findByText("셋째 주제");
     const cards=screen.getAllByRole("button").filter(button=>button.classList.contains("topic-card"));
     expect(cards.map(card=>card.querySelector(".soft-badge")?.textContent)).toEqual(["추천 A","추천 B","추천 C"]);
     expect(cards[0]).toHaveTextContent("이번 철 · 가을");
-    // 독자 유형·검색 증가율은 화면에 내지 않는다(추천 기준에는 그대로 쓰인다).
-    expect(document.body.textContent).not.toMatch(/약속 결정형|음식 탐색형|\+40%|검색 흐름/);
+    // 네이버 검색 흐름을 반영한 카드에는 그 말을, 위에는 반영했다는 한 줄을 보인다(증가율 숫자는 내지 않는다).
+    expect(cards[0]).toHaveTextContent("요즘 많이 찾는 말 · 방어");
+    expect(screen.getByText("네이버에서 요즘 많이 찾는 말: 방어 · 표시가 붙은 추천 주제에 넣었어요.")).toBeInTheDocument();
+    // 카드에는 주제 제목만. 긴 설명·독자 유형·증가율은 화면에 내지 않는다(설명은 저장해 두고 글 쓸 때 쓴다).
+    expect(document.body.textContent).not.toMatch(/약속 결정형|음식 탐색형|\+40%|이 긴 설명/);
+  });
+  it("waits the server's interval before '다른 주제 보기' and keeps the topics when asked to wait",async()=>{
+    const topics=[{id:"one",title:"첫 주제",summary:"",reason:"이유",audience:"A",imageBrief:""},{id:"two",title:"둘째 주제",summary:"",reason:"이유",audience:"B",imageBrief:""},{id:"three",title:"셋째 주제",summary:"",reason:"이유",audience:"C",imageBrief:""}];
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>url==="/api/topics"?{ok:true,status:200,json:async()=>({topics,cooldownSeconds:10})}:{ok:false,status:404,json:async()=>({})}));
+    render(<DraftWizard/>);
+    await screen.findByText("셋째 주제");
+    // 서버가 알려 준 10초 동안은 버튼을 막고 남은 초를 보여 준다.
+    const button=await screen.findByRole("button",{name:/다른 주제 보기 \(\d+초\)/});
+    expect(button).toBeDisabled();
+    expect(screen.getByText(/AI가 쉬지 않게 \d+초 뒤에 다시 볼 수 있어요/)).toBeInTheDocument();
+  });
+
+  it("keeps the current recommendations when the server says to wait (429)",async()=>{
+    const topics=[{id:"one",title:"첫 주제",summary:"",reason:"이유",audience:"A",imageBrief:""},{id:"two",title:"둘째 주제",summary:"",reason:"이유",audience:"B",imageBrief:""},{id:"three",title:"셋째 주제",summary:"",reason:"이유",audience:"C",imageBrief:""}];
+    let calls=0;
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>url!=="/api/topics"?{ok:false,status:404,json:async()=>({})}:++calls===1?{ok:true,status:200,json:async()=>({topics,cooldownSeconds:0})}:{ok:false,status:429,json:async()=>({paced:true,cooldownSeconds:7})}));
+    render(<DraftWizard/>);
+    await screen.findByText("셋째 주제");
+    fireEvent.click(screen.getByRole("button",{name:"다른 주제 보기"}));
+    expect(await screen.findByRole("button",{name:/다른 주제 보기 \([1-7]초\)/})).toBeDisabled();
+    expect(screen.getByText("셋째 주제")).toBeInTheDocument();
+    expect(screen.queryByText(/추천을 불러오지 못해/)).not.toBeInTheDocument();
   });
 });
