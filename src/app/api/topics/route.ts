@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { z } from "zod";
-import { overusedMenus, suggestTopics, topicDirectionsForRound } from "@/features/topics/service";
+import { overusedMenus, suggestTopics } from "@/features/topics/service";
 import { STORE_MENU } from "@/features/store/menu";
 import { TopicInputSchema } from "@/features/topics/schema";
 import { buildTopicPrompt, readTopicGeneration, topicGenerationSchema } from "@/features/topics/prompt";
@@ -31,7 +31,6 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 피할 주제 = 이 브라우저에서 최근에 보여 준 것 + 최근 초안 주제(중복 없이 최대 30개).
     const avoidTitles = [...new Set([...(body.recentTitles ?? []), ...recentDraftTopics])].slice(0, 30);
     const input = TopicInputSchema.parse({ storeName: body.storeProfile.name, intent: body.intent, recommendationRound:body.recommendationRound, excludeTitles:body.excludeTitles, avoidTitles });
-    const directions = topicDirectionsForRound(input.recommendationRound);
     // 오늘(한국 시간) 기준 계절과 다가오는 행사. 프롬프트와 준비된 주제 양쪽에 쓰고 화면에도 알려 준다.
     const season = seasonContext();
     // 사장님이 적어 둔 성과에서 반응 좋았던 주제(없으면 빈 목록).
@@ -46,14 +45,14 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     let source: "ai" | "fallback" = "ai";
-    // 준비된 주제로 바꾼 이유와, AI 추천 중 규칙에 안 맞아 준비된 주제로 채운 칸 수(화면에 알린다).
+    // 준비된 주제로 바꾼 이유와, AI 추천 중 규칙에 안 맞아 준비된 주제로 바꾼 개수(화면에 알린다).
     let fallbackMessage = "";
     let filledSlots = 0;
     const topics = await suggestTopics(input, { suggest:async () => readTopicGeneration(await client.generateJson(
       buildTopicPrompt(input, season, likedTitles, trends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name)),
-      topicGenerationSchema(directions),
+      topicGenerationSchema(),
     )) }, (reason, error) => { source = "fallback"; fallbackMessage = topicFallbackMessage(error); console.warn("[topics] using prepared topics:", reason); }, season,
-    (filled) => { filledSlots = filled; console.warn(`[topics] AI 추천 중 ${filled}칸이 규칙에 맞지 않아 준비된 주제로 채웠어요.`); }, hints);
+    (filled) => { filledSlots = filled; console.warn(`[topics] AI 추천 중 ${filled}개가 규칙에 맞지 않아 준비된 주제로 바꿨어요.`); }, hints);
     return NextResponse.json({ topics, source, ...(fallbackMessage ? { fallbackMessage } : {}), ...(filledSlots ? { filled: filledSlots } : {}), provider: source === "ai" ? client.provider : null, season: { name: season.season, events: season.events.map(({ name, daysAway }) => ({ name, daysAway })) }, trends: trends.map(({ keyword, growth }) => ({ keyword, growth })), trendStatus });
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { logout } from "@/features/auth/actions";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { GenerationBadge } from "./GenerationBadge";
 
 export type WizardStep = "topic" | "image" | "copy" | "review";
@@ -19,7 +20,7 @@ export function WizardShell({ step, children, canVisit=[], onStepChange, onNewDr
     <div className="app-shell">
       <header className="topbar">
         <Link className="brand" href="/" aria-label="묵동 콘텐츠 메이커 홈">
-          <span className="brand-mark" aria-hidden="true" />
+          <BrandLogo size={32} />
           묵동 콘텐츠 메이커
         </Link>
         <div className="topbar-actions">

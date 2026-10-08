@@ -24,10 +24,10 @@ function runNext(args, env) {
 }
 
 try {
-  for (const name of ["src", "assets", "package.json", "package-lock.json", "next.config.ts", "tsconfig.json", "next-env.d.ts"]) {
+  for (const name of ["src", "assets", "public", "package.json", "package-lock.json", "next.config.ts", "tsconfig.json", "next-env.d.ts"]) {
     const source = path.join(project, name);
     if ((await lstat(source)).isSymbolicLink()) throw new Error(`Symlink not allowed in test fixture: ${name}`);
-    await cp(source, path.join(fixture, name), { recursive: name === "src" || name === "assets" });
+    await cp(source, path.join(fixture, name), { recursive: name === "src" || name === "assets" || name === "public" });
   }
   const env = {};
   for (const name of ["SystemRoot", "WINDIR", "PATH", "PATHEXT", "TEMP", "TMP", "ComSpec"]) {

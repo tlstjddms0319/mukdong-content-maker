@@ -5,20 +5,26 @@ export const REEL={width:1080,height:1920,fps:30} as const;
 // 카드(1080×1350)를 세로 영상 가운데에 놓을 자리. 위아래 여백에는 흐리게 깐 같은 카드가 보인다.
 export const CARD_RECT={x:40,y:335,width:1000,height:1250} as const;
 const COVER_SECONDS=3,CARD_SECONDS=2.6,FADE_SECONDS=.5,INTRO_MAX=5,ZOOM=.06;
+// 끝 화면: 로고보다 어두운 갈색 바탕 가운데에 가게 공용 원형 로고와 옅은 크림색 테두리(로고 원이 바탕에 묻히지 않게). 릴스 화면 위(약 250px)·아래(약 400px)는 Instagram 글자가 덮으므로
+// 로고 가운데를 그 사이(세로 860px)에 둔다. 로고 파일은 public/brand/logo-512.png(같은 주소라 녹화 캔버스가 막히지 않는다).
+export const OUTRO={seconds:2,background:"#1f1714",ring:"rgba(243,233,218,.75)",logoSize:560,centerY:860,logo:"/brand/logo-512.png"} as const;
 
-export type Scene={kind:"intro"|"card";index:number;start:number;duration:number};
+export type Scene={kind:"intro"|"card"|"outro";index:number;start:number;duration:number};
 export type Timeline={scenes:Scene[];total:number};
 
 // intro: AI 표지 영상 길이(초). 있으면 맨 앞에 두고(최대 5초) 표지 카드로 이어진다.
-export function buildTimeline(cardCount:number,intro?:number):Timeline {
+// outro: true면 마지막 카드 뒤에 로고 끝 화면(2초)을 붙인다. 마지막 카드도 0.5초 동안 끝 화면으로 겹쳐 넘어간다.
+export function buildTimeline(cardCount:number,intro?:number,outro=false):Timeline {
   const scenes:Scene[]=[];
   let start=0;
   if(intro&&intro>0){const duration=Math.min(INTRO_MAX,intro);scenes.push({kind:"intro",index:0,start,duration});start+=duration-FADE_SECONDS;}
   for(let index=0;index<cardCount;index++){
     const duration=index===0?COVER_SECONDS:CARD_SECONDS;
     scenes.push({kind:"card",index,start,duration});
-    start+=duration-(index<cardCount-1?FADE_SECONDS:0);
+    const hasNext=index<cardCount-1||outro;
+    start+=duration-(hasNext?FADE_SECONDS:0);
   }
+  if(outro&&cardCount>0)scenes.push({kind:"outro",index:0,start,duration:OUTRO.seconds});
   const last=scenes.at(-1);
   return {scenes,total:last?last.start+last.duration:0};
 }

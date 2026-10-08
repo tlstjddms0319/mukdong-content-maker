@@ -7,7 +7,6 @@ vi.mock("@/features/settings/repository", () => ({ readSettings }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/ai/geminiClient", () => ({ createGeminiClient: () => ({ generateJson }) }));
 import { POST } from "@/app/api/topics/route";
-import { topicDirectionsForRound } from "@/features/topics/service";
 
 const call = () => POST(new Request("http://localhost/api/topics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storeProfile: { name: "묵동홍어마을" }, recommendationRound: 0 }) }));
 
@@ -24,9 +23,8 @@ describe("topic source reporting", () => {
   });
   it("marks Gemini topics as ai", async () => {
     const titles = ["치즈는 왜 익숙할까?", "취향은 왜 갈릴까?", "홍어의 향은 어디서 올까?"];
-    const directions = topicDirectionsForRound(0);
     // AI 응답은 {"topics":[…]} 객체 모양이다(배열 응답은 Cloudflare·Groq 엄격 모드가 읽지 못한다).
-    generateJson.mockImplementation(async (_p, schema) => schema.parse({ topics: titles.map((title, i) => ({ id: String(i), title, summary: "익숙한 음식의 향과 식감을 설명하고 홍어로 연결하는 흐름입니다.", reason: "이유", audience: "A", imageBrief: "사진", direction: directions[i], season: "", trend: "" })) }));
+    generateJson.mockImplementation(async (_p, schema) => schema.parse({ topics: titles.map((title, i) => ({ id: String(i), title, summary: "익숙한 음식의 향과 식감을 설명하고 홍어로 연결하는 흐름입니다.", reason: "이유", audience: "A", imageBrief: "사진", season: "", trend: "" })) }));
     const body = await (await call()).json();
     expect(body.source).toBe("ai");
     expect(body.provider).toBe("gemini");

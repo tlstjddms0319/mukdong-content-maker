@@ -7,12 +7,12 @@ export interface TopicAiClient {
   suggest(input:TopicInput):Promise<TopicSuggestionInput[]>;
 }
 
-// 라운드마다 세 방향. 홍어·삼합만 파지 않도록 한 라운드에 가게의 다른 메뉴(과메기·미나리전·배다리 막걸리·홍어애탕·홍어무침) 방향을 꼭 섞는다.
-const TOPIC_DIRECTIONS = [
-  ["익숙한 음식 조합의 이유","이 계절에 어울리는 가게 메뉴 소개(홍어회·삼합 말고)","홍어회와 삼합을 함께 먹는 이유"],
-  ["발효 음식에 대한 궁금증","막걸리와 전처럼 곁들이는 술·안주 이야기","회가 아닌 홍어 요리(홍어애탕·홍어무침)"],
-  ["같은 재료를 다르게 먹는 이유","친구와 음식을 나눌 때의 궁금증","홍어를 처음 맛보는 방법"],
-  ["곁들임이 맛에 주는 변화","제철 메뉴 한 접시(과메기·미나리전 등)","홍어의 향과 식감"],
+// 새로고침마다 AI에게 참고로 건네는 관점 예시(정해진 칸·개수·순서 없음, AI가 따르지 않아도 된다).
+// 회차마다 4개씩 돌려 새로고침할 때 다른 관점이 보이게 한다. 홍어 관점이 회차마다 0~2개로 섞이도록 순서를 섞어 두었다.
+const TOPIC_ANGLES = [
+  "익숙한 음식 조합의 이유","발효 음식에 대한 궁금증","홍어의 향과 식감","같은 재료를 다르게 먹는 이유",
+  "이 계절에 어울리는 가게 메뉴","친구와 음식을 나눌 때의 궁금증","곁들임이 맛에 주는 변화","홍어를 처음 맛보는 방법",
+  "회가 아닌 홍어 요리(홍어애탕·홍어무침·홍어찜)","막걸리와 전처럼 곁들이는 술·안주 이야기","제철 메뉴 한 접시(과메기·미나리전 등)","홍어회와 삼합을 함께 먹는 이유",
 ] as const;
 
 type PreparedTopic=Omit<TopicSuggestion,"id"|"season"|"trend">;
@@ -22,29 +22,20 @@ type PreparedTopic=Omit<TopicSuggestion,"id"|"season"|"trend">;
 // trends: 네이버 검색이 늘어난 말(묶음 이름). 준비된 주제는 그 말과 이어지는 메뉴를 먼저 고른다.
 export type TopicHints={recentMenus?:ReadonlySet<string>;trends?:readonly string[]};
 
-// 준비된 주제(AI 실패 시). 라운드마다 [일상 질문, (메뉴 소개 칸은 계절에 맞춰 아래 MENU_TOPICS에서), 홍어 요리 질문].
-// 일상 질문 제목에는 홍어·삼합을 넣지 않고, summary 앞쪽에 이어질 가게 메뉴를 먼저 적는다(메뉴 판별에 쓰인다).
-const FALLBACK_TOPIC_ROUNDS:Array<{general:PreparedTopic;hongeo:PreparedTopic}> = [
-  {
-    general:{title:"같은 회인데 왜 식감은 다를까?",summary:"회를 고를 때 부드러움과 탄력 중 무엇을 좋아하는지 질문합니다. 종류와 부위에 따른 식감 차이는 출처를 확인해 설명하고, 탄력 있는 홍어회와 반건조한 과메기처럼 서로 다른 식감의 메뉴로 연결합니다.",reason:"회를 즐기던 사람이 자신의 취향으로 읽기 시작할 수 있어요.",audience:"A",imageBrief:"홍어회의 얇은 단면과 결이 보이는 한 접시"},
-    hongeo:{title:"홍어는 왜 수육이랑 먹을까?",summary:"홍어의 탄력 있는 식감에 수육의 부드러움과 묵은지의 새콤함을 곁들이는 삼합 조합을 설명합니다. 특유의 향은 남는다고 알리고, 작은 한입으로 취향을 살펴보는 방법으로 마무리합니다.",reason:"삼합 사진을 본 사람이 세 재료를 함께 먹는 이유를 궁금해할 수 있어요.",audience:"C",imageBrief:"홍어·수육·묵은지를 조금씩 곁들인 한입"},
-  },
-  {
-    general:{title:"치즈는 익숙한데 다른 발효 음식은 왜 낯설까?",summary:"발효 음식마다 향과 먹어 본 경험이 다르다는 점에서 질문을 시작합니다. 치즈와 홍어를 같은 맛으로 취급하지 않고 취향 차이로 연결하며, 낯섦의 심리적 원인은 출처 확인 없이 단정하지 않습니다.",reason:"익숙한 치즈를 떠올리며 낯선 음식에 대한 취향을 비교할 수 있어요.",audience:"C",imageBrief:"발효 음식 비교 설명에 사용할 홍어회 한 접시"},
-    hongeo:{title:"홍어애탕은 어떤 국물일까?",summary:"회로만 알던 홍어를 뜨끈한 국물로 먹는 홍어애탕을 소개합니다. 들어가는 재료와 맛은 사장님께 확인한 뒤에만 쓰고, 김이 오르는 한 그릇을 나눠 먹는 장면 중심으로 설명합니다.",reason:"홍어를 회로만 알던 사람이 다른 먹는 방법을 궁금해할 수 있어요.",audience:"A",imageBrief:"김이 오르는 홍어애탕 한 그릇"},
-  },
-  {
-    general:{title:"새콤한 무침은 왜 술안주로 찾을까?",summary:"술자리에서 새콤한 무침을 찾는 익숙한 장면에서 시작합니다. 홍어무침을 사례로 양념과 홍어 조각이 어우러지는 모습을 보여 주고 막걸리 한 잔과 이어 가되, 맛이 어울리는 원리는 출처 확인 없이 단정하지 않습니다.",reason:"무침 안주를 시켜 본 사람이 이유를 떠올려 볼 수 있어요.",audience:"B",imageBrief:"붉은 양념에 무친 홍어무침 한 접시와 막걸리 사발"},
-    hongeo:{title:"홍어를 처음 먹는다면 한입에 얼마나 올릴까?",summary:"홍어의 향이 낯선 사람이 첫 한입을 고민하는 장면을 다룹니다. 고정된 정답이나 쉬운 입문을 보장하지 않고, 홍어회를 조금씩 곁들여 취향에 맞는 양을 찾는 방법을 설명합니다.",reason:"처음 맛보려는 사람이 바로 떠올릴 구체적인 질문이에요.",audience:"C",imageBrief:"홍어회를 소량 곁들여 만든 한입"},
-  },
-  {
-    general:{title:"같은 음식을 먹는데 왜 취향은 갈릴까?",summary:"친구와 같은 메뉴를 먹고도 향과 식감에 대한 반응이 다른 장면을 소개합니다. 홍어를 사례로 서로의 취향을 확인하는 방법을 제안하고, 유전이나 감각의 원인은 검증 없이 설명하지 않습니다.",reason:"친구와 메뉴를 정하며 겪었던 차이를 떠올릴 수 있어요.",audience:"B",imageBrief:"서로 나누어 맛보기 좋게 놓인 홍어회와 곁들임"},
-    hongeo:{title:"홍어무침과 홍어회는 무엇이 다를까?",summary:"홍어무침과 홍어회를 나란히 놓고 같은 홍어가 양념에 무쳤을 때와 회로 먹을 때 어떻게 다르게 보이는지 비교합니다. 양념으로 향이 없어진다고 단정하지 않고, 어떤 쪽이 취향에 맞을지 살펴보게 합니다.",reason:"홍어회만 알던 사람이 다른 메뉴를 고를 이유가 생겨요.",audience:"A",imageBrief:"붉은 양념의 홍어무침과 얇게 썬 홍어회가 나란히 놓인 장면"},
-  },
+// 준비된 질문 주제(AI 실패 시). 정해진 칸 없이 아래 메뉴 주제·시기 주제와 한 후보 목록에 놓고 fallbackTopics가 고른다.
+// summary 앞쪽에 이어질 가게 메뉴를 먼저 적는다(메뉴 판별에 쓰인다).
+const QUESTION_TOPICS:PreparedTopic[] = [
+  {title:"같은 회인데 왜 식감은 다를까?",summary:"회를 고를 때 부드러움과 탄력 중 무엇을 좋아하는지 질문합니다. 종류와 부위에 따른 식감 차이는 출처를 확인해 설명하고, 탄력 있는 홍어회와 반건조한 과메기처럼 서로 다른 식감의 메뉴로 연결합니다.",reason:"회를 즐기던 사람이 자신의 취향으로 읽기 시작할 수 있어요.",audience:"A",imageBrief:"홍어회의 얇은 단면과 결이 보이는 한 접시"},
+  {title:"홍어는 왜 수육이랑 먹을까?",summary:"홍어의 탄력 있는 식감에 수육의 부드러움과 묵은지의 새콤함을 곁들이는 삼합 조합을 설명합니다. 특유의 향은 남는다고 알리고, 작은 한입으로 취향을 살펴보는 방법으로 마무리합니다.",reason:"삼합 사진을 본 사람이 세 재료를 함께 먹는 이유를 궁금해할 수 있어요.",audience:"C",imageBrief:"홍어·수육·묵은지를 조금씩 곁들인 한입"},
+  {title:"치즈는 익숙한데 다른 발효 음식은 왜 낯설까?",summary:"발효 음식마다 향과 먹어 본 경험이 다르다는 점에서 질문을 시작합니다. 치즈와 홍어를 같은 맛으로 취급하지 않고 취향 차이로 연결하며, 낯섦의 심리적 원인은 출처 확인 없이 단정하지 않습니다.",reason:"익숙한 치즈를 떠올리며 낯선 음식에 대한 취향을 비교할 수 있어요.",audience:"C",imageBrief:"발효 음식 비교 설명에 사용할 홍어회 한 접시"},
+  {title:"홍어애탕은 어떤 국물일까?",summary:"회로만 알던 홍어를 뜨끈한 국물로 먹는 홍어애탕을 소개합니다. 들어가는 재료와 맛은 사장님께 확인한 뒤에만 쓰고, 김이 오르는 한 그릇을 나눠 먹는 장면 중심으로 설명합니다.",reason:"홍어를 회로만 알던 사람이 다른 먹는 방법을 궁금해할 수 있어요.",audience:"A",imageBrief:"김이 오르는 홍어애탕 한 그릇"},
+  {title:"새콤한 무침은 왜 술안주로 찾을까?",summary:"술자리에서 새콤한 무침을 찾는 익숙한 장면에서 시작합니다. 홍어무침을 사례로 양념과 홍어 조각이 어우러지는 모습을 보여 주고 막걸리 한 잔과 이어 가되, 맛이 어울리는 원리는 출처 확인 없이 단정하지 않습니다.",reason:"무침 안주를 시켜 본 사람이 이유를 떠올려 볼 수 있어요.",audience:"B",imageBrief:"붉은 양념에 무친 홍어무침 한 접시와 막걸리 사발"},
+  {title:"홍어를 처음 먹는다면 한입에 얼마나 올릴까?",summary:"홍어의 향이 낯선 사람이 첫 한입을 고민하는 장면을 다룹니다. 고정된 정답이나 쉬운 입문을 보장하지 않고, 홍어회를 조금씩 곁들여 취향에 맞는 양을 찾는 방법을 설명합니다.",reason:"처음 맛보려는 사람이 바로 떠올릴 구체적인 질문이에요.",audience:"C",imageBrief:"홍어회를 소량 곁들여 만든 한입"},
+  {title:"같은 음식을 먹는데 왜 취향은 갈릴까?",summary:"친구와 같은 메뉴를 먹고도 향과 식감에 대한 반응이 다른 장면을 소개합니다. 홍어를 사례로 서로의 취향을 확인하는 방법을 제안하고, 유전이나 감각의 원인은 검증 없이 설명하지 않습니다.",reason:"친구와 메뉴를 정하며 겪었던 차이를 떠올릴 수 있어요.",audience:"B",imageBrief:"서로 나누어 맛보기 좋게 놓인 홍어회와 곁들임"},
+  {title:"홍어무침과 홍어회는 무엇이 다를까?",summary:"홍어무침과 홍어회를 나란히 놓고 같은 홍어가 양념에 무쳤을 때와 회로 먹을 때 어떻게 다르게 보이는지 비교합니다. 양념으로 향이 없어진다고 단정하지 않고, 어떤 쪽이 취향에 맞을지 살펴보게 합니다.",reason:"홍어회만 알던 사람이 다른 메뉴를 고를 이유가 생겨요.",audience:"A",imageBrief:"붉은 양념의 홍어무침과 얇게 썬 홍어회가 나란히 놓인 장면"},
 ];
 
-// 메뉴 소개 칸(홍어회·삼합이 아닌 메뉴). 계절에 맞는 메뉴를 먼저 고른다(계절은 STORE_MENU의 seasons).
-// 제목에는 홍어·삼합을 넣지 않는다(일상 질문 칸과 같은 자리에 들어가므로).
+// 메뉴 주제(홍어회·삼합이 아닌 메뉴가 주인공). menu id로 계절·검색 흐름·최근 메뉴를 맞춰 고른다(계절은 STORE_MENU의 seasons·months).
 const MENU_TOPICS:Array<{menu:string;topic:PreparedTopic}>=[
   {menu:"gwamegi",topic:{title:"과메기는 왜 찬바람이 불면 찾을까?",summary:"겨울이 되면 과메기를 찾는 익숙한 장면에서 시작합니다. 과메기가 겨울 메뉴로 꼽히는 이유와 만드는 과정은 출처를 확인한 뒤 쓰고, 함께 내는 곁들임 구성은 사장님께 확인한 것만 소개합니다.",reason:"겨울마다 과메기 사진을 보는 사람이 제철의 이유를 궁금해할 수 있어요.",audience:"A",imageBrief:"윤기 도는 과메기를 길게 썰어 가지런히 담은 한 접시"}},
   {menu:"minari-jeon",topic:{title:"미나리전엔 왜 막걸리가 생각날까?",summary:"미나리전 한 장에 배다리 막걸리 한 잔을 곁들이는 장면을 다룹니다. 전과 막걸리가 어울린다고 느끼는 이유는 단정하지 않고 사람들이 즐겨 찾는 조합으로 소개하며, 홍어 메뉴는 함께 맛볼 선택지로만 덧붙입니다.",reason:"전과 막걸리 조합을 아는 사람이 바로 떠올릴 장면이에요.",audience:"B",imageBrief:"노릇한 미나리전 한 장과 막걸리 사발"}},
@@ -57,8 +48,7 @@ const MENU_TOPICS:Array<{menu:string;topic:PreparedTopic}>=[
   {menu:"baedari-makgeolli",topic:{title:"막걸리 한 잔엔 어떤 안주가 어울릴까?",summary:"배다리 막걸리 한 잔을 앞에 두고 안주를 고르는 장면을 다룹니다. 미나리전·홍어무침·홍어회처럼 가게 메뉴를 하나씩 비교해 취향대로 고르는 방법을 제안하고, 어울림의 원리는 단정하지 않습니다.",reason:"막걸리 집에서 안주를 고민해 본 사람이 많아요.",audience:"B",imageBrief:"막걸리 사발 옆에 놓인 미나리전과 홍어무침"}},
 ];
 
-// AI를 쓰지 못할 때 준비된 주제의 첫 칸(홍어를 제목에 넣지 않는 칸)을 이번 시기 주제로 바꿔 끼운다.
-// season.ts 행사 id로 찾는다. 제목은 홍어·삼합 없이, summary에는 이어질 가게 메뉴를 먼저 적는다.
+// 이번 시기 주제(AI를 쓰지 못할 때 행사가 있으면 맨 앞에 둔다). season.ts 행사 id로 찾는다. summary에는 이어질 가게 메뉴를 먼저 적는다.
 const SEASONAL_TOPICS:Record<string,PreparedTopic>={
   seollal:{title:"명절 상에는 왜 지역마다 다른 음식이 오를까?",summary:"설 연휴 가족 상차림에서 지역마다 빠지지 않는 음식이 다른 장면을 다룹니다. 전라도 잔칫상에 오르는 홍어를 사례로 소개하되, 유래와 역사는 출처를 확인한 뒤에만 씁니다.",reason:"명절에 고향 상차림을 떠올리는 사람이 많은 시기예요.",audience:"C",imageBrief:"명절 상 위에 놓인 홍어회 한 접시"},
   chuseok:{title:"명절 상에는 왜 지역마다 다른 음식이 오를까?",summary:"추석 가족 상차림에서 지역마다 빠지지 않는 음식이 다른 장면을 다룹니다. 전라도 잔칫상에 오르는 홍어를 사례로 소개하되, 유래와 역사는 출처를 확인한 뒤에만 씁니다.",reason:"명절에 고향 상차림을 떠올리는 사람이 많은 시기예요.",audience:"C",imageBrief:"명절 상 위에 놓인 홍어회 한 접시"},
@@ -74,8 +64,9 @@ const SEASONAL_TOPICS:Record<string,PreparedTopic>={
 
 const titleKey=(title:string)=>title.normalize("NFKC").toLocaleLowerCase("ko-KR").replace(/[^\p{L}\p{N}]/gu,"");
 
-export function topicDirectionsForRound(round:number):readonly string[] {
-  return TOPIC_DIRECTIONS[round%TOPIC_DIRECTIONS.length];
+// 이번 회차에 참고로 건넬 관점 4개(회차마다 3칸씩 밀어 돌린다).
+export function topicAnglesForRound(round:number):string[] {
+  return Array.from({length:4},(_,i)=>TOPIC_ANGLES[(round*3+i)%TOPIC_ANGLES.length]);
 }
 
 // 주제가 주로 다루는 가게 메뉴(제목에서 먼저, 없으면 설명에서 먼저 나온 메뉴). 메뉴를 못 찾으면 undefined.
@@ -85,31 +76,8 @@ export function topicMenu(topic:Pick<TopicSuggestion,"title"|"summary">):StoreMe
 // 홍어회·삼합이 아닌 가게 메뉴(과메기·미나리전·배다리 막걸리·홍어애탕·홍어무침 등)를 다루는 주제인지.
 export const isOtherMenuTopic=(topic:Pick<TopicSuggestion,"title"|"summary">)=>{const menu=topicMenu(topic);return Boolean(menu&&!isHongeoHoe(menu));};
 
-// 메뉴 소개 칸 고르기. 앞 단계일수록 먼저:
-// 검색이 늘어난 말의 메뉴 → 이번 철(또는 곧 제철) 메뉴 가운데 최근에 자주 안 나온 것 → 최근에 자주 안 나온 아무 메뉴
-// → 이번 철 메뉴 → 겹치지 않는 메뉴 → 아무거나. 모두 다른 칸과 메뉴가 겹치지 않는 것을 먼저 본다.
-// 라운드마다 시작 위치를 돌려 같은 메뉴만 나오지 않게 한다.
-function pickMenuTopic(index:number,season:SeasonContext|undefined,taken:ReadonlySet<string>,accept:(topic:PreparedTopic)=>boolean,hints:TopicHints={}):{topic:PreparedTopic;trend:string}|undefined {
-  const {inSeason,upcoming}=menusForDate(season?.today,season?.season);
-  const timely=new Set([...inSeason,...upcoming].map(item=>item.id));
-  const recent=hints.recentMenus??new Set<string>();
-  const trendOf=(menu:string)=>(hints.trends??[]).find(keyword=>trendMenu(keyword)===menu)??"";
-  const rotated=MENU_TOPICS.map((_,i)=>MENU_TOPICS[(index+i)%MENU_TOPICS.length]);
-  type Item=typeof MENU_TOPICS[number];
-  const tiers:Array<(item:Item)=>boolean>=[
-    item=>Boolean(trendOf(item.menu))&&!taken.has(item.menu),
-    item=>timely.has(item.menu)&&!taken.has(item.menu)&&!recent.has(item.menu),
-    item=>!taken.has(item.menu)&&!recent.has(item.menu),
-    item=>timely.has(item.menu)&&!taken.has(item.menu),
-    item=>!taken.has(item.menu),
-    ()=>true,
-  ];
-  for(const tier of tiers){const found=rotated.find(item=>tier(item)&&accept(item.topic));if(found)return {topic:found.topic,trend:trendOf(found.menu)};}
-  return undefined;
-}
-
 // 최근 주제 제목에서 주인공 메뉴를 짐작한다(메뉴 이름이 없으면 준비된 주제의 설명, "탕·국물"이면 홍어애탕).
-const PREPARED_SUMMARIES=new Map<string,string>([...FALLBACK_TOPIC_ROUNDS.flatMap(round=>[round.general,round.hongeo]),...MENU_TOPICS.map(item=>item.topic),...Object.values(SEASONAL_TOPICS)].map(topic=>[titleKey(topic.title),topic.summary]));
+const PREPARED_SUMMARIES=new Map<string,string>([...QUESTION_TOPICS,...MENU_TOPICS.map(item=>item.topic),...Object.values(SEASONAL_TOPICS)].map(topic=>[titleKey(topic.title),topic.summary]));
 export function titleMenu(title:string):StoreMenuItem|undefined {
   const direct=mainMenuOf(title);
   if(direct)return direct;
@@ -119,7 +87,7 @@ export function titleMenu(title:string):StoreMenuItem|undefined {
   return undefined;
 }
 // 이번에는 빼고 돌릴 메뉴: 지금 화면(current, "새로고침" 직전 추천)에 나온 메뉴 + 최근 주제(최근 것부터) 9개 안에 두 번 이상 나온 메뉴.
-// 홍어회는 홍어 질문 칸에 늘 나오므로 세지 않는다. 같은 메뉴가 새로고침마다 되풀이되지 않게 한다(예: 가을마다 홍어애탕).
+// 홍어회(삼합)는 가게의 대표 메뉴라 빼지 않는다(대신 한 묶음에 홍어회가 주인공인 주제는 겹치지 않게 고른다). 같은 메뉴가 새로고침마다 되풀이되지 않게 한다(예: 가을마다 홍어애탕).
 export function overusedMenus(recentTitles:readonly string[],current:readonly string[]=[]):Set<string> {
   const menuId=(title:string)=>{const menu=titleMenu(title);return menu&&!isHongeoHoe(menu)?menu.id:undefined;};
   const counts=new Map<string,number>();
@@ -127,90 +95,121 @@ export function overusedMenus(recentTitles:readonly string[],current:readonly st
   const now=current.map(menuId).filter((id):id is string=>Boolean(id));
   return new Set([...now,...[...counts].filter(([,count])=>count>=2).map(([id])=>id)]);
 }
+// 삼합 주제인지(삼합·수육이 제목이나 설명에 나온다). 한 묶음에 하나만 둔다(프롬프트의 "삼합은 3개 중 최대 1개"와 같은 기준).
+const isSamhapTopic=(topic:Pick<TopicSuggestion,"title"|"summary">)=>/삼합|수육/.test(`${topic.title} ${topic.summary}`);
+// 이미 고른 주제들 옆에 둘 수 있는지: 주인공 메뉴가 겹치지 않고(홍어회 주인공도 하나만), 삼합 주제는 하나만.
+// 정해진 칸은 없지만 이 두 가지는 AI 주제·준비된 주제 모두 코드로 지킨다(같은 메뉴 이야기가 겹치면 좋은 주제 3개가 아니다).
+const fitsWith=(picked:readonly TopicSuggestion[],topic:TopicSuggestion)=>{
+  const id=topicMenu(topic)?.id;
+  return !picked.some(item=>topicMenu(item)?.id===id)&&!(isSamhapTopic(topic)&&picked.some(isSamhapTopic));
+};
 
-// avoidTitles: 최근에 보여 준 주제. 되도록 피하지만, 다 피할 수 없으면 제외 목록만 지킨다.
-// 한 묶음 = [일상 질문(또는 이번 시기 주제), 계절에 맞는 메뉴 소개(홍어회·삼합 아님), 홍어 요리 질문].
+// 준비된 주제 3개(AI 실패 시, AI 주제가 모자랄 때 채울 후보). 정해진 칸 없이 후보를 점수 순으로 줄 세워 고른다.
+// 후보 = 이번 시기 행사 주제 + 질문 주제와 메뉴 주제를 번갈아(회차마다 두 칸씩 밀어 돌린다).
+// 점수: 이번 시기 행사 주제 > 검색이 늘어난 말의 메뉴 > 지금 제철·곧 제철 메뉴(사계절 메뉴 제외). 같으면 후보 순서.
+// 제철이 아닌 메뉴: 제철 달이 정해진 메뉴(과메기 11~2월)는 다른 후보가 다 떨어졌을 때만 고르고,
+// 계절에 특히 어울리는 메뉴(미나리전·홍어무침 봄여름, 홍어애탕 가을겨울)는 철이 아니면 점수를 낮춘다.
+// 고를 때: 주인공 메뉴가 서로 다르게, 삼합은 하나만, 시기 주제는 2개까지, 검색 흐름 주제는 1개까지(프롬프트의 "시기 1~2개·검색 흐름 1개"와 같은 기준).
+// excludeTitles: 지금 화면 주제(반드시 제외). avoidTitles: 최근에 보여 준 주제. 되도록 피하지만, 다 피할 수 없으면 제외 목록만 지킨다.
+// hints.recentMenus: 최근에 자주 나온 메뉴(되도록 뺀다).
+const PREPARED_ROUNDS=4;
 export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season?:SeasonContext,avoidTitles:readonly string[]=[],hints:TopicHints={}):TopicSuggestion[] {
   const excluded=new Set(excludeTitles.map(titleKey));
   const avoided=new Set(avoidTitles.map(titleKey));
   // 이번 시기 행사 가운데 준비된 주제가 있고 제외·최근 목록에 없는 첫 행사를 고른다.
   const event=season?.events.find(item=>SEASONAL_TOPICS[item.id]&&!excluded.has(titleKey(SEASONAL_TOPICS[item.id].title))&&!avoided.has(titleKey(SEASONAL_TOPICS[item.id].title)))
     ??season?.events.find(item=>SEASONAL_TOPICS[item.id]&&!excluded.has(titleKey(SEASONAL_TOPICS[item.id].title)));
-  const allowed=(topic:PreparedTopic,strict:boolean)=>!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title)));
-  const roundAt=(index:number,strict:boolean):TopicSuggestion[]|undefined=>{
-    const round=FALLBACK_TOPIC_ROUNDS[index];
-    const first:TopicSuggestion=event?{...SEASONAL_TOPICS[event.id],season:event.name,trend:"",id:`fallback-season-${event.id}`}:{...round.general,season:"",trend:"",id:`fallback-${index+1}-1`};
-    const last:TopicSuggestion={...round.hongeo,season:"",trend:"",id:`fallback-${index+1}-3`};
-    const taken=new Set([first,last].map(topic=>topicMenu(topic)?.id).filter((id):id is string=>Boolean(id)));
-    const menu=pickMenuTopic(index,season,taken,topic=>allowed(topic,strict)&&titleKey(topic.title)!==titleKey(first.title),hints);
-    if(!menu)return undefined;
-    // 메뉴 소개 칸이 아니어도 주인공 메뉴가 검색이 늘어난 말과 이어지면 그 말을 표시한다(예: 송년회 주제의 과메기).
-    const trendFor=(topic:TopicSuggestion)=>topic.trend||((hints.trends??[]).find(keyword=>trendMenu(keyword)&&trendMenu(keyword)===topicMenu(topic)?.id)??"");
-    return [first,{...menu.topic,season:"",trend:menu.trend,id:`fallback-${index+1}-2`},last].map(topic=>({...topic,trend:trendFor(topic)}));
+  const index=round%PREPARED_ROUNDS;
+  const rotate=<T,>(list:readonly T[])=>list.map((_,i)=>list[(index*2+i)%list.length]);
+  const questions=rotate(QUESTION_TOPICS),menus=rotate(MENU_TOPICS.map(item=>item.topic));
+  const candidates:TopicSuggestion[]=[
+    ...(event?[{...SEASONAL_TOPICS[event.id],season:event.name,trend:"",id:`fallback-season-${event.id}`}]:[]),
+    ...Array.from({length:Math.max(questions.length,menus.length)},(_,i)=>[questions[i],menus[i]]).flat().filter((topic):topic is PreparedTopic=>Boolean(topic)).map(topic=>({...topic,season:"",trend:"",id:""})),
+  ];
+  // 지금 제철·곧 제철인 메뉴(사계절 메뉴는 늘 제철이라 점수에서 뺀다). 시기를 모르면 비운다.
+  const dated=season?menusForDate(season.today,season.season):undefined;
+  const timely=new Set(dated?[...dated.inSeason,...dated.upcoming].filter(item=>item.seasons.length||item.months).map(item=>item.id):[]);
+  const fresh=new Set(dated?[...dated.inSeason,...dated.upcoming].map(item=>item.id):[]);
+  // "closed": 제철 달 밖(그 철에만 내는 메뉴), "weak": 어울리는 계절이 아님, undefined: 상관없음(사계절 메뉴·시기 모름).
+  const offSeason=(topic:TopicSuggestion):"closed"|"weak"|undefined=>{
+    const item=topicMenu(topic);
+    if(!dated||!item||!(item.seasons.length||item.months)||fresh.has(item.id))return undefined;
+    return item.months?"closed":"weak";
   };
-  // 1순위: 제외·최근 목록과 하나도 겹치지 않는 묶음, 2순위: 제외 목록만 피한 묶음(최근 것이 일부 겹쳐도).
-  for(const strict of [true,false]){
-    for(let offset=0;offset<FALLBACK_TOPIC_ROUNDS.length;offset++){
-      const topics=roundAt((round+offset)%FALLBACK_TOPIC_ROUNDS.length,strict);
-      if(topics?.every(topic=>allowed(topic,strict)))return topics;
+  const recent=hints.recentMenus??new Set<string>();
+  const menuId=(topic:TopicSuggestion)=>topicMenu(topic)?.id??"";
+  const trendOf=(topic:TopicSuggestion)=>(hints.trends??[]).find(keyword=>trendMenu(keyword)&&trendMenu(keyword)===menuId(topic))??"";
+  const isTimely=(topic:TopicSuggestion)=>Boolean(topic.season)||timely.has(menuId(topic));
+  const score=(topic:TopicSuggestion)=>(topic.season?4:0)+(trendOf(topic)?2:0)+(timely.has(menuId(topic))?1:0)-(offSeason(topic)==="weak"?1:0);
+  const ranked=candidates.map((topic,order)=>({topic,order})).sort((a,b)=>score(b.topic)-score(a.topic)||a.order-b.order).map(item=>item.topic);
+  const picked:TopicSuggestion[]=[];
+  // 1) 최근에 안 보인 주제·최근에 자주 안 나온 메뉴 → 2) 최근에 안 보인 주제 → 3) 제외 목록만 피한 주제 → 4) 철 지난 메뉴까지.
+  for(const [strict,varied,anySeason] of [[true,true,false],[true,false,false],[false,false,false],[false,false,true]] as const){
+    for(const topic of ranked){
+      if(picked.length>=3)break;
+      const key=titleKey(topic.title);
+      if(excluded.has(key)||(strict&&avoided.has(key))||picked.some(item=>titleKey(item.title)===key))continue;
+      if(varied&&recent.has(menuId(topic)))continue;
+      if(!anySeason&&offSeason(topic)==="closed")continue;
+      if(!fitsWith(picked,topic))continue;
+      if(isTimely(topic)&&picked.filter(isTimely).length>=2)continue;
+      if(trendOf(topic)&&picked.some(item=>trendOf(item)))continue;
+      picked.push(topic);
     }
   }
-  throw new Error("다른 추천 주제를 찾지 못했습니다.");
+  if(picked.length<3)throw new Error("다른 추천 주제를 찾지 못했습니다.");
+  // 점수 순(가장 추천하는 주제가 먼저)으로 놓는다. 화면은 첫 주제를 먼저 골라 둔다.
+  picked.sort((a,b)=>ranked.indexOf(a)-ranked.indexOf(b));
+  let n=0;
+  return picked.map(topic=>({...topic,trend:trendOf(topic),id:topic.id||`fallback-${index+1}-${++n}`}));
 }
 
 // 주제 한 개가 기본 조건(물음표 질문, 가게 이름 없음, 가게 메뉴로 이어지는 설명)을 지키는지.
-const isHongeoTitle=(title:string)=>/홍어|삼합/.test(title);
 const meetsTopicBasics=(topic:TopicSuggestion,storeName:string)=>/[?？]$/.test(topic.title.trim())&&!topic.title.includes(storeName)&&topic.summary.trim().length>=30&&menuOf(topic.summary).length>0;
+// 세 주제가 메뉴를 고르게 다루는지: 하나 이상은 홍어회·삼합이 아닌 메뉴, 셋 다 같은 메뉴는 아님(순서와 상관없음).
+const isVariedSet=(topics:TopicSuggestion[])=>topics.some(isOtherMenuTopic)&&new Set(topics.map(topic=>topicMenu(topic)?.id)).size>1;
 
-// AI가 준 주제 3개를 통째로 버리지 않고, 조건에 맞는 것만 살려 "일상 질문 2개 + 홍어 질문 1개" 순서로 맞춘다.
-// 세 주제가 모두 홍어회·삼합이면 둘째 칸을 이번 계절의 다른 메뉴 주제로 바꾼다(홍어만 파지 않게).
-// 모자란 칸만 준비된 주제(이번 시기·최근에 안 보인 것 우선)로 채운다. filled = 준비된 주제로 채운 칸 수.
+// AI가 준 주제 3개를 순서 그대로 살린다(첫 번째가 AI가 가장 추천하는 주제). 기본 조건에 안 맞거나 지금 화면·최근에 나온 제목,
+// 겹치는 제목, 앞 주제와 주인공 메뉴가 겹치거나 두 번째 삼합 주제만 빼고, 모자란 만큼만 준비된 주제(이번 시기·최근에 안 보인 것 우선)로 채운다.
+// 셋이 메뉴를 고르게 다루지 않으면(모두 홍어회·삼합, 또는 셋 다 같은 메뉴) 맨 뒤 하나를 다른 메뉴 주제로 바꾼다.
+// filled = 준비된 주제로 바꾼 개수.
 export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:string;round:number;excludeTitles:readonly string[];avoidTitles:readonly string[];season?:SeasonContext;hints?:TopicHints}):{topics:TopicSuggestion[];filled:number} {
   const blocked=new Set([...options.excludeTitles,...options.avoidTitles].map(titleKey));
   const used=new Set<string>();
   const take=(topic:TopicSuggestion)=>{used.add(titleKey(topic.title));return topic;};
-  const usable=suggestions.filter(topic=>meetsTopicBasics(topic,options.storeName)&&!blocked.has(titleKey(topic.title)))
-    .filter(topic=>{const key=titleKey(topic.title);if(used.has(key))return false;used.add(key);return true;});
-  used.clear();
-  // 일상 질문 칸은 다른 메뉴 주제를 먼저 고른다(AI가 셋 이상 줄 때 홍어회 일색이 되지 않게).
-  const general=[...usable.filter(topic=>!isHongeoTitle(topic.title)&&isOtherMenuTopic(topic)),...usable.filter(topic=>!isHongeoTitle(topic.title)&&!isOtherMenuTopic(topic))]
-    .slice(0,2).sort((a,b)=>usable.indexOf(a)-usable.indexOf(b)).map(take);
-  const hongeo=usable.filter(topic=>isHongeoTitle(topic.title)).slice(0,1).map(take);
-  // 채울 후보: 이번 묶음부터 차례로 돌며, 최근에 안 보인 것 → 제외 목록만 피한 것 순서.
+  const picked:TopicSuggestion[]=[];
+  for(const topic of suggestions)if(picked.length<3&&meetsTopicBasics(topic,options.storeName)&&!blocked.has(titleKey(topic.title))&&!used.has(titleKey(topic.title))&&fitsWith(picked,topic))picked.push(take(topic));
+  // 채울 후보: 이번 회차 준비된 주제부터 차례로 돌며, 최근에 안 보인 것 → 제외 목록만 피한 것 순서.
   const excluded=new Set(options.excludeTitles.map(titleKey));
   const avoided=new Set(options.avoidTitles.map(titleKey));
-  const pool=Array.from({length:FALLBACK_TOPIC_ROUNDS.length},(_,offset)=>fallbackTopics((options.round+offset)%FALLBACK_TOPIC_ROUNDS.length,[],options.season,options.avoidTitles,options.hints)).flat();
-  // 최근에 자주 나온 메뉴와 이미 고른 칸의 메뉴는 되도록 피한다(메뉴를 고르게 돌리기).
+  const pool=Array.from({length:PREPARED_ROUNDS},(_,offset)=>fallbackTopics((options.round+offset)%PREPARED_ROUNDS,[],options.season,options.avoidTitles,options.hints)).flat();
+  // 최근에 자주 나온 메뉴와 이미 고른 주제의 메뉴는 되도록 피한다(메뉴를 고르게 돌리기).
   const recent=options.hints?.recentMenus??new Set<string>();
-  const fresh=(topic:TopicSuggestion)=>{const id=topicMenu(topic)?.id;return !id||(!recent.has(id)&&![...general,...hongeo].some(item=>topicMenu(item)?.id===id));};
+  const fresh=(topic:TopicSuggestion)=>{const id=topicMenu(topic)?.id;return !id||(!recent.has(id)&&!picked.some(item=>topicMenu(item)?.id===id));};
   const pick=(fits:(topic:TopicSuggestion)=>boolean)=>{
     for(const [strict,varied] of [[true,true],[true,false],[false,false]] as const){
-      const found=pool.find(topic=>fits(topic)&&(!varied||fresh(topic))&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
+      const found=pool.find(topic=>fits(topic)&&fitsWith(picked,topic)&&(!varied||fresh(topic))&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
       if(found)return take(found);
     }
     throw new Error("다른 추천 주제를 찾지 못했습니다.");
   };
-  let filled=(2-general.length)+(1-hongeo.length);
-  while(general.length<2)general.push(pick(topic=>!isHongeoTitle(topic.title)&&(general.some(isOtherMenuTopic)||hongeo.some(isOtherMenuTopic)||isOtherMenuTopic(topic))));
-  if(!hongeo.length)hongeo.push(pick(topic=>isHongeoTitle(topic.title)));
-  // 그래도 셋 다 홍어회·삼합이면 둘째 칸을 다른 메뉴 주제로 바꾼다.
-  if(![...general,...hongeo].some(isOtherMenuTopic)){
-    const replaced=general[1];
+  let filled=3-picked.length;
+  while(picked.length<3)picked.push(pick(topic=>picked.some(isOtherMenuTopic)||isOtherMenuTopic(topic)));
+  if(!isVariedSet(picked)){
+    // 맨 뒤 하나를 빼고 그 자리에 다른 메뉴 주제를 넣는다(pick은 남은 두 주제와 메뉴·삼합이 겹치지 않는 것만 고른다).
+    const replaced=picked.pop()!;
     used.delete(titleKey(replaced.title));
-    general[1]=pick(topic=>!isHongeoTitle(topic.title)&&isOtherMenuTopic(topic)&&titleKey(topic.title)!==titleKey(replaced.title));
+    picked.push(pick(topic=>isOtherMenuTopic(topic)&&titleKey(topic.title)!==titleKey(replaced.title)));
     if(!replaced.id.startsWith("fallback-"))filled++;
   }
-  return {topics:[...general,...hongeo],filled};
+  return {topics:picked,filled};
 }
 
 // Structural editorial checks, not a fact checker or a judgment of marketing performance.
-// 물음표 질문·가게 이름 없음·가게 메뉴로 이어지는 설명, 앞 두 제목은 홍어·삼합 없이, 마지막은 홍어 요리 질문,
-// 그리고 셋 중 하나 이상은 홍어회·삼합이 아닌 메뉴를 다룬다.
+// 물음표 질문·가게 이름 없음·가게 메뉴로 이어지는 설명, 주인공 메뉴가 겹치지 않고 삼합은 하나, 그리고 메뉴를 고르게 다룬다
+// (순서·홍어 질문 개수는 보지 않는다).
 export function followsCuriosityBrief(topics:TopicSuggestion[],storeName:string):boolean {
-  return topics.every(topic=>/[?？]$/.test(topic.title.trim())&&!topic.title.includes(storeName)&&topic.summary.trim().length>=30&&menuOf(topic.summary).length>0)
-    && topics.slice(0,2).every(topic=>!/홍어|삼합/.test(topic.title))
-    && /홍어|삼합/.test(topics[2]?.title??"")
-    && topics.some(isOtherMenuTopic);
+  return topics.every((topic,i)=>meetsTopicBasics(topic,storeName)&&fitsWith(topics.slice(0,i),topic))&&isVariedSet(topics);
 }
 
 // AI가 season에 적은 이름이 이번 시기(계절·행사)에 없는 말이면 화면에 잘못된 표시가 붙지 않게 지운다.

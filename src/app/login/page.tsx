@@ -1,3 +1,4 @@
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { login } from "@/features/auth/actions";
 import { isOwnerConfigured } from "@/features/auth/config";
 import { safeReturnPath } from "@/features/auth/routes";
@@ -13,7 +14,7 @@ export default async function LoginPage({
   return (
     <main className="login-page">
       <section className="login-card" aria-labelledby="login-title">
-        <div className="brand"><span className="brand-mark" aria-hidden="true" />묵동 콘텐츠 메이커</div>
+        <div className="brand login-brand"><BrandLogo size={56} />묵동 콘텐츠 메이커</div>
         <h1 id="login-title">관리자 로그인</h1>
         <p>이 앱을 사용하는 관리자 암호를 입력하세요.</p>
         {!configured ? (

@@ -5,7 +5,6 @@ import { OptionalFieldsError, toStrictJsonSchema } from "@/lib/ai/jsonSchema";
 import { TextAiHttpError } from "@/lib/ai/errors";
 import { GeneratedCopyContentSchema } from "@/features/copy/schema";
 import { topicGenerationSchema } from "@/features/topics/prompt";
-import { topicDirectionsForRound } from "@/features/topics/service";
 import { CarouselPlanSchema } from "@/features/images/carousel";
 
 describe("toStrictJsonSchema", () => {
@@ -16,7 +15,7 @@ describe("toStrictJsonSchema", () => {
   });
 
   it("converts the three app schemas without optional fields", () => {
-    for (const schema of [GeneratedCopyContentSchema, topicGenerationSchema(topicDirectionsForRound(0)), CarouselPlanSchema]) {
+    for (const schema of [GeneratedCopyContentSchema, topicGenerationSchema(), CarouselPlanSchema]) {
       expect(() => toStrictJsonSchema(schema as z.ZodType)).not.toThrow();
     }
   });

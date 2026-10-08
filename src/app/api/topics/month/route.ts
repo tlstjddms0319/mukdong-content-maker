@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ownerApiError } from "@/features/auth/guard";
-import { overusedMenus, suggestTopics, topicDirectionsForRound } from "@/features/topics/service";
+import { overusedMenus, suggestTopics } from "@/features/topics/service";
 import { buildTopicPrompt, readTopicGeneration, topicGenerationSchema } from "@/features/topics/prompt";
 import { seasonContext } from "@/features/topics/season";
 import { MonthSchema, groupByWeek, pickWeekTopics, postDatesForMonth, rotateStyles, type MonthPlanItem } from "@/features/topics/monthPlan";
@@ -68,7 +68,7 @@ export async function POST(request:Request){
       // 최근 주제(최근 것부터)에 두 번 넘게 나온 메뉴는 이번 주 주인공에서 뺀다(주제 추천 화면과 같은 기준).
       const recentMenus=overusedMenus([...recent].reverse());
       const recentMenuNames=STORE_MENU.filter(item=>recentMenus.has(item.id)).map(item=>item.name);
-      const topics=await suggestTopics(input,{suggest:async()=>readTopicGeneration(await client.generateJson(buildTopicPrompt(input,season,likedTitles,[],recentMenuNames),topicGenerationSchema(topicDirectionsForRound(index))))},()=>{fallbackWeeks++;},season,filled=>{filledSlots+=filled;},{recentMenus});
+      const topics=await suggestTopics(input,{suggest:async()=>readTopicGeneration(await client.generateJson(buildTopicPrompt(input,season,likedTitles,[],recentMenuNames),topicGenerationSchema()))},()=>{fallbackWeeks++;},season,filled=>{filledSlots+=filled;},{recentMenus});
       const picked=pickWeekTopics(topics,weekDates.length,used);
       for(const topic of picked){used.add(titleKey(topic.title));recent.push(topic.title);}
       weekly.push({dates:weekDates,topics:picked});

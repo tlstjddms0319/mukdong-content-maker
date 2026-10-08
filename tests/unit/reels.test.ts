@@ -22,6 +22,21 @@ describe("reel timeline", () => {
     expect(blend[0].alpha+blend[1].alpha).toBeCloseTo(1,5);
   });
 
+  it("can end on a two-second logo screen that the last card fades into", () => {
+    const timeline=buildTimeline(5,undefined,true);
+    const [lastCard,outro]=timeline.scenes.slice(-2);
+    expect(lastCard).toMatchObject({kind:"card",index:4});
+    expect(outro).toMatchObject({kind:"outro",duration:2});
+    expect(outro.start).toBeCloseTo(lastCard.start+lastCard.duration-.5,5);
+    expect(timeline.total).toBeCloseTo(12.9,5);
+    const blend=framesAt(timeline,outro.start+.25);
+    expect(blend.map(frame=>frame.scene.kind)).toEqual(["card","outro"]);
+    expect(blend[0].alpha+blend[1].alpha).toBeCloseTo(1,5);
+    // 끝 화면을 끄면 예전과 같다.
+    expect(buildTimeline(5).total).toBeCloseTo(11.4,5);
+    expect(buildTimeline(0,undefined,true).scenes).toEqual([]);
+  });
+
   it("zooms slowly inside a scene and shows the first frame fully", () => {
     const timeline=buildTimeline(2);
     expect(framesAt(timeline,0)).toEqual([expect.objectContaining({alpha:1,zoom:1})]);

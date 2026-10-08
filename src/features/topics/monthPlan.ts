@@ -43,7 +43,8 @@ export function groupByWeek(dates:string[]):string[][] {
   return [...weeks.values()];
 }
 
-// 그 주의 추천 주제 3개 가운데 게시일 수만큼 고른다. 시즌 주제를 먼저, 그다음 홍어를 직접 다루는 주제(셋째 칸), 나머지 순.
+// 그 주의 추천 주제 3개 가운데 게시일 수만큼 고른다. 시즌 주제를 먼저, 그다음 추천 순서대로(첫 번째가 가장 추천하는 주제).
+// 정해진 칸(일상 2 + 홍어 1)이 없어져 홍어 제목에 주던 가산점도 없앴다.
 // 두 개 이상 고를 때 모두 홍어회·삼합이면 마지막 하나를 다른 메뉴(과메기·미나리전·막걸리 등) 주제로 바꾼다.
 // 이미 이번 달에 쓴 제목은 건너뛴다.
 export function pickWeekTopics(topics:TopicSuggestion[],count:number,used:Set<string>):TopicSuggestion[] {
@@ -55,7 +56,8 @@ export function pickWeekTopics(topics:TopicSuggestion[],count:number,used:Set<st
     if(other)picked[picked.length-1]=other;
   }
   return picked;
-  function score(topic:TopicSuggestion){return (topic.season?2:0)+(/홍어|삼합/.test(topic.title)?1:0);}
+  // 정렬은 안정 정렬이라 점수가 같으면 추천 순서를 지킨다.
+  function score(topic:TopicSuggestion){return topic.season?1:0;}
 }
 
 // 게시물마다 디자인 계열을 돌려 가며 추천한다. 기본 템플릿은 빼고, 같은 계열이 연달아 나오지 않게 한다.

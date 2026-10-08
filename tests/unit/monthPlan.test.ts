@@ -22,10 +22,11 @@ describe("month plan helpers", () => {
     expect(groupByWeek(["2026-11-03","2026-11-06","2026-11-10"])).toEqual([["2026-11-03","2026-11-06"],["2026-11-10"]]);
   });
 
-  it("prefers seasonal, then hongeo topics, and skips titles already used", () => {
+  it("prefers seasonal topics, then keeps the recommended order, and skips titles already used", () => {
     const topic=(title:string,season="")=>({id:title,title,summary:"요약",reason:"이유",audience:"A" as const,imageBrief:"사진",season,trend:""});
     const picked=pickWeekTopics([topic("같은 회인데 왜 다를까?"),topic("홍어는 왜 수육이랑 먹을까?"),topic("김장날엔 왜 수육을 삶을까?","김장철")],2,new Set());
-    expect(picked.map(item=>item.title)).toEqual(["김장날엔 왜 수육을 삶을까?","홍어는 왜 수육이랑 먹을까?"]);
+    // 홍어 제목에 주던 가산점은 없어졌다(정해진 홍어 칸이 없다). 시즌 주제 다음은 추천 순서 그대로.
+    expect(picked.map(item=>item.title)).toEqual(["김장날엔 왜 수육을 삶을까?","같은 회인데 왜 다를까?"]);
     expect(pickWeekTopics([topic("홍어는 왜 수육이랑 먹을까?")],1,new Set(["홍어는왜수육이랑먹을까"]))).toEqual([]);
     // 두 개를 고를 때 둘 다 홍어회·삼합이면 하나를 다른 메뉴 주제로 바꾼다.
     const varied=pickWeekTopics([topic("과메기는 왜 찬바람이 불면 찾을까?"),topic("홍어는 왜 수육이랑 먹을까?"),topic("김장날엔 왜 수육을 삶을까?","김장철")],2,new Set());
