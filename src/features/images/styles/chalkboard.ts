@@ -175,7 +175,7 @@ export const renderChalkboard:CardRenderer=async(inputs,slide,index,total)=>{
   const bottom=closing?cardTop-24:teaser?footerTop-teaser.info.height-26:footerTop;
   const shots=inputs.slice(0,2);
   // 머리말: "오늘의 이야기" + 장 번호, 색분필 물결 밑줄.
-  const head=await textLayer(content.cover?"오늘의 칠판":`오늘의 칠판 · ${index}/${total}`,{size:HANDWRITING_MIN_SIZE,color:accent,width:W,height:70,font:STYLE_FONTS.chalk,align:"centre",features:"tnum"});
+  const head=await textLayer(content.cover?"오늘의 칠판":`오늘의 칠판 · ${index}`,{size:HANDWRITING_MIN_SIZE,color:accent,width:W,height:70,font:STYLE_FONTS.chalk,align:"centre",features:"tnum"});
   layers.push({input:head.data,left:Math.round((1080-head.info.width)/2),top:84});
   deco+=`<path d="${squiggle(540-head.info.width/2,84+head.info.height+8,head.info.width,rand,10)}" stroke="${accent}" stroke-width="4" fill="none" stroke-linecap="round" opacity=".9"/>`;
   let y=84+head.info.height+46;

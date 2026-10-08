@@ -186,7 +186,7 @@ async function drawStoreCard(style:StyleId,t:StoreTokens,index:number,total:numb
   y+=tagline.info.height;
   let tagBottom=y;
   // 6) 장 번호(맨 아래) 5) 저장 칩(그 위)
-  const number=await textLayer(`${index} / ${total}`,{size:30,color:c.sub,width:300,height:60,font:t.label,align:"centre",features:"tnum"});
+  const number=await textLayer(`${index}`,{size:30,color:c.sub,width:300,height:60,font:t.label,align:"centre",features:"tnum"});
   const numberY=1350-t.inset.bottom-number.info.height;
   const chipText=await textLayer(STORE_CARD_CHIP,{size:32,color:c.chipText,width:W-60,height:80,font:t.label,align:"centre"});
   const padX=34,padY=16;

@@ -69,7 +69,7 @@ const closingHeight=async()=>(await closingBlock({width:FW,color:SUB,accent:CHIP
 // 긴 계정이 들어가 한 줄에 다 안 들어가면 오른쪽 글을 한 줄 위로 올린다(겹치지 않게, 생략하지 않게).
 async function edgeFooter(content:StyleContent):Promise<{layers:OverlayOptions[];svg:string;top:number}> {
   // 마지막 장은 명함에 계정이 이미 크게 있으므로 바닥글에는 가게 이름만 둔다(같은 계정을 두 번 쓰지 않게).
-  const folio=await textLayer(`${content.last?STORE_NAME:brandName()}  ·  ${content.index} / ${content.total}`,{size:26,color:EDGE_TEXT,width:FW,height:44,font:STYLE_FONTS.sansBold,features:"tnum"});
+  const folio=await textLayer(`${content.last?STORE_NAME:brandName()}  ·  ${content.index}`,{size:26,color:EDGE_TEXT,width:FW,height:44,font:STYLE_FONTS.sansBold,features:"tnum"});
   const layers:OverlayOptions[]=[{input:folio.data,left:FX,top:FOOT_TOP}];
   const middle=!content.cover&&!content.last;
   const right=middle?await nextCue(EDGE_TEXT,26):null;

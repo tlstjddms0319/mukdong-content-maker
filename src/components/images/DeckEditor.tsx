@@ -7,7 +7,7 @@ import { MAX_DECK_SLIDES, STORE_CARD_MAX_CONTENT, activeSlideIndex, deckTotal, a
 // "장 고치기": 완성된 캐러셀(또는 저장된 초안을 다시 연 것)에서 장을 빼거나 새 장을 끼워 넣는다.
 // AI 캐러셀과 실제 사진 캐러셀이 함께 쓴다. 상태와 다시 그리기는 generationStore(removeSlide·addSlide)가 맡는다.
 //
-// 장 번호("3 / 7")가 카드 그림에 박혀 있어서, 장을 빼거나 넣으면 나머지 장을 밑바탕으로 다시 그린다(이미지 AI 비용 없음).
+// 카드에는 장 번호("3")만 찍혀 있어서, 장을 빼거나 넣으면 번호가 바뀐 장·마지막 장·(예고 띠가 바뀌면) 표지만 다시 그린다(이미지 AI 비용 없음).
 // 구성안이 없는 초안(다시 연 초안·사진 그대로 쓴 캐러셀)은 카드를 새로 그릴 디자인 정보가 없으므로
 // 새 장은 "사진 그대로"만 넣을 수 있다.
 export function DeckEditor({state}:{state:GenerationState}){
@@ -54,7 +54,7 @@ export function DeckEditor({state}:{state:GenerationState}){
   return <div className="deck-editor" aria-label="장 고치기">
     <div className="deck-editor-head">
       <strong>장 고치기</strong>
-      <span className="field-help">지금 {slides.length}장 · 최대 {MAX_DECK_SLIDES}장. 장을 빼거나 넣으면 다른 장의 장 번호도 다시 그려요(무료).</span>
+      <span className="field-help">지금 {slides.length}장 · 최대 {MAX_DECK_SLIDES}장. 장을 빼거나 넣으면 번호가 바뀐 장만 다시 그려요(무료).</span>
     </div>
     <div className="photo-studio-actions">
       <button type="button" className="button secondary" disabled={busy||active===0||slides.length<=1} title={active===0?"표지는 뺄 수 없어요":undefined} onClick={()=>void removeSlide(active)}>{active+1}번 장 빼기</button>

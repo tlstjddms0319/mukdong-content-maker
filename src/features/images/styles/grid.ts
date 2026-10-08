@@ -113,13 +113,13 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
   const seal=await brandSeal(sealSize,index*7+3,{rotate:0});
   under+=seal.svg(sx,sy);
   centre(seal.text,sx,sy,sx+sealSize,sy+sealSize);
-  // 번호 칸의 남는 자리(오른쪽 아래)에는 전체 장 수만큼 작은 네모를 늘어놓고 지금 장만 빨갛게 채운다.
-  // 글자 없이 선과 빨간 네모만으로 "몇 번째 장"인지 보여 주는 진행 표시다.
-  const SQ=20,GAP=12,count=Math.min(total,12);
+  // 번호 칸의 남는 자리(오른쪽 아래)에는 지금 장 번호만큼 작은 네모를 늘어놓고 마지막(지금 장)만 빨갛게 채운다.
+  // 글자 없이 선과 빨간 네모만으로 "몇 번째 장"인지 보여 주는 표시다. 전체 장 수는 쓰지 않는다(장을 넣고 빼도 앞 장은 그대로).
+  const SQ=20,GAP=12,count=Math.min(index,12);
   const stripRight=xMark-T/2-PAD,stripBottom=yHead-T/2-PAD;
   for(let i=0;i<count;i++){
     const x=stripRight-(count-i)*(SQ+GAP)+GAP,y=stripBottom-SQ;
-    under+=i+1===index?rect(x,y,SQ,SQ,RED):`<rect x="${x+1.5}" y="${y+1.5}" width="${SQ-3}" height="${SQ-3}" fill="none" stroke="${INK}" stroke-width="3"/>`;
+    under+=i+1===count?rect(x,y,SQ,SQ,RED):`<rect x="${x+1.5}" y="${y+1.5}" width="${SQ-3}" height="${SQ-3}" fill="none" stroke="${INK}" stroke-width="3"/>`;
   }
 
   // ── 제목 칸: 검은 선으로 둘러싸고 왼쪽 정렬. 표지는 아주 크게. 칸 높이는 제목 높이에 맞춘다. ──
@@ -148,7 +148,7 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
     put(cue.label,cx,cy);over+=cue.arrow(cx,cy);
     pageW=cue.width;
   }else{
-    const page=await textLayer(`${index} / ${total}`,{size:26,color:INK,width:200,height:40,font:STYLE_FONTS.mono,spacing:0,features:"tnum"});
+    const page=await textLayer(`${index}`,{size:26,color:INK,width:200,height:40,font:STYLE_FONTS.mono,spacing:0,features:"tnum"});
     put(page,pageRight-page.info.width,(yFoot+Y1-page.info.height)/2);
     pageW=page.info.width;
   }

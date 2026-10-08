@@ -288,7 +288,7 @@ export const renderInfographic:CardRenderer=async(inputs,slide,index,total)=>{
   if(mascot&&showMascot)layers.push(mascot);
   deco+=`<path d="M${M} ${footerTop+14}H${1080-M}" stroke="${INK}" stroke-width="${MIN_STROKE}"/>`;
   // 바닥글: 가게 이름(+계정) · 장 번호(tnum). 마지막 장은 명함에 계정이 있으니 가게 이름만.
-  const folio=await textLayer(`${content.last?STORE_NAME:brandName()}  ·  ${index} / ${total}`,{size:26,color:INK,width:700,height:40,font:STYLE_FONTS.sansSemi,features:"tnum"});
+  const folio=await textLayer(`${content.last?STORE_NAME:brandName()}  ·  ${index}`,{size:26,color:INK,width:700,height:40,font:STYLE_FONTS.sansSemi,features:"tnum"});
   layers.push({input:folio.data,left:M,top:footerTop+30});
   // 넘겨 보기: 바닥글 줄 오른쪽. 마스코트가 오른쪽 아래에 서 있으면 그 왼쪽으로 비켜 둔다.
   if(!content.cover&&!content.last){

@@ -281,7 +281,7 @@ export const renderDoodle:CardRenderer=async(inputs,slide,index,total)=>{
   }else{
     // 바닥글: 가게 이름·장 번호(26px, 고정폭 숫자). 본문 장은 왼쪽에 두고 오른쪽 끝에 "넘겨 보기"를 같은 줄로.
     const cue=content.cover?null:await nextCue(hasPhoto?"#FFFFFF":INK,26);
-    const footer=await textLayer(`${brandName()}  ·  ${index}/${total}`,{size:26,color:footColor,width:1080-2*M-(cue?cue.width+40:0),height:40,font:STYLE_FONTS.sansSemi,features:"tnum"});
+    const footer=await textLayer(`${brandName()}  ·  ${index}`,{size:26,color:footColor,width:1080-2*M-(cue?cue.width+40:0),height:40,font:STYLE_FONTS.sansSemi,features:"tnum"});
     const fy=footerTop+22;
     layers.push({input:footer.data,left:cue?M:Math.round((1080-footer.info.width)/2),top:fy});
     if(cue){

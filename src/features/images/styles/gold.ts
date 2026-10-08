@@ -340,7 +340,7 @@ export const renderGold:CardRenderer=async(inputs,slide,index,total)=>{
   }
   // 바닥글: 금선 가운데 틈에 장 번호(금색 좁은 글자, 고정폭 숫자), 그 아래 가게 이름(크림색 명조) 가운데 정렬.
   // 모서리 꽃무늬와 부딪히지 않도록 글자는 모두 가운데에 모은다.
-  const folio=await textLayer(`${index} / ${total}`,{size:30,color:GOLD,width:200,height:44,font:STYLE_FONTS.condensed,align:"centre",features:"tnum"});
+  const folio=await textLayer(`${index}`,{size:30,color:GOLD,width:200,height:44,font:STYLE_FONTS.condensed,align:"centre",features:"tnum"});
   const fx=Math.round(540-folio.info.width/2);
   // 넘겨 보기: 표지·마지막 장이 아니면 바닥글 금선 오른쪽 끝을 끊고 그 자리에 금색 "넘겨 보기 ›"를 넣는다(가게 이름 줄과 겹치지 않는다).
   const cue=!content.cover&&!content.last?await nextCue(GOLD,26):null;

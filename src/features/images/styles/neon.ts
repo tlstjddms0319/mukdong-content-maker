@@ -161,7 +161,7 @@ export const renderNeon:CardRenderer=async(inputs,slide,index,total)=>{
   // 사진 테두리 관의 번짐 레이어(벽 바로 위, deco보다 아래).
   const tubes:OverlayOptions[]=[];
   // 맨 위 작은 간판.
-  const sign=await glowText(content.cover?"묵동 홍어 · 막걸리":`${index} / ${total}`,{sizes:[34],width:600,maxHeight:60,font:STYLE_FONTS.round,core:"#FFFFFF",glow:theme.accent,align:"centre"});
+  const sign=await glowText(content.cover?"묵동 홍어 · 막걸리":`${index}`,{sizes:[34],width:600,maxHeight:60,font:STYLE_FONTS.round,core:"#FFFFFF",glow:theme.accent,align:"centre"});
   const signW=sign.info.width-sign.pad*2+64,signX=Math.round((1080-signW)/2),signY=48;
   deco+=tube(roundedRect(signX,signY,signW,70,35),theme.accent,4);
   layers.push({input:sign.data,left:Math.round(540-sign.info.width/2),top:Math.round(signY+35-sign.info.height/2)});
@@ -263,7 +263,7 @@ export const renderNeon:CardRenderer=async(inputs,slide,index,total)=>{
   }
   // 바닥글: 가게 이름·장 번호(26px, 숫자 폭 고정). 마지막 장은 명함에 계정이 있으므로 이름만.
   // 가운데 장은 오른쪽 아래에 "넘겨 보기"를 같은 줄에 두고, 긴 계정과 부딪히면 바닥글을 왼쪽 정렬로 옮긴다.
-  const footer=await textLayer(`${content.last?STORE_NAME:brandName()}  ·  ${index} / ${total}`,{size:26,color:DIM,width:900,height:44,font:STYLE_FONTS.sansSemi,features:"tnum"});
+  const footer=await textLayer(`${content.last?STORE_NAME:brandName()}  ·  ${index}`,{size:26,color:DIM,width:900,height:44,font:STYLE_FONTS.sansSemi,features:"tnum"});
   let footerX=Math.round((1080-footer.info.width)/2);
   if(!content.cover&&!content.last){
     const cue=await nextCue(theme.glow,26);

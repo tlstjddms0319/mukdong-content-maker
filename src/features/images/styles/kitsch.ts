@@ -285,7 +285,7 @@ export const renderKitsch:CardRenderer=async(inputs,slide,index,total)=>{
   // 아래 검은 띠에 노란 가게 이름(전광판 느낌). 오른쪽에 장 번호(숫자 폭 고정), 본문 장이면 그 옆에 하늘색 "넘겨 보기 ›".
   deco+=subBoard;
   deco+=`<rect x="0" y="${footerTop+10}" width="1080" height="80" fill="#111"/>`;
-  const number=await textLayer(`${index}/${total}`,{size:30,color:"#FFE600",width:120,height:48,font:STYLE_FONTS.heavy,features:"tnum"});
+  const number=await textLayer(`${index}`,{size:30,color:"#FFE600",width:120,height:48,font:STYLE_FONTS.heavy,features:"tnum"});
   const cue=!content.cover&&!content.last?await nextCue("#7CF6FF",26):null;
   const rightW=number.info.width+(cue?cue.width+24:0);
   // 계정 이름이 길면 한 줄에 들어가는 크기로 줄인다(두 줄로 넘어가 작아지지 않게). 26px 아래로는 줄이지 않는다.

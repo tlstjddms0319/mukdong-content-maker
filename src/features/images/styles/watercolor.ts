@@ -285,7 +285,7 @@ export const renderWatercolor:CardRenderer=async(inputs,slide,index,total)=>{
     // ── 본문: 장 번호 → 제목(붓 띠) → 사진(1장·2장) → 요점 ──
     const text=!shots.length;
     // 장 번호: 손글씨 최소 크기(46)보다 작으므로 고운돋움, 숫자 폭 고정.
-    const tag=await textLayer(`${index} / ${total}`,{size:26,color:INK,width:220,height:44,font:dodum,features:"tnum"});
+    const tag=await textLayer(`${index}`,{size:26,color:INK,width:220,height:44,font:dodum,features:"tnum"});
     texts.push({input:tag.data,left:M+2,top:50});
     const title=await fitText(content.headline,{sizes:text?[92,84,76,68,60]:[68,62,56],width:W,maxHeight:text?360:220,color:INK,font:soft,spacing:6,emphasis:emphasisOf(content,ROSE)});
     // 마지막 장 가게 명함은 요점 아래에 두므로 그 높이(+간격)를 먼저 예약한다.

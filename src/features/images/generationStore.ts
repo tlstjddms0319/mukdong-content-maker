@@ -9,6 +9,7 @@ import type { SeasonMotif } from "./seasonMotif";
 import { AnalyzeResponseSchema, TOPIC_TAG, photoNote } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
 import { readJsonResponse } from "@/lib/http/readJson";
+import { teaserText } from "./teaser";
 import { fillWithPhotoViews, fitPanorama, fitPlanToPhotos, matchPhotosToSlides, swapPhoto, type PhotoView } from "./photoCarousel";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
@@ -18,7 +19,8 @@ import { fillWithPhotoViews, fitPanorama, fitPlanToPhotos, matchPhotosToSlides, 
 // check: AI 표지 점검 결과(coverCheck.ts). 점수와 경고 배지를 후보 위에 보여 준다.
 // bases: 글자를 얹기 전 밑바탕 사진(AI 이미지). 카드 글자만 고쳐 다시 그릴 때 쓴다. 초안에는 저장하지 않는다(화면에서만).
 // droppedPoints: 카드 자리가 모자라 그리지 못한 요점 수(서버가 알려 줌). 장 글자 고치기 옆에 안내한다.
-export type ApprovedImage={id:string;preview?:string;referencePreview?:string;bases?:string[];source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]};droppedPoints?:number};
+// drawnAt: 이 그림을 그릴 때의 "자리 정보"(positionKey). 장을 넣고 뺄 때 이것이 바뀐 장만 다시 그린다.
+export type ApprovedImage={id:string;preview?:string;referencePreview?:string;bases?:string[];source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]};droppedPoints?:number;drawnAt?:string};
 const droppedOf=(data:unknown)=>{const value=(data as {droppedPoints?:unknown})?.droppedPoints;return typeof value==="number"&&value>0?{droppedPoints:value}:{};};
 export type StudioMode="photo"|"ai"|"mix"|"free";
 export type StudioPhase="idle"|"uploading"|"planning"|"cover"|"slides";
@@ -183,17 +185,26 @@ async function readReference(file:File):Promise<string> {
   }
 }
 
-// 카드에 찍는 전체 장 수("3 / 7"의 7). 장을 고친 캐러셀은 지금 장 수, 아니면 설정한 장 수.
+// 내용 장 수. 장을 고친 캐러셀은 지금 장 수, 아니면 설정한 장 수. 카드에는 찍지 않고, 마지막 장·표지 예고 띠를 정하는 데 쓴다.
 export const deckTotal=(current:GenerationState)=>current.deckEdited?current.slides.length:current.input.slideCount;
 // 캐러셀이 다 만들어졌는지(장 빼기·넣기 뒤에는 장 수가 설정값과 달라도 완성).
 export const deckComplete=(current:GenerationState)=>current.slides.length>0&&(current.deckEdited||current.slides.length===current.input.slideCount);
 // 홍보 카드를 붙이는 캐러셀인지: 구성안으로 그린 캐러셀(실제 사진 카드·AI)만. 무료 카드·사진 그대로는 붙이지 않는다.
 // 인스타그램 캐러셀·초안 저장은 한 게시물에 10장까지라, 내용이 10장이면 홍보 카드를 붙이지 않는다(9장 이하일 때만).
-// 9↔10장을 오가도 전체 장 수가 10으로 같아 장 번호를 다시 그릴 필요가 없다.
+// 9↔10장을 오갈 때 다시 그릴 장은 positionKey가 알아서 고른다.
 export const STORE_CARD_MAX_CONTENT=9;
 export const storeCardOn=(current:GenerationState)=>current.storeCard.include&&Boolean(current.plan)&&current.mode!=="free"&&deckTotal(current)<=STORE_CARD_MAX_CONTENT;
-// 게시물 전체 장 수(홍보 카드 포함). 카드에 찍히는 장 번호 "n / 전체"가 이 수를 쓴다.
+// 게시물 전체 장 수(홍보 카드 포함). 카드에는 찍지 않고(번호만 찍는다), 어느 장이 마지막인지 정하는 데 쓴다.
 export const postTotal=(current:GenerationState)=>deckTotal(current)+(storeCardOn(current)?1:0);
+// 카드 그림 가운데 "몇 번째 장인지"에 따라 달라지는 것만 모은 열쇠(index는 0부터).
+// - 장 번호(카드에는 번호만 찍고 전체 장 수는 찍지 않는다)
+// - 마지막 장인지(마지막 장은 가게 명함·작별 마스코트, 나머지는 "넘겨 보기" 표시). 홍보 카드가 붙으면 내용 장은 마지막이 아니다.
+// - 표지면 예고 띠 글(내용 장 수가 3·5·7·10이 아니게 되면 "넘겨 보세요"로 바뀐다)
+// 장을 넣거나 빼면 이 열쇠가 바뀐 장만 다시 그린다. 예전에는 카드마다 "3 / 7"처럼 전체 장 수가 찍혀 있어 모든 장을 다시 그렸다.
+export function positionKey(current:GenerationState,index:number):string {
+  const total=postTotal(current),number=index+1;
+  return JSON.stringify([number,number===total,index===0?teaserText(total,storeCardOn(current)):""]);
+}
 // "이 캐러셀 사용"으로 넘길 이미지: 내용 장 + (붙였으면) 맨 뒤 홍보 카드.
 // 홍보 카드 그림이 지금 디자인·장 수로 그린 것일 때만 붙인다(다시 그리기에 실패해 옛 장 번호가 남은 카드는 빼고).
 const deckDesignOf=(current:GenerationState)=>current.plan?current.deckDesign??effectiveDesign(current.plan.design,current):undefined;
@@ -204,7 +215,7 @@ function finishDeck(){
   void ensureStoreCard();
 }
 export const approvedDeck=(current:GenerationState):ApprovedImage[]=>[...current.slides,...(storeCardOn(current)&&current.storeCard.image&&current.storeCard.key===storeCardKey(current)?[current.storeCard.image]:[])];
-// 홍보 카드를 그리는 중인지. 그리는 동안 "이 캐러셀 사용"을 막는다(카드에는 이미 "n / 전체+1"이 찍혀 있어 빠지면 장 번호가 어긋난다).
+// 홍보 카드를 그리는 중인지. 그리는 동안 "이 캐러셀 사용"을 막는다(홍보 카드가 빠지면 마지막 내용 장의 모양이 어긋난다).
 export const storeCardPending=(current:GenerationState)=>storeCardOn(current)&&Boolean(current.storeCard.pending);
 let storeRun=0;
 // 홍보 카드를 (다시) 그린다. 디자인·장 수가 그대로면 그려 둔 것을 쓴다. 실패해도 캐러셀은 그대로 쓸 수 있게 조용히 넘어간다.
@@ -288,6 +299,7 @@ export async function uploadPhoto(file:File|undefined,onApprove:(images:Approved
 export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,token=++run){
   if(!nextPlan)return;
   patch({phase:"cover",error:""});
+  const coverAt=positionKey(state,0);
   try{
     const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(nextPlan.slides[0]),styleAnchor:nextPlan.styleAnchor,design:effectiveDesign(nextPlan.design),slideIndex:1,count:2,...(state.refinements[0]?.trim()?{refinement:state.refinements[0].trim()}:{}),...(state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:{})})});
     const data=await readJsonResponse(response);
@@ -295,7 +307,7 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
     if(!response.ok)throw new Error(data.message||"표지 후보를 만들지 못했습니다.");
     if(!Array.isArray(data.images)||data.images.length!==2)throw new Error("표지 후보는 정확히 2장이 필요합니다.");
     const source=sourceOf(data.source);
-    patch({...(data.fallback?{providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],...(data.baseImages?.[i]?{bases:data.baseImages[i]}:{}),source,role:nextPlan.slides[0].role,...(data.checks?.[i]?{check:data.checks[i]}:{})}))});
+    patch({...(data.fallback?{providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],...(data.baseImages?.[i]?{bases:data.baseImages[i]}:{}),source,role:nextPlan.slides[0].role,...(data.checks?.[i]?{check:data.checks[i]}:{}),drawnAt:coverAt}))});
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"표지 후보를 만들지 못했습니다."});
   }finally{
@@ -330,6 +342,8 @@ export async function startPlan(){
 }
 
 async function generate(slide:CarouselPlan["slides"][number],index:number,refinement=""):Promise<ApprovedImage>{
+  // 요청을 보내는 순간의 자리 정보(서버가 이 번호·장 수로 그린다).
+  const drawnAt=positionKey(state,index-1);
   // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
   // 디자인 계열(기본 템플릿 아님)은 한 장에 사진을 두 장까지만 그린다. 그 이상 만들면 돈만 들고 안 쓰인다.
   const style=effectiveDesign(state.plan!.design).style;
@@ -339,7 +353,7 @@ async function generate(slide:CarouselPlan["slides"][number],index:number,refine
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");
   if(data.fallback)patch({providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."});
-  return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],...(data.baseImages?.[0]?{bases:data.baseImages[0]}:{}),source:sourceOf(data.source),role:slide.role,...droppedOf(data)};
+  return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],...(data.baseImages?.[0]?{bases:data.baseImages[0]}:{}),source:sourceOf(data.source),role:slide.role,...droppedOf(data),drawnAt};
 }
 
 // 한 번에 만드는 AI 장 수. 이미지 AI(Higgsfield·Cloudflare·OpenAI)가 동시에 받아 주는 범위 안에서 두 장.
@@ -457,12 +471,13 @@ export function movePhotoForward(index:number){
 // 칸마다 자르는 거리(가까이·결 확대)가 하나라도 있으면 함께 보낸다. 모두 "사진 그대로"면 보내지 않는다.
 const viewsField=(views:readonly PhotoView[]|undefined)=>views?.some(view=>view!=="full")?{photoViews:[...views]}:{};
 async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[],views?:readonly PhotoView[]):Promise<ApprovedImage>{
+  const drawnAt=positionKey(state,index);
   const slide=plan.slides[index];
   const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views)}:{}),...(panoramaSide(index,slots)?{panorama:panoramaSide(index,slots)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 만들지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
-  return {id:crypto.randomUUID(),preview:data.images[0],source:slots.length?"photo":"design",role:slide.role,...droppedOf(data)};
+  return {id:crypto.randomUUID(),preview:data.images[0],source:slots.length?"photo":"design",role:slide.role,...droppedOf(data),drawnAt};
 }
 
 // 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. AI 이미지는 만들지 않는다.
@@ -603,13 +618,14 @@ export const canEditSlideText=(current:GenerationState,index:number)=>textEditBa
 
 // 밑바탕(사진·AI 원본·없음)으로 한 장을 다시 그린다. 이미지 AI를 부르지 않는다(비용 없음).
 // 장 번호·전체 장 수는 지금 상태(deckTotal)를 따른다.
-async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none";views?:readonly PhotoView[]}):Promise<{preview:string;droppedPoints?:number}>{
+async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none";views?:readonly PhotoView[]}):Promise<{preview:string;droppedPoints?:number;drawnAt:string}>{
+  const drawnAt=positionKey(state,index);
   const plan=state.plan!;
   const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind,...(base.photoKind==="real"?viewsField(base.views):{})}:{}),...(base.photoKind==="real"&&panoramaSide(index,state.photoAssignment[index]??[])?{panorama:panoramaSide(index,state.photoAssignment[index]??[])}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 다시 그리지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
-  return {preview:data.images[0],...droppedOf(data)};
+  return {preview:data.images[0],...droppedOf(data),drawnAt};
 }
 
 export async function editSlideText(index:number,edit:SlideTextEdit){
@@ -625,7 +641,7 @@ export async function editSlideText(index:number,edit:SlideTextEdit){
     const card=await renderCard(index,slide,base);
     if(token!==run)return;
     // 출처(실제 사진/AI)와 밑바탕은 그대로 두고 그림만 바꾼다. 구성안도 고친 글자로 바꿔 캡션이 같은 흐름을 따르게 한다.
-    const updated={...state.slides[index],id:crypto.randomUUID(),preview:card.preview,droppedPoints:card.droppedPoints};
+    const updated={...state.slides[index],id:crypto.randomUUID(),preview:card.preview,droppedPoints:card.droppedPoints,drawnAt:card.drawnAt};
     patch({plan:{...plan,slides:plan.slides.map((item,i)=>i===index?slide:item)},slides:state.slides.map((item,i)=>i===index?updated:item),...(index===0?{cover:updated}:{}),approved:false});
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"카드를 다시 그리지 못했어요."});
@@ -636,30 +652,32 @@ export async function editSlideText(index:number,edit:SlideTextEdit){
 
 // ── 초안 고치기: 장 빼기·넣기 ─────────────────────────────────────────────────────────
 // 완성된 캐러셀(또는 저장된 초안을 다시 연 것)에서 장을 빼거나 새 장을 끼워 넣는다. 최대 10장(인스타 캐러셀 한도).
-// 카드마다 "3 / 7" 같은 장 번호가 그림에 박혀 있으므로, 장 수나 순서가 바뀌면 나머지 장을 밑바탕으로 다시 그린다
+// 카드에는 장 번호만 찍혀 있으므로, 장 수나 순서가 바뀌면 자리 정보가 바뀐 장만 밑바탕으로 다시 그린다(redrawDeck)
 // (이미지 AI는 부르지 않아 비용이 없다). 밑바탕이 없는 장(저장된 초안을 다시 연 경우 등)은 그대로 두고 안내만 한다.
 export const MAX_DECK_SLIDES=10;
 export type NewSlideSource="photo"|"ai"|"text"|"raw";
 // verbatim: 적은 글을 카드 문구로 그대로 쓴다. 아니면 적은 글을 "이런 장을 만들어 줘"라는 요청으로 읽어 문안 AI가 문구·장면을 짓는다.
 export type NewSlide={headline:string;points:string[];source:NewSlideSource;photo?:StudioPhoto;verbatim?:boolean};
 
-// 장 번호가 바뀐 장을 차례로 다시 그린다. skip은 방금 새로 그린 장(다시 그릴 필요 없음).
+// 장을 넣거나 뺀 뒤, 자리 정보(positionKey: 장 번호·마지막 장인지·표지 예고 띠)가 바뀐 장만 다시 그린다.
+// 예: 맨 뒤에 한 장 넣기 → 새 장과 바로 앞 장(마지막 장이 아니게 됨), 표지 띠가 바뀔 때만 표지.
+//     가운데 장 빼기 → 그 뒤 장들(번호가 하나씩 당겨짐)과 새 마지막 장, 필요하면 표지. 앞쪽 장은 그대로 둔다.
+// skip은 방금 새로 그린 장(다시 그릴 필요 없음). 밑바탕이 없는 장(저장된 초안을 다시 연 경우 등)은 그대로 두고 안내만 한다.
 async function redrawDeck(token:number,skip=-1){
-  const total=state.slides.length;
-  let missed=0;
-  for(let i=0;i<total;i++){
-    if(i===skip)continue;
+  const stale=state.slides.map((slide,i)=>i).filter(i=>i!==skip&&state.slides[i].drawnAt!==positionKey(state,i));
+  let missed=0,done=0;
+  for(const i of stale){
     const base=state.plan?textEditBase(state,i):null;
     if(!base||!state.plan?.slides[i]){missed++;continue;}
-    patch({deckStatus:`장 번호를 맞추는 중 ${i+1}/${total}`});
+    patch({deckStatus:`장 번호를 맞추는 중 ${++done}/${stale.length}`});
     const card=await renderCard(i,state.plan.slides[i],base);
     if(token!==run)return;
-    const updated={...state.slides[i],id:crypto.randomUUID(),preview:card.preview,droppedPoints:card.droppedPoints};
+    const updated={...state.slides[i],id:crypto.randomUUID(),preview:card.preview,droppedPoints:card.droppedPoints,drawnAt:card.drawnAt};
     patch({slides:state.slides.map((item,k)=>k===i?updated:item),...(i===0?{cover:updated}:{})});
   }
   finishDeck();
   // 카드로 그린 장인데 밑바탕이 없어 다시 못 그린 경우에만 알린다(사진 그대로 쓴 장은 장 번호가 없다).
-  if(missed&&state.slides.some(slide=>slide.source!=="photo"||state.plan))patch({providerNotice:"저장된 초안에서 다시 연 카드는 장 번호(예: 3 / 7)를 다시 그리지 못해요. 카드에 적힌 장 번호가 실제 장 수와 다를 수 있어요."});
+  if(missed&&state.slides.some(slide=>slide.source!=="photo"||state.plan))patch({providerNotice:"저장된 초안에서 다시 연 카드는 장 번호(예: 3)를 다시 그리지 못해요. 장을 넣거나 뺀 뒤에는 카드에 적힌 번호가 실제 순서와 다를 수 있어요."});
 }
 
 // 지금 보고 있는 장을 뺀다. 표지(첫 장)는 빼지 않는다(표지를 바꾸려면 다시 만들기).
