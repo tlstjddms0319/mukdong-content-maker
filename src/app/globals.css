@@ -619,3 +619,10 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .topic-tag { display:inline-flex; align-items:center; gap:4px; padding:6px 10px; border-radius:10px; font-size:15px; font-weight:700; line-height:1.2; white-space:nowrap; }
 .topic-tag-season { background:#FFF1D6; color:#8A5200; }
 .topic-tag-trend { background:#E4F1E8; color:#1f5a43; }
+
+/* 추천 주제를 기다리는 동안의 빈 카드: 제목 자리에 옅은 줄이 천천히 숨 쉬듯 깜빡인다. */
+.topic-card-placeholder { cursor:default; }
+.topic-card-placeholder .placeholder-line { display:block; width:85%; height:22px; border-radius:6px; background:var(--line); animation:placeholder-pulse 1.4s ease-in-out infinite; }
+.topic-card-placeholder .placeholder-line.short { width:55%; }
+@keyframes placeholder-pulse { 0%,100% { opacity:.45; } 50% { opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .topic-card-placeholder .placeholder-line { animation:none; } }

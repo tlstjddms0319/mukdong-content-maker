@@ -21,7 +21,7 @@ import { PLAN_DATE_PATTERN, PLAN_POST_TIME_KST } from "@/features/drafts/planLin
 import { SAME_TOPIC_SIMILARITY, topicSimilarity } from "@/features/topics/topicSimilarity";
 import { TRACK_SLIDE_COUNT, type CarouselTrack } from "@/features/images/track";
 
-// 처음 화면·서버 연결 실패 때 보이는 준비된 주제도 오늘(한국 시간) 계절·행사에 맞춰 고른다(예전에는 시기 없이 골라 계절 표시가 빠졌다).
+// 서버 연결 실패 때(또는 추천을 받지 않는 화면: 한 달 계획 주제·이어 만들기) 보이는 준비된 주제도 오늘(한국 시간) 계절·행사에 맞춰 고른다(예전에는 시기 없이 골라 계절 표시가 빠졌다).
 const DEFAULT_TOPICS:TopicSuggestion[] = fallbackTopics(0,[],seasonContext());
 // 추천 카드 이름: 화면에 놓인 순서대로 "추천 A · B · C". 카드 속 모양은 TopicCardBody(제목이 주인공, 계절·검색 표시는 맨 아래 한 줄)
 // (예전의 독자 유형·검색 증가율 숫자는 사장님이 읽을 필요가 없어 뺐다. 추천 기준에는 그대로 쓰인다).
@@ -58,12 +58,14 @@ export function DraftWizard() {
   // 추천 주제는 늦게 도착할 수 있다. 그사이 사용자가 2단계로 넘어갔으면 주제를 바꾸지 않도록 지금 단계를 ref로 본다.
   const stepRef=useRef<WizardStep>("topic");
   useEffect(()=>{stepRef.current=step;},[step]);
-  const [topic,setTopic]=useState(DEFAULT_TOPICS[0].title);
+  // 처음에는 비워 두고 추천이 오면 첫 주제를 골라 둔다(예전에는 준비된 주제를 먼저 보였다가 추천으로 바뀌었다).
+  const [topic,setTopic]=useState("");
   const [audience,setAudience]=useState<"A"|"B"|"C">("C");
   const [imageBrief,setImageBrief]=useState("");
-  const [contentBrief,setContentBrief]=useState(DEFAULT_TOPICS[0].summary);
-  const [topics,setTopics]=useState(DEFAULT_TOPICS);
-  const [topicsLoading,setTopicsLoading]=useState(false);
+  const [contentBrief,setContentBrief]=useState("");
+  // 비어 있으면 추천을 기다리는 중(빈 카드 자리만 보인다). 열자마자 "만드는 중"으로 시작한다.
+  const [topics,setTopics]=useState<TopicSuggestion[]>([]);
+  const [topicsLoading,setTopicsLoading]=useState(true);
   // 준비된 주제를 보여 줄 때 그 이유(서버가 알려 준 말, 연결 실패면 연결 안내). 빈 문자열이면 AI 추천.
   const [topicsFallback,setTopicsFallbackReason]=useState("");
   // 네이버 검색 흐름(요즘 검색이 늘어난 음식 말)을 이번 추천에 반영했는지 사장님이 알 수 있게 서버가 알려 준 그대로 둔다.
@@ -170,8 +172,14 @@ export function DraftWizard() {
         // 1단계에 머물러 있고 그사이 주제를 직접 바꾸지 않았을 때만 첫 추천으로 자동 선택한다.
         if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest&&!unsavedRef.current)changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",false,data.topics[0].summary ?? "");
         setRecommendationRound(round);
-      }
-    }catch{if(requestId===topicRequestRef.current)setTopicsFallbackReason(TOPIC_OFFLINE_NOTE);}finally{if(requestId===topicRequestRef.current)setTopicsLoading(false);}
+      }else if(requestId===topicRequestRef.current)throw new Error("추천 모양이 맞지 않아요.");
+    }catch{
+      if(requestId!==topicRequestRef.current)return;
+      setTopicsFallbackReason(TOPIC_OFFLINE_NOTE);
+      // 처음 추천을 못 받았으면(빈 화면) 오늘 계절에 맞춘 준비된 주제를 대신 보이고, 그사이 주제를 직접 안 바꿨으면 첫 주제를 골라 둔다.
+      setTopics(current=>current.length?current:DEFAULT_TOPICS);
+      if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest&&!topicAtRequest&&!unsavedRef.current)changeTopic(DEFAULT_TOPICS[0].title,DEFAULT_TOPICS[0].audience,DEFAULT_TOPICS[0].imageBrief ?? "",false,DEFAULT_TOPICS[0].summary ?? "");
+    }finally{if(requestId===topicRequestRef.current)setTopicsLoading(false);}
   },[changeTopic]);
   // 이어서 만들던 게시물을 두고 완전히 새로 시작한다. 이전 게시물은 서버에 저장된 그대로 내 게시물에 남는다.
   const startNewDraft=useCallback(()=>{
@@ -180,7 +188,8 @@ export function DraftWizard() {
     setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopyError("");setLoadError("");setPlanLink(null);setDraftId(nextDraftId);
     forgetCurrentDraft();clearWizardSession();
     if(window.location.search)window.history.replaceState({},"","/");
-    setTopics(DEFAULT_TOPICS);changeTopic(DEFAULT_TOPICS[0].title,DEFAULT_TOPICS[0].audience,DEFAULT_TOPICS[0].imageBrief ?? "",true,DEFAULT_TOPICS[0].summary ?? "");
+    // 준비된 주제를 먼저 보이지 않고 곧장 새 추천을 받는다(오면 첫 주제를 골라 둔다).
+    setTopics([]);changeTopic("","C","",true,"");
     setStep("topic");
     void loadTopics();
   },[changeTopic,loadTopics]);
@@ -346,7 +355,8 @@ export function DraftWizard() {
       if(session&&session.step!=="topic"){changeTopic(session.topic,session.audience,session.imageBrief,true,session.contentBrief);setPlanLink(planLinkFrom(session.planDate));draftIdRef.current=session.draftId;setDraftId(session.draftId);setStep("image");return;}
       void loadTopics();
     };
-    void load().finally(()=>{if(active)setSessionLoaded(true);});
+    // 추천을 받지 않고 끝난 경우(한 달 계획 주제, 이어 만들던 게시물): 1단계로 돌아왔을 때 빈 화면이 아니게 준비된 주제를 둔다.
+    void load().finally(()=>{if(!active)return;setSessionLoaded(true);if(!topicRequestRef.current){setTopics(current=>current.length?current:DEFAULT_TOPICS);setTopicsLoading(false);}});
     return () => { active=false; };
   // writeCaption은 만들기 상태가 바뀔 때마다 새로 만들어지지만, 처음 열 때 한 번만 불러오면 된다.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -389,7 +399,9 @@ export function DraftWizard() {
     <div className="topic-tools"><button type="button" className="button secondary" disabled={topicsLoading||refreshWait>0} onClick={()=>void loadTopics(recommendationRound + 1,topics.map(item=>item.title))}>{refreshWait>0?`다른 주제 보기 (${refreshWait}초)`:"다른 주제 보기"}</button>{topicsLoading&&<GenerationProgress label="추천 주제를"/>}{!topicsLoading&&refreshWait>0&&<span className="field-help refresh-wait">AI가 쉬지 않게 {refreshWait}초 뒤에 다시 볼 수 있어요.</span>}</div>
     {topicsFallback&&!topicsLoading&&<p role="status" className="field-help">준비된 주제를 보여 드려요. {topicsFallback}</p>}
     {trendInfo&&!topicsLoading&&<TrendLine info={trendInfo} used={topics.filter(item=>item.trend).map(item=>item.trend)} prepared={topicsFallback!==""}/>}
-    <div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><TopicCardBody label={topicCardLabel(index)} title={item.title} season={item.season} trend={item.trend} selected={topic===item.title}/></button>)}</div>
+    {/* 추천을 기다리는 동안은 카드 자리만 보인다(글자 없는 빈 카드). */}
+    {!topics.length&&<div className="topic-grid" aria-hidden="true">{[0,1,2].map(index=><div key={index} className="topic-card topic-card-placeholder"><span className="topic-card-label">{topicCardLabel(index)}</span><span className="placeholder-line"/><span className="placeholder-line short"/></div>)}</div>}
+    {topics.length>0&&<div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><TopicCardBody label={topicCardLabel(index)} title={item.title} season={item.season} trend={item.trend} selected={topic===item.title}/></button>)}</div>}
     <label className="custom-topic"><span>직접 쓰기</span><input maxLength={120} value={topic} placeholder="예: 비 오는 날 홍어전" onChange={e=>editTopicText(e.target.value)} /></label>
     <div className="bottom-action"><span/><button type="button" className="button primary big" disabled={!topic.trim()} onClick={goNext}>다음</button></div>
   </WizardShell>;
