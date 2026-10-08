@@ -7,6 +7,7 @@
 // - src/app/apple-icon.png   : 아이폰 "홈 화면에 추가"(180px). iOS는 투명 부분을 검게 칠하므로 앱 배경색 정사각 위에 둔다.
 // - public/brand/logo-64.png : 상단 막대 로고(32px 자리, 화면 배율 2배).
 // - public/brand/logo-192.png: 로그인·설정 화면 로고(96px 자리, 2배).
+// - public/brand/logo-512.png: 릴스 끝 화면 로고(녹화 캔버스에 560px 안팎으로 그린다).
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,6 +59,7 @@ const outputs = [
   ["src/app/apple-icon.png", appleIcon],
   ["public/brand/logo-64.png", await roundPng(64)],
   ["public/brand/logo-192.png", await roundPng(192)],
+  ["public/brand/logo-512.png", await roundPng(512)],
 ];
 for (const [file, data] of outputs) {
   await writeFile(path.join(project, file), data);

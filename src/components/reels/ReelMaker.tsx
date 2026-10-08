@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { CARD_RECT, REEL, buildTimeline, framesAt, pickRecordingType, type RecordingType, type Timeline } from "@/features/reels/timeline";
+import { CARD_RECT, OUTRO, REEL, buildTimeline, framesAt, pickRecordingType, type RecordingType, type Timeline } from "@/features/reels/timeline";
 import { readJsonResponse } from "@/lib/http/readJson";
 
 // 캐러셀 카드로 9:16 릴스 영상을 만든다. 영상 합성은 서버가 아니라 이 브라우저에서 한다.
@@ -30,12 +30,27 @@ function drawScene(ctx:CanvasRenderingContext2D,source:CanvasImageSource,alpha:n
   ctx.restore();
 }
 
+// 끝 화면: 어두운 바탕에 가게 원형 로고와 옅은 테두리를 가운데 그린다(장면 동안 천천히 커진다).
+function drawOutro(ctx:CanvasRenderingContext2D,logo:CanvasImageSource,alpha:number,zoom:number){
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle=OUTRO.background;
+  ctx.fillRect(0,0,REEL.width,REEL.height);
+  const size=OUTRO.logoSize*zoom;
+  ctx.drawImage(logo,(REEL.width-size)/2,OUTRO.centerY-size/2,size,size);
+  ctx.beginPath();
+  ctx.arc(REEL.width/2,OUTRO.centerY,size/2+12,0,Math.PI*2);
+  ctx.strokeStyle=OUTRO.ring;ctx.lineWidth=6;ctx.stroke();
+  ctx.restore();
+}
+
 export function ReelMaker({cards,coverSource,topic}:Props){
   const canvasRef=useRef<HTMLCanvasElement>(null);
   const [phase,setPhase]=useState<Phase>("idle");
   const [message,setMessage]=useState("");
   const [progress,setProgress]=useState(0);
   const [withIntro,setWithIntro]=useState(false);
+  const [withOutro,setWithOutro]=useState(true);
   const [result,setResult]=useState<{url:string;mp4:boolean}|null>(null);
   // 브라우저가 녹화를 지원하는지는 화면이 뜬 뒤에만 알 수 있다(서버 렌더링에는 MediaRecorder가 없다).
   const [support,setSupport]=useState<RecordingType|null|undefined>(undefined);
@@ -52,6 +67,8 @@ export function ReelMaker({cards,coverSource,topic}:Props){
     setResult(null);setMessage("");setProgress(0);
     try{
       const images=await Promise.all(cards.map(loadImage));
+      // 끝 화면 로고는 덤이라, 불러오지 못하면 끝 화면 없이 녹화한다.
+      const logo=withOutro?await loadImage(OUTRO.logo).catch(()=>null):null;
       // AI 표지 영상(선택): 서버가 Higgsfield로 만들어 data URL로 돌려준다.
       let intro:HTMLVideoElement|null=null;
       if(withIntro&&coverSource){
@@ -61,7 +78,7 @@ export function ReelMaker({cards,coverSource,topic}:Props){
         if(!response.ok)throw new Error(data.message||"AI 표지 영상을 만들지 못했어요.");
         intro=await loadVideo(data.video);
       }
-      const timeline:Timeline=buildTimeline(images.length,intro?intro.duration:undefined);
+      const timeline:Timeline=buildTimeline(images.length,intro?intro.duration:undefined,Boolean(logo));
       const canvas=canvasRef.current;
       canvas.width=REEL.width;canvas.height=REEL.height;
       const ctx=canvas.getContext("2d");
@@ -80,6 +97,7 @@ export function ReelMaker({cards,coverSource,topic}:Props){
           const t=(performance.now()-startedAt)/1000;
           ctx.fillStyle="#000";ctx.fillRect(0,0,REEL.width,REEL.height);
           for(const {scene,alpha,zoom} of framesAt(timeline,Math.min(t,timeline.total))){
+            if(scene.kind==="outro"){if(logo)drawOutro(ctx,logo,alpha,1+(zoom-1)/2);continue;}
             drawScene(ctx,scene.kind==="intro"&&intro?intro:images[scene.index],alpha,scene.kind==="intro"?1:zoom);
           }
           setProgress(Math.min(1,t/timeline.total));
@@ -107,6 +125,7 @@ export function ReelMaker({cards,coverSource,topic}:Props){
     {support===null&&<p role="alert">이 브라우저는 영상 녹화를 지원하지 않아요. 최신 크롬·엣지 또는 아이폰 사파리에서 만들어 주세요.</p>}
     {support&&!support.instagramReady&&<p className="field-help">이 브라우저는 Instagram용 H.264 영상을 녹화하지 못해요({support.mp4?"VP9 MP4":"WebM"}로 만들어져 업로드가 거절될 수 있어요). 구글 크롬 최신 버전이나 아이폰 사파리에서 만들어 주세요.</p>}
     {coverSource&&<label className="reel-option"><input type="checkbox" checked={withIntro} disabled={busy} onChange={event=>setWithIntro(event.target.checked)}/> 첫 장면에 AI 움직이는 표지 넣기 <small>(Higgsfield 크레딧 사용 · 1~3분 더 걸려요)</small></label>}
+    <label className="reel-option"><input type="checkbox" checked={withOutro} disabled={busy} onChange={event=>setWithOutro(event.target.checked)}/> 끝에 가게 로고 화면 넣기 <small>(2초 · 비용 없음)</small></label>
     <div className="reel-actions">
       <button type="button" className="button primary" disabled={!support||busy||!cards.length} onClick={()=>void record()}>{phase==="intro"?"AI 표지 영상 만드는 중…":phase==="recording"?`녹화 중… ${Math.round(progress*100)}%`:result?"다시 만들기":"릴스 영상 만들기"}</button>
       {result&&<a className="button secondary" href={result.url} download={fileName}>영상 받기 ({result.mp4?"MP4":"WebM"})</a>}
