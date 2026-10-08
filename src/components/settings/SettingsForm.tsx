@@ -53,7 +53,6 @@ export function SettingsForm({ onSave = saveSettings, connections = { gemini:fal
       <div className="connection-card"><span className={`status-dot ${connections.openai?"on":""}`}/><div><strong>OpenAI {connections.openai?"키 설정됨":"키 필요"}</strong><p>이미지 생성의 대체 수단이에요.</p></div></div>
       <div className="connection-card"><span className={`status-dot ${connections.naver?"on":""}`}/><div><strong>네이버 검색 트렌드 {connections.naver?"키 설정됨":"키 필요(선택)"}</strong><p>요즘 검색이 늘어난 음식 말을 주제 추천에 참고해요. NAVER API HUB의 검색어 트렌드 키를 NAVER_CLIENT_ID·NAVER_CLIENT_SECRET으로 넣어 주세요.</p></div></div>
     </div></section>
-    <section className="settings-section disabled-section"><div><h2>추후 적용할 옵션</h2><p>저장은 되어 있어도 지금 제작 결과에는 반영되지 않는 항목이에요.</p></div><p>이미지 방식·비율·후보 수 설정은 후속 단계에서 제공해요. (계절·명절과, 네이버 키를 넣었다면 요즘 검색이 늘어난 음식 말은 이미 추천 주제에 반영돼요.)</p></section>
     <div className="settings-actions"><p>권장값 복원은 현재 적용되는 설정만 바꿔요.</p><button type="button" className="button secondary" onClick={()=>{setSettings(current=>({...current,carouselSlideCount:DEFAULT_SETTINGS.carouselSlideCount,imageAiProvider:DEFAULT_SETTINGS.imageAiProvider,imageQuality:DEFAULT_SETTINGS.imageQuality,copyLength:DEFAULT_SETTINGS.copyLength,textAiProvider:DEFAULT_SETTINGS.textAiProvider}));setSaved("");}}>권장값으로 되돌리기</button><button type="submit" className="button primary">설정 저장</button>{saved==="admin"&&<span role="status">저장했어요.</span>}{error?.part==="admin"&&<span role="alert">{error.message}</span>}</div>
   </form>
   </details>

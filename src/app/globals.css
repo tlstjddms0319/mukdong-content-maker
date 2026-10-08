@@ -167,7 +167,6 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .publish-button { border:0; background:#a33d32; color:#fff; cursor:pointer; }
 .publish-button:disabled { cursor:wait; opacity:.65; }
 .status-dot { width:12px; height:12px; margin-top:7px; border-radius:50%; background:#b05b46; }.status-dot.on{background:var(--accent)}
-.disabled-section { opacity:.7; }
 .check-list { display:flex; flex-direction:column; gap:10px; }.check-list label{display:flex;align-items:center;gap:10px}.check-list input{width:20px;height:20px;min-height:auto}
 .settings-actions { display:flex; justify-content:flex-end; align-items:center; gap:10px; padding:22px 0; }
 .image-skeleton { aspect-ratio:4/5; display:grid; place-items:center; max-width:360px; border-radius:var(--panel-radius); background:linear-gradient(110deg,#eee 30%,#fafafa 45%,#eee 60%); }
@@ -604,3 +603,8 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .help-steps li strong { display:block; font-size:21px; }
 /* 접힌 더보기 안의 링크는 확실히 숨긴다(휴대폰에서 펼침 창을 absolute로 띄우므로 접힌 상태에서도 상자가 잡히던 문제). */
 .nav-more:not([open]) .nav-more-links { display:none; }
+/* 장 고치기의 "맨 뒤 홍보 카드" 줄: 체크와 글은 한 줄로 묶고, 미리보기 그림은 그 아래에 둔다
+   (휴대폰에서 "(무료)"가 그림 밑으로 떨어져 나뉘어 보이던 문제). */
+.deck-store-card { display:grid; gap:8px; justify-items:start; }
+.deck-store-toggle { display:flex; align-items:center; gap:10px; min-height:44px; }
+.deck-store-toggle input { width:22px; height:22px; flex:none; }
