@@ -95,10 +95,21 @@ export function overusedMenus(recentTitles:readonly string[],current:readonly st
   const now=current.map(menuId).filter((id):id is string=>Boolean(id));
   return new Set([...now,...[...counts].filter(([,count])=>count>=2).map(([id])=>id)]);
 }
+// 삼합 주제인지(삼합·수육이 제목이나 설명에 나온다). 한 묶음에 하나만 둔다(프롬프트의 "삼합은 3개 중 최대 1개"와 같은 기준).
+const isSamhapTopic=(topic:Pick<TopicSuggestion,"title"|"summary">)=>/삼합|수육/.test(`${topic.title} ${topic.summary}`);
+// 이미 고른 주제들 옆에 둘 수 있는지: 주인공 메뉴가 겹치지 않고(홍어회 주인공도 하나만), 삼합 주제는 하나만.
+// 정해진 칸은 없지만 이 두 가지는 AI 주제·준비된 주제 모두 코드로 지킨다(같은 메뉴 이야기가 겹치면 좋은 주제 3개가 아니다).
+const fitsWith=(picked:readonly TopicSuggestion[],topic:TopicSuggestion)=>{
+  const id=topicMenu(topic)?.id;
+  return !picked.some(item=>topicMenu(item)?.id===id)&&!(isSamhapTopic(topic)&&picked.some(isSamhapTopic));
+};
+
 // 준비된 주제 3개(AI 실패 시, AI 주제가 모자랄 때 채울 후보). 정해진 칸 없이 후보를 점수 순으로 줄 세워 고른다.
 // 후보 = 이번 시기 행사 주제 + 질문 주제와 메뉴 주제를 번갈아(회차마다 두 칸씩 밀어 돌린다).
 // 점수: 이번 시기 행사 주제 > 검색이 늘어난 말의 메뉴 > 지금 제철·곧 제철 메뉴(사계절 메뉴 제외). 같으면 후보 순서.
-// 고를 때: 주인공 메뉴가 서로 다르게, 시기 주제는 2개까지, 검색 흐름 주제는 1개까지(프롬프트의 "시기 1~2개·검색 흐름 1개"와 같은 기준).
+// 제철이 아닌 메뉴: 제철 달이 정해진 메뉴(과메기 11~2월)는 다른 후보가 다 떨어졌을 때만 고르고,
+// 계절에 특히 어울리는 메뉴(미나리전·홍어무침 봄여름, 홍어애탕 가을겨울)는 철이 아니면 점수를 낮춘다.
+// 고를 때: 주인공 메뉴가 서로 다르게, 삼합은 하나만, 시기 주제는 2개까지, 검색 흐름 주제는 1개까지(프롬프트의 "시기 1~2개·검색 흐름 1개"와 같은 기준).
 // excludeTitles: 지금 화면 주제(반드시 제외). avoidTitles: 최근에 보여 준 주제. 되도록 피하지만, 다 피할 수 없으면 제외 목록만 지킨다.
 // hints.recentMenus: 최근에 자주 나온 메뉴(되도록 뺀다).
 const PREPARED_ROUNDS=4;
@@ -118,21 +129,29 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
   // 지금 제철·곧 제철인 메뉴(사계절 메뉴는 늘 제철이라 점수에서 뺀다). 시기를 모르면 비운다.
   const dated=season?menusForDate(season.today,season.season):undefined;
   const timely=new Set(dated?[...dated.inSeason,...dated.upcoming].filter(item=>item.seasons.length||item.months).map(item=>item.id):[]);
+  const fresh=new Set(dated?[...dated.inSeason,...dated.upcoming].map(item=>item.id):[]);
+  // "closed": 제철 달 밖(그 철에만 내는 메뉴), "weak": 어울리는 계절이 아님, undefined: 상관없음(사계절 메뉴·시기 모름).
+  const offSeason=(topic:TopicSuggestion):"closed"|"weak"|undefined=>{
+    const item=topicMenu(topic);
+    if(!dated||!item||!(item.seasons.length||item.months)||fresh.has(item.id))return undefined;
+    return item.months?"closed":"weak";
+  };
   const recent=hints.recentMenus??new Set<string>();
   const menuId=(topic:TopicSuggestion)=>topicMenu(topic)?.id??"";
   const trendOf=(topic:TopicSuggestion)=>(hints.trends??[]).find(keyword=>trendMenu(keyword)&&trendMenu(keyword)===menuId(topic))??"";
   const isTimely=(topic:TopicSuggestion)=>Boolean(topic.season)||timely.has(menuId(topic));
-  const score=(topic:TopicSuggestion)=>(topic.season?4:0)+(trendOf(topic)?2:0)+(timely.has(menuId(topic))?1:0);
+  const score=(topic:TopicSuggestion)=>(topic.season?4:0)+(trendOf(topic)?2:0)+(timely.has(menuId(topic))?1:0)-(offSeason(topic)==="weak"?1:0);
   const ranked=candidates.map((topic,order)=>({topic,order})).sort((a,b)=>score(b.topic)-score(a.topic)||a.order-b.order).map(item=>item.topic);
   const picked:TopicSuggestion[]=[];
-  // 1) 최근에 안 보인 주제·최근에 자주 안 나온 메뉴 → 2) 최근에 안 보인 주제 → 3) 제외 목록만 피한 주제.
-  for(const [strict,varied] of [[true,true],[true,false],[false,false]] as const){
+  // 1) 최근에 안 보인 주제·최근에 자주 안 나온 메뉴 → 2) 최근에 안 보인 주제 → 3) 제외 목록만 피한 주제 → 4) 철 지난 메뉴까지.
+  for(const [strict,varied,anySeason] of [[true,true,false],[true,false,false],[false,false,false],[false,false,true]] as const){
     for(const topic of ranked){
       if(picked.length>=3)break;
       const key=titleKey(topic.title);
       if(excluded.has(key)||(strict&&avoided.has(key))||picked.some(item=>titleKey(item.title)===key))continue;
       if(varied&&recent.has(menuId(topic)))continue;
-      if(picked.some(item=>menuId(item)===menuId(topic)))continue;
+      if(!anySeason&&offSeason(topic)==="closed")continue;
+      if(!fitsWith(picked,topic))continue;
       if(isTimely(topic)&&picked.filter(isTimely).length>=2)continue;
       if(trendOf(topic)&&picked.some(item=>trendOf(item)))continue;
       picked.push(topic);
@@ -151,7 +170,7 @@ const meetsTopicBasics=(topic:TopicSuggestion,storeName:string)=>/[?？]$/.test(
 const isVariedSet=(topics:TopicSuggestion[])=>topics.some(isOtherMenuTopic)&&new Set(topics.map(topic=>topicMenu(topic)?.id)).size>1;
 
 // AI가 준 주제 3개를 순서 그대로 살린다(첫 번째가 AI가 가장 추천하는 주제). 기본 조건에 안 맞거나 지금 화면·최근에 나온 제목,
-// 겹치는 제목만 빼고, 모자란 만큼만 준비된 주제(이번 시기·최근에 안 보인 것 우선)로 채운다.
+// 겹치는 제목, 앞 주제와 주인공 메뉴가 겹치거나 두 번째 삼합 주제만 빼고, 모자란 만큼만 준비된 주제(이번 시기·최근에 안 보인 것 우선)로 채운다.
 // 셋이 메뉴를 고르게 다루지 않으면(모두 홍어회·삼합, 또는 셋 다 같은 메뉴) 맨 뒤 하나를 다른 메뉴 주제로 바꾼다.
 // filled = 준비된 주제로 바꾼 개수.
 export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:string;round:number;excludeTitles:readonly string[];avoidTitles:readonly string[];season?:SeasonContext;hints?:TopicHints}):{topics:TopicSuggestion[];filled:number} {
@@ -159,7 +178,7 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   const used=new Set<string>();
   const take=(topic:TopicSuggestion)=>{used.add(titleKey(topic.title));return topic;};
   const picked:TopicSuggestion[]=[];
-  for(const topic of suggestions)if(picked.length<3&&meetsTopicBasics(topic,options.storeName)&&!blocked.has(titleKey(topic.title))&&!used.has(titleKey(topic.title)))picked.push(take(topic));
+  for(const topic of suggestions)if(picked.length<3&&meetsTopicBasics(topic,options.storeName)&&!blocked.has(titleKey(topic.title))&&!used.has(titleKey(topic.title))&&fitsWith(picked,topic))picked.push(take(topic));
   // 채울 후보: 이번 회차 준비된 주제부터 차례로 돌며, 최근에 안 보인 것 → 제외 목록만 피한 것 순서.
   const excluded=new Set(options.excludeTitles.map(titleKey));
   const avoided=new Set(options.avoidTitles.map(titleKey));
@@ -169,7 +188,7 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   const fresh=(topic:TopicSuggestion)=>{const id=topicMenu(topic)?.id;return !id||(!recent.has(id)&&!picked.some(item=>topicMenu(item)?.id===id));};
   const pick=(fits:(topic:TopicSuggestion)=>boolean)=>{
     for(const [strict,varied] of [[true,true],[true,false],[false,false]] as const){
-      const found=pool.find(topic=>fits(topic)&&(!varied||fresh(topic))&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
+      const found=pool.find(topic=>fits(topic)&&fitsWith(picked,topic)&&(!varied||fresh(topic))&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
       if(found)return take(found);
     }
     throw new Error("다른 추천 주제를 찾지 못했습니다.");
@@ -177,19 +196,20 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   let filled=3-picked.length;
   while(picked.length<3)picked.push(pick(topic=>picked.some(isOtherMenuTopic)||isOtherMenuTopic(topic)));
   if(!isVariedSet(picked)){
-    const replaced=picked[2];
+    // 맨 뒤 하나를 빼고 그 자리에 다른 메뉴 주제를 넣는다(pick은 남은 두 주제와 메뉴·삼합이 겹치지 않는 것만 고른다).
+    const replaced=picked.pop()!;
     used.delete(titleKey(replaced.title));
-    const menus=new Set(picked.slice(0,2).map(topic=>topicMenu(topic)?.id));
-    picked[2]=pick(topic=>isOtherMenuTopic(topic)&&!menus.has(topicMenu(topic)?.id)&&titleKey(topic.title)!==titleKey(replaced.title));
+    picked.push(pick(topic=>isOtherMenuTopic(topic)&&titleKey(topic.title)!==titleKey(replaced.title)));
     if(!replaced.id.startsWith("fallback-"))filled++;
   }
   return {topics:picked,filled};
 }
 
 // Structural editorial checks, not a fact checker or a judgment of marketing performance.
-// 물음표 질문·가게 이름 없음·가게 메뉴로 이어지는 설명, 그리고 메뉴를 고르게 다룬다(순서·홍어 질문 개수는 보지 않는다).
+// 물음표 질문·가게 이름 없음·가게 메뉴로 이어지는 설명, 주인공 메뉴가 겹치지 않고 삼합은 하나, 그리고 메뉴를 고르게 다룬다
+// (순서·홍어 질문 개수는 보지 않는다).
 export function followsCuriosityBrief(topics:TopicSuggestion[],storeName:string):boolean {
-  return topics.every(topic=>meetsTopicBasics(topic,storeName))&&isVariedSet(topics);
+  return topics.every((topic,i)=>meetsTopicBasics(topic,storeName)&&fitsWith(topics.slice(0,i),topic))&&isVariedSet(topics);
 }
 
 // AI가 season에 적은 이름이 이번 시기(계절·행사)에 없는 말이면 화면에 잘못된 표시가 붙지 않게 지운다.

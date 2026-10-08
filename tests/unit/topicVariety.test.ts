@@ -9,27 +9,39 @@ const summary="익숙한 장면에서 출발해 식감 차이를 설명하고 �
 const make=(title:string,id=title)=>({id,title,summary,reason:"이유",audience:"A" as const,imageBrief:"사진",season:"",trend:""});
 // 홍어회·삼합이 아닌 메뉴(과메기)로 이어지는 주제.
 const makeMenu=(title:string,id=title)=>({...make(title,id),summary:"찬바람 부는 겨울에 찾는 과메기를 소개하고 제철 이유는 출처를 확인한 뒤 씁니다."});
+// 미나리전으로 이어지는 주제(주인공 메뉴가 홍어회·과메기와 다르다).
+const makeJeon=(title:string,id=title)=>({...make(title,id),summary:"비 오는 날 미나리전과 배다리 막걸리를 곁들이는 장면에서 시작해 어울리는 이유를 단정하지 않고 소개합니다."});
 const base={storeName:"묵동홍어마을",round:0,excludeTitles:[],avoidTitles:[]};
 
 describe("topic variety", () => {
   // 정해진 구성(일상 질문 2개 + 홍어 질문 1개)은 없다. AI가 고른 순서(첫 번째가 가장 추천)를 그대로 살린다.
   it("keeps valid AI topics in the AI's order", () => {
-    const {topics,filled}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),makeMenu("과메기는 왜 겨울에 찾을까?"),make("국밥엔 왜 깍두기가 어울릴까?")],base);
+    const {topics,filled}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),makeMenu("과메기는 왜 겨울에 찾을까?"),makeJeon("국밥엔 왜 깍두기가 어울릴까?")],base);
     expect(filled).toBe(0);
     expect(topics.map(topic=>topic.title)).toEqual(["홍어는 왜 겨울에 더 찾을까?","과메기는 왜 겨울에 찾을까?","국밥엔 왜 깍두기가 어울릴까?"]);
   });
 
-  it("swaps the last topic for another menu when all three lean on hongeo and samhap", () => {
+  it("replaces later topics that repeat a hero menu, so hongeo/samhap cannot fill the whole set", () => {
     const {topics,filled}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),make("굴은 왜 겨울에 맛있을까?"),make("국밥엔 왜 깍두기가 어울릴까?")],base);
+    expect(filled).toBe(2);
+    expect(topics[0].title).toBe("홍어는 왜 겨울에 더 찾을까?");
+    expect(topics.slice(1).every(topic=>topic.id.startsWith("fallback-"))).toBe(true);
+    expect(new Set(topics.map(topic=>topicMenu(topic)?.id)).size).toBe(3);
+    expect(topics.some(isOtherMenuTopic)).toBe(true);
+  });
+
+  it("keeps only one samhap topic even when the AI offers two", () => {
+    // 검토에서 찾은 사례: 삼합 주제 둘 + 과메기가 그대로 나왔다(삼합은 3개 중 최대 1개).
+    const samhap=(title:string)=>({...make(title),summary:"홍어회에 수육과 묵은지를 곁들이는 삼합 조합을 설명하고 향은 남는다고 알립니다."});
+    const {topics,filled}=assembleTopics([samhap("홍어는 왜 수육이랑 먹을까?"),samhap("삼합엔 왜 묵은지를 올릴까?"),makeMenu("과메기는 왜 겨울에 찾을까?")],base);
     expect(filled).toBe(1);
-    expect(topics.slice(0,2).map(topic=>topic.title)).toEqual(["홍어는 왜 겨울에 더 찾을까?","굴은 왜 겨울에 맛있을까?"]);
-    expect(isOtherMenuTopic(topics[2])).toBe(true);
-    expect(topics[2].id).toMatch(/^fallback-/);
+    expect(topics.map(topic=>topic.title).slice(0,2)).toEqual(["홍어는 왜 수육이랑 먹을까?","과메기는 왜 겨울에 찾을까?"]);
+    expect(topics.filter(topic=>/삼합|수육/.test(topic.title+topic.summary))).toHaveLength(1);
   });
 
   it("keeps three valid topics even when none names hongeo", () => {
     // 예전에는 홍어 질문 칸을 채우려고 하나를 준비된 홍어 주제로 바꿨다.
-    const input=[makeMenu("굴은 왜 겨울에 맛있을까?"),make("국밥엔 왜 깍두기가 어울릴까?"),make("전은 왜 비 오는 날 생각날까?")];
+    const input=[makeMenu("굴은 왜 겨울에 맛있을까?"),make("국밥엔 왜 깍두기가 어울릴까?"),makeJeon("전은 왜 비 오는 날 생각날까?")];
     const {topics,filled}=assembleTopics(input,base);
     expect(filled).toBe(0);
     expect(topics.map(topic=>topic.title)).toEqual(input.map(topic=>topic.title));
@@ -43,11 +55,11 @@ describe("topic variety", () => {
     expect(topics.map(topic=>topic.title)).toEqual(input.map(topic=>topic.title));
   });
 
-  it("swaps the last topic when all three share one menu", () => {
+  it("keeps the first topic and replaces the others when all three share one menu", () => {
     const {topics,filled}=assembleTopics([makeMenu("과메기는 왜 겨울에 찾을까?"),makeMenu("과메기는 왜 말릴까?"),makeMenu("과메기엔 왜 김을 싸 먹을까?")],base);
-    expect(filled).toBe(1);
-    expect(topics.slice(0,2).map(topic=>topic.title)).toEqual(["과메기는 왜 겨울에 찾을까?","과메기는 왜 말릴까?"]);
-    expect(topicMenu(topics[2])?.id).not.toBe("gwamegi");
+    expect(filled).toBe(2);
+    expect(topics[0].title).toBe("과메기는 왜 겨울에 찾을까?");
+    expect(topics.slice(1).map(topic=>topicMenu(topic)?.id)).not.toContain("gwamegi");
   });
 
   it("fills only the topic that broke a rule instead of discarding all three", () => {
@@ -58,7 +70,7 @@ describe("topic variety", () => {
   });
 
   it("replaces a topic shown recently or already drafted", () => {
-    const {topics,filled}=assembleTopics([make("수육에는 왜 김치를 곁들일까?"),make("굴은 왜 겨울에 맛있을까?"),make("홍어는 왜 겨울에 더 찾을까?")],{...base,avoidTitles:["수육에는 왜 김치를 곁들일까?"]});
+    const {topics,filled}=assembleTopics([make("수육에는 왜 김치를 곁들일까?"),make("굴은 왜 겨울에 맛있을까?"),makeMenu("과메기는 왜 겨울에 찾을까?")],{...base,avoidTitles:["수육에는 왜 김치를 곁들일까?"]});
     expect(filled).toBe(1);
     expect(topics.map(topic=>topic.title)).not.toContain("수육에는 왜 김치를 곁들일까?");
   });
@@ -72,7 +84,7 @@ describe("topic variety", () => {
 
   it("reports a partial fill and only falls back fully when nothing usable came back", async () => {
     const onFallback=vi.fn(),onPartial=vi.fn();
-    const whole=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("굴은 왜 겨울에 맛있을까?","1"),make("국밥엔 왜 깍두기가 어울릴까?","2"),make("전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
+    const whole=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("굴은 왜 겨울에 맛있을까?","1"),make("국밥엔 왜 깍두기가 어울릴까?","2"),makeJeon("전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
     expect(onPartial).not.toHaveBeenCalled();
     expect(whole.map(topic=>topic.id)).toEqual(["1","2","3"]);
     const partial=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("굴은 왜 겨울에 맛있을까?","1"),{...make("국밥엔 왜 깍두기가 어울릴까?","2"),summary:"짧음"},make("전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
@@ -168,5 +180,19 @@ describe("topic variety", () => {
       expect(new Set(topics.map(topic=>topicMenu(topic)?.id)).size).toBe(3);
       expect(topics.filter(topic=>/삼합|수육/.test(topic.title+topic.summary)).length).toBeLessThanOrEqual(1);
     }
+  });
+
+  it("never offers gwamegi out of its season in prepared topics, but still previews it in October", () => {
+    // 검토에서 찾은 사례: 5월·9월에도 "과메기는 왜 찬바람이 불면 찾을까?"가 나왔다(과메기는 11~2월).
+    const offMonths=["2026-03-15","2026-05-01","2026-06-20","2026-08-25","2026-09-20","2026-09-28"];
+    for(const date of offMonths){
+      const season=seasonContext(new Date(`${date}T12:00:00+09:00`));
+      for(let round=0;round<4;round++){
+        const topics=fallbackTopics(round,[],season);
+        expect(topics.some(topic=>topicMenu(topic)?.id==="gwamegi"),`${date} r${round}`).toBe(false);
+      }
+    }
+    const october=seasonContext(new Date("2026-10-08T12:00:00+09:00"));
+    expect([0,1,2,3].some(round=>fallbackTopics(round,[],october).some(topic=>topicMenu(topic)?.id==="gwamegi"))).toBe(true);
   });
 });
