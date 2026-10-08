@@ -247,3 +247,27 @@ describe("topic variety", () => {
     expect([0,1,2,3].some(round=>fallbackTopics(round,[],october).some(topic=>topicMenu(topic)?.id==="gwamegi"))).toBe(true);
   });
 });
+
+describe("topics from the owner's photos", () => {
+  it("asks the AI to start every topic from the photo, ahead of the other rules", () => {
+    const prompt=buildTopicPrompt({storeName:"묵동홍어마을",photoNotes:["홍어무침 한 접시, 깨 뿌림"]});
+    expect(prompt).toContain('"photoNotes":["홍어무침 한 접시, 깨 뿌림"]');
+    expect(prompt).toContain("3개 모두 사진에 보이는 음식(가게 메뉴)을 주인공으로");
+    expect(buildTopicPrompt({storeName:"묵동홍어마을"})).not.toContain('"photoNotes"');
+  });
+
+  it("keeps three AI questions about the same photographed dish (no menu-variety swap)", () => {
+    const muchim=(title:string)=>({...make(title),summary:"붉은 양념의 홍어무침 한 접시에서 시작해 새콤한 맛과 어울리는 곁들임을 확인한 뒤 소개합니다."});
+    const ai=[muchim("홍어무침은 왜 새콤할까?"),muchim("홍어무침엔 왜 막걸리가 어울릴까?"),muchim("홍어무침은 어떻게 먹으면 좋을까?")];
+    const {topics,filled}=assembleTopics(ai,{...base,hints:{photoMenus:new Set(["hongeo-muchim"])}});
+    expect(filled).toBe(0);
+    expect(topics.map(topic=>topic.title)).toEqual(ai.map(topic=>topic.title));
+    // 사진 없이 같은 셋이 오면 예전처럼 메뉴가 겹치는 둘은 다른 메뉴 주제로 바뀐다.
+    expect(assembleTopics(ai,base).filled).toBe(2);
+  });
+
+  it("fills prepared topics with the photographed menu first", () => {
+    const topics=fallbackTopics(0,[],undefined,[],{photoMenus:new Set(["gwamegi"])});
+    expect(topicMenu(topics[0])?.id).toBe("gwamegi");
+  });
+});

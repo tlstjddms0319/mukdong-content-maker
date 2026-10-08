@@ -20,7 +20,8 @@ type PreparedTopic=Omit<TopicSuggestion,"id"|"season"|"trend">;
 // 추천을 고르는 데 쓰는 참고 정보(라우트가 만든다).
 // recentMenus: 최근에 보여 준 주제에 자주 나온 메뉴 id(이번에는 되도록 빼서 메뉴를 고르게 돌린다).
 // trends: 네이버 검색이 늘어난 말(묶음 이름). 준비된 주제는 그 말과 이어지는 메뉴를 먼저 고른다.
-export type TopicHints={recentMenus?:ReadonlySet<string>;trends?:readonly string[]};
+// photoMenus: 사장님이 먼저 올린 사진에 보이는 가게 메뉴 id. 있으면(사진으로 주제 정하기) 세 주제 모두 그 메뉴에서 고른다.
+export type TopicHints={recentMenus?:ReadonlySet<string>;trends?:readonly string[];photoMenus?:ReadonlySet<string>};
 
 // 준비된 질문 주제(AI 실패 시). 정해진 칸 없이 아래 메뉴 주제·시기 주제와 한 후보 목록에 놓고 fallbackTopics가 고른다.
 // summary 앞쪽에 이어질 가게 메뉴를 먼저 적는다(메뉴 판별에 쓰인다).
@@ -140,7 +141,9 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
   const recent=hints.recentMenus??new Set<string>();
   const menuId=(topic:TopicSuggestion)=>topicMenu(topic)?.id??"";
   const trendOf=(topic:TopicSuggestion)=>(hints.trends??[]).find(keyword=>trendMenu(keyword)&&trendMenu(keyword)===menuId(topic))??"";
-  const score=(topic:TopicSuggestion)=>(topic.season?4:0)+(trendOf(topic)?2:0)+(timely.has(menuId(topic))?1:0)-(offSeason(topic)==="weak"?1:0);
+  // 사진으로 주제 정하기: 사진 속 메뉴 주제가 무엇보다 먼저.
+  const photoMenus=hints.photoMenus??new Set<string>();
+  const score=(topic:TopicSuggestion)=>(photoMenus.has(menuId(topic))?8:0)+(topic.season?4:0)+(trendOf(topic)?2:0)+(timely.has(menuId(topic))?1:0)-(offSeason(topic)==="weak"?1:0);
   const ranked=candidates.map((topic,order)=>({topic,order})).sort((a,b)=>score(b.topic)-score(a.topic)||a.order-b.order).map(item=>item.topic);
   const picked:TopicSuggestion[]=[];
   // 1) 최근에 안 보인 주제·최근에 자주 안 나온 메뉴 → 2) 최근에 안 보인 주제 → 3) 제외 목록만 피한 주제 → 4) 철 지난 메뉴까지.
@@ -195,8 +198,11 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   const take=(topic:TopicSuggestion)=>{used.add(titleKey(topic.title));return topic;};
   const picked:TopicSuggestion[]=[];
   // 이 AI 주제를 지금 고를 수 없는 이유(고를 수 있으면 undefined).
+  // 사진으로 주제 정하기: 사진 속 음식 하나로 세 질문을 만드는 게 맞으므로 "주인공 메뉴 겹침"·"메뉴 고르게" 검사를 하지 않는다.
+  const photoMode=options.hints?.photoMenus!==undefined;
+  const fits=(list:readonly TopicSuggestion[],topic:TopicSuggestion)=>photoMode||fitsWith(list,topic);
   const problem=(topic:TopicSuggestion):TopicRejectReason|undefined=>basicsProblem(topic,options.storeName)
-    ??(current.has(titleKey(topic.title))?"current":used.has(titleKey(topic.title))?"duplicate":!fitsWith(picked,topic)?"same-menu":undefined);
+    ??(current.has(titleKey(topic.title))?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
   // 1) 최근에 안 보인 제목 → 2) 최근에 보인 제목(준비된 주제보다는 낫다).
   for(const allowRecent of [false,true])for(const topic of suggestions){
     if(picked.length>=3||picked.includes(topic))continue;
@@ -211,16 +217,20 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   // 최근에 자주 나온 메뉴와 이미 고른 주제의 메뉴는 되도록 피한다(메뉴를 고르게 돌리기).
   const recent=options.hints?.recentMenus??new Set<string>();
   const fresh=(topic:TopicSuggestion)=>{const id=topicMenu(topic)?.id;return !id||(!recent.has(id)&&!picked.some(item=>topicMenu(item)?.id===id));};
-  const pick=(fits:(topic:TopicSuggestion)=>boolean)=>{
+  const pick=(wanted:(topic:TopicSuggestion)=>boolean)=>{
     for(const [strict,varied] of [[true,true],[true,false],[false,false]] as const){
-      const found=pool.find(topic=>fits(topic)&&fitsWith(picked,topic)&&(!varied||fresh(topic))&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
+      const found=pool.find(topic=>wanted(topic)&&fits(picked,topic)&&(!varied||fresh(topic))&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
       if(found)return take(found);
     }
     throw new Error("다른 추천 주제를 찾지 못했습니다.");
   };
   let filled=3-picked.length;
-  while(picked.length<3)picked.push(pick(topic=>picked.some(isOtherMenuTopic)||isOtherMenuTopic(topic)));
-  if(!isVariedSet(picked)){
+  // 사진으로 주제 정하기면 사진 속 메뉴 주제부터 채우고, 없으면 아무 주제나.
+  const photoMenus=options.hints?.photoMenus??new Set<string>();
+  while(picked.length<3)picked.push(photoMode
+    ?(()=>{try{return pick(topic=>photoMenus.has(topicMenu(topic)?.id??""));}catch{return pick(()=>true);}})()
+    :pick(topic=>picked.some(isOtherMenuTopic)||isOtherMenuTopic(topic)));
+  if(!photoMode&&!isVariedSet(picked)){
     // 맨 뒤 하나를 빼고 그 자리에 다른 메뉴 주제를 넣는다(pick은 남은 두 주제와 메뉴·삼합이 겹치지 않는 것만 고른다).
     const replaced=picked.pop()!;
     used.delete(titleKey(replaced.title));
