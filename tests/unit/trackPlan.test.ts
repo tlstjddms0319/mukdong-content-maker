@@ -8,6 +8,7 @@ import { pickFittingStyle } from "@/features/images/variety";
 import { rotateStyles } from "@/features/topics/monthPlan";
 import { slideCopyIssues } from "@/features/images/planReview";
 import { POST } from "@/app/api/images/plan/route";
+import { initialGenerationState } from "@/features/images/generationStore";
 
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
 const readSettings=vi.hoisted(()=>vi.fn());
@@ -95,6 +96,30 @@ describe("track plans", () => {
         if(words(text).length>1)expect(wholeWords(short,text),`${short} ⊄ ${text}`).toBe(true);
       }
     }
+  });
+
+  it("does not leave a dangling modifier, adnominal or dependent noun at the start of a shortened line", () => {
+    // 한 글자 부사(톡) 뒤, 관형형(삭힌) 뒤, 의존 명사(전에)에서 시작하지 않는다.
+    expect(fitLine("톡 쏘는 향을 막걸리가 부드럽게 눌러요",20)).not.toMatch(/^쏘는/);
+    expect(fitLine("덜 삭힌 홍어부터 드시면 향에 금방 익숙해져요",20)).not.toMatch(/^홍어부터/);
+    expect(fitLine("가게에 오시기 전에 전화로 자리를 확인해 주세요",20)).toBe("전화로 자리를 확인해 주세요");
+    // 마디 끝(~려) 뒤에서 시작하는 온전한 문장을 고르고, 자리가 넉넉하면 더 긴 뒷부분을 남긴다.
+    expect(fitLine("과메기는 겨울 바닷바람에 말려 쫀득한 식감이 살아 있어요",20)).toBe("쫀득한 식감이 살아 있어요");
+    expect(fitLine("과메기는 겨울 바닷바람에 말려 쫀득한 식감이 살아 있어요",24)).toBe("바닷바람에 말려 쫀득한 식감이 살아 있어요");
+    // 제목을 나눌 때도 꾸밈말("한") 바로 뒤에서 나누지 않는다.
+    const [head,tail]=splitHeadline("비 오는 저녁, 막걸리와 홍어 한 점이 당기는 이유",24,20)!;
+    expect(head).not.toMatch(/ 한$/);
+    expect(`${head} ${tail}`).toBe("비 오는 저녁, 막걸리와 홍어 한 점이 당기는 이유");
+  });
+
+  it("does not let the AI pick a track family when no track was asked for", async () => {
+    const plan=await planCarousel({topic:"홍어와 막걸리",slideCount:5},{generate:async()=>{const base=createFallbackCarouselPlan({topic:"홍어와 막걸리",slideCount:5});return {...base,design:{...base.design,style:"text-focus"}};}},{seed:4});
+    expect(TRACK_ONLY.has(plan.design.style)).toBe(false);
+  });
+
+  it("starts a track draft without the month plan's preferred family overriding the track design", () => {
+    expect(initialGenerationState("a",{topic:"홍어",slideCount:5,preferredStyle:"neon",track:"text"}).style).toBe("auto");
+    expect(initialGenerationState("b",{topic:"홍어",slideCount:5,preferredStyle:"neon"}).style).toBe("neon");
   });
 
   it("asks the AI for the track rules in the prompt and keeps the old prompt without a track", () => {

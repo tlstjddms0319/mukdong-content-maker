@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { composeSlideCard } from "@/features/images/composeSlide";
 import { describeIssue, type AuditReport } from "@/features/images/render/audit";
 import { photoFocusComposition } from "@/features/images/styles/photoFocus";
+import { glueShortWords } from "@/features/images/styles/trackKit";
 import type { CarouselSlidePlan } from "@/features/images/carousel";
 
 // 두 갈래 디자인(사진 중심·글 중심)을 갈래 규칙대로 그려(표지 사진 1장, 사진 중심 본문 frame / 글 중심 본문 browser)
@@ -41,6 +42,14 @@ async function render(style:Track,slide:CarouselSlidePlan,index:number,photo:Buf
 const linesOf=(box:AuditReport["boxes"][number])=>Math.max(1,Math.round(box.height/(box.size*1.3)));
 
 describe("track design families", () => {
+  it("keeps one-syllable words on the same line as the next word in titles", () => {
+    // "막걸리와 홍어 한 / 점이 당기는 이유"처럼 꾸밈말 뒤에서 줄이 바뀌지 않게 줄바꿈 없는 공백으로 묶는다.
+    expect(glueShortWords("막걸리와 홍어 한 점이 당기는 이유")).toBe("막걸리와 홍어 한\u00A0점이 당기는 이유");
+    expect(glueShortWords("비 오는 날엔 홍어 한 점 어때요?")).toBe("비\u00A0오는 날엔 홍어 한\u00A0점\u00A0어때요?");
+    expect(glueShortWords("가까이 보면 결이 살아 있어요")).toBe("가까이 보면 결이 살아 있어요");
+  });
+
+
   it("draws every slide of both tracks without audit issues on dark and bright photos, normal and long copy", async () => {
     const shots=await photos();
     const problems:string[]=[];

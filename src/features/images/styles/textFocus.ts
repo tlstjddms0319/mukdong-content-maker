@@ -70,7 +70,7 @@ async function body(content:StyleContent,index:number):Promise<Buffer> {
 async function last(content:StyleContent,index:number):Promise<Buffer> {
   const surface=TRACK_SURFACES.cream;
   const block=await textBlock(content,surface,{align:"centre",sizes:[76,72,68,64]});
-  const card=await storeCardBlock({logoSize:300,wordmark:false,surface});
+  const card=await storeCardBlock({logoSize:300,wordmark:false,surface,halo:{color:surface.soft,pad:36}});
   const folio=await folioMark(index,surface.accent,{rule:false});
   const HEAD=96,GAP=110;
   // 제목·짧은 글과 명함을 한 덩어리로 장 번호 아래 남는 높이의 가운데에 둔다(위아래 여백을 고르게).
@@ -82,8 +82,8 @@ async function last(content:StyleContent,index:number):Promise<Buffer> {
   const layers:OverlayOptions[]=[];
   const paper=await textureLayer("linen",{opacity:.2});
   if(paper)layers.push(paper);
-  // 로고 뒤에 한 톤 짙은 원을 깔아 명함 자리를 잡는다(로고가 종이 위에 떠 보이지 않게).
-  layers.push(svgLayer(`<circle cx="540" cy="${cardTop+150}" r="186" fill="${surface.soft}"/>`+placed.svg),{input:folio.layer.data,left:Math.round(540-folio.layer.info.width/2),top:HEAD});
+  // 로고 뒤에는 한 톤 짙은 원(halo)을 깔아 명함 자리를 잡는다(로고가 종이 위에 떠 보이지 않게).
+  layers.push(svgLayer(placed.svg),{input:folio.layer.data,left:Math.round(540-folio.layer.info.width/2),top:HEAD});
   for(const item of block.items)layers.push({input:item.layer.data,left:Math.round(540-item.layer.info.width/2),top:top+item.top});
   layers.push(...placed.layers);
   return sharp({create:{width:1080,height:1350,channels:3,background:surface.bg}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();

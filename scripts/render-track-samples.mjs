@@ -7,6 +7,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { composeSlideCard } from "../src/features/images/composeSlide.ts";
 import { describeIssue, describeNote } from "../src/features/images/render/audit.ts";
+import { fitTrackCopy } from "../src/features/images/track.ts";
 
 const OUT=process.argv.find(arg=>arg.startsWith("--out="))?.slice(6)??"output/track-samples";
 const only=process.argv.find(arg=>arg.startsWith("--track="))?.slice(8);
@@ -17,7 +18,8 @@ const photoSets={
   "어두운 사진":[await sample("hands-makgeolli"),await sample("table-topdown"),await sample("hands-samhap"),await sample("hands-makgeolli"),await sample("table-topdown")],
   "밝은 사진":[await sample("studio-hongeo"),await sample("studio-ray"),await sample("illustration-plate"),await sample("studio-hongeo"),await sample("studio-ray")],
 };
-// 갈래 규칙에 맞춘 문안(보통: 짧게, 긴 글: 상한 길이). 사진 중심은 짧은 글 1개, 글 중심은 2개까지 쓴다.
+// 문안(보통: 짧게, 긴 글: 상한 근처나 조금 넘게). 그리기 전에 구성안과 같은 갈래 글 길이 맞추기(fitTrackCopy)를 거쳐
+// 사장님이 실제로 받게 될 글로 그린다(사진 중심은 짧은 글 1개, 글 중심은 2개까지).
 const copies={
   "보통 글":[
     {role:"cover",headline:"비 오는 날엔 홍어 한 점 어때요?",subline:"처음이라도 부담 없는 순서",points:[]},
@@ -49,7 +51,8 @@ for(const [track,style,label] of tracks){
       // 사진 중심은 모든 장이 사진 1장(표지 fullscreen, 본문 frame), 글 중심은 표지만 사진 1장이고 본문·마지막 장은 사진 없음(browser).
       const layout=index===1?"fullscreen":track==="photo"?"frame":"browser";
       const inputs=track==="photo"||index===1?[photos[i]]:[];
-      const {image,report}=await composeSlideCard(inputs,{...base,...slide,layout},index,copy.length,"card",{palette:"warm",style},{photoKind:"real",contrast:true,brandHandle:handle});
+      const fitted={...base,...slide,...fitTrackCopy({...base,...slide},track),layout};
+      const {image,report}=await composeSlideCard(inputs,fitted,index,copy.length,"card",{palette:"warm",style},{photoKind:"real",contrast:true,brandHandle:handle});
       const notes=report.notes.filter(note=>!["photo-crop","photo-quality"].includes(note.kind));
       if(report.issues.length){problems++;console.log(`✗ ${style} ${photoName} ${copyName} ${index}장:`,report.issues.map(describeIssue).join(" | "));}
       if(notes.length)console.log(`· ${style} ${photoName} ${copyName} ${index}장 메모:`,notes.map(describeNote).join(" | "));

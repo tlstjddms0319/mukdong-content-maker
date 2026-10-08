@@ -6,6 +6,7 @@ import { diversifyCarouselDesign } from "./variety";
 import { MENU_BY_ID, heroMenu, josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SKATE_TABLE, copyMentionsSkate, foodFreeAnchor, isOtherMenu } from "./sceneFoods";
 import { CarouselTrackSchema, TRACK_SLIDE_COUNT, applyTrack, trackPromptRules } from "./track";
+import { TRACK_STYLES } from "./styleCatalog";
 
 export const CarouselPlanInputSchema=z.object({
   topic:z.string().trim().min(1).max(200),
@@ -286,7 +287,9 @@ export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,op
   if(!ai)return vary(fallback,true);
   try {
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));
-    if(plan.slideCount===parsed.slideCount){const menu=carouselMenu(parsed);return vary(keepScenesOnMenu(limitChopstickScenes(normalizeCarouselDesign(plan),parsed.topic,menu),parsed.topic,menu),false);}
+    // 갈래 없는 요청에 AI가 갈래 전용 계열(사진 중심·글 중심)을 적어 오면(안내문에는 없다) 기본 템플릿으로 보고 예전처럼 고른다.
+    const chosen=!parsed.track&&TRACK_STYLES.has(plan.design.style)?{...plan,design:{...plan.design,style:"template" as const}}:plan;
+    if(plan.slideCount===parsed.slideCount){const menu=carouselMenu(parsed);return vary(keepScenesOnMenu(limitChopstickScenes(normalizeCarouselDesign(chosen),parsed.topic,menu),parsed.topic,menu),false);}
     options.onFallback?.(new Error("wrong slide count"));
     return vary(fallback,true);
   } catch(error) {

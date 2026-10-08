@@ -66,8 +66,12 @@ export async function countLines(layer:Layer,size:number,font:Font,spacing:numbe
 //   prefer:"size"  — 큰 글자가 먼저(표지 제목: 상한 줄 수 안에서 가장 큰 크기).
 // 여러 줄이면 fitText(균형 줄바꿈·쉼표 자리 우선)로 다시 그린다. 상한 안에 안 들어가면 가장 작은 크기로 그대로 그린다
 // (줄은 늘지만 글자를 몰래 줄이지 않는다). 돌려주는 lines로 부르는 쪽이 요점 수를 줄인다.
-export async function fitLines(value:string,options:{sizes:number[];width:number;font:Font;color:string;maxLines:number;prefer:"lines"|"size";align?:"left"|"centre";spacing?:(size:number)=>number;letterSpacing?:(size:number)=>number;emphasis?:{words:string[];color:string}}):Promise<{layer:Layer;lines:number;size:number}> {
+// 줄바꿈이 꾸밈말 바로 뒤에서 일어나지 않게("막걸리와 홍어 한 / 점이 당기는 이유") 한 글자 낱말(한·두·덜·비 …)과
+// 다음 낱말 사이 띄어쓰기를 줄바꿈 없는 공백(U+00A0)으로 묶는다. 보이는 모양은 같고, Pango가 그 자리에서만 줄을 안 바꾼다.
+export const glueShortWords=(value:string)=>value.replace(/(?<=^|[\s\u00A0])([가-힣]) (?=\S)/g,"$1\u00A0");
+export async function fitLines(rawValue:string,options:{sizes:number[];width:number;font:Font;color:string;maxLines:number;prefer:"lines"|"size";align?:"left"|"centre";spacing?:(size:number)=>number;letterSpacing?:(size:number)=>number;emphasis?:{words:string[];color:string}}):Promise<{layer:Layer;lines:number;size:number}> {
   const spacing=options.spacing??((size:number)=>Math.round(size*.18));
+  const value=glueShortWords(rawValue);
   const measure=async(size:number)=>{
     const layer=await textLayer(value,{size,color:options.color,width:options.width,height:4000,font:options.font,align:options.align,spacing:spacing(size),letterSpacing:options.letterSpacing?.(size)});
     return {size,lines:await countLines(layer,size,options.font,spacing(size),options.letterSpacing?.(size))};
@@ -120,8 +124,10 @@ export async function folioMark(index:number,color:string,options:{shadow?:boole
 // 원형 로고 → (워드마크) → 계정(설정에 있을 때) → "저장해 두고 다시 보세요" 알약. 가운데 정렬로 cx 기준에 놓는다.
 // 주소·영업시간은 넣지 않는다(확인 안 된 사실). 로고 안의 전화번호는 가게가 직접 쓰는 로고 그대로다.
 export const SAVE_CHIP="저장해 두고 다시 보세요";
-export async function storeCardBlock(options:{logoSize:number;ring?:string;wordmark:boolean;surface:Pick<TrackSurface,"ink"|"dim"|"chip"|"chipInk">;width?:number}):Promise<{height:number;place:(cx:number,top:number)=>{layers:OverlayOptions[];svg:string}}> {
-  const width=options.width??900,s=options.surface;
+// halo: 로고 뒤에 깔 한 톤 짙은 원(색·로고 밖으로 나오는 폭). 원이 계정 글자에 걸리지 않게 그 폭만큼 아래로 띄운다
+// (예전에는 원을 따로 그려 계정 글자 윗부분이 원 테두리에 잘려 보였다).
+export async function storeCardBlock(options:{logoSize:number;ring?:string;wordmark:boolean;surface:Pick<TrackSurface,"ink"|"dim"|"chip"|"chipInk">;width?:number;halo?:{color:string;pad:number}}):Promise<{height:number;place:(cx:number,top:number)=>{layers:OverlayOptions[];svg:string}}> {
+  const width=options.width??900,s=options.surface,halo=options.halo;
   const logo=await logoMark(options.logoSize,options.ring);
   const word=options.wordmark?await textLayer(STORE_NAME,{size:48,color:s.ink,width,height:120,font:TITLE_SERIF,align:"centre",letterSpacing:48*.06}):null;
   const account=brandHandle();
@@ -129,16 +135,19 @@ export async function storeCardBlock(options:{logoSize:number;ring?:string;wordm
   const chip=await textLayer(SAVE_CHIP,{size:32,color:s.chipInk,width,height:70,font:SANS_SEMI});
   const padX=34,padY=16,chipH=chip.info.height+padY*2,chipW=chip.info.width+padX*2;
   const GAP=22;
-  const height=options.logoSize+(word?GAP+word.info.height:0)+(handle?(word?12:GAP)+handle.info.height:0)+GAP+6+chipH;
+  const pad=halo?.pad??0;
+  const height=pad*2+options.logoSize+(word?GAP+word.info.height:0)+(handle?(word?12:GAP)+handle.info.height:0)+GAP+6+chipH;
   return {height,place:(cx,top)=>{
-    const layers:OverlayOptions[]=[{input:logo,left:Math.round(cx-options.logoSize/2),top}];
-    let y=top+options.logoSize;
+    const layers:OverlayOptions[]=[{input:logo,left:Math.round(cx-options.logoSize/2),top:top+pad}];
+    let markup=halo?`<circle cx="${cx}" cy="${top+pad+options.logoSize/2}" r="${options.logoSize/2+pad}" fill="${halo.color}"/>`:"";
+    let y=top+pad*2+options.logoSize;
     if(word){y+=GAP;layers.push({input:word.data,left:Math.round(cx-word.info.width/2),top:y});y+=word.info.height;}
     if(handle){y+=word?12:GAP;layers.push({input:handle.data,left:Math.round(cx-handle.info.width/2),top:y});y+=handle.info.height;}
     y+=GAP+6;
     const x=Math.round(cx-chipW/2);
     layers.push({input:chip.data,left:x+padX,top:y+padY});
-    return {layers,svg:`<rect x="${x}" y="${y}" width="${chipW}" height="${chipH}" rx="${chipH/2}" fill="${s.chip}"/>`};
+    markup+=`<rect x="${x}" y="${y}" width="${chipW}" height="${chipH}" rx="${chipH/2}" fill="${s.chip}"/>`;
+    return {layers,svg:markup};
   }};
 }
 

@@ -36,9 +36,10 @@ export const trackDesign=(track:CarouselTrack):DesignSpec=>({...DEFAULT_DESIGN,s
 // 낱말 단위로만, 다음 순서로 줄인다(낱말 가운데는 자르지 않는다).
 //   1) 쉼표·가운뎃점 앞 첫 마디가 상한 안이고 너무 짧지 않으면(상한의 40% 이상) 그 마디("비 오는 날엔 홍어 한 점, 막걸리 한 잔" → 앞 마디).
 //   2) 빼도 뜻이 남는 꾸밈말(작게·살짝·먼저·처음이라면 …)을 하나씩 뺀다("처음이라면 덜 삭힌 쪽부터 작게 한 점 집어 보세요" → "덜 삭힌 쪽부터 한 점 집어 보세요").
-//   3) 앞 낱말부터 덜어 내 서술어가 남는 가장 긴 뒷부분(두 낱말 이상, 상한의 절반 이상)
-//      ("홍어 살은 얇게 썰려 빛에 비추면 결이 또렷하게 보여요" → "빛에 비추면 결이 또렷하게 보여요").
-//      단, 꾸밈말 바로 뒤("한 잔과" → "잔과 …", "덜 삭힌" → "삭힌 …")와 보조 동사("알려 주는" → "주는 …")에서는 시작하지 않는다.
+//   3) 앞 낱말부터 덜어 내 서술어가 남는 뒷부분(두 낱말 이상, 상한의 절반 이상). 마디 끝(~면·~고·~서·~려·쉼표) 뒤에서
+//      시작하는 온전한 문장을 먼저, 같으면 가장 긴 것("홍어 살은 얇게 썰려 빛에 비추면 결이 또렷하게 보여요" → "빛에 비추면 결이 또렷하게 보여요").
+//      단, 꾸밈말·한 글자 부사·관형형 바로 뒤("한 잔과" → "잔과 …", "톡 쏘는" → "쏘는 …", "덜 삭힌 홍어" → "홍어 …"),
+//      보조 동사("알려 주는" → "주는 …"), 의존 명사("오시기 전에" → "전에 …")에서는 시작하지 않는다.
 //   4) 낱말 경계의 앞부분. 5) 한 낱말이 상한보다 길 때만 글자 수에서.
 const tidy=(value:string)=>value.replace(/\s+/g," ").trim();
 const trimEnd=(value:string)=>value.replace(/[\s,，·、…]+$/,"");
@@ -47,7 +48,25 @@ const FILLERS=new Set(["처음이라면","처음엔","처음에는","작게","�
 const MODIFIERS=new Set(["한","두","세","네","첫","덜","더","안","못","잘","꼭","이","그","저","몇","새","옛","온"]);
 // 보조 동사 앞(~어 주다, ~아 보다, ~어 있다, ~어 두다)에서는 자르지 않는다.
 const AUXILIARY=/^(?:주|줘|보|봐|있|두|둬|놓|버리|버려)/;
-const startsBadly=(prev:string,first:string)=>MODIFIERS.has(prev)||(/[어아여워해려와]$/.test(prev)&&AUXILIARY.test(first))||(/(?:과|와|랑|하고)$/.test(prev)&&/^(?:함께|같이)$/.test(first));
+// 앞말 없이는 뜻이 안 서는 의존 명사로 시작하는 낱말("마신 / 뒤", "오시기 / 전에", "먹는 / 것이").
+const DEPENDENT=/^(?:(?:뒤|전|후|중|때)(?:에|엔|에는|는|도)?|땐|것.*|수|동안|만큼|대로|줄|적|데|덕분에|정도)$/;
+const lastSyllable=(word:string)=>word.charCodeAt(word.length-1)-0xAC00;
+const hangulSyllable=(code:number)=>code>=0&&code<11172;
+// 관형형(~ㄴ 받침: 삭힌·쫀득한·마신)으로 끝나는 낱말. 그 뒤에서 자르면 꾸밈 받던 말("홍어")만 남아 뜻이 바뀐다
+// ("덜 삭힌 홍어부터" → "홍어부터"). 받침이 ㄴ인 조사(은·는·만·엔·선)와 흔한 ㄴ 받침 명사 끝 글자는 빼고 본다.
+// ㄹ 받침(먹을)은 겨울·마을·오늘 같은 명사가 훨씬 많아 보지 않는다.
+const ADNOMINAL_EXCEPT=new Set(["은","는","만","엔","선","판","반","전","산","편","분","간","본","손","돈","문","년","원","인","관","단","면","천","진","친","신","운"]);
+const endsAdnominal=(word:string)=>{const code=lastSyllable(word);return hangulSyllable(code)&&word.length>1&&code%28===4&&!ADNOMINAL_EXCEPT.has(word[word.length-1]);};
+// 한 글자 낱말(톡·꽤·막·푹 같은 부사, 수)은 다음 낱말을 꾸미므로 그 바로 뒤에서 시작하지 않는다.
+const single=(word:string)=>word.length===1&&hangulSyllable(lastSyllable(word));
+// 조사·어미 없이 끝난 명사(홍어) 바로 뒤의 "명사+조사"(살은)는 한 덩어리("홍어 살은")라 그 사이에서 시작하지 않는다.
+const PARTICLE_END=/(?:[은는이가을를에의도와과로만서고면며게요다죠까,，?!.]|부터|까지|처럼|보다|하고|랑)$/;
+const bareNounBefore=(prev:string,first:string)=>hangulSyllable(lastSyllable(prev))&&!PARTICLE_END.test(prev)&&/(?:은|는|이|가|을|를|의)$/.test(first);
+const startsBadly=(prev:string,first:string)=>MODIFIERS.has(prev)||single(prev)||endsAdnominal(prev)||DEPENDENT.test(first)||bareNounBefore(prev,first)
+  ||(/[어아여워해려와]$/.test(prev)&&AUXILIARY.test(first))||(/(?:과|와|랑|하고)$/.test(prev)&&/^(?:함께|같이)$/.test(first));
+// 마디가 끝나는 자리(쉼표, ~면·~고·~서·~며·~니까·~는데·~지만·~도록·~려(썰려·말려)·~해). 이 뒤에서 시작하면 뒷부분이 온전한 한 문장이다.
+const CLAUSE_END=/(?:[,，]|면|고|서|며|니까|는데|지만|도록|려|해)$/;
+
 export function fitLine(value:string,max:number):string {
   let text=tidy(value);
   if(text.length<=max)return text;
@@ -60,11 +79,14 @@ export function fitLine(value:string,max:number):string {
     if(text.length<=max)return text;
   }
   const words=text.split(" ");
-  for(let i=1;i<words.length-1;i++){
-    const tail=words.slice(i).join(" ");
-    if(tail.length>max||startsBadly(words[i-1],words[i]))continue;
-    if(tail.length>=max*.5)return tail;
-    break;
+  // 서술어가 남는 뒷부분 후보 중 가장 긴 것. 단 마디 끝 뒤에서 시작하는 후보(온전한 한 문장)가 그 80% 이상이면 그쪽
+  // ("바닷바람에 말려 쫀득한 식감이…"(20자 초과) → "말려 쫀득한…"보다 "쫀득한 식감이 살아 있어요").
+  const tails=words.slice(1,-1).map((_,k)=>k+1).filter(i=>!startsBadly(words[i-1],words[i]))
+    .map(i=>({tail:words.slice(i).join(" "),clause:CLAUSE_END.test(words[i-1])}))
+    .filter(({tail})=>tail.length<=max&&tail.length>=max*.5);
+  if(tails.length){
+    const longest=tails[0],clause=tails.find(item=>item.clause);
+    return clause&&clause.tail.length>=longest.tail.length*.8?clause.tail:longest.tail;
   }
   for(let i=words.length-1;i>0;i--){
     const head=trimEnd(words.slice(0,i).join(" "));
@@ -80,8 +102,10 @@ const PHRASE_END=/(?:[,，.?!…]|은|는|이|가|고|서|면|며|데|니까|지
 export function splitHeadline(value:string,max:number,tailMax:number):[string,string]|null {
   const text=tidy(value);
   const rank=(at:number)=>/[,，]/.test(text[at-1])?2:PHRASE_END.test(text.slice(0,at))?1:0;
+  // 꾸밈말 바로 뒤("홍어 한 / 점이")나 보조 동사 앞("집어 / 보세요")에서는 나누지 않는다(fitLine과 같은 기준).
+  const wordsAround=(at:number):[string,string]=>[text.slice(0,at).split(" ").pop()??"",text.slice(at+1).split(" ")[0]??""];
   const spots=[...text.matchAll(/ /g)].map(match=>match.index!)
-    .filter(at=>at<=max&&at>=text.length*.4&&text.length-at-1<=tailMax)
+    .filter(at=>at<=max&&at>=text.length*.4&&text.length-at-1<=tailMax&&!startsBadly(...wordsAround(at)))
     .sort((a,b)=>rank(b)-rank(a)||b-a);
   if(!spots.length)return null;
   const at=spots[0];

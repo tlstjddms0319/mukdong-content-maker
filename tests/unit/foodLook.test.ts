@@ -38,6 +38,8 @@ describe("food look", () => {
     expect(foodLookOf("오늘의 메뉴 전")).toBe("jeon");
     // "전통·이전"처럼 "전"이 섞인 낱말은 전으로 보지 않는다.
     expect(foodLookOf("전통 방식 그대로, 이전과 같은 맛")).toBeNull();
+    // "가기 전에"는 메뉴(전)가 아니다. 키워드의 홍어 보정을 쓴다.
+    expect(foodLookOf("가기 전에 이것만 확인해 두세요 홍어 막걸리")).toBe("hongeo");
     expect(foodLookOf("오늘도 문 열었어요")).toBeNull();
   });
 

@@ -31,6 +31,7 @@ export type StudioPhoto={id:string;preview:string;name:string};
 export const MAX_STUDIO_PHOTOS=10;
 // preferredStyle: 한 달 기획이 추천한 디자인 계열. 새 초안의 계열 선택 기본값이 된다(사용자가 바꾸면 그쪽을 따른다).
 // track: 갈래(사진 중심·글 중심, track.ts). 있으면 구성안 요청에 실어 보내고 서버가 장 수·디자인·글 길이를 정한다(화면 연결은 다음 단계).
+// 갈래가 있으면 한 달 기획이 추천한 계열(preferredStyle)로 갈래 디자인을 덮어쓰지 않는다(계열 선택은 "auto"로 시작).
 export type GenerationInput={topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount;preferredStyle?:StyleId;track?:CarouselTrack};
 // "auto"면 구성안 AI가 글 분위기에 맞춰 추천한 글꼴을 쓰고, 아니면 사용자가 고른 글꼴로 덮어쓴다.
 export type FontChoice<T extends string>="auto"|T;
@@ -81,7 +82,7 @@ export type GenerationState={
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
 export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",referenceWarning:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],photoViews:[],photoNotes:[],referenceNote:"",
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.track?"auto":input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",referenceWarning:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],photoViews:[],photoNotes:[],referenceNote:"",
     // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 캐러셀로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
