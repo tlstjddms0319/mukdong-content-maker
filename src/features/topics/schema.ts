@@ -7,6 +7,8 @@ export const TopicInputSchema = z.object({
   excludeTitles: z.array(z.string().trim().min(1).max(120)).max(3).optional().default([]),
   // 최근에 보여 줬거나 이미 초안으로 만든 주제. excludeTitles(지금 화면, 반드시 제외)와 달리 "되도록 피하기"용이다.
   avoidTitles: z.array(z.string().trim().min(1).max(120)).max(30).optional().default([]),
+  // 사장님이 주제보다 먼저 올린 사진에 보이는 것(사진마다 한 줄). 있으면 이번 추천은 그 사진에서 출발한다.
+  photoNotes: z.array(z.string().trim().min(1).max(200)).max(10).optional().default([]),
 });
 
 export const TopicSuggestionSchema = z.object({

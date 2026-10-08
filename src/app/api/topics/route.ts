@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { z } from "zod";
 import { TOPIC_REJECT_LABELS, overusedMenus, suggestTopics, type TopicRejectReason } from "@/features/topics/service";
-import { STORE_MENU } from "@/features/store/menu";
+import { STORE_MENU, menuOf } from "@/features/store/menu";
 import { TopicInputSchema } from "@/features/topics/schema";
 import { buildTopicPrompt, readTopicGeneration, topicGenerationSchema } from "@/features/topics/prompt";
 import { createTextClient } from "@/lib/ai/textClient";
@@ -21,6 +21,8 @@ const RequestSchema = z.object({
   excludeTitles: z.array(z.string().trim().min(1).max(120)).max(3).optional(),
   // 이 브라우저에서 최근에 보여 준 주제(되도록 피하기).
   recentTitles: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+  // 사진으로 주제 정하기: 사장님이 먼저 올린 사진에 보이는 것(사진마다 한 줄).
+  photoNotes: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
 });
 
 export async function POST(request: Request) { const denied=await ownerApiError(); if(denied)return denied;
@@ -32,7 +34,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const recentDraftTopics = [...drafts].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 10).map((draft) => draft.topic).filter((title) => title.trim().length > 0 && title.length <= 120);
     // 피할 주제 = 이 브라우저에서 최근에 보여 준 것 + 최근 초안 주제(중복 없이 최대 30개).
     const avoidTitles = [...new Set([...(body.recentTitles ?? []), ...recentDraftTopics])].slice(0, 30);
-    const input = TopicInputSchema.parse({ storeName: body.storeProfile.name, intent: body.intent, recommendationRound:body.recommendationRound, excludeTitles:body.excludeTitles, avoidTitles });
+    const input = TopicInputSchema.parse({ storeName: body.storeProfile.name, intent: body.intent, recommendationRound:body.recommendationRound, excludeTitles:body.excludeTitles, avoidTitles, photoNotes:body.photoNotes });
     // 오늘(한국 시간) 기준 계절과 다가오는 행사. 프롬프트와 준비된 주제 양쪽에 쓰고 화면에도 알려 준다.
     const season = seasonContext();
     // 사장님이 적어 둔 성과에서 반응 좋았던 주제(없으면 빈 목록).
@@ -43,7 +45,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const recentMenus = overusedMenus([...(body.recentTitles ?? []), ...recentDraftTopics], input.excludeTitles);
     // 검색이 늘어난 메뉴는 "최근에 자주 나온 메뉴"에서 뺀다. 둘 다에 있으면 프롬프트가 "꼭 쓰라"와 "쓰지 말라"를 함께 말하게 된다.
     for (const { keyword } of trends) { const menu = trendMenu(keyword); if (menu) recentMenus.delete(menu); }
-    const hints = { recentMenus, trends: trends.map(({ keyword }) => keyword) };
+    // 사진으로 주제 정하기: 사진 속 가게 메뉴. 그 메뉴는 "최근에 자주 나온 메뉴"여도 이번에는 쓴다(사진이 먼저).
+    const photoMenus = new Set(input.photoNotes.flatMap((note) => menuOf(note).map((item) => item.id)));
+    for (const id of photoMenus) recentMenus.delete(id);
+    const hints = { recentMenus, trends: trends.map(({ keyword }) => keyword), ...(input.photoNotes.length ? { photoMenus } : {}) };
     const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     // 무료 문안 AI의 분당 한도를 넘기지 않게 "다른 주제 보기" 간격을 지킨다(refreshPace.ts). 너무 빨리 다시 누르면 AI를 부르지 않고

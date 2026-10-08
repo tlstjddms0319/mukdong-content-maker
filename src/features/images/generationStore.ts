@@ -268,7 +268,7 @@ async function regenerateSlide(){
 // 보관함이 돌려주는 미리보기(최대 1400px JPEG, 회전 보정됨)를 카드 그리기에 그대로 쓴다.
 
 // 사진 한 장을 보관함에 저장하고 스튜디오 사진 형태로 돌려준다(사진 캐러셀 올리기·장 추가에서 함께 쓴다).
-async function uploadStudioPhoto(file:File):Promise<StudioPhoto>{
+export async function uploadStudioPhoto(file:File):Promise<StudioPhoto>{
   const body=new FormData();
   // 고화소 사진은 휴대폰에서 먼저 줄여 보낸다(빨리 올라가고 크기 제한에 안 걸리게).
   body.append("file",await shrinkPhoto(file));
@@ -329,7 +329,7 @@ async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[],v
 
 // 사진마다 보이는 것(음식·장면) 한 줄. Gemini 키가 있으면 AI가 사진을 읽고, 없으면 보관함 이름·태그로만 안다(무료).
 // 실패하거나 모르면 빈 문자열이라 예전처럼 올린 순서대로 배치한다.
-async function describePhotos(photos:StudioPhoto[],topic:string):Promise<string[]> {
+export async function describePhotos(photos:StudioPhoto[],topic:string):Promise<string[]> {
   try{
     const response=await fetch("/api/images/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({photos:photos.map(photo=>({id:photo.id})),describe:true,...(topic?{topic:topic.slice(0,200)}:{})})});
     if(!response.ok)return photos.map(()=>"");

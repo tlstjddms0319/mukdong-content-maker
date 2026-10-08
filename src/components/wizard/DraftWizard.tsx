@@ -12,6 +12,8 @@ import { fallbackTopics } from "@/features/topics/service";
 import { seasonContext } from "@/features/topics/season";
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { selectedDraftMedia } from "@/features/drafts/selection";
+import { addLibraryPhoto, describePhotos, uploadStudioPhoto, type StudioPhoto } from "@/features/images/generationStore";
+import { TopicPhotoBox } from "./TopicPhotoBox";
 import { STOP_RUNNING_QUESTION, acknowledgeAuto, adoptImages, cancelGeneration, approvedDeck, createAutomatically, deckComplete, deckPhotoNotes, designStyleOf, ensureGeneration, generatingDraftId, isGenerating, markApproved, runningAuto, storeCardPending, useGenerationState, type ApprovedImage, type GenerationInput } from "@/features/images/generationStore";
 import { CURRENT_DRAFT_KEY, CURRENT_TOPIC_KEY, forgetCurrentDraft, rememberCurrentDraft, saveDraftCaption, saveDraftImages, writePostText, type DraftMeta } from "@/features/drafts/draftSave";
 import { clearWizardSession, readWizardSession, saveWizardSession } from "@/features/drafts/wizardSession";
@@ -154,6 +156,12 @@ export function DraftWizard() {
     else if(same||paidWork)changeTopic(value,current.audience,current.imageBrief,true,current.contentBrief,true);
     else changeTopic(value,current.audience,"",false,"");
   };
+  // 사진으로 주제 정하기: 1단계에서 먼저 넣은 사진과 사진마다 보이는 것(한 줄). 있으면 추천 요청에 실어 그 사진에서 주제를 고르게 하고,
+  // 다음 단계(만들기)로 넘어갈 때 이 게시물의 사진으로 옮긴다.
+  const [topicPhotos,setTopicPhotos]=useState<StudioPhoto[]>([]);
+  const [topicPhotoStatus,setTopicPhotoStatus]=useState("");
+  const [topicPhotoError,setTopicPhotoError]=useState("");
+  const photoNotesRef=useRef<string[]>([]);
   // round를 주지 않으면(처음 열 때) 지난번 다음 회차로 시작한다.
   const loadTopics=useCallback(async(requestedRound?:number,excludeTitles:string[]=[])=>{
     const round=requestedRound??nextInitialRound();
@@ -161,7 +169,7 @@ export function DraftWizard() {
     const topicAtRequest=topicSelectionRef.current.topic;
     setTopicsLoading(true);
     try{
-      const response=await fetch("/api/topics", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({storeProfile:{name:"묵동홍어마을"},recommendationRound:round,excludeTitles,recentTitles:readRecentTopics()}) });
+      const response=await fetch("/api/topics", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({storeProfile:{name:"묵동홍어마을"},recommendationRound:round,excludeTitles,recentTitles:readRecentTopics(),...(photoNotesRef.current.length?{photoNotes:photoNotesRef.current}:{})}) });
       // 너무 빨리 다시 누른 경우(서버가 AI를 부르지 않음): 지금 추천을 그대로 두고 남은 초만 받는다.
       if(response.status===429){const data=await readJsonResponse(response).catch(()=>({}));if(requestId===topicRequestRef.current)holdRefresh((data as {cooldownSeconds?:unknown}).cooldownSeconds??10);return;}
       if(!response.ok) throw new Error();
@@ -378,15 +386,51 @@ export function DraftWizard() {
   // "확인"은 주제 칸이 이미 새 주제라 changeTopic만으로는 "바뀐 것 없음"으로 보일 수 있다(메모 없는 직접 쓴 주제). 그래서 직접 새 게시물로 바꾼다.
   // 단계 표시줄의 "2 만들기"와 같은 화면 안의 "만들기" 메뉴도 이 길로 보낸다(옆길로 가면 묻지 않고 주제만 바뀌었다).
   const goNext=()=>{
+    let backToRunning=running;
     if(running&&topicSimilarity(topic,generation.input.topic)<SAME_TOPIC_SIMILARITY){
-      if(window.confirm(STOP_RUNNING_QUESTION)){freshDraft();changeTopic(topic,audience,"",true,"");}
+      if(window.confirm(STOP_RUNNING_QUESTION)){freshDraft();changeTopic(topic,audience,"",true,"");backToRunning=false;}
       else changeTopic(generation.input.topic,audience,imageBrief,true,contentBrief);
+    }
+    // 1단계에서 주제용으로 넣은 사진은 이 게시물의 사진으로 옮긴다(만들기 화면에 그대로 보이고 카드에 쓰인다).
+    // 만드는 중인 다른 게시물로 돌아가는 경우에는 옮기지 않는다(그 게시물의 사진이 바뀌지 않게).
+    if(topicPhotos.length&&!backToRunning){
+      ensureGeneration(`${draftIdRef.current}|${SLIDES}`,{...genInput,topic:topicSelectionRef.current.topic},[]);
+      topicPhotos.forEach(photo=>addLibraryPhoto(photo));
+      setTopicPhotos([]);
     }
     setStep("image");
   };
   const visitStep=(next:WizardStep)=>{if(next==="image"&&step==="topic")goNext();else setStep(next);};
   // 만드는 중에 "만들기" 메뉴를 누르면(같은 화면이라 새로 열리지 않는다) 진행 화면으로 돌아간다. 확인 화면의 다시 그리기는 그 화면 그대로.
   const backToProgress=running&&autoBusy?()=>visitStep("image"):undefined;
+  // 사진을 넣으면: 보관함에 올리고(큰 사진은 줄여서) → 사진에 보이는 것을 읽고 → 그 사진으로 주제 3개를 새로 받는다.
+  const addTopicPhotos=async(files:File[])=>{
+    if(!files.length)return;
+    setTopicPhotoError("");
+    let next=topicPhotos;
+    try{
+      for(const [i,file] of files.entries()){
+        setTopicPhotoStatus(`사진을 올리고 있어요 ${i+1}/${files.length}`);
+        const photo=await uploadStudioPhoto(file);
+        if(!next.some(item=>item.id===photo.id))next=[...next,photo];
+        setTopicPhotos(next);
+      }
+    }catch(error){setTopicPhotoError(error instanceof Error?error.message:"사진을 올리지 못했어요.");}
+    if(!next.length){setTopicPhotoStatus("");return;}
+    setTopicPhotoStatus("사진을 보고 주제를 생각하고 있어요…");
+    const notes=await describePhotos(next,"");
+    // 사진을 못 읽었으면(AI 키 없음 등) 사진 이름으로 대신한다.
+    photoNotesRef.current=notes.map((note,i)=>note||next[i].name).filter(Boolean);
+    setTopicPhotoStatus("");
+    await loadTopics(recommendationRound+1,[]);
+  };
+  const removeTopicPhoto=(index:number)=>{
+    const next=topicPhotos.filter((_,i)=>i!==index);
+    setTopicPhotos(next);
+    photoNotesRef.current=photoNotesRef.current.filter((_,i)=>i!==index);
+    if(!next.length)photoNotesRef.current=[];
+    void loadTopics(recommendationRound+1,[]);
+  };
   const shell={canVisit,onStepChange:visitStep,onCreateMenu:backToProgress,onNewDraft:step==="topic"?undefined:()=>{if(confirmDiscard())startNewDraft();}};
   if(loadError)return <WizardShell step="topic" {...shell}><div className="state-card"><p role="alert">{loadError}</p><Link className="button secondary" href="/drafts">내 게시물로 돌아가기</Link></div></WizardShell>;
   if(step==="image")return <WizardShell step={step} {...shell}>{planNote}<MakeStep topic={topic} track={track} onTrack={setTrack} state={generationMine?generation:{...generation,auto:{stage:"idle",error:""},photos:[],slides:[],phase:"idle",error:""}} onMake={make} onBack={()=>setStep("topic")}/></WizardShell>;
@@ -396,6 +440,8 @@ export function DraftWizard() {
     <h1>무엇을 올릴까요?</h1>
     <p className="lead">추천 주제 하나를 누르거나, 아래 칸에 직접 쓰세요.</p>
     {planNote}
+    <TopicPhotoBox photos={topicPhotos} busy={topicsLoading||topicPhotoStatus!==""} status={topicPhotoStatus} error={topicPhotoError} onAdd={files=>void addTopicPhotos(files)} onRemove={removeTopicPhoto}/>
+    {topicPhotos.length>0&&!topicsLoading&&!topicPhotoStatus&&<p className="field-help topic-photo-note">넣은 사진을 보고 고른 주제예요.</p>}
     <div className="topic-tools"><button type="button" className="button secondary" disabled={topicsLoading||refreshWait>0} onClick={()=>void loadTopics(recommendationRound + 1,topics.map(item=>item.title))}>{refreshWait>0?`다른 주제 보기 (${refreshWait}초)`:"다른 주제 보기"}</button>{topicsLoading&&<GenerationProgress label="추천 주제를"/>}{!topicsLoading&&refreshWait>0&&<span className="field-help refresh-wait">AI가 쉬지 않게 {refreshWait}초 뒤에 다시 볼 수 있어요.</span>}</div>
     {topicsFallback&&!topicsLoading&&<p role="status" className="field-help">준비된 주제를 보여 드려요. {topicsFallback}</p>}
     {trendInfo&&!topicsLoading&&<TrendLine info={trendInfo} used={topics.filter(item=>item.trend).map(item=>item.trend)} prepared={topicsFallback!==""}/>}
