@@ -40,7 +40,10 @@ function makingRoutes(track:"photo"|"text",extra:Record<string,Handler>={}):Reco
   };
 }
 async function goMake(track:"photo"|"text"){
-  fireEvent.click(await screen.findByRole("button",{name:"다음"}));
+  // 처음에는 주제가 비어 있고(추천을 기다림), 추천이 오면 첫 주제가 골라져 "다음"이 켜진다.
+  const next=await screen.findByRole("button",{name:"다음"});
+  await waitFor(()=>expect(next).toBeEnabled(),{timeout:5000});
+  fireEvent.click(next);
   fireEvent.click(screen.getByRole("button",{name:new RegExp(track==="photo"?"사진 중심":"글 중심")}));
   fireEvent.click(screen.getByRole("button",{name:"만들기"}));
 }
@@ -612,7 +615,9 @@ describe("DraftWizard",()=>{
     const topics=[{id:"t1",title:"늦게 온 추천 주제일까?",summary:"홍어로 이어지는 설명 방향입니다. 충분히 긴 요약입니다.",reason:"이유",audience:"B",imageBrief:"사진",season:""},{id:"t2",title:"두 번째 주제일까?",summary:"홍어로 이어지는 설명 방향입니다. 충분히 긴 요약입니다.",reason:"이유",audience:"A",imageBrief:"사진",season:""},{id:"t3",title:"홍어는 왜 그럴까?",summary:"홍어로 이어지는 설명 방향입니다. 충분히 긴 요약입니다.",reason:"이유",audience:"C",imageBrief:"사진",season:""}];
     vi.stubGlobal("fetch",vi.fn((url:string)=>url==="/api/topics"?late:Promise.resolve({ok:true,json:async()=>({})})));
     render(<DraftWizard/>);
-    const initial=((await screen.findByLabelText("직접 쓰기",undefined,{timeout:5000})) as HTMLInputElement).value;
+    // 추천이 오기 전에 직접 쓴 주제로 다음 단계로 간다.
+    fireEvent.change(await screen.findByLabelText("직접 쓰기",undefined,{timeout:5000}),{target:{value:"직접 쓴 주제일까?"}});
+    const initial="직접 쓴 주제일까?";
     fireEvent.click(screen.getByRole("button",{name:"다음"}));
     answer({ok:true,json:async()=>({topics,source:"ai"})});
     await act(async()=>{await late;await new Promise(resolve=>setTimeout(resolve,0));});
