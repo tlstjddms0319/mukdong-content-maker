@@ -265,7 +265,9 @@ function requestBase(){const {topic,imageBrief}=state.input;return {topic,...(im
 // 막걸리 상차림 등)과 상관없이 거의 같은 접시가 반복됐다. 나머지 장은 사장님 사진의 색감·조명만 이어 가고 장면은 장 글대로 만든다.
 export function referenceFieldsFor(role:CarouselRole|undefined,current:Pick<GenerationState,"mode"|"photoPreview"|"referenceUse"|"cover">=state){
   if(current.mode==="mix")return {referenceImage:current.photoPreview,referenceMode:role==="cover"?current.referenceUse:"style" as const};
-  return current.cover?.referencePreview?{referenceImage:current.cover.referencePreview,referenceMode:"continuity" as const}:{};
+  // 표지 이어 가기(continuity) 참고 이미지는 보내지 않는다. 이미지 AI가 표지를 거의 그대로 베껴 장마다 같은 그림이 됐다.
+  // 통일감은 구성안의 공통 스타일(styleAnchor)로 잇는다.
+  return {};
 }
 const sourceOf=(reported?:string)=>(reported??(state.mode==="mix"?"ai-edited":"ai-generated")) as ApprovedImage["source"];
 
