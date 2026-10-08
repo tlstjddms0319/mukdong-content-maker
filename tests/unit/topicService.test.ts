@@ -17,11 +17,11 @@ describe("topic service", () => {
     await expect(suggestTopics(input, { suggest:async () => topics })).resolves.toEqual(topics.map(topic=>({...topic,season:"",trend:""})));
   });
 
-  it("offers two everyday questions and one hongeo dish question, with at least one other menu, in every offline round", async () => {
+  it("offers three question topics with distinct menus, at least one beyond hongeo and samhap, in every offline round", async () => {
     for (let recommendationRound=0; recommendationRound<4; recommendationRound++) {
       const result=await suggestTopics({...input,recommendationRound});
       expect(result.every(topic=>topic.title.endsWith("?"))).toBe(true);
-      expect(result.filter(topic=>!/홍어|삼합|묵동홍어마을/.test(topic.title))).toHaveLength(2);
+      expect(result.some(topic=>topic.title.includes("묵동홍어마을"))).toBe(false);
       // 모든 주제가 가게 메뉴로 이어지고, 최소 하나는 홍어회·삼합이 아닌 메뉴(과메기·미나리전·막걸리·애탕·무침)다.
       expect(result.every(topic=>menuOf(topic.summary).length>0)).toBe(true);
       expect(result.some(isOtherMenuTopic)).toBe(true);

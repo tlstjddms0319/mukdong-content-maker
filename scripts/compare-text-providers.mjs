@@ -8,7 +8,6 @@ const { createGeminiClient } = await import("@/lib/ai/geminiClient");
 const { createGroqClient } = await import("@/lib/ai/groqClient");
 const { createCloudflareTextClient } = await import("@/lib/ai/cloudflareTextClient");
 const { buildTopicPrompt, topicGenerationSchema } = await import("@/features/topics/prompt");
-const { topicDirectionsForRound } = await import("@/features/topics/service");
 const { buildCopyPrompt } = await import("@/features/copy/writing");
 const { GeneratedCopyContentSchema } = await import("@/features/copy/schema");
 const { CarouselPlanSchema, buildCarouselPlanPrompt } = await import("@/features/images/carousel");
@@ -35,7 +34,7 @@ for (const [provider, create, model] of factories) {
   const entry = { provider, model, topics: [], copies: [], plans: [] };
   for (const round of [0, 1]) {
     const input = { storeName: store, recommendationRound: round };
-    const topic = await timed(() => client.generateJson(buildTopicPrompt(input), topicGenerationSchema(topicDirectionsForRound(round))));
+    const topic = await timed(() => client.generateJson(buildTopicPrompt(input), topicGenerationSchema()));
     entry.topics.push({ round, ...topic });
     await sleep(2500);
     if (topic.ok) {

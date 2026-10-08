@@ -12,6 +12,7 @@ vi.mock("@/lib/ai/geminiClient", () => ({
 }));
 
 import { POST } from "@/app/api/topics/route";
+import { topicAnglesForRound } from "@/features/topics/service";
 
 const topics = ["치즈는 익숙한데 다른 발효 음식은 왜 낯설까?", "같은 음식을 먹는데 왜 취향은 갈릴까?", "홍어의 톡 쏘는 향은 어디서 올까?"].map((title,index) => ({
   id:String(index + 1),
@@ -24,10 +25,7 @@ const topics = ["치즈는 익숙한데 다른 발효 음식은 왜 낯설까?",
 
 describe("topic route", () => {
   beforeEach(() => {
-    generateJson.mockReset().mockImplementation(async (_prompt, schema) => schema.parse(topics.map((topic,index) => ({
-      ...topic,
-      direction:["발효 음식에 대한 궁금증","음식 취향이 갈리는 이유","홍어의 향과 식감"][index],
-    }))));
+    generateJson.mockReset().mockImplementation(async (_prompt, schema) => schema.parse(topics));
   });
 
   it("passes the selected round and visible titles into the Gemini prompt", async () => {
@@ -43,17 +41,17 @@ describe("topic route", () => {
 
     expect(response.status).toBe(200);
     const prompt=String(generateJson.mock.calls[0][0]);
-    expect(prompt).toContain("발효 음식에 대한 궁금증");
+    // 회차마다 참고 관점(angleHints)이 바뀐다. 따르지 않아도 되는 예시일 뿐 정해진 칸이 아니다.
+    expect(prompt).toContain('"angleHints":'+JSON.stringify(topicAnglesForRound(1)));
+    expect(prompt).not.toContain('"directions"');
     expect(prompt).toContain("첫 추천 1");
     expect(prompt).toContain("첫 추천 2");
     expect(prompt).toContain("첫 추천 3");
   });
 
-  it("falls back when Gemini does not use each requested direction", async () => {
-    generateJson.mockImplementation(async (_prompt, schema) => schema.parse(topics.map((topic) => ({
-      ...topic,
-      direction:"발효 음식에 대한 궁금증",
-    }))));
+  it("falls back when the AI answer has the wrong shape", async () => {
+    // 배열을 그대로 주면 {topics:[…]} 모양이 아니라 읽지 못한다.
+    generateJson.mockImplementation(async (_prompt, schema) => schema.parse(topics));
     const response = await POST(new Request("http://localhost/api/topics", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
@@ -61,7 +59,7 @@ describe("topic route", () => {
     }));
     const body=await response.json();
 
-    // 오늘 날짜에 시즌 행사가 있으면 첫 칸이 시즌 주제(fallback-season-*)로 바뀔 수 있다.
+    // 오늘 날짜에 시즌 행사가 있으면 맨 앞이 시즌 주제(fallback-season-*)일 수 있다.
     expect(body.topics.filter((topic:{id:string})=>!topic.id.startsWith("fallback-season-")).every((topic:{id:string})=>topic.id.startsWith("fallback-2-"))).toBe(true);
     expect(body.season.name).toMatch(/^(봄|여름|가을|겨울)$/);
   });
