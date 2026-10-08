@@ -75,7 +75,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
 
 // 준비된 주제로 바꾼 이유를 사장님 말로. AI 호출 오류가 없으면(답은 왔는데 규칙에 안 맞음) 그 사실을 말한다.
 function topicFallbackMessage(error: unknown): string {
-  if (error === undefined) return "AI 추천이 이번 기준(메뉴 고르게·질문형 등)에 맞지 않아 준비된 주제로 바꿨어요. 새로고침하면 다시 받아요.";
+  if (error === undefined) return "AI 추천이 기준(메뉴 고르게·질문형 등)에 맞지 않았어요. '다른 주제 보기'를 누르면 다시 받아요.";
   const reason = planFallbackReason(error);
-  return reason === "format" ? "AI가 보낸 추천 형식이 맞지 않았어요. 새로고침하면 대개 됩니다." : PLAN_FALLBACK_MESSAGES[reason];
+  if (reason === "format") return "AI가 보낸 추천 형식이 맞지 않았어요. '다른 주제 보기'를 누르면 대개 됩니다.";
+  // 주제 추천의 한도 초과는 대개 분당 한도라 1분 쉬면 풀린다(버튼도 1분 잠긴다, refreshPace.ts).
+  if (reason === "quota") return "글 쓰는 AI가 잠깐 한도에 걸렸어요. 1분 뒤 '다른 주제 보기'를 눌러 보세요.";
+  return PLAN_FALLBACK_MESSAGES[reason];
 }

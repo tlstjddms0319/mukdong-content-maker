@@ -159,7 +159,8 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
   // 점수 순(가장 추천하는 주제가 먼저)으로 놓는다. 화면은 첫 주제를 먼저 골라 둔다.
   picked.sort((a,b)=>ranked.indexOf(a)-ranked.indexOf(b));
   let n=0;
-  return picked.map(topic=>({...topic,trend:trendOf(topic),id:topic.id||`fallback-${index+1}-${++n}`}));
+  // 제철·곧 제철 메뉴 주제에도 계절 표시를 붙인다(예전에는 행사 주제에만 붙어, 행사가 빠지면 계절 표시가 사라졌다).
+  return picked.map(topic=>({...topic,season:topic.season||(season&&timely.has(menuId(topic))?season.season:""),trend:trendOf(topic),id:topic.id||`fallback-${index+1}-${++n}`}));
 }
 
 // 주제 한 개가 기본 조건(물음표 질문, 가게 이름 없음, 가게 메뉴로 이어지는 설명)을 지키는지.
@@ -214,9 +215,20 @@ export function followsCuriosityBrief(topics:TopicSuggestion[],storeName:string)
 }
 
 // AI가 season에 적은 이름이 이번 시기(계절·행사)에 없는 말이면 화면에 잘못된 표시가 붙지 않게 지운다.
+// AI가 "가을 제철", "곧 막걸리의 날"처럼 이름에 말을 덧붙였으면 그 이름으로 맞춘다(예전에는 통째로 지워 계절 표시가 사라졌다).
+// AI가 비워 뒀어도 주인공 메뉴가 지금 제철·곧 제철(사계절 메뉴 제외)이면 이번 계절 이름을 붙인다.
 function normalizeSeasonLabels(topics:TopicSuggestion[],season?:SeasonContext):TopicSuggestion[] {
-  const allowed=new Set(season?[season.season,...season.events.map(event=>event.name)]:[]);
-  return topics.map(topic=>({...topic,season:allowed.has(topic.season.trim())?topic.season.trim():""}));
+  if(!season)return topics.map(topic=>({...topic,season:""}));
+  // 행사 이름을 먼저 본다("막걸리의 날"이 "가을"보다 구체적).
+  const allowed=[...season.events.map(event=>event.name),season.season];
+  const dated=menusForDate(season.today,season.season);
+  const timely=new Set([...dated.inSeason,...dated.upcoming].filter(item=>item.seasons.length||item.months).map(item=>item.id));
+  return topics.map(topic=>{
+    const label=topic.season.trim();
+    const named=label?allowed.find(name=>label===name)??allowed.find(name=>label.includes(name)):undefined;
+    const menu=topicMenu(topic)?.id;
+    return {...topic,season:named??(menu&&timely.has(menu)?season.season:"")};
+  });
 }
 
 // onFallback: 세 칸 모두 준비된 주제로 대체됐을 때(이유와 함께). onPartial: 일부 칸만 채웠을 때.

@@ -1,3 +1,5 @@
+import { fallbackTopics } from "@/features/topics/service";
+import { seasonContext } from "@/features/topics/season";
 import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -496,7 +498,8 @@ describe("DraftWizard",()=>{
     window.history.replaceState({},"","/?topic="+"가".repeat(121));
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({})})));
     render(<DraftWizard/>);
-    expect(await screen.findByDisplayValue("같은 회인데 왜 식감은 다를까?")).toBeInTheDocument();
+    // 서버에 닿지 못하면 오늘 계절에 맞춘 준비된 주제의 첫 제목이 들어간다.
+    expect(await screen.findByDisplayValue(fallbackTopics(0,[],seasonContext())[0].title)).toBeInTheDocument();
   });
 
   it("carries the month plan date into the new post",async()=>{
@@ -685,6 +688,6 @@ describe("DraftWizard",()=>{
     fireEvent.click(screen.getByRole("button",{name:"다른 주제 보기"}));
     expect(await screen.findByRole("button",{name:/다른 주제 보기 \([1-7]초\)/})).toBeDisabled();
     expect(screen.getByText("셋째 주제")).toBeInTheDocument();
-    expect(screen.queryByText(/추천을 불러오지 못해/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/준비된 주제를 보여 드려요/)).not.toBeInTheDocument();
   });
 });
