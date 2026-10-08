@@ -105,14 +105,18 @@ export function DraftWizard() {
   const confirmDiscard=()=>runningRef.current?window.confirm(STOP_RUNNING_QUESTION):!unsavedRef.current||window.confirm("아직 저장하지 않은 사진·글이 있어요. 다른 주제로 바꾸면 사라져요. 바꿀까요?");
   // 지금 게시물이 어떤 주제에서 시작했는지(추천 카드·한 달 계획·저장된 게시물의 제목). 직접 고친 제목이 이것과 비슷하면 같은 게시물로 본다.
   const anchorTopicRef=useRef(topic);
+  // 지금 게시물(만드는 중이면 그 만들기도)을 내려놓고 빈 새 게시물로 바꾼다. 주제 칸은 건드리지 않는다.
+  const freshDraft=useCallback(()=>{
+    cancelGeneration(`${draftIdRef.current}|${SLIDES}`);setPlanLink(null);const nextDraftId=crypto.randomUUID();draftIdRef.current=nextDraftId;createdAtRef.current=new Date().toISOString();setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopyError("");setDraftId(nextDraftId);forgetCurrentDraft();if(window.location.search)window.history.replaceState({},"","/");
+  },[]);
   const changeTopic=useCallback((nextTopic:string,nextAudience:"A"|"B"|"C",nextImageBrief="",preserveDraft=false,nextContentBrief="",keepAnchor=false)=>{
     const next={topic:nextTopic,audience:nextAudience,imageBrief:nextImageBrief,contentBrief:nextContentBrief};
     if(!keepAnchor)anchorTopicRef.current=nextTopic;
     const current=topicSelectionRef.current;
     const changed=current.topic!==next.topic||current.audience!==next.audience||current.imageBrief!==next.imageBrief||current.contentBrief!==next.contentBrief;
     topicSelectionRef.current=next;setTopic(next.topic);setAudience(next.audience);setImageBrief(next.imageBrief);setContentBrief(next.contentBrief);
-    if(changed&&!preserveDraft){cancelGeneration(`${draftIdRef.current}|${SLIDES}`);setPlanLink(null);const nextDraftId=crypto.randomUUID();draftIdRef.current=nextDraftId;createdAtRef.current=new Date().toISOString();setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopyError("");setDraftId(nextDraftId);forgetCurrentDraft();if(window.location.search)window.history.replaceState({},"","/");}
-  },[]);
+    if(changed&&!preserveDraft)freshDraft();
+  },[freshDraft]);
   // 직접 주제 칸.
   // - 몇 단어만 고친 제목(시작한 주제와 비슷함)이면 같은 게시물·한 달 계획 연결·메모를 그대로 둔다.
   // - 아예 다른 주제를 적으면 새 게시물로 시작한다(다른 주제의 사진·글·메모가 따라가지 않게).
@@ -330,20 +334,25 @@ export function DraftWizard() {
   const canVisit:WizardStep[]=["topic",...(topic.trim()?["image" as const]:[]),...(images.length&&saveState==="saved"&&!running?["review" as const]:[])];
   const planDay=planLink?new Date(`${planLink.date}T00:00:00`):null;
   const planNote=planLink&&planDay?<p className="season-line plan-line">한 달 계획 · {planDay.getMonth()+1}/{planDay.getDate()}({"일월화수목금토"[planDay.getDay()]}) {PLAN_POST_TIME_KST}에 올릴 글</p>:null;
-  const shell={canVisit,onStepChange:setStep,onNewDraft:step==="topic"?undefined:()=>{if(confirmDiscard())startNewDraft();}};
   const make=()=>{
     if(images.length&&(generationMine?generation.auto.stage:"idle")!=="error"&&!window.confirm(REMAKE_QUESTION))return;
     ensureGeneration(genKey,genInput,[]);void createAutomatically(meta());
   };
   // 1단계 "다음". 만드는 중에 아예 다른 주제를 적었으면 여기서 묻는다(글자를 칠 때마다 물을 수는 없어서 적는 동안은 그대로 둔다).
   // "확인"이면 새 주제로 새 게시물, "취소"면 만들던 주제로 되돌리고 진행 화면으로 간다.
+  // "확인"은 주제 칸이 이미 새 주제라 changeTopic만으로는 "바뀐 것 없음"으로 보일 수 있다(메모 없는 직접 쓴 주제). 그래서 직접 새 게시물로 바꾼다.
+  // 단계 표시줄의 "2 만들기"와 같은 화면 안의 "만들기" 메뉴도 이 길로 보낸다(옆길로 가면 묻지 않고 주제만 바뀌었다).
   const goNext=()=>{
     if(running&&topicSimilarity(topic,generation.input.topic)<SAME_TOPIC_SIMILARITY){
-      if(window.confirm(STOP_RUNNING_QUESTION))changeTopic(topic,audience,"",false,"");
+      if(window.confirm(STOP_RUNNING_QUESTION)){freshDraft();changeTopic(topic,audience,"",true,"");}
       else changeTopic(generation.input.topic,audience,imageBrief,true,contentBrief);
     }
     setStep("image");
   };
+  const visitStep=(next:WizardStep)=>{if(next==="image"&&step==="topic")goNext();else setStep(next);};
+  // 만드는 중에 "만들기" 메뉴를 누르면(같은 화면이라 새로 열리지 않는다) 진행 화면으로 돌아간다. 확인 화면의 다시 그리기는 그 화면 그대로.
+  const backToProgress=running&&autoBusy?()=>visitStep("image"):undefined;
+  const shell={canVisit,onStepChange:visitStep,onCreateMenu:backToProgress,onNewDraft:step==="topic"?undefined:()=>{if(confirmDiscard())startNewDraft();}};
   if(loadError)return <WizardShell step="topic" {...shell}><div className="state-card"><p role="alert">{loadError}</p><Link className="button secondary" href="/drafts">내 게시물로 돌아가기</Link></div></WizardShell>;
   if(step==="image")return <WizardShell step={step} {...shell}>{planNote}<MakeStep topic={topic} track={track} onTrack={setTrack} state={generationMine?generation:{...generation,auto:{stage:"idle",error:""},photos:[],slides:[],phase:"idle",error:""}} onMake={make} onBack={()=>setStep("topic")}/></WizardShell>;
   if(step==="review")return <WizardShell step={step} {...shell}><ReviewStep draftId={draftId} topic={topic} audience={audience} images={images} generation={generationMine?generation:null} caption={caption} onCaption={setCaption} captionStatus={captionShown} writing={writing} copyError={copyError} onRewrite={rewrite} onSaveCaption={()=>caption===savedCaption?Promise.resolve(true):saveCaption(caption)} onFreeCards={cards=>{adoptImages(cards);void saveImages(cards);}} imageNotice={imageNotice}/></WizardShell>;

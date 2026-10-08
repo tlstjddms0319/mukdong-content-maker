@@ -229,6 +229,47 @@ describe("DraftWizard",()=>{
     expect(calls(request,"/api/drafts","POST")).toHaveLength(0);
   });
 
+  // 직접 쓴 주제(메모 없음)로 만들던 중 아예 다른 주제를 적고 "확인"하면, 예전에는 바뀐 것이 없다고 보고 만들기를 멈추지 않아
+  // 옛 주제의 그림이 새 주제 게시물에 붙었다.
+  it("really stops a running post started from a typed topic when the owner agrees to a different topic",async()=>{
+    const {request,release}=heldMaking();
+    render(<DraftWizard/>);
+    fireEvent.change(await screen.findByLabelText("직접 쓰기"),{target:{value:"비 오는 날 홍어전"}});
+    await goMake("text");
+    await screen.findByRole("heading",{name:"만들고 있어요"});
+    fireEvent.click(screen.getByRole("button",{name:"1 무엇을 올릴까요"}));
+    fireEvent.change(screen.getByLabelText("직접 쓰기"),{target:{value:"막걸리와 즐기는 저녁 한 상"}});
+    vi.stubGlobal("confirm",vi.fn(()=>true));
+    fireEvent.click(screen.getByRole("button",{name:"다음"}));
+    expect(screen.getByRole("heading",{name:"어떻게 만들까요?"})).toBeInTheDocument();
+    await act(async()=>{release();await new Promise(resolve=>setTimeout(resolve,0));});
+    expect(calls(request,"/api/drafts","POST")).toHaveLength(0);
+    expect(screen.getByRole("heading",{name:"어떻게 만들까요?"})).toBeInTheDocument();
+  });
+
+  // 단계 표시줄의 "2 만들기"나 "만들기" 메뉴로 가도 "다음"과 똑같이 묻는다(옆길로 가면 묻지 않고 주제만 바뀌었다).
+  it("asks the same way when the step bar or the 만들기 menu is used instead of 다음",async()=>{
+    const {request,release}=heldMaking();
+    render(<DraftWizard/>);
+    await goMake("text");
+    await screen.findByRole("heading",{name:"만들고 있어요"});
+    const running=calls(request,"/api/images/plan")[0].topic as string;
+    fireEvent.click(screen.getByRole("button",{name:"1 무엇을 올릴까요"}));
+    fireEvent.change(screen.getByLabelText("직접 쓰기"),{target:{value:"막걸리와 즐기는 저녁 한 상"}});
+    const confirm=vi.fn(()=>false);vi.stubGlobal("confirm",confirm);
+    fireEvent.click(screen.getByRole("button",{name:"2 만들기"}));
+    expect(confirm).toHaveBeenCalledWith(STOP);
+    expect(screen.getByRole("heading",{name:"만들고 있어요"})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"1 무엇을 올릴까요"}));
+    expect(screen.getByLabelText("직접 쓰기")).toHaveValue(running);
+    // 같은 화면 안에서 "만들기" 메뉴를 눌러도 진행 화면으로 돌아간다.
+    fireEvent.click(within(screen.getByRole("navigation",{name:"주요 메뉴"})).getByRole("link",{name:"만들기"}));
+    expect(screen.getByRole("heading",{name:"만들고 있어요"})).toBeInTheDocument();
+    await act(async()=>{release();});
+    await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
+    expect(calls(request,"/api/drafts","POST")[0]).toMatchObject({topic:running});
+  });
+
   it("asks before making a finished post again from the start",async()=>{
     const request=api(makingRoutes("text"));
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);

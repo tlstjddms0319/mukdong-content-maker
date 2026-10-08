@@ -32,8 +32,10 @@ const MORE:Array<{section:Section;href:string;label:string}>=[
   {section:"help",href:"/help",label:"도움말"},
 ];
 
-export function WizardShell({ step, children, canVisit=[], onStepChange, onNewDraft, section="create" }: { step: WizardStep; children: ReactNode; canVisit?:WizardStep[]; onStepChange?:(step:WizardStep)=>void; onNewDraft?:()=>void; section?:Section }) {
-  const link=(item:{section:Section;href:string;label:string})=><Link key={item.href} className={section===item.section?"active":undefined} aria-current={section===item.section?"page":undefined} href={item.href}>{item.label}</Link>;
+// onCreateMenu: 만들기 화면 안에서 "만들기" 메뉴를 눌렀을 때 할 일. 같은 주소라 화면이 새로 열리지 않으므로,
+// 만드는 중이면 위저드가 진행 화면으로 돌려보낼 수 있게 받는다(없으면 평소 링크).
+export function WizardShell({ step, children, canVisit=[], onStepChange, onNewDraft, onCreateMenu, section="create" }: { step: WizardStep; children: ReactNode; canVisit?:WizardStep[]; onStepChange?:(step:WizardStep)=>void; onNewDraft?:()=>void; onCreateMenu?:()=>void; section?:Section }) {
+  const link=(item:{section:Section;href:string;label:string})=><Link key={item.href} className={section===item.section?"active":undefined} aria-current={section===item.section?"page":undefined} href={item.href} onClick={item.section==="create"&&onCreateMenu?event=>{event.preventDefault();onCreateMenu();}:undefined}>{item.label}</Link>;
   const inMore=MORE.some(item=>item.section===section);
   return (
     <div className="app-shell">
