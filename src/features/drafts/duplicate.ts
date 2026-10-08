@@ -19,6 +19,7 @@ export function duplicateDraft(source:Draft,options:{id:string;now:string;newId:
     ...(source.selected_media_ids?{selected_media_ids:source.selected_media_ids.map(mapId)}:{}),
     planned_publish_at:null,
     final_review_complete:false,
+    archived:false,
     created_at:options.now,
     updated_at:options.now,
   };

@@ -66,3 +66,21 @@ describe("ScheduleShare", () => {
     await waitFor(()=>expect(screen.getByRole("alert")).toHaveTextContent("사진과 글을 만들고"));
   });
 });
+
+describe("ArchiveShare", () => {
+  it("saves the caption, archives, and can take it back out", async () => {
+    const { ArchiveShare }=await import("@/components/review/ArchiveShare");
+    const fetch=vi.fn(async(_url:string,init?:RequestInit)=>init?.method==="PATCH"?{ok:true,json:async()=>({})}:{ok:true,json:async()=>({id:ID})});
+    vi.stubGlobal("fetch",fetch);
+    const saveCaption=vi.fn(async()=>true),changed=vi.fn();
+    render(<ArchiveShare draftId={ID} onBeforeArchive={saveCaption} onChange={changed}/>);
+    fireEvent.click(screen.getByRole("button",{name:"보관함에 보관하기"}));
+    expect(await screen.findByText("보관함에 넣었어요.")).toBeInTheDocument();
+    expect(saveCaption).toHaveBeenCalled();expect(changed).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("link",{name:"보관함 보기"})).toHaveAttribute("href","/drafts?view=archive");
+    fireEvent.click(screen.getByRole("button",{name:"꺼내기"}));
+    expect(await screen.findByRole("button",{name:"보관함에 보관하기"})).toBeInTheDocument();
+    const bodies=fetch.mock.calls.filter(([,init])=>init?.method==="PATCH").map(([,init])=>JSON.parse(String(init!.body)));
+    expect(bodies).toEqual([{id:ID,archived:true},{id:ID,archived:false}]);
+  });
+});

@@ -546,7 +546,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .review-text-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; }
 .review-text-actions .field-help { margin:0; }
 .review-text [role="alert"], .review-preview [role="alert"] { margin:0; color:#a33d32; }
-.share-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:28px; padding-top:24px; border-top:1px solid var(--line); }
+.share-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:28px; padding-top:24px; border-top:1px solid var(--line); }
 .share-action { display:grid; gap:6px; align-content:start; }
 .share-action .field-help { margin:0; text-align:center; }
 .share-button { width:100%; }
@@ -635,3 +635,10 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .schedule-custom { display:grid; gap:4px; font-size:16px; color:var(--muted); }
 .schedule-custom input { min-height:48px; padding:8px 10px; font-size:17px; border:1px solid var(--line); border-radius:var(--control-radius); }
 .schedule-picker .button.primary { width:100%; }
+
+/* 보관함에 넣은 뒤: 보관함 보기·꺼내기를 나란히. */
+.archive-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+/* 내 게시물: 게시물 / 보관함 두 칸. */
+.drafts-tabs { display:flex; gap:8px; margin-top:20px; }
+.drafts-tabs a { min-height:48px; display:inline-flex; align-items:center; padding:0 18px; border:1px solid var(--line); border-radius:999px; font-size:18px; font-weight:700; color:var(--muted); text-decoration:none; background:#fff; }
+.drafts-tabs a[aria-current="page"] { border-color:#1f5c43; background:#1f5c43; color:#fff; }

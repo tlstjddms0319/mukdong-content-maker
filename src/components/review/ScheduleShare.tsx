@@ -11,7 +11,8 @@ import { readJsonResponse } from "@/lib/http/readJson";
 // onBeforeSchedule: 고친 글을 먼저 저장한다(예약은 저장된 글로 올라간다).
 type Mode="closed"|"picking"|"saving";
 
-export function ScheduleShare({draftId,ready,onBeforeSchedule}:{draftId:string;ready:boolean;onBeforeSchedule?:()=>Promise<boolean>}) {
+// onChange: 예약·취소한 뒤 부르면 부모가 보관 버튼도 서버 상태를 다시 읽게 한다(예약하면 보관함에서 나온다).
+export function ScheduleShare({draftId,ready,onBeforeSchedule,onChange}:{draftId:string;ready:boolean;onBeforeSchedule?:()=>Promise<boolean>;onChange?:()=>void}) {
   const [reservedAt,setReservedAt]=useState<string|null>(null);
   const [mode,setMode]=useState<Mode>("closed");
   const [picked,setPicked]=useState("");
@@ -37,7 +38,7 @@ export function ScheduleShare({draftId,ready,onBeforeSchedule}:{draftId:string;r
       const response=await fetch("/api/drafts",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:draftId,planned_publish_at:plannedIso,final_review_complete:Boolean(plannedIso)})});
       const data=await readJsonResponse(response).catch(()=>({}));
       if(!response.ok)throw new Error(String((data as {error?:unknown}).error||"예약하지 못했어요. 잠시 뒤 다시 눌러 주세요."));
-      setReservedAt(plannedIso);setMode("closed");setPicked("");setCustom("");
+      setReservedAt(plannedIso);setMode("closed");setPicked("");setCustom("");onChange?.();
     }catch(cause){setError(cause instanceof Error?cause.message:"예약하지 못했어요.");setMode(plannedIso?"picking":"closed");}
   };
   // 고른 시각: 빠른 버튼 > 직접 고른 시각.
@@ -51,7 +52,7 @@ export function ScheduleShare({draftId,ready,onBeforeSchedule}:{draftId:string;r
   const cancel=()=>{if(window.confirm("예약을 취소할까요? 취소하면 저절로 올라가지 않아요."))void save(null);};
 
   if(reservedAt)return <div className="share-action">
-    <p role="status" className="share-done"><strong>{formatKstTime(reservedAt)}에 올라가요.</strong> 그때 인스타그램에 저절로 올라가요(1~2분 늦을 수 있어요).</p>
+    <p role="status" className="share-done"><strong>{formatKstTime(reservedAt)}에 올라가요.</strong> 그때 인스타그램에 저절로 올라가요(1~2분 늦을 수 있어요). 글이나 사진을 고치면 예약이 풀려요.</p>
     <button type="button" className="button secondary" disabled={mode==="saving"} onClick={cancel}>{mode==="saving"?"취소하는 중…":"예약 취소"}</button>
     {error&&<p role="alert" className="field-help">{error}</p>}
   </div>;

@@ -56,7 +56,7 @@ describe("owner server guard", () => {
     }
     for (const page of ["page.tsx", "drafts/page.tsx", "settings/page.tsx"]) {
       const source = readFileSync(path.join(process.cwd(), "src/app", page), "utf8");
-      expect(source, page).toMatch(/export default async function [^(]+\(\)\s*\{\s*await requireOwnerPage\(\);/);
+      expect(source, page).toMatch(/export default async function [^(]+\([^)]*\)\s*\{\s*await requireOwnerPage\(\);/);
     }
   });
 });
