@@ -109,7 +109,8 @@ const fitsWith=(picked:readonly TopicSuggestion[],topic:TopicSuggestion)=>{
 // 점수: 이번 시기 행사 주제 > 검색이 늘어난 말의 메뉴 > 지금 제철·곧 제철 메뉴(사계절 메뉴 제외). 같으면 후보 순서.
 // 제철이 아닌 메뉴: 제철 달이 정해진 메뉴(과메기 11~2월)는 다른 후보가 다 떨어졌을 때만 고르고,
 // 계절에 특히 어울리는 메뉴(미나리전·홍어무침 봄여름, 홍어애탕 가을겨울)는 철이 아니면 점수를 낮춘다.
-// 고를 때: 주인공 메뉴가 서로 다르게, 삼합은 하나만, 시기 주제는 2개까지, 검색 흐름 주제는 1개까지(프롬프트의 "시기 1~2개·검색 흐름 1개"와 같은 기준).
+// 고를 때: 주인공 메뉴가 서로 다르게, 삼합은 하나만. 시기·검색 주제는 개수 제한 없이 점수 순으로 먼저 채우고(프롬프트의 "시기·검색 우선"과 같은 기준),
+// 모자란 자리만 일반 질문·메뉴 주제로 채운다.
 // excludeTitles: 지금 화면 주제(반드시 제외). avoidTitles: 최근에 보여 준 주제. 되도록 피하지만, 다 피할 수 없으면 제외 목록만 지킨다.
 // hints.recentMenus: 최근에 자주 나온 메뉴(되도록 뺀다).
 const PREPARED_ROUNDS=4;
@@ -139,7 +140,6 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
   const recent=hints.recentMenus??new Set<string>();
   const menuId=(topic:TopicSuggestion)=>topicMenu(topic)?.id??"";
   const trendOf=(topic:TopicSuggestion)=>(hints.trends??[]).find(keyword=>trendMenu(keyword)&&trendMenu(keyword)===menuId(topic))??"";
-  const isTimely=(topic:TopicSuggestion)=>Boolean(topic.season)||timely.has(menuId(topic));
   const score=(topic:TopicSuggestion)=>(topic.season?4:0)+(trendOf(topic)?2:0)+(timely.has(menuId(topic))?1:0)-(offSeason(topic)==="weak"?1:0);
   const ranked=candidates.map((topic,order)=>({topic,order})).sort((a,b)=>score(b.topic)-score(a.topic)||a.order-b.order).map(item=>item.topic);
   const picked:TopicSuggestion[]=[];
@@ -152,8 +152,6 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
       if(varied&&recent.has(menuId(topic)))continue;
       if(!anySeason&&offSeason(topic)==="closed")continue;
       if(!fitsWith(picked,topic))continue;
-      if(isTimely(topic)&&picked.filter(isTimely).length>=2)continue;
-      if(trendOf(topic)&&picked.some(item=>trendOf(item)))continue;
       picked.push(topic);
     }
   }
@@ -202,6 +200,9 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
     picked.push(pick(topic=>isOtherMenuTopic(topic)&&titleKey(topic.title)!==titleKey(replaced.title)));
     if(!replaced.id.startsWith("fallback-"))filled++;
   }
+  // 시기·검색 흐름을 반영한 주제를 앞으로(같은 무리 안에서는 AI가 준 순서 그대로). 화면은 첫 주제를 먼저 골라 둔다.
+  const tagged=(topic:TopicSuggestion)=>Number(Boolean(topic.season||topic.trend));
+  picked.sort((a,b)=>tagged(b)-tagged(a));
   return {topics:picked,filled};
 }
 

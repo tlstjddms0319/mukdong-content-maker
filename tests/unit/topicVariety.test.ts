@@ -149,6 +149,17 @@ describe("topic variety", () => {
     expect(labeled.map(topic=>topic.trend)).toEqual(["과메기","",""]);
   });
 
+  it("moves season and search topics to the front, keeping the AI order otherwise", () => {
+    const {topics}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),makeJeon("국밥엔 왜 깍두기가 어울릴까?"),{...makeMenu("과메기는 왜 겨울에 찾을까?"),trend:"과메기"}],base);
+    expect(topics.map(topic=>topic.title)).toEqual(["과메기는 왜 겨울에 찾을까?","홍어는 왜 겨울에 더 찾을까?","국밥엔 왜 깍두기가 어울릴까?"]);
+  });
+
+  it("uses every rising search word that leads to a menu in prepared topics (no one-topic cap)", () => {
+    const season=seasonContext(new Date("2026-11-20T12:00:00+09:00"));
+    const topics=fallbackTopics(0,[],season,[],{trends:["과메기","막걸리 안주"]});
+    expect(topics.map(topic=>topic.trend).filter(Boolean).sort()).toEqual(["과메기","막걸리 안주"]);
+  });
+
   it("asks the AI for menu variety and lists the store menu with seasonal picks", () => {
     const prompt=buildTopicPrompt({storeName:"묵동홍어마을"},seasonContext(new Date("2026-12-20T12:00:00+09:00")));
     for(const menu of ["과메기","미나리전","배다리 막걸리","홍어애탕","홍어무침"])expect(prompt).toContain(menu);
@@ -159,7 +170,7 @@ describe("topic variety", () => {
 
   it("no longer asks for a fixed two everyday + one hongeo layout", () => {
     const prompt=buildTopicPrompt({storeName:"묵동홍어마을",recommendationRound:1});
-    expect(prompt).toContain("정해진 구성은 없습니다");
+    expect(prompt).toContain("몇 번째에 둘지 미리 정하지 마세요");
     expect(prompt).toContain("가장 추천하는 주제를 첫 번째에");
     expect(prompt).not.toContain("마지막 1개는 홍어");
     expect(prompt).not.toContain("- direction:");
@@ -167,7 +178,17 @@ describe("topic variety", () => {
     expect(prompt).not.toContain('"directions"');
   });
 
-  it("builds prepared sets with distinct hero menus, at most two season topics, best first", () => {
+  it("asks for season and search topics first, general topics only when nothing fits", () => {
+    const prompt=buildTopicPrompt({storeName:"묵동홍어마을",recommendationRound:0},seasonContext(new Date("2026-10-08T12:00:00+09:00")),[],["방어 +40%","과메기 +20%"]);
+    expect(prompt).toContain("3개 모두 되도록 아래 둘 중 하나에서 출발하세요");
+    expect(prompt).toContain("정말 이어질 거리가 없을 때만");
+    expect(prompt).toContain("되도록 모두 쓰세요");
+    // 예전 개수 상한(시기 1~2개, 검색 1개)은 없다.
+    expect(prompt).not.toContain("3개 중 1~2개");
+    expect(prompt).not.toContain("3개 중 1개는 그 가운데");
+  });
+
+  it("builds prepared sets with distinct hero menus, season topics first", () => {
     for(const date of ["2026-10-08","2026-11-20"]){
       const season=seasonContext(new Date(`${date}T12:00:00+09:00`));
       const topics=fallbackTopics(0,[],season);
