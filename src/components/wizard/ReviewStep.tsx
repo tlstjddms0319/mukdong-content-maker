@@ -24,6 +24,7 @@ const CAPTION_STATUS:Record<CaptionStatus,string>={saved:"글을 저장했어요
 export function ReviewStep({draftId,topic,audience,images,generation,caption,onCaption,captionStatus,writing,copyError,onRewrite,onSaveCaption,onFreeCards,imageNotice}:Props) {
   const urls:ReviewImage[]=images.flatMap(image=>image.preview?[{url:image.preview,source:image.source}]:[]);
   const [index,setIndex]=useState(0);
+  // 바로 올릴 수 있으면 "바로 올리기"가, 아니면(연결 전·연결 기간 끝남) "휴대폰에 저장하기"가 주인공 버튼이다(한 화면에 주인공은 하나).
   const [instagramReady,setInstagramReady]=useState(true);
   const [freeOpen,setFreeOpen]=useState(false);
   const shown=Math.min(index,Math.max(urls.length-1,0)),active=urls[shown];
@@ -65,7 +66,7 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,onC
       </div>
     </div>
     <div className="share-actions">
-      <InstagramPublish draftId={draftId} caption={caption} imageUrls={urls.map(image=>image.url)} primary onBeforePublish={onSaveCaption} onReady={setInstagramReady}/>
+      <InstagramPublish draftId={draftId} caption={caption} imageUrls={urls.map(image=>image.url)} primary={instagramReady} onBeforePublish={onSaveCaption} onReady={setInstagramReady}/>
       <SaveToPhone images={urls} caption={caption} title={topic} primary={!instagramReady}/>
     </div>
     <details className="more-tools">

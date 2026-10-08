@@ -19,6 +19,8 @@ export function InstagramPublish({draftId,caption,imageUrls,primary=true,onBefor
   const [record,setRecord]=useState<PublishStatus|null>(null);
   const [state,setState]=useState<PanelState>("idle");
   const [message,setMessage]=useState("");
+  // 서버가 준 이유(문안·HTTPS 주소·서버 설정 같은 말이 섞여 있다)는 "자세한 이유"로 접어 둔다.
+  const [detail,setDetail]=useState("");
   // 연결 상태는 화면을 열 때 한 번만 읽는다(부모가 onReady를 새로 만들어도 다시 묻지 않게 ref로 부른다).
   const readyRef=useRef(onReady);
   useEffect(()=>{readyRef.current=onReady;},[onReady]);
@@ -37,16 +39,22 @@ export function InstagramPublish({draftId,caption,imageUrls,primary=true,onBefor
   const publish=async()=>{
     if(!connection?.connected)return;
     if(!window.confirm(`@${connection.username}에 사진 ${imageUrls.length}장과 글을 지금 올릴까요?`))return;
-    setState("publishing");setMessage("");
+    setState("publishing");setMessage("");setDetail("");
     try{
       if(onBeforePublish&&!await onBeforePublish())throw new Error("고친 글을 저장하지 못해 올리지 않았어요. 잠시 뒤 다시 눌러 주세요.");
       const currentId=draftId??localStorage.getItem("mukdong-current-draft");
       if(!currentId)throw new Error("저장된 게시물을 찾지 못했어요. 내 게시물에서 다시 열어 주세요.");
       const response=await fetch("/api/instagram/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draftId:currentId,approved:true,caption})});
       const data=await readJsonResponse(response);
-      if(!response.ok)throw new Error(data.error||data.message||"올리지 못했어요. 잠시 뒤 다시 눌러 주세요.");
+      if(!response.ok){
+        // 사장님에게는 무엇을 누르면 되는지만 한 줄로. 바로 올리기가 막혀도 '휴대폰에 저장하기'로 올릴 수 있다고 알려 준다.
+        setDetail(String(data.error||data.message||""));
+        throw new Error(response.status===401?"인스타그램 연결이 끝났어요. 설정에서 다시 연결해 주세요. 지금은 '휴대폰에 저장하기'로 올릴 수 있어요."
+          :response.status===409?"지금 올리는 중이에요. 잠시 뒤 인스타그램 앱에서 확인해 주세요."
+          :"바로 올리지 못했어요. 잠시 뒤 다시 눌러 주세요. 급하면 '휴대폰에 저장하기'로 올려 주세요.");
+      }
       setState(data.alreadyPublished?"already":"published");
-    }catch(error){setMessage(error instanceof Error?error.message:"올리지 못했어요. 잠시 뒤 다시 눌러 주세요.");setState("error");}
+    }catch(error){setMessage(error instanceof Error?error.message:"바로 올리지 못했어요. 잠시 뒤 다시 눌러 주세요.");setState("error");}
   };
   const already=state==="already"||(state==="idle"&&record?.state==="published");
   const ready=Boolean(connection?.connected)&&!connection?.needsReconnect;
@@ -60,6 +68,6 @@ export function InstagramPublish({draftId,caption,imageUrls,primary=true,onBefor
           :connection.needsReconnect?<p className="field-help">인스타그램 연결 기간이 끝났어요. 설정에서 다시 연결해 주세요</p>
           :<p className="field-help">@{connection.username} 계정에 올라가요</p>}
       </>}
-    {state==="error"&&<p role="alert">{message}</p>}
+    {state==="error"&&<div role="alert"><p>{message}</p>{detail&&<details><summary>자세한 이유</summary><p>{detail}</p></details>}</div>}
   </div>;
 }

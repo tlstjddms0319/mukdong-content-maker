@@ -77,6 +77,9 @@ describe("DraftWizard",()=>{
     expect(await screen.findByText("설정에서 인스타그램을 연결하면 바로 올릴 수 있어요")).toBeInTheDocument();
     expect(screen.getByRole("button",{name:"인스타그램에 바로 올리기"})).toBeDisabled();
     expect(screen.getByRole("button",{name:"휴대폰에 저장하기"})).toBeEnabled();
+    // 주인공 버튼은 하나: 못 올리는 "바로 올리기"는 주인공 색을 내려놓고 "휴대폰에 저장하기"가 주인공이 된다.
+    await waitFor(()=>expect(screen.getByRole("button",{name:"휴대폰에 저장하기"})).toHaveClass("primary"));
+    expect(screen.getByRole("button",{name:"인스타그램에 바로 올리기"})).not.toHaveClass("primary");
     // 예전 화면의 골라야 하는 것들은 화면에 없다.
     for(const gone of [/디자인 계열/,/화풍/,/파노라마/,/첫 문장 후보/,/음악 방향/,/해시태그/])expect(screen.queryByText(gone)).not.toBeInTheDocument();
   });
@@ -132,6 +135,8 @@ describe("DraftWizard",()=>{
     await goMake("photo");
     expect(await screen.findByText(/사진을 다 만들지 못했어요. '다시 해 보기'를 눌러 주세요/,undefined,{timeout:5000})).toBeInTheDocument();
     expect(calls(request,"/api/drafts","POST")).toHaveLength(0);
+    // 사진 없이 AI 그림이 멈췄을 때는 사장님이 할 수 있는 다른 길(가게 사진 올리기)도 한 줄로 알려 준다.
+    expect(screen.getByText(/가게 사진을 올린 뒤 눌러 보세요/)).toBeInTheDocument();
     failSlide3=false;
     const before=calls(request,"/api/images/generate").length;
     fireEvent.click(screen.getByRole("button",{name:"다시 해 보기"}));
@@ -148,6 +153,8 @@ describe("DraftWizard",()=>{
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);
     await goMake("text");
     expect(await screen.findByText(/만든 사진을 저장하지 못했어요/,undefined,{timeout:5000})).toBeInTheDocument();
+    // 저장이 멈춘 것이라 사진을 올리라는 안내는 맞지 않는다.
+    expect(screen.queryByText(/가게 사진을 올린 뒤 눌러 보세요/)).not.toBeInTheDocument();
     const made=calls(request,"/api/images/generate").length;
     fireEvent.click(screen.getByRole("button",{name:"다시 해 보기"}));
     await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
@@ -242,6 +249,18 @@ describe("DraftWizard",()=>{
     await waitFor(()=>expect(calls(request,"/api/copy")).toHaveLength(1));
     expect(calls(request,"/api/copy")[0]).toMatchObject({topic:"홍어전",imageBrief:"노릇한 전 한 접시",contentBrief:"익혔을 때 달라지는 식감을 설명하고 홍어전으로 연결한다.",hasAiImages});
     await waitFor(()=>expect(textarea().value).toContain("AI 첫 문장"));
+  });
+
+  it("keeps the text of a very old draft saved only as split copy (no caption) instead of writing a new one",async()=>{
+    const id="44444444-4444-4444-8444-444444444444",mediaId="22222222-2222-4222-8222-222222222222";
+    window.history.replaceState({},"",`/?draft=${id}`);
+    const request=api({"/api/drafts?*":()=>({id,topic:"예전 홍어",audience:"B",copy:{...copy,hook:"예전에 쓴 첫 문장"},media_candidates:[{id:mediaId,source:"photo",file_id:"saved-photo",purpose:"instagram-primary"}],selected_media_id:mediaId}),"PATCH /api/drafts":()=>({}),"/api/copy":()=>copy,"/api/instagram/status":()=>({connected:false})});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);
+    await screen.findByRole("heading",{name:"확인하고 올리기"});
+    expect(textarea().value).toContain("예전에 쓴 첫 문장");
+    // 그 글을 글 칸 글(caption)로 저장해 두고, 새로 써서 덮어쓰지 않는다.
+    await waitFor(()=>expect(calls(request,"/api/drafts","PATCH").at(-1)).toMatchObject({id,caption:expect.stringContaining("예전에 쓴 첫 문장")}),{timeout:4000});
+    expect(calls(request,"/api/copy")).toHaveLength(0);
   });
 
   it("reopens a saved draft without an image at step 2",async()=>{

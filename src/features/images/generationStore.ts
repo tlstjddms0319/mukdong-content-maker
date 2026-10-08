@@ -900,7 +900,7 @@ export const designStyleOf=(current:GenerationState):StyleId|undefined=>current.
 const hasAi=(images:ApprovedImage[])=>images.some(image=>image.source==="ai-generated"||image.source==="ai-edited");
 
 // 사장님에게 보여 줄 멈춘 이유(쉬운 말 한 줄). 자세한 이유(AI 이름 등)는 detail로 따로 둔다(접어서 보여 준다).
-const AUTO_FAILED="사진을 다 만들지 못했어요. '다시 해 보기'를 눌러 주세요. 만든 장은 그대로 두고 이어서 만들어요.";
+export const AUTO_FAILED="사진을 다 만들지 못했어요. '다시 해 보기'를 눌러 주세요. 만든 장은 그대로 두고 이어서 만들어요.";
 
 export async function createAutomatically(meta:DraftMeta){
   if(!state.input.track||state.auto.stage==="working"||state.auto.stage==="saving"||state.auto.stage==="writing")return;
@@ -936,7 +936,9 @@ export async function createAutomatically(meta:DraftMeta){
     if(!alive())return;
     patchAuto({stage:"done",images,caption,captionSaved,...(copyError?{copyError}:{})});
   }catch(error){
-    if(alive())patchAuto({stage:"error",error:error instanceof Error?error.message:AUTO_FAILED});
+    // 저장 실패처럼 우리가 쓴 쉬운 말이면 그대로, 브라우저가 낸 영어 오류(Failed to fetch 등)면 쉬운 말 + 자세한 이유로 접는다.
+    const text=error instanceof Error?error.message:"";
+    if(alive())patchAuto(/[가-힣]/.test(text)?{stage:"error",error:text}:{stage:"error",error:AUTO_FAILED,detail:text||undefined});
   }
 }
 

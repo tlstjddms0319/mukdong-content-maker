@@ -24,7 +24,7 @@ export function SettingsForm({ onSave = saveSettings, connections = { gemini:fal
       <div className="brand-kit-logo"><BrandLogo size={64} alt="묵동홍어마을 공용 로고"/><p><strong>가게 로고</strong><small className="field-help">앱 아이콘과 화면 위쪽에도 쓰여요.</small></p></div>
       <label>인스타그램 계정<input aria-label="Instagram 계정" placeholder="@mukdong_hongeo" maxLength={31} value={settings.brandHandle??""} onChange={e=>update("brandHandle",e.target.value.trim())}/><small className="field-help">카드 예시: 묵동홍어마을 · {settings.brandHandle?.trim()?`@${settings.brandHandle.trim().replace(/^@/,"")}`:"@계정"}</small></label>
     </div></section>
-    <div className="settings-actions"><span/><button type="submit" className="button primary">계정 저장</button>{saved==="brand"&&<span role="status">저장했어요.</span>}{error?.part==="brand"&&<span role="alert">{error.message}</span>}</div>
+    <div className="settings-actions"><span/><button type="submit" className="button secondary">계정 저장</button>{saved==="brand"&&<span role="status">저장했어요.</span>}{error?.part==="brand"&&<span role="alert">{error.message}</span>}</div>
   </form>
   <details className="admin-settings">
     <summary>관리자용 설정</summary>

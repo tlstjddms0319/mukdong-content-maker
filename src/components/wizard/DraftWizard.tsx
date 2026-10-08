@@ -12,6 +12,7 @@ import { acknowledgeAuto, adoptImages, cancelGeneration, approvedDeck, createAut
 import { CURRENT_DRAFT_KEY, CURRENT_TOPIC_KEY, forgetCurrentDraft, rememberCurrentDraft, saveDraftCaption, saveDraftImages, writePostText, type DraftMeta } from "@/features/drafts/draftSave";
 import { clearWizardSession, readWizardSession, saveWizardSession } from "@/features/drafts/wizardSession";
 import { readJsonResponse } from "@/lib/http/readJson";
+import { formatCopy } from "@/features/copy/writing";
 import { PLAN_DATE_PATTERN, PLAN_POST_TIME_KST } from "@/features/drafts/planLink";
 import { SAME_TOPIC_SIMILARITY, topicSimilarity } from "@/features/topics/topicSimilarity";
 import { TRACK_SLIDE_COUNT, type CarouselTrack } from "@/features/images/track";
@@ -266,11 +267,14 @@ export function DraftWizard() {
             if(active&&draft?.id&&draft?.topic){
               // 예전 계열·예전 방식으로 만든 게시물도 저장된 사진·글 그대로 연다(다시 그리지 않는다).
               const restored=selected.map(item=>({id:item.id,preview:item.file_id,source:item.source}));
-              changeTopic(draft.topic,draft.audience,draft.image_brief??"",true,draft.content_brief??"");setPlanLink(draft.plan_date?{date:draft.plan_date}:null);draftIdRef.current=draft.id;createdAtRef.current=draft.created_at??new Date().toISOString();setDraftId(draft.id);setImages(restored);setCaption(draft.caption??"");setSavedCaption(draft.caption??"");setCaptionStatus("saved");setSaveState("saved");rememberCurrentDraft(draft.id,draft.topic);
+              // 아주 예전 게시물은 글이 caption이 아니라 copy(나눠 쓴 글)에만 있다. 그 글을 그대로 이어 보여 주고(곧 caption으로 저장된다),
+              // 새로 써서 덮어쓰지 않는다.
+              const savedText=draft.caption?.trim()?draft.caption as string:draft.copy?formatCopy(draft.copy):"";
+              changeTopic(draft.topic,draft.audience,draft.image_brief??"",true,draft.content_brief??"");setPlanLink(draft.plan_date?{date:draft.plan_date}:null);draftIdRef.current=draft.id;createdAtRef.current=draft.created_at??new Date().toISOString();setDraftId(draft.id);setImages(restored);setCaption(savedText);setSavedCaption(draft.caption??"");setCaptionStatus("saved");setSaveState("saved");rememberCurrentDraft(draft.id,draft.topic);
               const target:WizardStep=selected.length?"review":"image";
               setStep(!requestedId&&session&&session.draftId===draft.id&&(session.step!=="review"||selected.length)?session.step:target);
               // 사진은 있는데 글이 없는 게시물(예전 화면에서 사진만 저장)은 열면서 글을 써 준다.
-              if(selected.length&&!draft.caption?.trim())void writeCaption({topic:draft.topic,audience:draft.audience,contentBrief:draft.content_brief??"",imageBrief:draft.image_brief??""},restored);
+              if(selected.length&&!savedText.trim())void writeCaption({topic:draft.topic,audience:draft.audience,contentBrief:draft.content_brief??"",imageBrief:draft.image_brief??""},restored);
               return;
             }
           }

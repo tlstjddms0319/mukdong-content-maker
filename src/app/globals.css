@@ -525,6 +525,8 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .make-error summary { cursor:pointer; color:var(--muted); font-size:16px; }
 .make-progress .generation-progress { margin-top:28px; font-size:21px; }
 .make-progress .progress-bar { height:14px; }
+/* 자동 만들기는 장마다 초가 0으로 돌아가 오히려 헷갈리고, 휴대폰에서는 "· 0초"만 따로 한 줄을 차지했다. 진행 막대·움직이는 점으로 충분하다. */
+.make-progress .progress-elapsed { display:none; }
 .make-thumbs { display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; }
 .make-thumbs .feed-thumb { width:auto; height:120px; aspect-ratio:4/5; }
 /* 3단계: 사진 미리보기 + 글 + 큰 버튼 두 개 */

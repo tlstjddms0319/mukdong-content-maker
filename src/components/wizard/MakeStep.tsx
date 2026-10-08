@@ -1,7 +1,7 @@
 "use client";
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { PhotoPicker } from "./PhotoPicker";
-import { autoProgress, type GenerationState } from "@/features/images/generationStore";
+import { AUTO_FAILED, autoProgress, type GenerationState } from "@/features/images/generationStore";
 import type { CarouselTrack } from "@/features/images/track";
 
 // 2단계 "어떻게 만들까요?": 큰 카드 두 개 중 하나 + 사진 올리기(선택) + "만들기" 한 번.
@@ -44,6 +44,8 @@ export function MakeStep({topic,track,onTrack,state,onMake,onBack}:{topic:string
     <PhotoPicker state={state}/>
     {auto.stage==="error"&&<div className="make-error" role="alert">
       <p>{auto.error}</p>
+      {/* AI 그림이 계속 멈추면(그림 AI 한도·연결 문제) 사장님이 할 수 있는 다른 길: 가게 사진으로 만들면 그림 AI가 필요 없다. */}
+      {auto.error===AUTO_FAILED&&!state.photos.length&&<p className="field-help">계속 멈추면 위 &apos;사진 고르기&apos;로 가게 사진을 올린 뒤 눌러 보세요. 사진으로 만들면 AI 그림을 기다리지 않아요.</p>}
       {auto.detail&&<details><summary>자세한 이유</summary><p>{auto.detail}</p></details>}
     </div>}
     {state.error&&auto.stage!=="error"&&<p role="alert">{state.error}</p>}

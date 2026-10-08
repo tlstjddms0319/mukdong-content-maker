@@ -53,6 +53,21 @@ describe("InstagramPublish",()=>{
     expect(await screen.findByRole("alert")).toHaveTextContent("올리지 않았어요");
     expect(request.mock.calls.some(([url])=>url==="/api/instagram/publish")).toBe(false);
   });
+  it("올리지 못하면 쉬운 말로 다음에 할 일을 알리고, 서버가 준 이유는 접어 둔다",async()=>{
+    const request=vi.fn(async(url:string)=>url==="/api/instagram/status"?{ok:true,status:200,json:async()=>({connected:true,username:"mukdong"})}
+      :url.startsWith("/api/instagram/publication")?{ok:true,status:200,json:async()=>({state:"none",label:""})}
+      :{ok:false,status:400,json:async()=>({error:"공개 HTTPS 주소 설정이 필요합니다."})});
+    vi.stubGlobal("fetch",request);vi.stubGlobal("confirm",vi.fn(()=>true));
+    render(<InstagramPublish {...props}/>);
+    const button=await screen.findByRole("button",{name:"인스타그램에 바로 올리기"});
+    await waitFor(()=>expect(button).toBeEnabled());
+    fireEvent.click(button);
+    const alert=await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("바로 올리지 못했어요");
+    expect(alert).toHaveTextContent("휴대폰에 저장하기");
+    expect(alert.querySelector("details")).toHaveTextContent("공개 HTTPS 주소 설정이 필요합니다.");
+    expect(alert.querySelector("details")).not.toHaveAttribute("open");
+  });
   it("이미 올린 게시물은 '올렸어요' 대신 다시 올리지 않았다고 알려 준다",async()=>{
     vi.stubGlobal("fetch",connected({status:"published",alreadyPublished:true,mediaId:"post-old"}));vi.stubGlobal("confirm",vi.fn(()=>true));
     render(<InstagramPublish {...props}/>);
