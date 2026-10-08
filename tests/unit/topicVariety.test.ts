@@ -160,6 +160,16 @@ describe("topic variety", () => {
     expect(topics.map(topic=>topic.trend).filter(Boolean).sort()).toEqual(["과메기","막걸리 안주"]);
   });
 
+  it("keeps season badges: loose AI labels, unlabeled in-season menus, and prepared in-season topics", async () => {
+    const season=seasonContext(new Date("2026-10-08T12:00:00+09:00"));
+    const aetang={...make("홍어애탕은 어떤 국물일까?"),summary:"찬바람 부는 날 홍어애탕 한 그릇을 소개하고 재료와 맛은 사장님께 확인한 뒤 씁니다."};
+    const topics=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[{...makeMenu("과메기는 왜 찬바람이 불면 찾을까?"),season:"가을 제철"},aetang,{...makeJeon("막걸리엔 왜 전이 생각날까?"),season:"곧 막걸리의 날"}]},undefined,season);
+    expect(Object.fromEntries(topics.map(topic=>[topic.title,topic.season]))).toEqual({"과메기는 왜 찬바람이 불면 찾을까?":"가을","홍어애탕은 어떤 국물일까?":"가을","막걸리엔 왜 전이 생각날까?":"막걸리의 날"});
+    // 준비된 주제: 행사 주제가 빠져도(최근에 보여 줌) 제철 메뉴 주제에 계절 표시가 남는다.
+    const prepared=fallbackTopics(0,[],season,["막걸리엔 왜 전을 곁들일까?"]);
+    expect(prepared.filter(topic=>topic.season).length).toBeGreaterThanOrEqual(2);
+  });
+
   it("asks the AI for menu variety and lists the store menu with seasonal picks", () => {
     const prompt=buildTopicPrompt({storeName:"묵동홍어마을"},seasonContext(new Date("2026-12-20T12:00:00+09:00")));
     for(const menu of ["과메기","미나리전","배다리 막걸리","홍어애탕","홍어무침"])expect(prompt).toContain(menu);
