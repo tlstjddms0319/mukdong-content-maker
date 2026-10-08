@@ -124,10 +124,11 @@ export function setSeason(season:FontChoice<SeasonMotif>){patch({season});}
 // 파노라마 켜고 끄기는 다음에 캐러셀을 만들 때부터 적용된다(이미 만든 장은 그대로).
 export function setPanorama(panorama:boolean){patch({panorama});}
 // 이 장을 파노라마의 어느 쪽으로 그릴지. 표지와 2번째 장이 같은 사진(첫 칸)을 쓸 때만. 사진을 바꾸면 자연히 평소 디자인으로 돌아간다.
-// slots: 이 장에 (새로) 넣을 사진 칸. 짝이 되는 장(표지↔2번째)의 첫 사진과 같으면 파노라마의 한쪽이다.
-function panoramaSide(index:number,slots:number[]):"left"|"right"|undefined {
-  if(!state.panorama||index>1)return undefined;
-  const mine=slots[0],other=state.photoAssignment[1-index]?.[0];
+// slots: 이 장에 (새로) 넣을 사진 칸(생략하면 지금 배정된 칸). 짝이 되는 장(표지↔2번째)의 첫 사진과 같으면 파노라마의 한쪽이다.
+// current를 받는 것은 positionKey가 "지금 상태"가 아닌 상태로도 계산할 수 있게 하려는 것(테스트·미리 계산).
+function panoramaSide(current:GenerationState,index:number,slots:number[]=current.photoAssignment[index]??[]):"left"|"right"|undefined {
+  if(!current.panorama||index>1)return undefined;
+  const mine=slots[0],other=current.photoAssignment[1-index]?.[0];
   if(mine===undefined||mine!==other)return undefined;
   return index===0?"left":"right";
 }
@@ -200,10 +201,19 @@ export const postTotal=(current:GenerationState)=>deckTotal(current)+(storeCardO
 // - 장 번호(카드에는 번호만 찍고 전체 장 수는 찍지 않는다)
 // - 마지막 장인지(마지막 장은 가게 명함·작별 마스코트, 나머지는 "넘겨 보기" 표시). 홍보 카드가 붙으면 내용 장은 마지막이 아니다.
 // - 표지면 예고 띠 글(내용 장 수가 3·5·7·10이 아니게 되면 "넘겨 보세요"로 바뀐다)
+// - 표지·2번째 장이면 파노라마의 어느 쪽인지(2번째 장을 빼거나 그 앞에 장을 넣으면 짝이 풀려 표지를 한 장짜리로 다시 그려야 한다)
+// - 디자인(글꼴·테마·디자인 계열). 다 만든 뒤 글꼴을 바꾸고 장을 빼면 바뀐 장만 새 글꼴이 되어 섞였다.
+//   디자인이 바뀌었으면 모든 장의 열쇠가 바뀌어 한꺼번에 새 디자인으로 맞춘다(예전처럼 전체 다시 그리기).
 // 장을 넣거나 빼면 이 열쇠가 바뀐 장만 다시 그린다. 예전에는 카드마다 "3 / 7"처럼 전체 장 수가 찍혀 있어 모든 장을 다시 그렸다.
-export function positionKey(current:GenerationState,index:number):string {
+// slots: 이 장에 그릴 사진 칸(사진 바꾸기처럼 상태에 넣기 전에 그릴 때만 넘긴다).
+export function positionKey(current:GenerationState,index:number,slots?:number[]):string {
   const total=postTotal(current),number=index+1;
-  return JSON.stringify([number,number===total,index===0?teaserText(total,storeCardOn(current)):""]);
+  return JSON.stringify([
+    number,number===total,
+    index===0?teaserText(total,storeCardOn(current)):"",
+    panoramaSide(current,index,slots)??"",
+    current.plan?effectiveDesign(current.plan.design,current):null,
+  ]);
 }
 // "이 캐러셀 사용"으로 넘길 이미지: 내용 장 + (붙였으면) 맨 뒤 홍보 카드.
 // 홍보 카드 그림이 지금 디자인·장 수로 그린 것일 때만 붙인다(다시 그리기에 실패해 옛 장 번호가 남은 카드는 빼고).
@@ -234,8 +244,9 @@ export async function ensureStoreCard(){
   }catch{/* 아래에서 안내한다. */}
   if(mine!==storeRun)return;
   if(image)patch({storeCard:{...state.storeCard,pending:false,image:{id:crypto.randomUUID(),preview:image,source:"design"},key}});
-  // 홍보 카드는 덤이라 못 그려도 캐러셀은 쓸 수 있게 둔다. 다만 장 번호가 한 장 많게 찍혀 있으니 끄면 맞춰진다고 알린다.
-  else patch({storeCard:{...state.storeCard,pending:false},providerNotice:"가게 홍보 카드를 그리지 못했어요. 장 고치기에서 홍보 카드를 껐다 켜거나, 끄면 장 번호가 맞춰져요."});
+  // 홍보 카드는 덤이라 못 그려도 캐러셀은 쓸 수 있게 둔다(빠진 채로 "이 캐러셀 사용"이 가능).
+  // 다만 마지막 내용 장은 홍보 카드가 뒤에 붙는 모양(명함 없이 "넘겨 보기")으로 그려져 있으니, 끄면 마지막 장으로 다시 그려진다고 알린다.
+  else patch({storeCard:{...state.storeCard,pending:false},providerNotice:"가게 홍보 카드를 그리지 못했어요. 장 고치기에서 홍보 카드를 껐다 켜면 다시 그려요. 끄면 마지막 내용 장이 가게 명함이 있는 마무리 장으로 바뀌어요."});
 }
 // 장 고치기의 "맨 뒤 가게 홍보 카드" 켜고 끄기. 전체 장 수가 바뀌므로 내용 장의 장 번호를 다시 그린다.
 export async function setStoreCardIncluded(include:boolean){
@@ -471,9 +482,10 @@ export function movePhotoForward(index:number){
 // 칸마다 자르는 거리(가까이·결 확대)가 하나라도 있으면 함께 보낸다. 모두 "사진 그대로"면 보내지 않는다.
 const viewsField=(views:readonly PhotoView[]|undefined)=>views?.some(view=>view!=="full")?{photoViews:[...views]}:{};
 async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[],views?:readonly PhotoView[]):Promise<ApprovedImage>{
-  const drawnAt=positionKey(state,index);
+  // 사진 바꾸기는 새 사진 칸을 상태에 넣기 전에 그리므로, 그릴 칸(slots)으로 열쇠를 만든다(파노라마 짝 판단이 그림과 같게).
+  const drawnAt=positionKey(state,index,slots);
   const slide=plan.slides[index];
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views)}:{}),...(panoramaSide(index,slots)?{panorama:panoramaSide(index,slots)}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views)}:{}),...(panoramaSide(state,index,slots)?{panorama:panoramaSide(state,index,slots)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 만들지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
@@ -565,7 +577,7 @@ export async function swapSlidePhoto(photoIndex:number){
   const slots=swapPhoto(photoAssignment[index],photoIndex);
   // 파노라마(표지+2장)의 짝이 바뀌면(풀리거나 다시 맞춰지거나) 짝이 된 다른 장도 다시 그린다(반쪽 사진만 남지 않게).
   // 예전에는 바꾸기 전 짝만 봐서, 2번째 장 사진을 바꿨다가 표지 사진으로 되돌리면 2번째 장만 반쪽으로 그려졌다.
-  const partner=index<=1&&(panoramaSide(index,photoAssignment[index])||panoramaSide(index,slots))?1-index:-1;
+  const partner=index<=1&&(panoramaSide(state,index,photoAssignment[index])||panoramaSide(state,index,slots))?1-index:-1;
   const token=++run;
   patch({phase:"slides",error:""});
   try{
@@ -621,7 +633,7 @@ export const canEditSlideText=(current:GenerationState,index:number)=>textEditBa
 async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none";views?:readonly PhotoView[]}):Promise<{preview:string;droppedPoints?:number;drawnAt:string}>{
   const drawnAt=positionKey(state,index);
   const plan=state.plan!;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind,...(base.photoKind==="real"?viewsField(base.views):{})}:{}),...(base.photoKind==="real"&&panoramaSide(index,state.photoAssignment[index]??[])?{panorama:panoramaSide(index,state.photoAssignment[index]??[])}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind,...(base.photoKind==="real"?viewsField(base.views):{})}:{}),...(base.photoKind==="real"&&panoramaSide(state,index)?{panorama:panoramaSide(state,index)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 다시 그리지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");

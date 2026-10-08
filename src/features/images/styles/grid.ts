@@ -115,7 +115,8 @@ export const renderGrid:CardRenderer=async(inputs,slide,index,total)=>{
   centre(seal.text,sx,sy,sx+sealSize,sy+sealSize);
   // 번호 칸의 남는 자리(오른쪽 아래)에는 지금 장 번호만큼 작은 네모를 늘어놓고 마지막(지금 장)만 빨갛게 채운다.
   // 글자 없이 선과 빨간 네모만으로 "몇 번째 장"인지 보여 주는 표시다. 전체 장 수는 쓰지 않는다(장을 넣고 빼도 앞 장은 그대로).
-  const SQ=20,GAP=12,count=Math.min(index,12);
+  // 표지(1번)는 네모가 하나뿐이라 진행 표시로 읽히지 않고 빨간 점처럼 떠 보여 그리지 않는다(2번 장부터).
+  const SQ=20,GAP=12,count=index>1?Math.min(index,12):0;
   const stripRight=xMark-T/2-PAD,stripBottom=yHead-T/2-PAD;
   for(let i=0;i<count;i++){
     const x=stripRight-(count-i)*(SQ+GAP)+GAP,y=stripBottom-SQ;

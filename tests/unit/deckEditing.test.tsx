@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
 import { ImageBriefSchema } from "@/features/images/schema";
-import { addLibraryPhoto, addSlide, approvedDeck, postTotal, setStoreCardIncluded, swapSlidePhoto, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
+import { addLibraryPhoto, addSlide, approvedDeck, postTotal, setStoreCardIncluded, setTitleFont, swapSlidePhoto, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
 
 const photo=(n:number)=>`data:image/jpeg;base64,PHOTO${n}`;
 const card=(n:number)=>`data:image/jpeg;base64,CARD${n}`;
@@ -85,6 +85,18 @@ describe("deck editing", () => {
     // 홍보 카드를 끄면 마지막 내용 장(6번)만 "마지막 장"(가게 명함)이 되어 다시 그린다.
     await act(async()=>{await setStoreCardIncluded(false);});
     expect(bodies.map(body=>[body.slideIndex,body.slideTotal])).toEqual([[6,6]]);
+  });
+
+  it("redraws every slide in the new font when the font changed after the deck was finished", async () => {
+    // 다 만든 뒤 글꼴을 바꾸고 장을 빼면, 예전에는 번호가 바뀐 장만 새 글꼴로 그려져 한 캐러셀에 글꼴이 섞였다.
+    const {hook,bodies}=await builtDeck();
+    act(()=>setTitleFont("jua"));
+    act(()=>setActiveSlide(3));
+    await act(async()=>{await removeSlide();});
+    expect(hook.result.current.slides).toHaveLength(4);
+    // 남은 4장을 모두 같은 새 글꼴로 다시 그린다(2번 장도 포함).
+    expect(bodies.map(body=>body.slideIndex)).toEqual([1,2,3,4]);
+    expect(bodies.every(body=>(body.design as {titleFont?:string}).titleFont==="jua")).toBe(true);
   });
 
   it("adds a text-only card without photos", async () => {
@@ -235,5 +247,22 @@ describe("review fixes in the deck", () => {
     expect(bodies[1]).toMatchObject({slideIndex:1});
     expect(bodies[1].panorama).toBeUndefined();
     expect(hook.result.current.photoAssignment[1]).toEqual([2]);
+  });
+  it("redraws the panorama cover as a single card when slide 2 is removed even if nothing else on the cover changes", async () => {
+    // 10장 → 9장(홍보 카드 끔)으로 만든 뒤 2번째 장을 빼면 9장 → 8장: 표지의 장 번호·예고 띠("넘겨 보세요")는 그대로다.
+    // 예전에는 그래서 표지를 다시 그리지 않아, 짝(2번째 장)이 사라진 표지가 파노라마 왼쪽 반쪽으로 남았다.
+    const {hook,bodies}=await build(10,{panorama:true});
+    await act(async()=>{await setStoreCardIncluded(false);});
+    act(()=>setActiveSlide(5));
+    await act(async()=>{await removeSlide();});
+    expect(hook.result.current.slides).toHaveLength(9);
+    bodies.length=0;
+    act(()=>setActiveSlide(1));
+    await act(async()=>{await removeSlide();});
+    expect(hook.result.current.slides).toHaveLength(8);
+    const cover=bodies.find(body=>body.slideIndex===1);
+    expect(cover).toBeDefined();
+    expect(cover!.panorama).toBeUndefined();
+    expect(bodies.every(body=>body.panorama===undefined)).toBe(true);
   });
 });
