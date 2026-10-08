@@ -2,6 +2,7 @@ import { z } from "zod";
 import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
+import { TRACK_COPY, type CarouselTrack } from "./track";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
 // 1) slideCopyIssues: 코드로 잡을 수 있는 문제를 장 번호와 함께 찾는다(광고 상투어, 반복, 끝맺음, 길이 등).
@@ -25,7 +26,14 @@ function similarity(a:string,b:string){
   return both/(x.size+y.size-both);
 }
 
-export function slideCopyIssues(plan:CarouselPlan):SlideCopyIssue[] {
+// 갈래(track.ts)가 있으면 글 길이 기준이 갈래 기준(제목 18자·표지 24자, 짧은 글 20~24자)이고,
+// 사진 중심은 짧은 글 1개가 정상이라 "요점 2개 이상" 대신 1개 이상을 본다.
+type CopyLimits={headline:number;coverHeadline:number;minPoints:number;point?:number};
+const DEFAULT_LIMITS:CopyLimits={headline:30,coverHeadline:30,minPoints:2};
+export const copyLimitsOf=(track?:CarouselTrack):CopyLimits=>track?{headline:TRACK_COPY[track].headline,coverHeadline:TRACK_COPY.cover.headline,minPoints:1,point:TRACK_COPY[track].point}:DEFAULT_LIMITS;
+
+export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCopyIssue[] {
+  const limits=copyLimitsOf(track);
   const issues:SlideCopyIssue[]=[];
   const add=(slide:number,field:SlideCopyIssue["field"],message:string)=>issues.push({slide,field,message});
   const allPoints:Array<{slide:number;text:string}>=[];
@@ -34,7 +42,8 @@ export function slideCopyIssues(plan:CarouselPlan):SlideCopyIssue[] {
     const length=headline.replace(/\s/g,"").length;
     // 표지는 짧고 굵은 제목도 괜찮아서 4자, 본문 장은 6자를 최소로 본다.
     if(length<(slide.role==="cover"?4:6))add(n,"headline","제목이 너무 짧아요. 무엇에 대한 장인지 알 수 있게 쓰세요.");
-    if(headline.length>30)add(n,"headline","제목이 30자를 넘어요. 한 가지 정보만 남겨 줄이세요.");
+    const max=slide.role==="cover"?limits.coverHeadline:limits.headline;
+    if(headline.length>max)add(n,"headline",`제목이 ${max}자를 넘어요. 한 가지 정보만 남겨 줄이세요.`);
     for(const word of CLICHES)if(headline.includes(word))add(n,"headline",`광고 상투어 '${word}'를 빼고 구체적인 정보로 바꾸세요.`);
     if(SLOGAN.test(headline))add(n,"headline","명사로 끝나는 슬로건 대신 해요체 문장이나 질문으로 쓰세요.");
     if((headline.match(/!/g)??[]).length>1)add(n,"headline","느낌표를 줄이세요.");
@@ -47,10 +56,11 @@ export function slideCopyIssues(plan:CarouselPlan):SlideCopyIssue[] {
       for(const word of CLICHES)if(text.includes(word))add(n,"points",`요점 '${text}'의 광고 상투어 '${word}'를 빼세요.`);
       if(!/[요까다?]$/.test(text.replace(/[.!]$/,"")))add(n,"points",`요점 '${text}'을 해요체 완결 문장으로 끝내세요.`);
       if(similarity(text,headline)>.6)add(n,"points",`요점 '${text}'이 제목을 되풀이해요. 새로운 정보를 쓰세요.`);
+      if(limits.point&&text.length>limits.point)add(n,"points",`요점 '${text}'이 ${limits.point}자를 넘어요. 짧게 줄이세요.`);
       allPoints.push({slide:n,text});
     }
-    // 표지가 아닌 장의 요점은 2개 이상이어야 카드가 비어 보이지 않는다.
-    if(slide.role!=="cover"&&slide.points.length<2)add(n,"points","요점을 2~4개로 채우세요.");
+    // 표지가 아닌 장의 요점은 2개 이상이어야 카드가 비어 보이지 않는다(갈래가 있으면 1개 이상).
+    if(slide.role!=="cover"&&slide.points.length<limits.minPoints)add(n,"points",limits.minPoints>1?"요점을 2~4개로 채우세요.":"짧은 글을 하나 넣으세요.");
   });
   // 장끼리 제목·요점이 겹치면 캐러셀을 넘겨도 새 정보가 없다.
   for(let i=0;i<plan.slides.length;i++)for(let j=i+1;j<plan.slides.length;j++){
@@ -79,7 +89,7 @@ function heroLine(topic:string,menu:StoreMenuItem|undefined=mainMenuOf(topic)):s
   return `주어와 첫 동작은 주제의 메뉴인 ${josa(menu.short,"으로","로")} 쓰고, 다른 음식은 곁들이는 말로만 넣으세요. 홍어·삼합을 억지로 끌어오지 마세요.`;
 }
 
-export type ReviewContext={menu?:StoreMenuItem;photoNotes?:readonly string[];contentBrief?:string};
+export type ReviewContext={menu?:StoreMenuItem;photoNotes?:readonly string[];contentBrief?:string;track?:CarouselTrack};
 
 export function buildPlanReviewPrompt(plan:CarouselPlan,topic:string,issues:SlideCopyIssue[],context:ReviewContext={}):string {
   const slides=plan.slides.map((slide,i)=>({slide:i+1,role:slide.role,headline:slide.headline,points:slide.points}));
@@ -94,7 +104,7 @@ ${found}
 
 [편집 기준]
 1. 각 장은 앞 장이 남긴 궁금증에 답하고 다음 장으로 이어집니다. 장끼리 같은 말이나 같은 정보를 반복하지 마세요.
-2. 제목은 12~30자의 해요체 문장이나 질문 하나, 요점은 12~28자의 해요체 완결 문장입니다. 명사로 끝나는 슬로건, 광고 상투어, 느낌표 남발은 쓰지 마세요.
+2. ${context.track?`제목은 ${TRACK_COPY[context.track].headline}자 이내(표지는 ${TRACK_COPY.cover.headline}자 이내)의 해요체 문장이나 질문 하나, 요점은 ${TRACK_COPY[context.track].point}자 이내의 해요체 완결 문장입니다. 글자 수를 늘리지 마세요.`:"제목은 12~30자의 해요체 문장이나 질문 하나, 요점은 12~28자의 해요체 완결 문장입니다."} 명사로 끝나는 슬로건, 광고 상투어, 느낌표 남발은 쓰지 마세요.
 3. ${heroLine(topic,context.menu??mainMenuOf(topic))}
 4. "입안의 리듬" 같은 추상적 비유 대신 눈이나 입으로 확인할 수 있는 구체적 관찰(색, 결, 식감, 먹는 순서)로 쓰세요.
 5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.
@@ -111,16 +121,17 @@ export type ReviewResult={plan:CarouselPlan;applied:boolean;before:number;after:
 // AI 검수를 적용한다. 형식이 다르거나(장 수·요점 수), 문제 수가 늘거나, 금지 표현이 새로 생기면 원래 구성안을 쓴다.
 // 자동 검사에서 문제가 하나도 없으면 AI를 다시 부르지 않는다(무료 한도를 아끼고, 멀쩡한 문안을 괜히 바꾸지 않게).
 export async function reviewCarouselPlan(plan:CarouselPlan,topic:string,ai:{review:(prompt:string,schema:ReturnType<typeof reviewSchema>)=>Promise<PlanReview>},context:ReviewContext={}):Promise<ReviewResult> {
-  const issues=slideCopyIssues(plan);
+  const issues=slideCopyIssues(plan,context.track);
   const before=issues.length;
   if(!before)return {plan,applied:false,before:0,after:0};
   try{
     const schema=reviewSchema(plan.slides.length);
     const reviewed=schema.parse(await ai.review(buildPlanReviewPrompt(plan,topic,issues,context),schema));
-    const sameShape=reviewed.slides.every((slide,i)=>slide.points.length===plan.slides[i].points.length||(plan.slides[i].role!=="cover"&&slide.points.length>=2));
+    const minPoints=copyLimitsOf(context.track).minPoints;
+    const sameShape=reviewed.slides.every((slide,i)=>slide.points.length===plan.slides[i].points.length||(plan.slides[i].role!=="cover"&&slide.points.length>=minPoints));
     if(!sameShape)return {plan,applied:false,before,after:before};
     const next:CarouselPlan={...plan,slides:plan.slides.map((slide,i)=>({...slide,headline:reviewed.slides[i].headline,points:slide.role==="cover"?[]:reviewed.slides[i].points}))};
-    const after=slideCopyIssues(next).length;
+    const after=slideCopyIssues(next,context.track).length;
     const blocked=next.slides.some(slide=>[slide.headline,...slide.points].some(text=>checkTextClaims(text).blocked.length>0));
     if(blocked||after>before)return {plan,applied:false,before,after:before};
     return {plan:next,applied:true,before,after};

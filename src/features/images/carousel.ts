@@ -5,6 +5,7 @@ import { SlideBodyFontSchema, SlideTitleFontSchema } from "./typography";
 import { diversifyCarouselDesign } from "./variety";
 import { MENU_BY_ID, heroMenu, josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SKATE_TABLE, copyMentionsSkate, foodFreeAnchor, isOtherMenu } from "./sceneFoods";
+import { CarouselTrackSchema, TRACK_SLIDE_COUNT, applyTrack, trackPromptRules } from "./track";
 
 export const CarouselPlanInputSchema=z.object({
   topic:z.string().trim().min(1).max(200),
@@ -15,6 +16,9 @@ export const CarouselPlanInputSchema=z.object({
   // 실제 사진 캐러셀: 사장님이 올린 사진마다 보이는 것 한 줄(올린 순서, 첫 사진이 표지). 모르는 사진은 빈 문자열.
   // 문안 AI가 사진에 없는 음식을 주인공으로 한 장을 쓰지 않게 하고, 사진을 글이 맞는 장에 넣는 데 쓴다.
   photoNotes:z.array(z.string().trim().max(120)).max(10).optional(),
+  // 갈래(track.ts): "photo"(사진 중심)·"text"(글 중심). 주면 장 수(5장)·디자인·장마다 사진 수·글 길이를 갈래가 정한다.
+  // 없으면 예전과 똑같이 만든다(예전 화면·저장된 초안).
+  track:CarouselTrackSchema.optional(),
 });
 
 export const CarouselRoleSchema=z.enum(["cover","overview","detail","how-to","pairing","process","occasion","mood","visit","cta"]);
@@ -45,6 +49,10 @@ export const CarouselSlidePlanSchema=z.object({
 });
 
 export type CarouselPlanInput=z.input<typeof CarouselPlanInputSchema>;
+export type ParsedCarouselPlanInput=z.output<typeof CarouselPlanInputSchema>;
+// 갈래가 있으면 요청한 장 수와 상관없이 5장으로 맞춘다(검사된 입력에 쓴다. 구성안 라우트·기본 문안·프롬프트가 같은 장 수를 보게).
+export const withTrackCount=(input:ParsedCarouselPlanInput):ParsedCarouselPlanInput=>input.track?{...input,slideCount:TRACK_SLIDE_COUNT}:input;
+const parsePlanInput=(input:CarouselPlanInput)=>withTrackCount(CarouselPlanInputSchema.parse(input));
 export type CarouselRole=z.infer<typeof CarouselRoleSchema>;
 // 장 하나를 받는 함수(그리기·이미지 프롬프트)는 글꼴 필드가 없는 예전 장도 받는다. 없으면 "auto"로 본다.
 export type CarouselSlidePlan=z.input<typeof CarouselSlidePlanSchema>;
@@ -142,14 +150,14 @@ function fallbackKeywords(menu:StoreMenuItem|undefined):Record<CarouselRole,stri
 }
 
 export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan {
-  const parsed=CarouselPlanInputSchema.parse(input);
+  const parsed=parsePlanInput(input);
   const style=IMAGE_STYLE_DIRECTIONS[parsed.imageStyle??"photo"];
   const drawn=parsed.imageStyle!==undefined&&parsed.imageStyle!=="photo";
   const context=parsed.imageBrief ? ` 선택 주제의 기존 이미지 설명도 반영: ${parsed.imageBrief.slice(0,450)}.` : "";
   const menu=carouselMenu(parsed);
   const slides=fallbackSlides(menu);
   const keywords=fallbackKeywords(menu);
-  return CarouselPlanSchema.parse({
+  const plan=CarouselPlanSchema.parse({
     slideCount:parsed.slideCount,
     styleAnchor:`따뜻하고 자연스러운 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트, ${style.anchor}`,
     design:DEFAULT_DESIGN,
@@ -166,6 +174,8 @@ export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan
       visualPrompt:`${drawn?slides[role].visualPrompt.replace(/사진/g,"그림"):slides[role].visualPrompt}.${context}`.slice(0,600),
     })),
   });
+  // 갈래가 있으면 기본 문안도 같은 규칙(디자인·장마다 사진 수·글 길이)을 따른다.
+  return parsed.track?applyTrack(plan,parsed.track):plan;
 }
 
 // 구성안 프롬프트의 주인공 메뉴 규칙. 주제가 과메기면 과메기가, 홍어 주제일 때만 홍어가 주인공이다.
@@ -183,26 +193,30 @@ function sceneExamples(menu:StoreMenuItem|undefined):string {
 
 // Shared by the plan route and the provider comparison script so both send the same instruction.
 export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
-  const parsed=CarouselPlanInputSchema.parse(input);
+  const parsed=parsePlanInput(input);
   const style=IMAGE_STYLE_DIRECTIONS[parsed.imageStyle??"photo"];
   const roles=rolesForCount(parsed.slideCount);
   const menu=carouselMenu(parsed);
+  // 갈래가 있으면 이야기 구조·문체(글 길이)·디자인 안내를 갈래용으로 바꾸고 갈래 설명을 더한다(track.ts).
+  const track=parsed.track?trackPromptRules(parsed.track):null;
   return [
     `한국 음식점 Instagram 캐러셀 구성안을 JSON 객체로 작성하세요. 선택한 주제 "${parsed.topic}"를 바꾸지 말고 모든 장면에 일관되게 반영하세요. 기존 이미지 설명: ${parsed.imageBrief ?? "없음"}. 내용 메모: ${parsed.contentBrief ?? "없음"}. slideCount는 ${parsed.slideCount}, slides의 role 순서는 ${roles.join(" → ")}를 정확히 지키세요.`,
     // 한 편의 이야기: 장마다 독립된 자랑을 나열하지 않고, 앞 장이 남긴 궁금증을 다음 장이 받는다.
-    `[이야기 구조] ${parsed.slideCount}장은 한 사람이 친구에게 이 음식을 설명해 주는 한 편의 이야기입니다. 표지는 독자가 실제로 가질 법한 구체적인 궁금증 하나를 질문이나 한 문장으로 던지고, 각 본문 장은 앞 장이 남긴 궁금증에 답하면서 마지막 요점 한 줄로 다음 장의 내용을 예고하세요. 마지막 장은 첫 장의 궁금증이 어떻게 풀렸는지 한 줄로 돌아본 뒤 방문 전 확인할 것으로 닫으세요. 장마다 "우리 대단하죠" 식의 자랑이나 감탄으로 끝내지 말고, 정보가 한 방향으로 쌓이게 하세요.`,
+    track?track.story:`[이야기 구조] ${parsed.slideCount}장은 한 사람이 친구에게 이 음식을 설명해 주는 한 편의 이야기입니다. 표지는 독자가 실제로 가질 법한 구체적인 궁금증 하나를 질문이나 한 문장으로 던지고, 각 본문 장은 앞 장이 남긴 궁금증에 답하면서 마지막 요점 한 줄로 다음 장의 내용을 예고하세요. 마지막 장은 첫 장의 궁금증이 어떻게 풀렸는지 한 줄로 돌아본 뒤 방문 전 확인할 것으로 닫으세요. 장마다 "우리 대단하죠" 식의 자랑이나 감탄으로 끝내지 말고, 정보가 한 방향으로 쌓이게 하세요.`,
     // 사람이 쓴 글처럼: 명사형 슬로건과 광고 상투어를 막고, 관찰 가능한 구체 정보로 쓴다.
-    `[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰려 빛에 비치면 결이 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요. 표지 headline은 넘기고 싶게 만드는 짧은 훅(8~18자, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(30자 이내 해요체 한 줄)에 넣으세요. 표지가 아닌 장의 subline은 빈 문자열로 두세요.`,
+    track?track.style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰려 빛에 비치면 결이 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요. 표지 headline은 넘기고 싶게 만드는 짧은 훅(8~18자, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(30자 이내 해요체 한 줄)에 넣으세요. 표지가 아닌 장의 subline은 빈 문자열로 두세요.`,
     `[사실 기준] 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어무침·홍어애탕(그리고 홍어전·찜)의 조리법을 구분하세요. 선택 주제나 내용 메모에 삼합이 없으면 삼합 구성(홍어·수육·묵은지)을 쓰지 마세요. 삼합은 이 가게의 기본값이 아니라 여러 메뉴 가운데 하나입니다. 메뉴에 들어가는 재료와 곁들임 구성, 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요.`,
     // 글도 주제의 메뉴가 주인공: 곁들임이 문장을 이끌면 그림보다 글에서 먼저 주인공이 바뀐다. 과메기 주제면 과메기, 홍어 주제일 때만 홍어.
     heroRule(menu,[parsed.topic,parsed.contentBrief].filter(Boolean).join(" ")),
     // A vs B 장은 글로 말한 차이가 두 사진에서 보여야 한다. 코 모양처럼 썬 회 사진에 안 나오는 차이는 쓰지 않는다.
-    `[비교 장] layout이 versus인 장의 points는 두 사진을 나란히 놓았을 때 눈으로 보이는 차이(살의 색, 결의 굵기, 썬 모양, 윤기)만 쓰세요. 코 모양, 몸 전체 생김새처럼 썬 회 사진에 나오지 않는 차이는 쓰지 마세요. 두 visualPrompt는 같은 접시·각도·조명으로 맞추고, 쓰인 차이(예: 붉은빛 도는 홍어 살과 하얗고 투명한 가오리 살)가 한눈에 갈리도록 각 사진에 그 차이를 명시하세요.`,
+    // 갈래 게시물에는 비교(versus) 장이 없으므로 비교 장 규칙을 뺀다.
+    ...(track?[]:[`[비교 장] layout이 versus인 장의 points는 두 사진을 나란히 놓았을 때 눈으로 보이는 차이(살의 색, 결의 굵기, 썬 모양, 윤기)만 쓰세요. 코 모양, 몸 전체 생김새처럼 썬 회 사진에 나오지 않는 차이는 쓰지 마세요. 두 visualPrompt는 같은 접시·각도·조명으로 맞추고, 쓰인 차이(예: 붉은빛 도는 홍어 살과 하얗고 투명한 가오리 살)가 한눈에 갈리도록 각 사진에 그 차이를 명시하세요.`]),
     // 장면 다양성: 같은 접시를 거리만 바꿔 다섯 번 찍지 않도록, 장면 유형과 사람 요소를 장마다 다르게 배정한다.
     `[장면] visualPrompt는 각 장의 headline과 points가 말하는 내용을 그대로 보여 주는 ${style.scene}으로 쓰세요. 각 visualPrompt에는 그 장의 글이 말하는 대상과 동작을 구체적으로 적으세요(예: ${sceneExamples(menu)}). 장마다 장면 유형을 다르게 고르세요: 완성된 한 상(45도), 위에서 본 상차림, 접시 위 질감(매크로), 곁들임과 함께 놓인 조합, 막걸리와 함께 놓인 식탁, 준비 과정, 함께 먹는 식탁(여러 손과 잔, 뒷모습). "젓가락으로 한 점을 집어 든" 장면은 한 게시물에 최대 한 장만 쓰고, 나머지 장은 접시·그릇·식탁 위에 놓인 모습으로 쓰세요. 손·잔·뒷모습 같은 사람 요소는 글이 먹는 동작이나 함께하는 자리를 말할 때만 넣고, 얼굴은 프레임 밖에 두거나 식별되지 않게 하세요. 촬영 거리, 각도, 피사체 배치가 앞 장과 겹치지 않게 쓰고 이미지 안 글자나 로고를 요청하지 마세요. 음식이 나오는 모든 장면에서 주제의 메뉴(${menu&&menu.id!=="hongeo-hoe"?menu.short:"홍어"})가 주인공입니다. visualPrompt에 그 메뉴를 가장 크고 앞에, 초점이 맞게 둔다고 명시하고, 다른 음식·술은 글이 말할 때만 작게 곁들여지는 조연으로 쓰세요. 집어 올리는 한입도 주인공 메뉴여야 합니다.`,
     photoRule(parsed.photoNotes),
-    `[디자인] ${designCatalogText()}`,
-    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})만 쓰고 음식 이름은 쓰지 마세요(모든 장에 똑같이 붙으므로, 음식은 각 장 visualPrompt에만). 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone, season)를 두고(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud. season은 아래 계절 소품 중 주제에 꼭 맞을 때만, 애매하면 none), 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
+    track?track.design:`[디자인] ${designCatalogText()}`,
+    ...(track?[track.track]:[]),
+    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})만 쓰고 음식 이름은 쓰지 마세요(모든 장에 똑같이 붙으므로, 음식은 각 장 visualPrompt에만). 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone, season)를 두고${track?"(값은 위 [디자인] 그대로)":"(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud. season은 아래 계절 소품 중 주제에 꼭 맞을 때만, 애매하면 none)"}, 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
   ].join("\n");
 }
 
@@ -264,10 +278,11 @@ export function keepScenesOnMenu(plan:CarouselPlan,topic:string,menu:StoreMenuIt
 }
 
 // onFallback: AI 구성안을 못 써서 기본 문안으로 넘어갈 때 그 이유(오류)를 받는다. 예전에는 이유를 버려 로그에도 남지 않았다.
+// 갈래가 있으면 무작위 섞기 대신 갈래 규칙(applyTrack)으로 디자인·장마다 사진 수·글 길이를 정한다.
 export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,options:{seed?:number;onFallback?:(error:unknown)=>void}={}):Promise<CarouselPlan> {
-  const parsed=CarouselPlanInputSchema.parse(input);
+  const parsed=parsePlanInput(input);
   const fallback=createFallbackCarouselPlan(parsed);
-  const vary=(plan:CarouselPlan,isFallback:boolean)=>options.seed===undefined?plan:diversifyCarouselDesign(plan,options.seed,{fallback:isFallback});
+  const vary=(plan:CarouselPlan,isFallback:boolean)=>parsed.track?applyTrack(plan,parsed.track):options.seed===undefined?plan:diversifyCarouselDesign(plan,options.seed,{fallback:isFallback});
   if(!ai)return vary(fallback,true);
   try {
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));

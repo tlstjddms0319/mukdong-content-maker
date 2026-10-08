@@ -8,6 +8,7 @@ import type { ThemeId } from "./themes";
 import type { SeasonMotif } from "./seasonMotif";
 import { AnalyzeResponseSchema, TOPIC_TAG, photoNote } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
+import type { CarouselTrack } from "./track";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { teaserText } from "./teaser";
 import { fillWithPhotoViews, fitPanorama, fitPlanToPhotos, matchPhotosToSlides, swapPhoto, type PhotoView } from "./photoCarousel";
@@ -29,7 +30,8 @@ export type ReferenceUse="source"|"style";
 export type StudioPhoto={id:string;preview:string;name:string};
 export const MAX_STUDIO_PHOTOS=10;
 // preferredStyle: 한 달 기획이 추천한 디자인 계열. 새 초안의 계열 선택 기본값이 된다(사용자가 바꾸면 그쪽을 따른다).
-export type GenerationInput={topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount;preferredStyle?:StyleId};
+// track: 갈래(사진 중심·글 중심, track.ts). 있으면 구성안 요청에 실어 보내고 서버가 장 수·디자인·글 길이를 정한다(화면 연결은 다음 단계).
+export type GenerationInput={topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount;preferredStyle?:StyleId;track?:CarouselTrack};
 // "auto"면 구성안 AI가 글 분위기에 맞춰 추천한 글꼴을 쓰고, 아니면 사용자가 고른 글꼴로 덮어쓴다.
 export type FontChoice<T extends string>="auto"|T;
 
@@ -103,12 +105,15 @@ export function useGenerationState():GenerationState {
   return useSyncExternalStore(subscribe,getSnapshot,getSnapshot);
 }
 
+// 구성안 요청에 실을 갈래(없으면 빈 객체: 예전 요청과 똑같다).
+const trackField=()=>state.input.track?{track:state.input.track}:{};
+
 export function resetGenerationStore(){run++;replace(initialGenerationState("",EMPTY_INPUT));}
 
 // 다른 초안으로 바뀌면 새로 시작하고, 같은 초안이면 진행 중인 상태를 그대로 이어 간다.
 export function ensureGeneration(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]){
   if(state.key!==key){run++;replace(initialGenerationState(key,input,approvedImages));return;}
-  if(state.input.topic!==input.topic||state.input.imageBrief!==input.imageBrief||state.input.contentBrief!==input.contentBrief||state.input.slideCount!==input.slideCount)patch({input});
+  if(state.input.topic!==input.topic||state.input.imageBrief!==input.imageBrief||state.input.contentBrief!==input.contentBrief||state.input.slideCount!==input.slideCount||state.input.track!==input.track)patch({input});
 }
 
 export const activeSlideIndex=(current:GenerationState)=>Math.min(current.activeSlide,Math.max(current.slides.length-1,0));
@@ -340,7 +345,7 @@ export async function startPlan(){
   patch({...CLEARED,phase:"planning"});
   try{
     const {topic,imageBrief,contentBrief,slideCount}=state.input;
-    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:state.imageStyle})});
+    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:state.imageStyle,...trackField()})});
     const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
@@ -521,7 +526,7 @@ export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
     if(token!==run)return;
     patch({photoNotes:notes});
     const photoNotes=notes.some(Boolean)?notes:undefined;
-    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:"photo",...(photoNotes?{photoNotes}:{})})});
+    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:"photo",...(photoNotes?{photoNotes}:{}),...trackField()})});
     const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
