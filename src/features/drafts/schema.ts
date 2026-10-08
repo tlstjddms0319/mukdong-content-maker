@@ -35,6 +35,8 @@ export const DraftSchema = z.object({
   caption: z.string().max(2200).optional(),
   planned_publish_at: z.string().datetime().nullable().optional(),
   final_review_complete: z.boolean().optional(),
+  // 보관함에 넣은 게시물(지금은 안 올리고 따로 모아 둔 것). 내 게시물 목록에서는 빼고 '보관함'에서 보인다.
+  archived: z.boolean().optional(),
   // 한 달 기획의 어느 게시일에서 시작한 초안인지(YYYY-MM-DD). 기획표가 진행 상태를 보여 줄 때 쓴다.
   plan_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   // 이 초안 카드에 쓴 디자인 계열(성과를 계열별로 비교할 때 쓴다).

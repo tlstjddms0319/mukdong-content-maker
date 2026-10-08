@@ -626,3 +626,19 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .topic-card-placeholder .placeholder-line.short { width:55%; }
 @keyframes placeholder-pulse { 0%,100% { opacity:.45; } 50% { opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .topic-card-placeholder .placeholder-line { animation:none; } }
+
+/* 예약해서 올리기: 버튼 아래로 펼치는 시각 고르기(빠른 시각 버튼 + 직접 고르기 + 예약하기). */
+.schedule-picker { display:grid; gap:10px; padding:14px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; }
+.schedule-choices { display:grid; gap:8px; }
+.schedule-choices .button { width:100%; font-size:18px; }
+.schedule-choices .button.selected { border-color:var(--accent, #1f5c43); background:#e8efe9; font-weight:800; }
+.schedule-custom { display:grid; gap:4px; font-size:16px; color:var(--muted); }
+.schedule-custom input { min-height:48px; padding:8px 10px; font-size:17px; border:1px solid var(--line); border-radius:var(--control-radius); }
+.schedule-picker .button.primary { width:100%; }
+
+/* 보관함에 넣은 뒤: 보관함 보기·꺼내기를 나란히. */
+.archive-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+/* 내 게시물: 게시물 / 보관함 두 칸. */
+.drafts-tabs { display:flex; gap:8px; margin-top:20px; }
+.drafts-tabs a { min-height:48px; display:inline-flex; align-items:center; padding:0 18px; border:1px solid var(--line); border-radius:999px; font-size:18px; font-weight:700; color:var(--muted); text-decoration:none; background:#fff; }
+.drafts-tabs a[aria-current="page"] { border-color:#1f5c43; background:#1f5c43; color:#fff; }

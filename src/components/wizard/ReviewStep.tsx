@@ -3,6 +3,8 @@ import { useState } from "react";
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { InstagramPublish } from "@/components/review/InstagramPublish";
 import { SaveToPhone } from "@/components/review/SaveToPhone";
+import { ScheduleShare } from "@/components/review/ScheduleShare";
+import { ArchiveShare } from "@/components/review/ArchiveShare";
 import { ExportActions } from "@/components/review/ExportActions";
 import type { ReviewImage } from "@/components/review/exportFiles";
 import { SlideTextEditor } from "@/components/images/SlideTextEditor";
@@ -10,7 +12,7 @@ import { DeckEditor } from "@/components/images/DeckEditor";
 import { FreeCardStudio } from "@/components/images/FreeCardStudio";
 import { canEditSlideText, redoSlide, redoSlideKind, setActiveSlide, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
-// 3단계 "확인하고 올리기": 사진과 글을 한 화면에서 보고, 큰 버튼 두 개(바로 올리기·휴대폰에 저장) 중 하나를 누른다.
+// 3단계 "확인하고 올리기": 사진과 글을 한 화면에서 보고, 큰 버튼 네 개(바로 올리기·예약해서 올리기·휴대폰에 저장·보관함에 보관) 중 하나를 누른다.
 // 작은 버튼은 "이 장 다시 만들기"와 "글 다시 쓰기"뿐. 장 고치기·글자 고치기·글자 카드·파일 받기는 "더보기" 안에 접어 둔다.
 // generation: 이 게시물의 만들기 상태(장 다시 만들기·장 고치기에 쓴다). 예전 초안처럼 구성안이 없으면 다시 만들 것이 없어 버튼을 숨긴다.
 export type CaptionStatus="saved"|"saving"|"unsaved"|"error";
@@ -27,6 +29,9 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,onC
   // 바로 올릴 수 있으면 "바로 올리기"가, 아니면(연결 전·연결 기간 끝남) "휴대폰에 저장하기"가 주인공 버튼이다(한 화면에 주인공은 하나).
   const [instagramReady,setInstagramReady]=useState(true);
   const [freeOpen,setFreeOpen]=useState(false);
+  // 예약·보관은 서로 영향을 준다(보관하면 예약이 꺼지고, 예약하면 보관함에서 나온다). 한쪽을 바꾸면 둘 다 서버 상태를 다시 읽게 key를 바꾼다.
+  const [shareTick,setShareTick]=useState(0);
+  const bumpShare=()=>setShareTick(tick=>tick+1);
   const shown=Math.min(index,Math.max(urls.length-1,0)),active=urls[shown];
   // 장을 넘기면 만들기 상태의 "지금 장"도 맞춘다(이 장 다시 만들기·글자 고치기·장 고치기가 그 장에 걸린다).
   const go=(next:number)=>{setIndex(next);if(generation&&next<generation.slides.length)setActiveSlide(next);};
@@ -67,7 +72,10 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,onC
     </div>
     <div className="share-actions">
       <InstagramPublish draftId={draftId} caption={caption} imageUrls={urls.map(image=>image.url)} primary={instagramReady} onBeforePublish={onSaveCaption} onReady={setInstagramReady}/>
+      {/* 사진이 바뀌면(장 다시 만들기 등) 서버가 예약 확인을 풀므로, 다시 읽도록 사진 목록을 key로 준다. */}
+      <ScheduleShare key={`${shareTick}|${urls.map(image=>image.url.slice(-24)).join("|")}`} draftId={draftId} ready={instagramReady&&urls.length>0} onBeforeSchedule={onSaveCaption} onChange={bumpShare}/>
       <SaveToPhone images={urls} caption={caption} title={topic} primary={!instagramReady}/>
+      <ArchiveShare key={shareTick} draftId={draftId} onBeforeArchive={onSaveCaption} onChange={bumpShare}/>
     </div>
     <details className="more-tools">
       <summary>더보기</summary>

@@ -43,7 +43,7 @@ it("renders a saved draft with a way to reopen it", async () => {
   await createDraftRepository(directory).saveDraft({id,status:"ready",topic:"홍어 첫 한 점",audience:"A",media_candidates:[],selected_media_id:null,copy:null,caption:"직접 쓴 소개 문구",facts_to_verify:[],store_profile_version:"2026-09-10",created_at:"2026-09-10T00:00:00.000Z",updated_at:"2026-09-12T00:00:00.000Z"});
   const { default:DraftsPage }=await import("@/app/drafts/page");
 
-  const html=renderToStaticMarkup(await DraftsPage());
+  const html=renderToStaticMarkup(await DraftsPage({searchParams:Promise.resolve({})}));
   expect(html).toContain("홍어 첫 한 점");
   expect(html).toContain("직접 쓴 소개 문구");
   expect(html).toContain(`/?draft=${id}`);
@@ -170,4 +170,36 @@ it("fills the planned time from the month plan only when a draft is first saved"
   const pastId="55555555-5555-4555-8555-555555555555";
   await POST(new Request("http://localhost/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...JSON.parse(await body({}).text()),id:pastId,plan_date:"2020-01-07"})}));
   expect(await createDraftRepository(directory).readDraft(pastId)).toMatchObject({plan_date:"2020-01-07",planned_publish_at:null});
+});
+
+it("archives a draft: turns off its schedule, survives re-saving, moves it to the 보관함 tab, and scheduling takes it out", async () => {
+  directory=await mkdtemp(path.join(tmpdir(),"mukdong-archive-"));
+  process.env.DATA_DIR=directory;
+  vi.resetModules();
+  const { createDraftRepository }=await import("@/features/drafts/repository");
+  const id="11111111-1111-4111-8111-111111111111";
+  const mediaId="22222222-2222-4222-8222-222222222222";
+  const repository=createDraftRepository(directory);
+  const draft={id,status:"ready" as const,topic:"보관할 홍어 주제",audience:"A" as const,media_candidates:[{id:mediaId,source:"photo" as const,file_id:"photo.jpg",purpose:"instagram-primary" as const}],selected_media_id:mediaId,copy:null,caption:"홍어 소개",facts_to_verify:[],store_profile_version:"2026-09-10",created_at:"2026-09-10T00:00:00.000Z",updated_at:"2026-09-10T00:00:00.000Z",planned_publish_at:"2030-05-15T09:00:00.000Z",final_review_complete:true};
+  await repository.saveDraft(draft);
+  const { PATCH, POST }=await import("@/app/api/drafts/route");
+  const patch=(body:object)=>PATCH(new Request("http://localhost/api/drafts",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}));
+
+  expect((await patch({id,archived:true})).status).toBe(200);
+  expect(await repository.readDraft(id)).toMatchObject({archived:true,final_review_complete:false});
+  // 사진·글을 다시 저장해도(POST) 보관함에서 빠지지 않는다.
+  const {planned_publish_at:_p,final_review_complete:_f,...plain}=draft;void _p;void _f;
+  await POST(new Request("http://localhost/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(plain)}));
+  expect((await repository.readDraft(id))?.archived).toBe(true);
+
+  const { default:DraftsPage }=await import("@/app/drafts/page");
+  expect(renderToStaticMarkup(await DraftsPage({searchParams:Promise.resolve({})}))).not.toContain("보관할 홍어 주제");
+  const archive=renderToStaticMarkup(await DraftsPage({searchParams:Promise.resolve({view:"archive"})}));
+  expect(archive).toContain("보관할 홍어 주제");
+  expect(archive).toContain("보관함에서 꺼내기");
+
+  // 예약을 켜면 보관함에서 나온다.
+  expect((await patch({id,planned_publish_at:"2030-05-15T09:00:00.000Z",final_review_complete:true})).status).toBe(200);
+  expect(await repository.readDraft(id)).toMatchObject({archived:false,final_review_complete:true});
+  expect((await patch({id,archived:"yes"})).status).toBe(400);
 });
