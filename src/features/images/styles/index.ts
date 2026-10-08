@@ -19,6 +19,8 @@ import { renderGold } from "./gold";
 import { renderWatercolor } from "./watercolor";
 import { renderTicket } from "./ticket";
 import { renderEditorial } from "./editorial";
+import { renderPhotoFocus } from "./photoFocus";
+import { renderTextFocus } from "./textFocus";
 
 // 스타일 계열별 그리기 함수. "template"은 여기 없고 composeSlide의 레이아웃 그리기 함수를 쓴다.
 // 각 함수는 받은 사진 수(0~3장)에 맞춰 표지·사진 장·글자 장을 알아서 그린다.
@@ -42,4 +44,7 @@ export const STYLE_RENDERERS:Record<Exclude<StyleId,"template">,CardRenderer>={
   watercolor:renderWatercolor,
   ticket:renderTicket,
   editorial:renderEditorial,
+  // 갈래 전용(사진 중심·글 중심). 구성안의 갈래(track)만 이 둘을 고른다(styleCatalog.ts TRACK_STYLES).
+  "photo-focus":renderPhotoFocus,
+  "text-focus":renderTextFocus,
 };
