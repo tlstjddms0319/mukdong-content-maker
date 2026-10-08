@@ -47,13 +47,17 @@ it("renders a saved draft with a way to reopen it", async () => {
   expect(html).toContain("홍어 첫 한 점");
   expect(html).toContain("직접 쓴 소개 문구");
   expect(html).toContain(`/?draft=${id}`);
-  expect(html).toContain("게시 희망일시 (한국시간)");
+  // 올릴 날짜 정하기는 카드마다 접어 둔 "올릴 날짜 · 반응 적기" 안에 그대로 있다.
+  expect(html).toContain("올릴 날짜 · 반응 적기");
+  expect(html).toContain("올릴 날짜와 시각");
   expect(html).toContain("최종 확인 완료");
-  expect(html).toContain("자동 게시되지 않아요");
+  expect(html).toContain("저절로 올라가요");
   expect(html).toContain("같은 주제로 새로");
+  expect(html).toContain("내 게시물");
+  expect(html).not.toContain("초안");
 });
 
-it("shows planned drafts in upcoming order and keeps overdue plans visible", async () => {
+it("shows planned drafts in upcoming order on the month plan page and keeps overdue plans visible", async () => {
   directory=await mkdtemp(path.join(tmpdir(),"mukdong-overview-"));
   process.env.DATA_DIR=directory;
   vi.resetModules();
@@ -64,10 +68,11 @@ it("shows planned drafts in upcoming order and keeps overdue plans visible", asy
   await repository.saveDraft({...base,id:"22222222-2222-4222-8222-222222222222",topic:"지난 계획",planned_publish_at:"2020-01-02T09:00:00.000Z"});
   await repository.saveDraft({...base,id:"33333333-3333-4333-8333-333333333333",topic:"이른 예정",planned_publish_at:"2098-01-02T09:00:00.000Z"});
   await repository.saveDraft({...base,id:"44444444-4444-4444-8444-444444444444",topic:"일정 없음"});
-  const { default:DraftsPage }=await import("@/app/drafts/page");
+  vi.doMock("@/components/drafts/MonthPlanner",()=>({MonthPlanner:()=>null}));
+  const { default:PlanPage }=await import("@/app/plan/page");
 
-  const html=renderToStaticMarkup(await DraftsPage());
-  const overview=html.match(/<section[^>]*aria-label="게시 계획"[^>]*>[\s\S]*?<\/section>/)?.[0];
+  const html=renderToStaticMarkup(await PlanPage());
+  const overview=html.match(/<section[^>]*aria-label="올릴 날짜"[^>]*>[\s\S]*?<\/section>/)?.[0];
   expect(overview).toBeDefined();
   expect(overview).toContain('aria-label="콘텐츠 캘린더"');
   expect(overview).toContain("2098년 1월");

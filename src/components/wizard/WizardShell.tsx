@@ -6,16 +6,33 @@ import { logout } from "@/features/auth/actions";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { GenerationBadge } from "./GenerationBadge";
 
-export type WizardStep = "topic" | "image" | "copy" | "review";
+// 만들기 3단계(간소화 계획 B). 예전 "3 문안" 단계는 없어졌다: 글은 자동으로 쓰이고 3단계에서 고친다.
+// id "image"는 예전 이름 그대로 둔다(탭 세션·테스트가 쓰는 값). 화면에 보이는 이름만 "만들기"다.
+export type WizardStep = "topic" | "image" | "review";
 
 const steps: Array<{ id: WizardStep; label: string }> = [
-  { id: "topic", label: "1 주제" },
-  { id: "image", label: "2 이미지" },
-  { id: "copy", label: "3 문안" },
-  { id: "review", label: "4 확인" },
+  { id: "topic", label: "1 무엇을 올릴까요" },
+  { id: "image", label: "2 만들기" },
+  { id: "review", label: "3 확인하고 올리기" },
 ];
 
-export function WizardShell({ step, children, canVisit=[], onStepChange, onNewDraft, section="create" }: { step: WizardStep; children: ReactNode; canVisit?:WizardStep[]; onStepChange?:(step:WizardStep)=>void; onNewDraft?:()=>void; section?:"create"|"drafts"|"images"|"library"|"settings"|"help" }) {
+type Section="create"|"drafts"|"images"|"library"|"settings"|"help"|"plan";
+// 자주 쓰는 메뉴 셋만 늘 보이게 두고, 가끔 쓰는 것은 "더보기" 안에 접어 둔다(사장님 결정: 고를 것을 줄인다).
+const MAIN:Array<{section:Section;href:string;label:string}>=[
+  {section:"create",href:"/",label:"만들기"},
+  {section:"drafts",href:"/drafts",label:"내 게시물"},
+  {section:"settings",href:"/settings",label:"설정"},
+];
+const MORE:Array<{section:Section;href:string;label:string}>=[
+  {section:"plan",href:"/plan",label:"한 달 계획"},
+  {section:"library",href:"/library",label:"콘텐츠 자료"},
+  {section:"images",href:"/images",label:"이미지 모음"},
+  {section:"help",href:"/help",label:"도움말"},
+];
+
+export function WizardShell({ step, children, canVisit=[], onStepChange, onNewDraft, section="create" }: { step: WizardStep; children: ReactNode; canVisit?:WizardStep[]; onStepChange?:(step:WizardStep)=>void; onNewDraft?:()=>void; section?:Section }) {
+  const link=(item:{section:Section;href:string;label:string})=><Link key={item.href} className={section===item.section?"active":undefined} aria-current={section===item.section?"page":undefined} href={item.href}>{item.label}</Link>;
+  const inMore=MORE.some(item=>item.section===section);
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -24,27 +41,28 @@ export function WizardShell({ step, children, canVisit=[], onStepChange, onNewDr
           묵동 콘텐츠 메이커
         </Link>
         <div className="topbar-actions">
-          <Link className="button secondary" aria-current={section==="help"?"page":undefined} href="/help">도움말</Link>
           <form action={logout}><button className="button secondary" type="submit">로그아웃</button></form>
         </div>
       </header>
       <div className="shell-body">
         <nav className="side-nav" aria-label="주요 메뉴">
-          <Link className={section==="create"?"active":undefined} aria-current={section==="create"?"page":undefined} href="/">만들기</Link>
+          {MAIN.slice(0,1).map(link)}
           <GenerationBadge />
-          <Link className={section==="drafts"?"active":undefined} aria-current={section==="drafts"?"page":undefined} href="/drafts">내 초안</Link>
-          <Link className={section==="images"?"active":undefined} aria-current={section==="images"?"page":undefined} href="/images">이미지 제작실</Link>
-          <Link className={section==="library"?"active":undefined} aria-current={section==="library"?"page":undefined} href="/library">콘텐츠 자료</Link>
-          <Link className={section==="settings"?"active":undefined} aria-current={section==="settings"?"page":undefined} href="/settings">설정</Link>
+          {MAIN.slice(1).map(link)}
+          {/* 더보기: 지금 보고 있는 화면이 이 안에 있으면 "더보기"를 굵게 표시한다(휴대폰에서는 펼친 창이 화면을 가리므로 접어 둔다). */}
+          <details className="nav-more">
+            <summary className={inMore?"active":undefined} aria-current={inMore?"location":undefined}>더보기</summary>
+            <div className="nav-more-links">{MORE.map(link)}</div>
+          </details>
         </nav>
         <main className="main-content">
-          {section==="create"&&<div className="step-bar"><ol className="step-list" aria-label="제작 단계">
+          {section==="create"&&<div className="step-bar"><ol className="step-list" aria-label="만드는 순서">
             {steps.map((item) => (
               <li key={item.id} aria-current={item.id === step ? "step" : undefined}>
                 <button type="button" disabled={!onStepChange||!canVisit.includes(item.id)} onClick={()=>onStepChange?.(item.id)}>{item.label}</button>
               </li>
             ))}
-          </ol>{onNewDraft&&<button type="button" className="button secondary" onClick={onNewDraft}>새 초안 시작</button>}</div>}
+          </ol>{onNewDraft&&<button type="button" className="button secondary" onClick={onNewDraft}>새로 만들기</button>}</div>}
           {children}
         </main>
       </div>

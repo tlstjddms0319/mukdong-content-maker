@@ -21,6 +21,22 @@ describe("SettingsForm", () => {
     expect(screen.getByLabelText("캐러셀 장수")).toHaveValue("5");
   });
 
+  it("shows only the brand kit and keeps technical settings inside a closed 관리자용 설정", () => {
+    const onSave=vi.fn();
+    render(<SettingsForm onSave={onSave} adminCards={<p>저장소 점검 카드</p>}/>);
+    const admin=screen.getByText("관리자용 설정").closest("details")!;
+    expect(admin).not.toHaveAttribute("open");
+    for(const label of ["문안 AI","이미지 AI","OpenAI 이미지 품질","문안 길이","캐러셀 장수","원격 누끼 사용"])expect(admin).toContainElement(screen.getByLabelText(label));
+    expect(admin).toContainElement(screen.getByText("저장소 점검 카드"));
+    expect(admin).toContainElement(screen.getByText(/Gemini (키 설정됨|키 필요)/));
+    // 브랜드 키트(계정·로고)는 접지 않고 보인다. 계정만 고쳐 저장해도 다른 설정은 그대로 간다.
+    const handle=screen.getByLabelText("Instagram 계정");
+    expect(admin).not.toContainElement(handle);
+    fireEvent.change(handle,{target:{value:"@mukdong_hongeo"}});
+    fireEvent.click(screen.getByRole("button",{name:"계정 저장"}));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({brandHandle:"@mukdong_hongeo",textAiProvider:"automatic",carouselSlideCount:5}));
+  });
+
   it("saves validated defaults through the settings API", async () => {
     const request = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", request);

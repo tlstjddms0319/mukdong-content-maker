@@ -34,7 +34,7 @@ describe("manual posting guide", () => {
 
     expect(text).toContain("네이버 플레이스: https://naver.me/Ffex1C2k");
     expect(text).toContain("Instagram 음악 검색어: korean acoustic, makgeolli mood, folk groove");
-    expect(text).toContain("1. 이미지 순서와 잘림을 확인합니다.");
-    expect(text).toContain("5. Instagram 앱에서 직접 게시합니다.");
+    expect(text).toContain("1. 사진 순서와 잘린 곳이 없는지 봐요.");
+    expect(text).toContain("5. 인스타그램 앱에서 직접 올려요.");
   });
 });

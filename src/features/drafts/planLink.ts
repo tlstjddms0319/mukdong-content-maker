@@ -18,7 +18,7 @@ export const kstToday=(now=Date.now())=>new Date(now+9*3_600_000).toISOString().
 // 기획 칸의 진행 상태. 기획만 → 이미지 저장 → 문안까지 → 최종 확인 완료. 날짜가 지났는데 초안이 없으면 "놓침".
 export type PlanItemState="planned"|"missed"|"images"|"caption"|"reviewed";
 export type PlanDraftSummary={id:string;topic:string;plan_date?:string;hasImages:boolean;hasCaption:boolean;reviewed:boolean};
-export const PLAN_STATE_LABELS:Record<PlanItemState,string>={planned:"기획",missed:"날짜 지남",images:"이미지 저장됨",caption:"문안까지 완료",reviewed:"최종 확인 완료"};
+export const PLAN_STATE_LABELS:Record<PlanItemState,string>={planned:"주제만 정함",missed:"날짜 지남",images:"사진 저장됨",caption:"사진·글 완성",reviewed:"최종 확인 완료"};
 
 const titleKey=(title:string)=>title.replace(/[\s?!.,]/g,"");
 const progress=(draft:PlanDraftSummary)=>draft.reviewed?3:draft.hasCaption?2:draft.hasImages?1:0;

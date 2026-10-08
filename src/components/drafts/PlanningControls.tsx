@@ -24,20 +24,20 @@ export function PlanningControls({ draftId, topic, plannedPublishAt, finalReview
       const updated=await readJsonResponse(response);
       setSavedDate(updated.planned_publish_at?new Date(Date.parse(updated.planned_publish_at)+9*60*60*1000).toISOString().slice(0,16):"");
       setSavedReview(!!updated.final_review_complete);
-      setMessage("예약 준비를 저장했어요.");
+      setMessage("저장했어요.");
       router.refresh();
     }catch(cause){setError(cause instanceof Error?cause.message:"저장하지 못했어요.");}
     finally{setBusy(false);}
   }
   return <form className="draft-planning" aria-label={`${topic} 예약 준비`} onSubmit={event=>void save(event)}>
-    <span className="soft-badge">{savedReview?"게시 준비 완료":savedDate?"희망일시 저장됨":"예약 준비 전"}</span>
-    <label htmlFor={dateId}>게시 희망일시 (한국시간)</label>
+    <span className="soft-badge">{savedReview?"올릴 준비 끝":savedDate?"날짜 정함":"날짜 안 정함"}</span>
+    <label htmlFor={dateId}>올릴 날짜와 시각</label>
     <input id={dateId} type="datetime-local" value={date} onChange={event=>{setDate(event.target.value);if(!event.target.value)setReviewed(false);}}/>
     <label className="planning-check"><input type="checkbox" checked={reviewed} disabled={!canReview||!date} onChange={event=>setReviewed(event.target.checked)}/>최종 확인 완료</label>
-    <button type="submit" className="button secondary" disabled={busy}>{busy?"저장 중…":"예약 준비 저장"}</button>
-    {!canReview&&<small>이미지와 문안을 먼저 저장해 주세요.</small>}
+    <button type="submit" className="button secondary" disabled={busy}>{busy?"저장 중…":"날짜 저장"}</button>
+    {!canReview&&<small>사진과 글을 먼저 만들어 주세요.</small>}
     {message&&<small role="status">{message}</small>}
     {error&&<small role="alert">{error}</small>}
-    <small>Instagram을 연결하고 ‘최종 확인 완료’를 켜 두면 이 시각에 자동으로 게시돼요. 연결 전에는 자동 게시되지 않아요. 무료 서버가 잠들어 있으면 늦어질 수 있고(설정의 외부 깨우기 안내 참고), 6시간 넘게 지나면 게시하지 않아요. 예약을 멈추려면 ‘최종 확인 완료’를 끄고 저장하세요.</small>
+    <small>인스타그램을 연결하고 ‘최종 확인 완료’를 켜 두면 이 시각에 저절로 올라가요. 조금 늦어질 수 있고, 6시간 넘게 지나면 올리지 않아요. 멈추려면 ‘최종 확인 완료’를 끄고 저장하세요.</small>
   </form>;
 }

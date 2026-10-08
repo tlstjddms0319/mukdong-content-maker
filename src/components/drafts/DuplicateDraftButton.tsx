@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { readJsonResponse } from "@/lib/http/readJson";
 
 // "복제해서 고치기": 서버에 복제본을 만들고 바로 그 복제본을 위저드로 연다.
-// 원본은 그대로 남으므로 디자인·문안을 마음껏 바꿔 봐도 된다.
+// 원본은 그대로 남으므로 사진·글을 마음껏 바꿔 봐도 된다.
 export function DuplicateDraftButton({draftId,topic}:{draftId:string;topic:string}){
   const router=useRouter();
   const [busy,setBusy]=useState(false);

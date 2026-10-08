@@ -40,7 +40,7 @@ function AssetCard({asset,onSaved,onRemoved}:{asset:LibraryAsset;onSaved:(asset:
     finally{setBusy(false);}
   };
   const remove=async()=>{
-    if(!window.confirm(`"${asset.name}" 사진을 보관함에서 뺄까요? 이미 만든 초안에는 영향이 없어요.`))return;
+    if(!window.confirm(`"${asset.name}" 사진을 보관함에서 뺄까요? 이미 만든 게시물은 그대로예요.`))return;
     setBusy(true);setMessage("");
     try{
       const response=await fetch(`/api/images/assets?id=${encodeURIComponent(asset.id)}`,{method:"DELETE"});
@@ -81,7 +81,7 @@ export function PhotoLibraryManager(){
   return <section className="photo-library-manager" aria-label="사진 보관함 관리">
     <div><h2>사진 보관함</h2><p>올린 사진에 메뉴 이름 같은 검색어를 달아 두면, 사진을 고를 때 바로 찾을 수 있어요.</p></div>
     {error&&<p role="alert">{error}</p>}
-    {assets===null?<p role="status">불러오는 중…</p>:!assets.length?<p className="field-help">아직 저장한 사진이 없어요. 새 초안의 이미지 단계에서 사진을 올리면 여기에 모여요.</p>:<>
+    {assets===null?<p role="status">불러오는 중…</p>:!assets.length?<p className="field-help">아직 저장한 사진이 없어요. 만들기 2단계에서 사진을 올리면 여기에 모여요.</p>:<>
       <LibraryFilterBar query={query} onQuery={setQuery} sort={sort} onSort={setSort} tags={popularTags(assets)} count={shown.length}/>
       <label className="library-cover-first"><input type="checkbox" checked={coversFirst} onChange={event=>setCoversFirst(event.target.checked)}/>표지로 좋은 사진 먼저 <small>(어둡거나 흔들리지 않은 사진)</small></label>
       <ul className="library-assets">{shown.map(asset=><AssetCard key={asset.id} asset={asset} onSaved={saved=>setAssets(current=>current?.map(item=>item.id===saved.id?saved:item)??null)} onRemoved={id=>setAssets(current=>current?.filter(item=>item.id!==id)??null)}/>)}</ul>

@@ -9,7 +9,7 @@ export function DeleteDraftButton({draftId,topic,published=false}:{draftId:strin
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const remove=async()=>{
-    const question=published?`'${topic}' 초안을 지울까요? 인스타그램에 올린 글은 지워지지 않고, 이 앱의 초안·성과 기록만 지워져요.`:`'${topic}' 초안을 지울까요? 지운 초안은 되돌릴 수 없어요.`;
+    const question=published?`'${topic}' 게시물을 지울까요? 인스타그램에 올린 글은 지워지지 않고, 이 앱에 남긴 기록만 지워져요.`:`'${topic}' 게시물을 지울까요? 지우면 되돌릴 수 없어요.`;
     if(!window.confirm(question))return;
     setBusy(true);setError("");
     try{
@@ -21,7 +21,7 @@ export function DeleteDraftButton({draftId,topic,published=false}:{draftId:strin
     }catch(cause){setError(cause instanceof Error?cause.message:"지우지 못했어요.");setBusy(false);}
   };
   return <>
-    <button type="button" className="button secondary danger" aria-label={`${topic} 초안 지우기`} disabled={busy} onClick={()=>void remove()}>{busy?"지우는 중…":"지우기"}</button>
+    <button type="button" className="button secondary danger" aria-label={`${topic} 지우기`} disabled={busy} onClick={()=>void remove()}>{busy?"지우는 중…":"지우기"}</button>
     {error&&<p role="alert" className="field-help">{error}</p>}
   </>;
 }

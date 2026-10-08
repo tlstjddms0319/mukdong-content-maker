@@ -32,17 +32,19 @@ const selected: Draft = {
 describe("ImageGallery", () => {
   it("offers the existing creation flow when there are no drafts", () => {
     render(<ImageGallery drafts={[]} />);
-    expect(screen.getByText("아직 저장된 초안이 없어요")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "이미지 제작 시작" })).toHaveAttribute("href", "/");
+    expect(screen.getByText("아직 만든 게시물이 없어요")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "새로 만들기" })).toHaveAttribute("href", "/");
+    // 예전의 이미지 방식 4개 안내는 없다(사진 유무로 자동).
+    expect(screen.queryByText("사진 + AI")).not.toBeInTheDocument();
   });
 
   it("shows selected media only and keeps an image-less draft reachable", () => {
-    const noImage: Draft = { ...baseDraft, id: "33333333-3333-4333-8333-333333333333", topic: "이미지 없는 초안" };
+    const noImage: Draft = { ...baseDraft, id: "33333333-3333-4333-8333-333333333333", topic: "사진 없는 게시물" };
     render(<ImageGallery drafts={[selected, noImage].map(summarizeDraft)} />);
-    expect(screen.getByText("선택 이미지 1장")).toBeInTheDocument();
+    expect(screen.getByText("사진 1장")).toBeInTheDocument();
     expect(screen.getByText("이미지 미선택")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "초안 열기" })[0]).toHaveAttribute("href", `/?draft=${selected.id}`);
-    expect(screen.getAllByRole("link", { name: "초안 열기" })[1]).toHaveAttribute("href", `/?draft=${noImage.id}`);
+    expect(screen.getAllByRole("link", { name: "열기" })[0]).toHaveAttribute("href", `/?draft=${selected.id}`);
+    expect(screen.getAllByRole("link", { name: "열기" })[1]).toHaveAttribute("href", `/?draft=${noImage.id}`);
   });
 
   it("shows the small thumbnail from the thumbnail route, not the original image", () => {
@@ -54,7 +56,7 @@ describe("ImageGallery", () => {
     render(<ImageGallery drafts={[summarizeDraft(selected)]} />);
     fireEvent.error(screen.getByRole("img", { name: "홍어 한 상 선택 이미지 미리보기" }));
     expect(screen.getByText("미리보기 없음")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "초안 열기" })).toHaveAttribute("href", `/?draft=${selected.id}`);
+    expect(screen.getByRole("link", { name: "열기" })).toHaveAttribute("href", `/?draft=${selected.id}`);
   });
 });
 

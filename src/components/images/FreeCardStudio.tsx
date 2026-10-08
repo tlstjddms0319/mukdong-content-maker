@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ASSET_KIND_LABELS, rankAssets, type LibraryAsset, type FreeCard } from "@/features/images/freeCards";
-import type { ApprovedImage } from "./ImageStudio";
+import type { ApprovedImage } from "@/features/images/generationStore";
 import { readJsonResponse } from "@/lib/http/readJson";
 
 export function FreeCardStudio({topic,onApprove}:{topic:string;onApprove:(images:ApprovedImage[])=>void}) {

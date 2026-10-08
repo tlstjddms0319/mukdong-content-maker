@@ -2,7 +2,7 @@ import { z } from "zod";
 import { mainMenuOf, menuOf, type StoreMenuItem } from "@/features/store/menu";
 
 // 사장님 사진 표지 추천(/api/images/analyze)의 요청·응답 모양과 순서 정하기.
-// 화면(PhotoCarouselStudio)과 서버가 함께 쓰므로 sharp·server-only를 넣지 않는다.
+// 화면(사진 고르기)과 서버가 함께 쓰므로 sharp·server-only를 넣지 않는다.
 
 export const MAX_ANALYZE_PHOTOS=10;
 const DATA_URL=/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
