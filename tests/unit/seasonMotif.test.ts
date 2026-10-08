@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { composeSlideCard } from "@/features/images/composeSlide";
 import { buildCarouselPlanPrompt, createFallbackCarouselPlan } from "@/features/images/carousel";
 import { DesignSpecSchema } from "@/features/images/design";
-import { effectiveDesign } from "@/features/images/generationStore";
 import { addSeasonMotif } from "@/features/images/render/seasonLayer";
 import { suggestSeasonMotif } from "@/features/images/seasonMotif";
 
@@ -64,11 +63,9 @@ describe("season motif layer", () => {
     expect(suggestSeasonMotif("홍어 한 점의 결",new Date("2026-03-03T03:00:00Z"))).toBe("none");
   });
 
-  it("keeps old plans valid and lets the owner override the AI's choice", () => {
+  it("keeps old plans valid and keeps the AI's choice", () => {
     expect(DesignSpecSchema.parse({palette:"warm"}).season).toBe("none");
-    const design=DesignSpecSchema.parse({palette:"warm",season:"moon"});
-    expect(effectiveDesign(design,{titleFont:"auto",bodyFont:"auto",season:"auto"}).season).toBe("moon");
-    expect(effectiveDesign(design,{titleFont:"auto",bodyFont:"auto",season:"none"}).season).toBe("none");
+    expect(DesignSpecSchema.parse({palette:"warm",season:"moon"}).season).toBe("moon");
   });
 
   it("asks the plan AI to choose a season motif only when it fits", () => {

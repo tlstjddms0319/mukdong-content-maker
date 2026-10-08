@@ -104,12 +104,12 @@ export function lenientPlanSchema(slideCount:number,fixes:string[]=[]){
 // 기본 문안으로 넘어간 이유. 화면에는 짧은 한국어로, 서버 로그에는 원문을 함께 남긴다.
 export type PlanFallbackReason="no-ai"|"quota"|"key"|"busy"|"format"|"error";
 export const PLAN_FALLBACK_MESSAGES:Record<PlanFallbackReason,string>={
-  "no-ai":"문안 AI가 설정되어 있지 않아요(설정 → AI 키 확인).",
-  quota:"문안 AI 오늘 사용량을 다 썼어요. 잠시 뒤나 내일 다시 해 보세요.",
-  key:"문안 AI 키가 맞지 않아요(설정 → AI 키 확인).",
-  busy:"문안 AI 서버가 잠시 바빠요. 조금 뒤 다시 해 보세요.",
+  "no-ai":"글 쓰는 AI가 설정되어 있지 않아요(설정 → AI 키 확인).",
+  quota:"글 쓰는 AI의 오늘 사용량을 다 썼어요. 잠시 뒤나 내일 다시 해 보세요.",
+  key:"글 쓰는 AI 키가 맞지 않아요(설정 → AI 키 확인).",
+  busy:"글 쓰는 AI가 잠시 바빠요. 조금 뒤 다시 해 보세요.",
   format:"AI가 보낸 구성안 형식이 맞지 않았어요. 다시 만들면 대개 됩니다.",
-  error:"문안 AI 연결에 문제가 있었어요. 다시 해 보세요.",
+  error:"글 쓰는 AI 연결에 문제가 있었어요. 다시 해 보세요.",
 };
 export function planFallbackReason(error:unknown):PlanFallbackReason {
   if(error instanceof TextAiHttpError){

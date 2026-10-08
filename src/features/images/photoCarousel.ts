@@ -86,19 +86,6 @@ export function fitPlanToPhotos(plan:CarouselPlan,photoCount:number,options:Phot
   return {plan:{...plan,slides:fitted},assignment,unused:Array.from({length:photoCount-next},(_,k)=>next+k)};
 }
 
-// 표지+2장 파노라마(render/panorama.ts): 표지 사진을 2번째 장에도 한 번 더 쓴다(두 장이 반씩 나눠 그린다).
-// 나머지 장은 2번째 장을 뺀 구성안으로 평소처럼 사진을 나눈 뒤, 2번째 장을 표지 사진(0번) 한 장짜리로 다시 끼운다.
-export function fitPanorama(plan:CarouselPlan,photoCount:number,options:PhotoFitOptions={}):PhotoFit {
-  if(plan.slides.length<2)return fitPlanToPhotos(plan,photoCount,options);
-  const rest=fitPlanToPhotos({...plan,slides:[plan.slides[0],...plan.slides.slice(2)]},photoCount,options);
-  const second={...plan.slides[1],layout:SINGLE_LAYOUT,variant:0};
-  return {
-    plan:{...rest.plan,slides:[rest.plan.slides[0],second,...rest.plan.slides.slice(1)]},
-    assignment:[rest.assignment[0],[0],...rest.assignment.slice(1)],
-    unused:rest.unused,
-  };
-}
-
 // 한 장의 사진을 바꿀 때: 그 장의 첫 칸을 고른 사진으로 바꾸고, 같은 사진이 다른 칸에 있으면 자리를 맞바꾼다.
 export function swapPhoto(slots:number[],photoIndex:number,slot=0):number[] {
   const next=[...slots];
@@ -112,7 +99,7 @@ export function swapPhoto(slots:number[],photoIndex:number,slot=0):number[] {
 // fitPlanToPhotos는 장마다 사진 "몇 장"을 정하고 올린 순서대로 나눠 준다. 사진마다 보이는 것(notes, AI가 읽은 음식·장면)을
 // 알면, 그 칸 수는 그대로 두고 어느 사진을 어느 장에 넣을지를 글과 겹치는 정도로 다시 고른다.
 // 예: "사발에 따르면 이런 빛이에요" 장에는 홍어 접시보다 막걸리 사발이 보이는 사진.
-// - 표지 첫 칸은 사장님이 고른 첫 사진 그대로(파노라마의 2번째 장도 표지 사진을 그대로 쓴다).
+// - 표지 첫 칸은 사장님이 고른 첫 사진 그대로.
 // - 점수가 같으면 원래 배치(올린 순서)를 지킨다. 사진 내용을 하나도 모르면 아무것도 바꾸지 않는다.
 // - 칸보다 사진이 많으면 글과 가장 덜 맞는 사진이 unused로 남는다.
 

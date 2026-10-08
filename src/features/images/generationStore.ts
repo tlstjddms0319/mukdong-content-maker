@@ -2,41 +2,36 @@ import { useSyncExternalStore } from "react";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan, type CarouselRole, type CarouselSlideCount } from "./carousel";
 import type { ImageStyle } from "./style";
 import { DEFAULT_SLIDE_LAYOUT, type SlideLayout } from "./slideLayout";
-import { normalizeCardLayout, photosNeeded, type DesignSpec } from "./design";
-import type { BodyFontId, TitleFontId } from "./typography";
-import type { ThemeId } from "./themes";
-import type { SeasonMotif } from "./seasonMotif";
+import { normalizeCardLayout, photosNeeded } from "./design";
 import { AnalyzeResponseSchema, TOPIC_TAG, photoNote } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
 import { TRACK_STYLES, type CarouselTrack } from "./track";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { teaserText } from "./teaser";
-import { fillWithPhotoViews, fitPanorama, fitPlanToPhotos, matchPhotosToSlides, swapPhoto, type PhotoView } from "./photoCarousel";
+import { fillWithPhotoViews, fitPlanToPhotos, matchPhotosToSlides, swapPhoto, type PhotoView } from "./photoCarousel";
 import { rememberCurrentDraft, saveDraftCaption, saveDraftImages, writePostText, type DraftMeta } from "@/features/drafts/draftSave";
 
 // 이미지 생성 상태를 React 컴포넌트 밖의 모듈 싱글턴에 둔다.
 // 화면(만들기 2·3단계)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
 // 새로고침을 하면 사라진다(모듈이 다시 로드되므로). 그 경우는 서버 작업 큐가 필요하다.
+// 예전 이미지 화면(방식 4개·계열/테마/글꼴/계절 고르기·표지 후보·파노라마·참고 사진)이 쓰던 상태와 함수는 화면과 함께 지웠다(간소화 C).
+// 지금은 자동 만들기(사진 묶음 또는 AI) → 확인 화면의 이 장 다시 만들기·장 고치기·글자 고치기만 이 상태를 쓴다.
 
-// check: AI 표지 점검 결과(coverCheck.ts). 점수와 경고 배지를 후보 위에 보여 준다.
+// check: AI 표지 점검 결과(coverCheck.ts).
 // bases: 글자를 얹기 전 밑바탕 사진(AI 이미지). 카드 글자만 고쳐 다시 그릴 때 쓴다. 초안에는 저장하지 않는다(화면에서만).
-// droppedPoints: 카드 자리가 모자라 그리지 못한 요점 수(서버가 알려 줌). 장 글자 고치기 옆에 안내한다.
+// droppedPoints: 카드 자리가 모자라 그리지 못한 짧은 글 수(서버가 알려 줌).
 // drawnAt: 이 그림을 그릴 때의 "자리 정보"(positionKey). 장을 넣고 뺄 때 이것이 바뀐 장만 다시 그린다.
 export type ApprovedImage={id:string;preview?:string;referencePreview?:string;bases?:string[];source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]};droppedPoints?:number;drawnAt?:string};
 const droppedOf=(data:unknown)=>{const value=(data as {droppedPoints?:unknown})?.droppedPoints;return typeof value==="number"&&value>0?{droppedPoints:value}:{};};
-export type StudioMode="photo"|"ai"|"mix"|"free";
+// photo: 사장님 사진으로 그린 묶음, ai: AI가 그린 묶음. 저장된 게시물을 다시 열면 photo(구성안 없음)로 시작한다.
+export type StudioMode="photo"|"ai";
 export type StudioPhase="idle"|"uploading"|"planning"|"cover"|"slides";
-export type ReferenceUse="source"|"style";
-// 실제 사진 캐러셀에 쓸 사진 한 장. id는 사진 보관함(asset library) id, preview는 서버가 줄여 준 JPEG(최대 1400px).
+// 사진 묶음에 쓸 사진 한 장. id는 사진 보관함(asset library) id, preview는 서버가 줄여 준 JPEG(최대 1400px).
 export type StudioPhoto={id:string;preview:string;name:string};
 export const MAX_STUDIO_PHOTOS=10;
-// preferredStyle: 한 달 기획이 추천한 디자인 계열. 새 초안의 계열 선택 기본값이 된다(사용자가 바꾸면 그쪽을 따른다).
 // track: 갈래(사진 중심·글 중심, track.ts). 있으면 구성안 요청에 실어 보내고 서버가 장 수·디자인·글 길이를 정한다.
 //        사장님 사진 묶음도 갈래를 따른다(사진 중심은 장마다 사진 1장까지, 글 중심은 표지에만 사진).
-// 갈래가 있으면 한 달 기획이 추천한 계열(preferredStyle)로 갈래 디자인을 덮어쓰지 않는다(계열 선택은 "auto"로 시작).
-export type GenerationInput={topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount;preferredStyle?:StyleId;track?:CarouselTrack};
-// "auto"면 구성안 AI가 글 분위기에 맞춰 추천한 글꼴을 쓰고, 아니면 사용자가 고른 글꼴로 덮어쓴다.
-export type FontChoice<T extends string>="auto"|T;
+export type GenerationInput={topic:string;imageBrief?:string;contentBrief?:string;slideCount:CarouselSlideCount;track?:CarouselTrack};
 
 export type GenerationState={
   key:string;                 // 초안(세션)마다 다른 값. 키가 바뀌면 상태를 새로 시작한다.
@@ -44,61 +39,44 @@ export type GenerationState={
   mode:StudioMode;
   imageStyle:ImageStyle;
   slideLayout:SlideLayout;
-  titleFont:FontChoice<TitleFontId>;
-  bodyFont:FontChoice<BodyFontId>;
-  theme:FontChoice<ThemeId>;      // 게시물 테마. "auto"면 구성안(AI·서버)이 고른 테마.
-  panorama:boolean;               // 표지+2장 파노라마를 쓸지(실제 사진 캐러셀, 표지 사진이 가로로 길 때만 화면에 보인다).
-  season:FontChoice<SeasonMotif>; // 계절 소품(빗줄기·보름달·색동…). "auto"면 구성안이 고른 값(없으면 장식 없음).
-  style:FontChoice<StyleId>;      // 디자인 계열(컬러 블록·신문·웹툰 등). "auto"면 구성안이 고른 계열.
-  referenceUse:ReferenceUse;
-  photoPreview:string;
-  // 사진+AI 참고 사진이 글의 메뉴와 다를 때 안내(예: "과메기 글인데 삼합 사진이에요"). Gemini 키가 있을 때만 알 수 있다.
-  referenceWarning:string;
   photoStatus:string;
-  providerNotice:string;
   plan?:CarouselPlan;
-  planFallback:boolean;      // AI가 구성안을 못 만들어 준비된 기본 문안으로 채웠는지. 표지 생성 전에 사용자가 다시 시도할 수 있게 멈춘다.
-  planFallbackMessage:string; // 기본 문안으로 넘어간 이유(서버가 짧은 한국어로 보냄. 사용량 한도·키·형식 등). 모르면 빈 문자열.
-  covers:ApprovedImage[];
   cover?:ApprovedImage;
   slides:ApprovedImage[];
   activeSlide:number;
   phase:StudioPhase;
   error:string;
   approved:boolean;
-  refinements:Record<number,string>;
-  photos:StudioPhoto[];          // 실제 사진 캐러셀에 쓸 사진(올린 순서 = 장에 배치되는 순서)
+  photos:StudioPhoto[];          // 사진 묶음에 쓸 사진(올린 순서 = 장에 배치되는 순서)
   photoAssignment:number[][];    // 장마다 들어간 사진 번호(photos 기준). 사진 바꾸기에 쓴다.
   photoViews:PhotoView[][];      // photoAssignment와 같은 모양: 그 칸의 사진을 얼마나 가까이 잘라 쓰는지. 없으면 사진 그대로.
-  photoNotes:string[];           // photos와 같은 순서: 사진마다 보이는 것(사진 분석). 모르면 "". 문안(캡션)에도 넘긴다.
-  referenceNote:string;          // 사진+AI 참고 사진에 보이는 것(사진 분석). 모르면 "".
-  deckEdited:boolean;            // 사용자가 완성된 캐러셀에서 장을 빼거나 넣었는지. 그러면 장 수는 설정값이 아니라 지금 장 수다.
+  photoNotes:string[];           // photos와 같은 순서: 사진마다 보이는 것(사진 분석). 모르면 "". 글 쓰기에도 넘긴다.
+  deckEdited:boolean;            // 사용자가 완성된 묶음에서 장을 빼거나 넣었는지. 그러면 장 수는 설정값이 아니라 지금 장 수다.
   deckStatus:string;             // 장을 빼고 넣은 뒤 장 번호를 다시 그리는 동안의 진행 안내.
-  // 맨 뒤 가게 홍보 카드(사장님 결정: 모든 캐러셀 끝에 "묵동홍어마을" 홍보 카드 한 장, 이미지 AI 비용 없음).
+  // 맨 뒤 가게 홍보 카드(사장님 결정: 모든 묶음 끝에 "묵동홍어마을" 홍보 카드 한 장, 이미지 AI 비용 없음).
   // include: 붙일지(장 고치기에서 끌 수 있음). image: 그려 둔 카드. key: 그릴 때의 디자인·장 수(바뀌면 다시 그린다).
   storeCard:{include:boolean;image?:ApprovedImage;key?:string;pending?:boolean};
-  // 캐러셀을 다 그렸을 때의 디자인. 완성 뒤에 디자인 고르기를 바꿔도(다음에 만들 때부터 적용) 홍보 카드는 이미 그린 장과 같은 디자인으로 남는다.
-  deckDesign?:DesignSpec;
-  // 자동 만들기(3단계 화면의 "만들기" 한 번): 사진 → 저장 → 글까지 이어서 하는 진행 상황. 화면이 사라져도 여기 남는다.
+  // 자동 만들기(2단계 화면의 "만들기" 한 번): 사진 → 저장 → 글까지 이어서 하는 진행 상황. 화면이 사라져도 여기 남는다.
   auto:AutoState;
 };
 // working: 사진 만드는 중, saving: 초안 저장 중, writing: 글 쓰는 중, done: 끝(images·caption을 화면이 가져간다), error: 멈춤.
+// meta: 지금 만드는 게시물의 주제·대상·게시일 등. 다른 메뉴에 다녀와 화면이 새로 열려도 같은 게시물로 돌아오게 한다.
 export type AutoStage="idle"|"working"|"saving"|"writing"|"done"|"error";
-export type AutoState={stage:AutoStage;error:string;detail?:string;images?:ApprovedImage[];caption?:string;captionSaved?:boolean;copyError?:string};
+export type AutoState={stage:AutoStage;error:string;detail?:string;images?:ApprovedImage[];caption?:string;captionSaved?:boolean;copyError?:string;meta?:DraftMeta};
 const AUTO_IDLE:AutoState={stage:"idle",error:""};
 
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
-export function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,titleFont:"auto",bodyFont:"auto",theme:"auto",season:"auto",panorama:false,style:input.track?"auto":input.preferredStyle??"auto",referenceUse:"source",photoPreview:"",referenceWarning:"",photoStatus:"",providerNotice:"",plan:undefined,planFallback:false,planFallbackMessage:"",covers:[],cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,refinements:{},photos:[],photoAssignment:[],photoViews:[],photoNotes:[],referenceNote:"",
-    // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 캐러셀로 본다.
+function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,photoStatus:"",plan:undefined,cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,photos:[],photoAssignment:[],photoViews:[],photoNotes:[],
+    // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 묶음으로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
     storeCard:{include:approvedImages.length===0},auto:AUTO_IDLE};
 }
 
-// 만든 것들만 비우고 모드·화풍·참고 사진은 남긴다(모드 카드나 표지 다시 만들기에서 쓰는 초기화).
-const CLEARED:Partial<GenerationState>={plan:undefined,planFallback:false,planFallbackMessage:"",refinements:{},covers:[],cover:undefined,slides:[],activeSlide:0,approved:false,error:"",providerNotice:"",photoAssignment:[],photoViews:[],photoNotes:[],deckEdited:false,deckStatus:"",deckDesign:undefined};
+// 만든 것들만 비우고 사진은 남긴다(사진을 더하거나 빼거나, 처음부터 다시 만들 때).
+const CLEARED:Partial<GenerationState>={plan:undefined,cover:undefined,slides:[],activeSlide:0,approved:false,error:"",photoAssignment:[],photoViews:[],photoNotes:[],deckEdited:false,deckStatus:""};
 
 let state:GenerationState=initialGenerationState("",EMPTY_INPUT);
 // 늦게 도착한 응답을 버리기 위한 토큰. 새 작업이 시작되거나 상태가 초기화될 때마다 올라간다.
@@ -127,77 +105,16 @@ export function ensureGeneration(key:string,input:GenerationInput,approvedImages
 
 export const activeSlideIndex=(current:GenerationState)=>Math.min(current.activeSlide,Math.max(current.slides.length-1,0));
 
-// 같은 모드를 다시 고르면 아무것도 하지 않는다(예전에는 다 만든 캐러셀이 한 번 탭에 지워졌다). 다른 모드로 바꿀지는 화면이 먼저 묻는다.
-export function chooseMode(next:StudioMode){if(next===state.mode)return;run++;patch({...CLEARED,mode:next,phase:"idle"});}
-export function setImageStyle(imageStyle:ImageStyle){patch({imageStyle});}
-export function setSlideLayout(slideLayout:SlideLayout){patch({slideLayout});}
-export function setTitleFont(titleFont:FontChoice<TitleFontId>){patch({titleFont});}
-export function setBodyFont(bodyFont:FontChoice<BodyFontId>){patch({bodyFont});}
-export function setTheme(theme:FontChoice<ThemeId>){patch({theme});}
-export function setSeason(season:FontChoice<SeasonMotif>){patch({season});}
-// 파노라마 켜고 끄기는 다음에 캐러셀을 만들 때부터 적용된다(이미 만든 장은 그대로).
-export function setPanorama(panorama:boolean){patch({panorama});}
-// 이 장을 파노라마의 어느 쪽으로 그릴지. 표지와 2번째 장이 같은 사진(첫 칸)을 쓸 때만. 사진을 바꾸면 자연히 평소 디자인으로 돌아간다.
-// slots: 이 장에 (새로) 넣을 사진 칸(생략하면 지금 배정된 칸). 짝이 되는 장(표지↔2번째)의 첫 사진과 같으면 파노라마의 한쪽이다.
-// current를 받는 것은 positionKey가 "지금 상태"가 아닌 상태로도 계산할 수 있게 하려는 것(테스트·미리 계산).
-function panoramaSide(current:GenerationState,index:number,slots:number[]=current.photoAssignment[index]??[]):"left"|"right"|undefined {
-  if(!current.panorama||index>1)return undefined;
-  const mine=slots[0],other=current.photoAssignment[1-index]?.[0];
-  if(mine===undefined||mine!==other)return undefined;
-  return index===0?"left":"right";
-}
-export function setStyle(style:FontChoice<StyleId>){patch({style});}
-
-// 서버에 보낼 디자인: 구성안의 추천(palette·글꼴)에 사용자가 직접 고른 글꼴을 덮어쓴다.
-// 요청을 보낼 때마다 계산하므로, 도중에 글꼴을 바꾸면 그다음에 만드는 장부터 적용된다.
-export function effectiveDesign(design:DesignSpec,current:Pick<GenerationState,"titleFont"|"bodyFont">&{theme?:FontChoice<ThemeId>;style?:FontChoice<StyleId>;season?:FontChoice<SeasonMotif>}=state):DesignSpec {
-  return {...design,...(current.season&&current.season!=="auto"?{season:current.season}:{}),...(current.titleFont!=="auto"?{titleFont:current.titleFont}:{}),...(current.bodyFont!=="auto"?{bodyFont:current.bodyFont}:{}),...(current.theme&&current.theme!=="auto"?{theme:current.theme}:{}),...(current.style&&current.style!=="auto"?{style:current.style}:{})};
-}
-// 장마다 AI가 고른 글꼴도 사용자가 직접 고른 글꼴이 있으면 덮어쓴다(직접 고른 글꼴은 모든 장에 같게 적용).
-export function effectiveSlide<T extends {titleFont?:string;bodyFont?:string}>(slide:T,current:Pick<GenerationState,"titleFont"|"bodyFont">=state):T {
-  return {...slide,...(current.titleFont!=="auto"?{titleFont:current.titleFont}:{}),...(current.bodyFont!=="auto"?{bodyFont:current.bodyFont}:{})};
-}
-export function setReferenceUse(referenceUse:ReferenceUse){patch({referenceUse});}
-export function setRefinement(index:number,value:string){patch({refinements:{...state.refinements,[index]:value}});}
 export function setActiveSlide(activeSlide:number){patch({activeSlide});}
-export function selectCover(candidate:ApprovedImage){patch({cover:candidate,slides:[],activeSlide:0,approved:false});}
 export function markApproved(){patch({approved:true});}
 
-const readPreview=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>typeof reader.result==="string"?resolve(reader.result):reject(new Error());reader.onerror=()=>reject(new Error());reader.readAsDataURL(file);});
-// 문안(캡션)에 넘길 "게시물에 실제로 들어간 사진에 보이는 것". 실제 사진 캐러셀은 장에 들어간 사진 순서대로(같은 사진은 한 번),
-// 사진+AI는 참고 사진 한 장(표지가 이 사진의 음식을 살린다). 아는 것이 없으면 undefined.
-export function deckPhotoNotes(current:Pick<GenerationState,"mode"|"photoAssignment"|"photoNotes"|"referenceNote"|"slides">):string[]|undefined {
-  if(current.mode==="mix")return current.referenceNote?[current.referenceNote]:undefined;
+// 글 쓰기에 넘길 "게시물에 실제로 들어간 사진에 보이는 것". 사진 묶음은 장에 들어간 사진 순서대로(같은 사진은 한 번).
+// AI 묶음이거나 아는 것이 없으면 undefined.
+export function deckPhotoNotes(current:Pick<GenerationState,"mode"|"photoAssignment"|"photoNotes"|"slides">):string[]|undefined {
   if(current.mode!=="photo"||!current.slides.length)return undefined;
   const order=[...new Set(current.photoAssignment.flat())];
   const notes=order.map(index=>current.photoNotes[index]?.trim()).filter((note):note is string=>Boolean(note));
   return notes.length?notes.slice(0,10):undefined;
-}
-
-// 사진+AI의 참고 사진은 장마다 요청에 실려 가므로, 휴대폰 원본(수 MB) 그대로 보내지 않고 긴 변 2048px JPEG로 줄인다.
-// 이미지 AI도 어차피 줄여서 쓴다(Higgsfield 1536px, Cloudflare 512px). 줄일 수 없는 환경(오래된 브라우저)은 원본을 쓴다.
-export const REFERENCE_MAX_SIDE=2048;
-async function readReference(file:File):Promise<string> {
-  if(typeof createImageBitmap!=="function"||typeof document==="undefined")return readPreview(file);
-  let bitmap:ImageBitmap|undefined;
-  try{
-    // from-image: 휴대폰 사진의 회전 정보(EXIF)를 반영해 바로 세운다.
-    bitmap=await createImageBitmap(file,{imageOrientation:"from-image"});
-    const scale=Math.min(1,REFERENCE_MAX_SIDE/Math.max(bitmap.width,bitmap.height));
-    if(scale===1&&file.size<=2*1024*1024)return readPreview(file);
-    const canvas=document.createElement("canvas");
-    canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
-    const context=canvas.getContext("2d");
-    if(!context)return readPreview(file);
-    // 투명한 PNG가 JPEG로 바뀌며 검게 되지 않도록 흰 바탕을 먼저 깐다.
-    context.fillStyle="#ffffff";context.fillRect(0,0,canvas.width,canvas.height);
-    context.drawImage(bitmap,0,0,canvas.width,canvas.height);
-    return canvas.toDataURL("image/jpeg",.9);
-  }catch{
-    return readPreview(file);
-  }finally{
-    bitmap?.close();
-  }
 }
 
 // 내용 장 수. 장을 고친 캐러셀은 지금 장 수, 아니면 설정한 장 수. 카드에는 찍지 않고, 마지막 장·표지 예고 띠를 정하는 데 쓴다.
@@ -208,36 +125,29 @@ export const deckComplete=(current:GenerationState)=>current.slides.length>0&&(c
 // 인스타그램 캐러셀·초안 저장은 한 게시물에 10장까지라, 내용이 10장이면 홍보 카드를 붙이지 않는다(9장 이하일 때만).
 // 9↔10장을 오갈 때 다시 그릴 장은 positionKey가 알아서 고른다.
 export const STORE_CARD_MAX_CONTENT=9;
-export const storeCardOn=(current:GenerationState)=>current.storeCard.include&&Boolean(current.plan)&&current.mode!=="free"&&deckTotal(current)<=STORE_CARD_MAX_CONTENT;
+export const storeCardOn=(current:GenerationState)=>current.storeCard.include&&Boolean(current.plan)&&deckTotal(current)<=STORE_CARD_MAX_CONTENT;
 // 게시물 전체 장 수(홍보 카드 포함). 카드에는 찍지 않고(번호만 찍는다), 어느 장이 마지막인지 정하는 데 쓴다.
 export const postTotal=(current:GenerationState)=>deckTotal(current)+(storeCardOn(current)?1:0);
 // 카드 그림 가운데 "몇 번째 장인지"에 따라 달라지는 것만 모은 열쇠(index는 0부터).
 // - 장 번호(카드에는 번호만 찍고 전체 장 수는 찍지 않는다)
 // - 마지막 장인지(마지막 장은 가게 명함·작별 마스코트, 나머지는 "넘겨 보기" 표시). 홍보 카드가 붙으면 내용 장은 마지막이 아니다.
 // - 표지면 예고 띠 글(내용 장 수가 3·5·7·10이 아니게 되면 "넘겨 보세요"로 바뀐다)
-// - 표지·2번째 장이면 파노라마의 어느 쪽인지(2번째 장을 빼거나 그 앞에 장을 넣으면 짝이 풀려 표지를 한 장짜리로 다시 그려야 한다)
-// - 디자인(글꼴·테마·디자인 계열). 다 만든 뒤 글꼴을 바꾸고 장을 빼면 바뀐 장만 새 글꼴이 되어 섞였다.
-//   디자인이 바뀌었으면 모든 장의 열쇠가 바뀌어 한꺼번에 새 디자인으로 맞춘다(예전처럼 전체 다시 그리기).
+// - 디자인(구성안의 디자인: 갈래·글꼴·색)
 // 장을 넣거나 빼면 이 열쇠가 바뀐 장만 다시 그린다. 예전에는 카드마다 "3 / 7"처럼 전체 장 수가 찍혀 있어 모든 장을 다시 그렸다.
-// slots: 이 장에 그릴 사진 칸(사진 바꾸기처럼 상태에 넣기 전에 그릴 때만 넘긴다).
-export function positionKey(current:GenerationState,index:number,slots?:number[]):string {
+// (예전 화면의 파노라마·글꼴 고르기도 이 열쇠에 들어 있었지만, 그 화면과 함께 지웠다.)
+function positionKey(current:GenerationState,index:number):string {
   const total=postTotal(current),number=index+1;
   return JSON.stringify([
     number,number===total,
     index===0?teaserText(total,storeCardOn(current)):"",
-    panoramaSide(current,index,slots)??"",
-    current.plan?effectiveDesign(current.plan.design,current):null,
+    current.plan?current.plan.design:null,
   ]);
 }
-// "이 캐러셀 사용"으로 넘길 이미지: 내용 장 + (붙였으면) 맨 뒤 홍보 카드.
+// 게시물에 넘길 이미지: 내용 장 + (붙였으면) 맨 뒤 홍보 카드.
 // 홍보 카드 그림이 지금 디자인·장 수로 그린 것일 때만 붙인다(다시 그리기에 실패해 옛 장 번호가 남은 카드는 빼고).
-const deckDesignOf=(current:GenerationState)=>current.plan?current.deckDesign??effectiveDesign(current.plan.design,current):undefined;
-const storeCardKey=(current:GenerationState)=>current.plan?JSON.stringify([deckDesignOf(current),postTotal(current)]):"";
-// 캐러셀을 다 그린 직후(또는 장 번호를 다시 그린 직후) 그 디자인을 기억하고 홍보 카드를 맞춘다.
-function finishDeck(){
-  if(state.plan&&deckComplete(state))patch({deckDesign:effectiveDesign(state.plan.design)});
-  void ensureStoreCard();
-}
+const storeCardKey=(current:GenerationState)=>current.plan?JSON.stringify([current.plan.design,postTotal(current)]):"";
+// 묶음을 다 그린 직후(또는 장 번호를 다시 그린 직후) 홍보 카드를 맞춘다.
+function finishDeck(){void ensureStoreCard();}
 export const approvedDeck=(current:GenerationState):ApprovedImage[]=>[...current.slides,...(storeCardOn(current)&&current.storeCard.image&&current.storeCard.key===storeCardKey(current)?[current.storeCard.image]:[])];
 // 홍보 카드를 그리는 중인지. 그리는 동안 "이 캐러셀 사용"을 막는다(홍보 카드가 빠지면 마지막 내용 장의 모양이 어긋난다).
 export const storeCardPending=(current:GenerationState)=>storeCardOn(current)&&Boolean(current.storeCard.pending);
@@ -246,10 +156,10 @@ let storeRun=0;
 let storeCardTask:Promise<void>=Promise.resolve();
 async function storeCardSettled(){for(let i=0;i<5&&state.storeCard.pending;i++)await storeCardTask;}
 // 홍보 카드를 (다시) 그린다. 디자인·장 수가 그대로면 그려 둔 것을 쓴다. 실패해도 캐러셀은 그대로 쓸 수 있게 조용히 넘어간다.
-export function ensureStoreCard():Promise<void>{storeCardTask=drawStoreCard();return storeCardTask;}
+function ensureStoreCard():Promise<void>{storeCardTask=drawStoreCard();return storeCardTask;}
 async function drawStoreCard(){
   if(!storeCardOn(state)||!deckComplete(state)||!state.plan)return;
-  const design=deckDesignOf(state)!,total=postTotal(state);
+  const design=state.plan.design,total=postTotal(state);
   const key=storeCardKey(state);
   if(state.storeCard.image&&state.storeCard.key===key)return;
   const mine=++storeRun;
@@ -262,9 +172,8 @@ async function drawStoreCard(){
   }catch{/* 아래에서 안내한다. */}
   if(mine!==storeRun)return;
   if(image)patch({storeCard:{...state.storeCard,pending:false,image:{id:crypto.randomUUID(),preview:image,source:"design"},key}});
-  // 홍보 카드는 덤이라 못 그려도 캐러셀은 쓸 수 있게 둔다(빠진 채로 "이 캐러셀 사용"이 가능).
-  // 다만 마지막 내용 장은 홍보 카드가 뒤에 붙는 모양(명함 없이 "넘겨 보기")으로 그려져 있으니, 끄면 마지막 장으로 다시 그려진다고 알린다.
-  else patch({storeCard:{...state.storeCard,pending:false},providerNotice:"가게 홍보 카드를 그리지 못했어요. 장 고치기에서 홍보 카드를 껐다 켜면 다시 그려요. 끄면 마지막 내용 장이 가게 명함이 있는 마무리 장으로 바뀌어요."});
+  // 홍보 카드는 덤이라 못 그려도 묶음은 쓸 수 있게 둔다(빠진 채로 저장된다. 장 고치기에서 껐다 켜면 다시 그린다).
+  else patch({storeCard:{...state.storeCard,pending:false}});
 }
 // 장 고치기의 "맨 뒤 가게 홍보 카드" 켜고 끄기. 전체 장 수가 바뀌므로 내용 장의 장 번호를 다시 그린다.
 export async function setStoreCardIncluded(include:boolean){
@@ -275,122 +184,29 @@ export async function setStoreCardIncluded(include:boolean){
   patch({phase:"slides",deckStatus:"장 번호를 맞추는 중"});
   try{await redrawDeck(token);}finally{if(token===run)patch({phase:"idle",deckStatus:""});}
 }
-// 서버가 보낸 "기본 문안으로 넘어간 이유". 예전 서버 응답에는 없으므로 빈 문자열.
-const fallbackMessageOf=(data:unknown)=>{const message=(data as {fallbackMessage?:unknown})?.fallbackMessage;return typeof message==="string"?message.slice(0,120):"";};
 function requestBase(){const {topic,imageBrief}=state.input;return {topic,...(imageBrief?{imageBrief}:{}),slideTotal:postTotal(state),...(state.deckEdited?{deckEdited:true}:{}),...(storeCardOn(state)?{storeCard:true}:{}),imageStyle:state.imageStyle,slideLayout:state.slideLayout};}
-// 참고 사진(mix)이 있으면 그것을, 아니면 고른 표지의 글자 없는 원본을 이어 가기용으로 붙인다.
-// 사진+AI의 "음식 그대로"는 표지에만 쓴다. 2장부터 같은 사진을 "음식 모양 그대로"로 보내면 장 글(젓가락으로 한 점,
-// 막걸리 상차림 등)과 상관없이 거의 같은 접시가 반복됐다. 나머지 장은 사장님 사진의 색감·조명만 이어 가고 장면은 장 글대로 만든다.
-export function referenceFieldsFor(role:CarouselRole|undefined,current:Pick<GenerationState,"mode"|"photoPreview"|"referenceUse"|"cover">=state){
-  if(current.mode==="mix")return {referenceImage:current.photoPreview,referenceMode:role==="cover"?current.referenceUse:"style" as const};
-  // 표지 이어 가기(continuity) 참고 이미지는 보내지 않는다. 이미지 AI가 표지를 거의 그대로 베껴 장마다 같은 그림이 됐다.
-  // 통일감은 구성안의 공통 스타일(styleAnchor)로 잇는다.
-  return {};
-}
-const sourceOf=(reported?:string)=>(reported??(state.mode==="mix"?"ai-edited":"ai-generated")) as ApprovedImage["source"];
+// 표지 이어 가기(continuity) 참고 이미지는 보내지 않는다. 이미지 AI가 표지를 거의 그대로 베껴 장마다 같은 그림이 됐다.
+// 통일감은 구성안의 공통 스타일(styleAnchor)로 잇는다.
+const sourceOf=(reported?:string)=>(reported??"ai-generated") as ApprovedImage["source"];
 
-// 사진+AI 참고 사진이 글의 메뉴와 맞는지 AI로 한 번 본다(실제 사진 사용의 "메뉴 다름"과 같은 검사). 표지는 이 사진의 음식을
-// 그대로 살리므로, 과메기 글에 삼합 사진이면 글과 그림이 어긋난다. 막지는 않고 알려만 준다. 실패하면 조용히 넘어간다.
-async function checkReference(preview:string){
-  if(preview.length>8_000_000)return;
-  try{
-    const response=await fetch("/api/images/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({photos:[{id:"reference",image:preview}],describe:true,...(state.input.topic?{topic:state.input.topic.slice(0,200)}:{})})});
-    if(!response.ok)return;
-    const parsed=AnalyzeResponseSchema.safeParse(await readJsonResponse(response));
-    const mismatch=parsed.success?parsed.data.photos[0]?.mismatch:null;
-    // 그사이 다른 참고 사진으로 바꿨으면 버린다.
-    if(parsed.success&&state.photoPreview===preview)patch({referenceNote:photoNote(parsed.data.photos[0])});
-    if(mismatch&&state.photoPreview===preview)patch({referenceWarning:`${mismatch}. 표지는 이 사진의 음식을 살려 만들어요. 맞는 사진으로 바꾸거나 '화풍·분위기만'을 골라 주세요.`});
-  }catch{/* 안내는 보조 기능 */}
-}
-
-export async function uploadPhoto(file:File|undefined,onApprove:(images:ApprovedImage[])=>void,reference=state.mode==="mix"){
-  if(!file)return;
-  const token=++run;
-  patch({phase:"uploading",error:""});
-  try{
-    const preview=reference?await readReference(file):await readPreview(file);
-    if(token!==run)return;
-    patch({photoPreview:preview,referenceWarning:"",referenceNote:""});
-    const body=new FormData();body.append("file",file);
-    const response=await fetch("/api/media/upload",{method:"POST",body});
-    const data=await readJsonResponse(response);
-    if(token!==run)return;
-    if(!response.ok)throw new Error(data.message);
-    patch({photoStatus:`${file.name} ${reference?"참고 사진을":"사진을"} 저장했어요.`});
-    if(reference)void checkReference(preview);
-    if(!reference)onApprove([{id:data.id,preview,source:"photo"}]);
-  }catch(error){
-    if(token===run)patch({error:error instanceof Error?error.message:"사진을 저장하지 못했어요."});
-  }finally{
-    if(token===run)patch({phase:"idle"});
-  }
-}
-
-export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,token=++run){
-  if(!nextPlan)return;
-  patch({phase:"cover",error:""});
-  const coverAt=positionKey(state,0);
-  try{
-    const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(nextPlan.slides[0]),styleAnchor:nextPlan.styleAnchor,design:effectiveDesign(nextPlan.design),slideIndex:1,count:2,...(state.refinements[0]?.trim()?{refinement:state.refinements[0].trim()}:{}),...(state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:{})})});
-    const data=await readJsonResponse(response);
-    if(token!==run)return;
-    if(!response.ok)throw new Error(data.message||"표지를 만들지 못했어요.");
-    if(!Array.isArray(data.images)||data.images.length!==2)throw new Error("표지 후보는 정확히 2장이 필요합니다.");
-    const source=sourceOf(data.source);
-    patch({...(data.fallback?{providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],...(data.baseImages?.[i]?{bases:data.baseImages[i]}:{}),source,role:nextPlan.slides[0].role,...(data.checks?.[i]?{check:data.checks[i]}:{}),drawnAt:coverAt}))});
-  }catch(error){
-    if(token===run)patch({error:error instanceof Error?error.message:"표지를 만들지 못했어요."});
-  }finally{
-    if(token===run)patch({phase:"idle"});
-  }
-}
-
-// 서버가 구성안 문안을 한 번 더 검수해 고쳤으면(planReview.ts) 몇 곳을 다듬었는지 한 줄로 알려 준다.
-function reviewNotice(review?:{applied?:boolean;before?:number;after?:number}|null):Partial<GenerationState> {
-  if(!review?.applied)return {};
-  const fixed=Math.max(0,(review.before??0)-(review.after??0));
-  return {providerNotice:fixed?`AI가 카드 글을 한 번 더 살펴 ${fixed}곳을 다듬었어요.`:"AI가 카드 글의 흐름을 한 번 더 다듬었어요."};
-}
-
-export async function startPlan(){
-  const token=++run;
-  patch({...CLEARED,phase:"planning"});
-  try{
-    const {topic,imageBrief,contentBrief,slideCount}=state.input;
-    const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:state.imageStyle,...trackField()})});
-    const data=await readJsonResponse(response);
-    if(token!==run)return;
-    if(!response.ok)throw new Error(data.message||"글 순서를 정하지 못했어요.");
-    const next=data.plan as CarouselPlan;
-    // 기본 문안은 주제와 무관한 일반 문장이라, 그걸로 이미지를 만들어 크레딧을 쓰기 전에 멈추고 알린다.
-    if(data.provider==="fallback"){patch({plan:next,planFallback:true,planFallbackMessage:fallbackMessageOf(data),phase:"idle"});return;}
-    patch({plan:next,planFallback:false,planFallbackMessage:"",...reviewNotice(data.review)});
-    void requestCovers(next,token);
-  }catch(error){
-    if(token===run)patch({error:error instanceof Error?error.message:"글 순서를 정하지 못했어요.",phase:"idle"});
-  }
-}
-
-async function generate(slide:CarouselPlan["slides"][number],index:number,refinement=""):Promise<ApprovedImage>{
+async function generate(slide:CarouselPlan["slides"][number],index:number):Promise<ApprovedImage>{
   // 요청을 보내는 순간의 자리 정보(서버가 이 번호·장 수로 그린다).
   const drawnAt=positionKey(state,index-1);
   // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
   // 디자인 계열(기본 템플릿 아님)은 한 장에 사진을 두 장까지만 그린다. 그 이상 만들면 돈만 들고 안 쓰인다.
-  const style=effectiveDesign(state.plan!.design).style;
+  const style=state.plan!.design.style;
   const count=state.slideLayout==="card"?Math.min(Math.max(1,photosNeeded(normalizeCardLayout(slide))),!style||style==="template"?3:2):1;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:state.plan!.styleAnchor,design:effectiveDesign(state.plan!.design),slideIndex:index,count,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFieldsFor(slide.role)})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("장 그림을 받지 못했어요.");
-  if(data.fallback)patch({providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."});
   return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],...(data.baseImages?.[0]?{bases:data.baseImages[0]}:{}),source:sourceOf(data.source),role:slide.role,...droppedOf(data),drawnAt};
 }
 
 // 한 번에 만드는 AI 장 수. 이미지 AI(Higgsfield·Cloudflare·OpenAI)가 동시에 받아 주는 범위 안에서 두 장.
 const SLIDE_CONCURRENCY=2;
 // 고른 표지 뒤의 남은 장을 만든다. 화면이 사라져도 이 루프는 계속 돌고 결과는 저장소에 쌓인다.
-export async function finishSlides(){
+async function finishSlides(){
   const {plan,cover,slides,input}=state;
   // 장을 빼거나 넣은 뒤에는 설정 장 수까지 다시 채우지 않는다(사용자가 고른 장 수를 지킨다).
   if(!plan||!cover||state.deckEdited)return;
@@ -425,13 +241,13 @@ export async function finishSlides(){
   }
 }
 
-export async function regenerateSlide(){
+async function regenerateSlide(){
   const {plan,cover}=state;
   if(!plan||!cover)return;
   const index=activeSlideIndex(state),token=++run;
   patch({phase:"slides",error:""});
   try{
-    const replacement=await generate(plan.slides[index],index+1,state.refinements[index]);
+    const replacement=await generate(plan.slides[index],index+1);
     if(token!==run)return;
     patch({slides:state.slides.map((item,i)=>i===index?replacement:item),...(index===0?{cover:replacement}:{}),approved:false});
   }catch(error){
@@ -491,30 +307,19 @@ export function addLibraryPhoto(photo:StudioPhoto){
   patch({photos:[...state.photos,photo],...CLEARED});
 }
 export function removePhoto(index:number){run++;patch({photos:state.photos.filter((_,i)=>i!==index),...CLEARED});}
-// 사진 순서 바꾸기(앞으로 한 칸). 첫 사진이 표지가 된다.
-export function movePhotoForward(index:number){
-  if(index<=0)return;
-  const photos=[...state.photos];
-  [photos[index-1],photos[index]]=[photos[index],photos[index-1]];
-  run++;patch({photos,...CLEARED});
-}
 
 // 칸마다 자르는 거리(가까이·결 확대)가 하나라도 있으면 함께 보낸다. 모두 "사진 그대로"면 보내지 않는다.
 const viewsField=(views:readonly PhotoView[]|undefined)=>views?.some(view=>view!=="full")?{photoViews:[...views]}:{};
 async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[],views?:readonly PhotoView[]):Promise<ApprovedImage>{
-  // 사진 바꾸기는 새 사진 칸을 상태에 넣기 전에 그리므로, 그릴 칸(slots)으로 열쇠를 만든다(파노라마 짝 판단이 그림과 같게).
-  const drawnAt=positionKey(state,index,slots);
+  const drawnAt=positionKey(state,index);
   const slide=plan.slides[index];
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views)}:{}),...(panoramaSide(state,index,slots)?{panorama:panoramaSide(state,index,slots)}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide,styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 만들지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
   return {id:crypto.randomUUID(),preview:data.images[0],source:slots.length?"photo":"design",role:slide.role,...droppedOf(data),drawnAt};
 }
 
-// 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. AI 이미지는 만들지 않는다.
-// options.panorama: 표지+2장 파노라마로 만들지. 화면이 "표지 사진이 가로로 긴지"(사진 분석)를 확인하고 넘긴다.
-// 넘기지 않으면 끈다(가로로 짧은 사진이면 2번째 장에 같은 사진만 한 번 더 나오게 되므로).
 // 사진마다 보이는 것(음식·장면) 한 줄. Gemini 키가 있으면 AI가 사진을 읽고, 없으면 보관함 이름·태그로만 안다(무료).
 // 실패하거나 모르면 빈 문자열이라 예전처럼 올린 순서대로 배치한다.
 async function describePhotos(photos:StudioPhoto[],topic:string):Promise<string[]> {
@@ -527,10 +332,11 @@ async function describePhotos(photos:StudioPhoto[],topic:string):Promise<string[
   }catch{return photos.map(()=>"");}
 }
 
-export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
+// 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. AI 이미지는 만들지 않는다.
+export async function buildPhotoCarousel(){
   if(!state.photos.length)return;
   const token=++run;
-  patch({...CLEARED,mode:"photo",phase:"planning",slideLayout:"card",panorama:options.panorama===true});
+  patch({...CLEARED,mode:"photo",phase:"planning",slideLayout:"card"});
   try{
     const {topic,imageBrief,contentBrief,slideCount}=state.input;
     // 1) 사진에 무엇이 보이는지 읽어 문안 AI에게 알려 준다(사진에 없는 음식을 주인공으로 한 장을 쓰지 않게).
@@ -545,15 +351,15 @@ export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
     if(!response.ok)throw new Error(data.message||"글 순서를 정하지 못했어요.");
     // 디자인 계열(칠판·한지 등)은 한 장에 사진을 두 장까지만 그려서, 세 장짜리 콜라주는 기본 템플릿일 때만 만든다.
     // 갈래가 있으면 갈래가 장마다 사진 수를 정한다(사진 중심 1장까지, 글 중심은 표지만). 파노라마는 쓰지 않는다.
-    const style=effectiveDesign((data.plan as CarouselPlan).design).style;
+    const style=(data.plan as CarouselPlan).design.style;
     const track=state.input.track;
-    const fitted=track?fitPlanToPhotos(data.plan as CarouselPlan,photos.length,{track}):(state.panorama?fitPanorama:fitPlanToPhotos)(data.plan as CarouselPlan,photos.length,{maxPerSlide:!style||style==="template"?3:2});
+    const fitted=track?fitPlanToPhotos(data.plan as CarouselPlan,photos.length,{track}):fitPlanToPhotos(data.plan as CarouselPlan,photos.length,{maxPerSlide:!style||style==="template"?3:2});
     // 2) 장마다 사진 칸 수는 그대로 두고, 사진 내용이 그 장의 글과 맞는 사진을 넣는다(표지는 첫 사진 그대로).
     const matched=photoNotes?{...fitted,...matchPhotosToSlides(fitted.plan,fitted.assignment,notes)}:fitted;
     // 3) 사진이 모자라 글자 카드로 남은 장에는 같은 사진을 "가까이"·"결 확대"로 다시 쓴다(사진 한 장이 최대 세 장면).
     const fit=fillWithPhotoViews(matched.plan,matched.assignment,photos.length,notes,track);
-    // 기본 문안이어도 비용이 들지 않으니 멈추지 않고, 안내만 남긴다.
-    patch({plan:fit.plan,planFallback:data.provider==="fallback",planFallbackMessage:data.provider==="fallback"?fallbackMessageOf(data):"",photoAssignment:fit.assignment,photoViews:fit.views,phase:"slides",...reviewNotice(data.review)});
+    // 기본 문안(AI가 구성을 못 짠 경우)이어도 비용이 들지 않으니 멈추지 않는다.
+    patch({plan:fit.plan,photoAssignment:fit.assignment,photoViews:fit.views,phase:"slides"});
     let next:ApprovedImage[]=[];
     for(let i=0;i<fit.plan.slides.length;i++){
       const card=await composePhotoSlide(fit.plan,i,fit.assignment[i],fit.views[i]);
@@ -597,9 +403,6 @@ export async function swapSlidePhoto(photoIndex:number){
   const index=activeSlideIndex(state);
   if(!plan||!photoAssignment[index]?.length)return;
   const slots=swapPhoto(photoAssignment[index],photoIndex);
-  // 파노라마(표지+2장)의 짝이 바뀌면(풀리거나 다시 맞춰지거나) 짝이 된 다른 장도 다시 그린다(반쪽 사진만 남지 않게).
-  // 예전에는 바꾸기 전 짝만 봐서, 2번째 장 사진을 바꿨다가 표지 사진으로 되돌리면 2번째 장만 반쪽으로 그려졌다.
-  const partner=index<=1&&(panoramaSide(state,index,photoAssignment[index])||panoramaSide(state,index,slots))?1-index:-1;
   const token=++run;
   patch({phase:"slides",error:""});
   try{
@@ -607,11 +410,6 @@ export async function swapSlidePhoto(photoIndex:number){
     const card=await composePhotoSlide(plan,index,slots);
     if(token!==run)return;
     patch({slides:state.slides.map((item,i)=>i===index?card:item),photoAssignment:state.photoAssignment.map((item,i)=>i===index?slots:item),photoViews:state.slides.map((_,i)=>i===index?slots.map(()=>"full" as const):state.photoViews[i]??[]),...(index===0?{cover:card}:{}),approved:false});
-    if(partner>=0&&state.photoAssignment[partner]){
-      const other=await composePhotoSlide(plan,partner,state.photoAssignment[partner],state.photoViews[partner]);
-      if(token!==run)return;
-      patch({slides:state.slides.map((item,i)=>i===partner?other:item),...(partner===0?{cover:other}:{})});
-    }
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"사진을 바꾸지 못했어요."});
   }finally{
@@ -655,7 +453,7 @@ export const canEditSlideText=(current:GenerationState,index:number)=>textEditBa
 async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none";views?:readonly PhotoView[]}):Promise<{preview:string;droppedPoints?:number;drawnAt:string}>{
   const drawnAt=positionKey(state,index);
   const plan=state.plan!;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind,...(base.photoKind==="real"?viewsField(base.views):{})}:{}),...(base.photoKind==="real"&&panoramaSide(state,index)?{panorama:panoramaSide(state,index)}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind,...(base.photoKind==="real"?viewsField(base.views):{})}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 다시 그리지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
@@ -696,13 +494,13 @@ export type NewSlide={headline:string;points:string[];source:NewSlideSource;phot
 // 장을 넣거나 뺀 뒤, 자리 정보(positionKey: 장 번호·마지막 장인지·표지 예고 띠)가 바뀐 장만 다시 그린다.
 // 예: 맨 뒤에 한 장 넣기 → 새 장과 바로 앞 장(마지막 장이 아니게 됨), 표지 띠가 바뀔 때만 표지.
 //     가운데 장 빼기 → 그 뒤 장들(번호가 하나씩 당겨짐)과 새 마지막 장, 필요하면 표지. 앞쪽 장은 그대로 둔다.
-// skip은 방금 새로 그린 장(다시 그릴 필요 없음). 밑바탕이 없는 장(저장된 초안을 다시 연 경우 등)은 그대로 두고 안내만 한다.
+// skip은 방금 새로 그린 장(다시 그릴 필요 없음). 밑바탕이 없는 장(저장된 초안을 다시 연 경우 등)은 그대로 둔다.
 async function redrawDeck(token:number,skip=-1){
   const stale=state.slides.map((slide,i)=>i).filter(i=>i!==skip&&state.slides[i].drawnAt!==positionKey(state,i));
-  let missed=0,done=0;
+  let done=0;
   for(const i of stale){
     const base=state.plan?textEditBase(state,i):null;
-    if(!base||!state.plan?.slides[i]){missed++;continue;}
+    if(!base||!state.plan?.slides[i])continue;
     patch({deckStatus:`장 번호를 맞추는 중 ${++done}/${stale.length}`});
     const card=await renderCard(i,state.plan.slides[i],base);
     if(token!==run)return;
@@ -710,22 +508,19 @@ async function redrawDeck(token:number,skip=-1){
     patch({slides:state.slides.map((item,k)=>k===i?updated:item),...(i===0?{cover:updated}:{})});
   }
   finishDeck();
-  // 카드로 그린 장인데 밑바탕이 없어 다시 못 그린 경우에만 알린다(사진 그대로 쓴 장은 장 번호가 없다).
-  if(missed&&state.slides.some(slide=>slide.source!=="photo"||state.plan))patch({providerNotice:"예전에 만든 게시물을 다시 연 카드는 장 번호(예: 3)를 다시 그리지 못해요. 장을 넣거나 뺀 뒤에는 카드에 적힌 번호가 실제 순서와 다를 수 있어요."});
 }
 
 // 지금 보고 있는 장을 뺀다. 표지(첫 장)는 빼지 않는다(표지를 바꾸려면 다시 만들기).
 export async function removeSlide(index=activeSlideIndex(state)){
   if(index<=0||index>=state.slides.length||state.slides.length<=1||state.phase!=="idle")return;
   const keep=<T,>(_:T,i:number)=>i!==index;
-  const refinements=Object.fromEntries(Object.entries(state.refinements).flatMap(([key,value])=>{const i=Number(key);return i===index?[]:[[i>index?i-1:i,value]];}));
   const token=++run;
   patch({
     slides:state.slides.filter(keep),
     plan:state.plan?{...state.plan,slides:state.plan.slides.filter(keep)}:undefined,
     photoAssignment:state.photoAssignment.filter(keep),
     photoViews:state.slides.map((_,i)=>state.photoViews[i]??[]).filter(keep),
-    refinements,deckEdited:true,approved:false,error:"",providerNotice:"",
+    deckEdited:true,approved:false,error:"",
     activeSlide:Math.min(index,state.slides.length-2),phase:"slides",deckStatus:"장을 빼고 장 번호를 맞추는 중",
   });
   try{await redrawDeck(token);}
@@ -793,7 +588,7 @@ export async function addSlide(input:NewSlide):Promise<boolean>{
       if(!response.ok||!data.draft)throw new Error(data.message||"새 장 문구를 짓지 못했어요.");
       // 가게 홍보 카드를 원하는 요청이면 새 장을 따로 만들지 않고 맨 뒤 홍보 카드(낙관·가게 이름·마스코트)를 켠다.
       if(data.draft.kind==="store"){
-        patch({phase:"idle",deckStatus:"",providerNotice:"가게 홍보 카드는 맨 뒤에 자동으로 붙어요(로고·가게 이름·마스코트). 장 고치기에서 켜고 끌 수 있어요."});
+        patch({phase:"idle",deckStatus:""});
         if(!state.storeCard.include)await setStoreCardIncluded(true);else void ensureStoreCard();
         return true;
       }
@@ -818,9 +613,8 @@ export async function addSlide(input:NewSlide):Promise<boolean>{
   const slides=[...state.slides];slides.splice(position,0,placeholder);
   const assignment=state.slides.map((_,i)=>state.photoAssignment[i]??[]);assignment.splice(position,0,slots);
   const views=state.slides.map((_,i)=>state.photoViews[i]??[]);views.splice(position,0,slots.map(()=>"full" as const));
-  const refinements=Object.fromEntries(Object.entries(state.refinements).map(([key,value])=>{const i=Number(key);return [i>=position?i+1:i,value];}));
   const token=++run;
-  patch({slides,photos,photoAssignment:assignment,photoViews:views,refinements,plan:{...plan,slides:[...plan.slides.slice(0,position),slide,...plan.slides.slice(position)]},deckEdited:true,approved:false,activeSlide:position,error:"",providerNotice:"",phase:"slides",deckStatus:"새 장을 그리는 중"});
+  patch({slides,photos,photoAssignment:assignment,photoViews:views,plan:{...plan,slides:[...plan.slides.slice(0,position),slide,...plan.slides.slice(position)]},deckEdited:true,approved:false,activeSlide:position,error:"",phase:"slides",deckStatus:"새 장을 그리는 중"});
   try{
     const card=input.source==="ai"?await generate(slide,position+1):{...placeholder,...await renderCard(position,slide,{photos:slots.map(i=>photos[i].preview),photoKind:slots.length?"real":"none"})};
     if(token!==run)return false;
@@ -842,17 +636,9 @@ export async function addSlide(input:NewSlide):Promise<boolean>{
 
 // 게시물에 쓴 보관함 사진의 사용 횟수를 올린다(보관함 "자주 쓴 순"·"안 쓴 사진 먼저" 정렬용).
 // 실패해도 게시물 만들기에는 영향이 없으므로 기다리지 않고 조용히 넘어간다.
-export function recordPhotoUse(ids:Array<string|undefined>){
+function recordPhotoUse(ids:Array<string|undefined>){
   const unique=[...new Set(ids.filter((id):id is string=>!!id))].slice(0,10);
   if(unique.length)void fetch("/api/images/assets/used",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:unique})}).catch(()=>undefined);
-}
-
-// 카드로 꾸미지 않고 올린 사진 그대로 캐러셀로 쓴다.
-export function approveRawPhotos(onApprove:(images:ApprovedImage[])=>void){
-  if(!state.photos.length)return;
-  patch({approved:true});
-  onApprove(state.photos.map(photo=>({id:photo.id,preview:photo.preview,source:"photo"})));
-  recordPhotoUse(state.photos.map(photo=>photo.id));
 }
 
 // ── 자동 만들기(새 3단계 화면) ─────────────────────────────────────────────────────────────
@@ -876,17 +662,17 @@ async function buildAiCarousel(){
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"글 순서를 정하지 못했어요.");
     const plan=data.plan as CarouselPlan;
-    patch({plan,planFallback:data.provider==="fallback",planFallbackMessage:data.provider==="fallback"?fallbackMessageOf(data):"",phase:"cover",...reviewNotice(data.review)});
+    patch({plan,phase:"cover"});
     const count=state.input.track==="text"?2:1;
     const coverAt=positionKey(state,0);
-    const made=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(plan.slides[0]),styleAnchor:plan.styleAnchor,design:effectiveDesign(plan.design),slideIndex:1,count})});
+    const made=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:plan.slides[0],styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:1,count})});
     const result=await readJsonResponse(made);
     if(token!==run)return;
     if(!made.ok)throw new Error(result.message||"표지를 만들지 못했습니다.");
     if(!Array.isArray(result.images)||result.images.length!==count)throw new Error("표지를 만들지 못했습니다.");
     // 서버가 점검 점수가 높은 후보를 앞에 둔다(점검을 못 하면 만든 순서). 첫 장이 표지다.
     const cover:ApprovedImage={id:crypto.randomUUID(),preview:result.images[0],referencePreview:result.referenceImages?.[0],...(result.baseImages?.[0]?{bases:result.baseImages[0]}:{}),source:sourceOf(result.source),role:plan.slides[0].role,...(result.checks?.[0]?{check:result.checks[0]}:{}),drawnAt:coverAt};
-    patch({cover,slides:[],covers:[],phase:"idle",...(result.fallback?{providerNotice:result.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{})});
+    patch({cover,slides:[],phase:"idle"});
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"표지를 만들지 못했습니다.",phase:"idle"});
     return;
@@ -896,7 +682,7 @@ async function buildAiCarousel(){
 }
 
 // 이 초안 카드에 쓴 디자인 계열(성과를 계열별로 비교하는 데 쓴다). 구성안 없이 사진만 쓴 초안은 없다.
-export const designStyleOf=(current:GenerationState):StyleId|undefined=>current.plan?(current.style!=="auto"?current.style:current.plan.design?.style):undefined;
+export const designStyleOf=(current:GenerationState):StyleId|undefined=>current.plan?.design?.style;
 const hasAi=(images:ApprovedImage[])=>images.some(image=>image.source==="ai-generated"||image.source==="ai-edited");
 
 // 사장님에게 보여 줄 멈춘 이유(쉬운 말 한 줄). 자세한 이유(AI 이름 등)는 detail로 따로 둔다(접어서 보여 준다).
@@ -909,7 +695,7 @@ export async function createAutomatically(meta:DraftMeta){
   // 다시 해 보기(앞 번에 멈춤): 이미 만든 것은 버리지 않는다(멈춘 사진 묶음은 남은 장만, AI는 표지 뒤 남은 장만, 다 만들었으면 저장부터).
   // 갈래를 바꿨거나, 멈춘 적 없이 "만들기"를 다시 누른 것이면 처음부터 새로 만든다.
   const retry=state.auto.stage==="error"&&state.plan?.design?.style===TRACK_STYLES[state.input.track];
-  patchAuto({stage:"working",error:"",detail:undefined,copyError:undefined});
+  patchAuto({stage:"working",error:"",detail:undefined,copyError:undefined,meta});
   try{
     if(!retry)await (state.photos.length?buildPhotoCarousel():buildAiCarousel());
     else if(!deckComplete(state)){
@@ -969,8 +755,29 @@ export async function redoSlide(){
   if(kind==="photo"){const index=activeSlideIndex(state),current=state.photoAssignment[index][0];return swapSlidePhoto((current+1)%state.photos.length);}
 }
 
+// ── 만드는 중인 게시물 지키기 ────────────────────────────────────────────────────────────
+// 만들기는 화면 밖(이 모듈)에서 돈다. 그래서 다른 게시물을 열거나 새로 시작하면 지금 만드는 것이 소리 없이 멈출 수 있었다.
+// 그 전에 한 번 묻고(취소하면 만들던 것을 그대로 두고), 만들기 메뉴로 돌아오면 진행 화면을 다시 보여 준다.
+const autoBusy=(stage:AutoStage)=>stage==="working"||stage==="saving"||stage==="writing";
+// 지금 무언가를 만드는 중인지(자동 만들기, 이 장 다시 만들기, 장 고치기·글자 고치기의 다시 그리기). 사진 올리기는 넣지 않는다(돈이 들지 않고 금방 끝난다).
+export const isGenerating=(current:GenerationState)=>current.phase==="planning"||current.phase==="cover"||current.phase==="slides"||autoBusy(current.auto.stage);
+// 만드는 중인 게시물의 id(열쇠 "id|장 수"의 앞부분). 만드는 중이 아니면 null.
+export const generatingDraftId=(current:GenerationState=state):string|null=>isGenerating(current)&&current.key?current.key.split("|")[0]:null;
+// 자동 만들기 중이면 그 게시물의 주제·대상·게시일과 갈래(화면이 새로 열려도 같은 게시물·같은 갈래로 돌아가는 데 쓴다).
+export const runningAuto=():{meta:DraftMeta;track?:CarouselTrack}|null=>autoBusy(state.auto.stage)&&state.auto.meta?{meta:state.auto.meta,track:state.input.track}:null;
+export const STOP_RUNNING_QUESTION="지금 만드는 게시물이 있어요. 그만두고 새로 시작할까요?";
+// 다른 게시물로 옮기기 전에 부른다. 만드는 중이 아니거나 같은 게시물이면 그냥 true.
+// 만드는 중이면 한 번 묻고, "확인"이면 그 만들기를 멈춘 뒤 true, "취소"면 아무것도 바꾸지 않고 false.
+export function confirmStopGeneration(targetDraftId?:string|null):boolean {
+  const running=generatingDraftId();
+  if(!running||(targetDraftId&&running===targetDraftId))return true;
+  if(typeof window==="undefined"||!window.confirm(STOP_RUNNING_QUESTION))return false;
+  cancelGeneration(state.key);
+  return true;
+}
+
 // 화면이 자동 만들기 결과(장·글)를 가져간 뒤 부른다. 다시 2단계로 돌아가도 곧장 3단계로 넘어가지 않게.
-export function acknowledgeAuto(){if(state.auto.stage==="done")patchAuto({stage:"idle",images:undefined,caption:undefined,copyError:undefined});}
+export function acknowledgeAuto(){if(state.auto.stage==="done")patchAuto({stage:"idle",images:undefined,caption:undefined,copyError:undefined,meta:undefined});}
 // 만든 장 대신 다른 이미지(글자 카드로 직접 만들기)를 쓰기로 했을 때: 저장된 초안을 다시 연 것과 같은 상태로 바꾼다
 // (그래야 확인 화면이 예전 장을 "고친 장"으로 보고 다시 저장하지 않는다).
 export function adoptImages(images:ApprovedImage[]){run++;replace({...initialGenerationState(state.key,state.input,images),approved:true});}

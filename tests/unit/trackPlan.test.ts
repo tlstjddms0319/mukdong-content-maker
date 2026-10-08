@@ -8,7 +8,6 @@ import { pickFittingStyle } from "@/features/images/variety";
 import { rotateStyles } from "@/features/topics/monthPlan";
 import { slideCopyIssues } from "@/features/images/planReview";
 import { POST } from "@/app/api/images/plan/route";
-import { initialGenerationState } from "@/features/images/generationStore";
 
 vi.mock("@/features/auth/guard", () => ({ ownerApiError: async () => null }));
 const readSettings=vi.hoisted(()=>vi.fn());
@@ -115,11 +114,6 @@ describe("track plans", () => {
   it("does not let the AI pick a track family when no track was asked for", async () => {
     const plan=await planCarousel({topic:"홍어와 막걸리",slideCount:5},{generate:async()=>{const base=createFallbackCarouselPlan({topic:"홍어와 막걸리",slideCount:5});return {...base,design:{...base.design,style:"text-focus"}};}},{seed:4});
     expect(TRACK_ONLY.has(plan.design.style)).toBe(false);
-  });
-
-  it("starts a track draft without the month plan's preferred family overriding the track design", () => {
-    expect(initialGenerationState("a",{topic:"홍어",slideCount:5,preferredStyle:"neon",track:"text"}).style).toBe("auto");
-    expect(initialGenerationState("b",{topic:"홍어",slideCount:5,preferredStyle:"neon"}).style).toBe("neon");
   });
 
   it("asks the AI for the track rules in the prompt and keeps the old prompt without a track", () => {

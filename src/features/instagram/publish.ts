@@ -43,7 +43,7 @@ async function publishLocked(input:{draftId:string;approved:boolean;caption?:str
     }
   }
   const [draft,connection]=await Promise.all([deps.readDraft(input.draftId),deps.readConnection()]);
-  if(!draft||!draft.selected_media_id||(!draft.copy&&!input.caption?.trim()))throw new InstagramPublishError("이미지와 문안을 모두 완성해 주세요.","incomplete");
+  if(!draft||!draft.selected_media_id||(!draft.copy&&!input.caption?.trim()))throw new InstagramPublishError("사진과 글을 모두 완성해 주세요.","incomplete");
   const selected=selectedDraftMedia(draft);
   const requestedIds=draft.selected_media_ids??[draft.selected_media_id];
   if(requestedIds.length<1||requestedIds.length>10||new Set(requestedIds).size!==requestedIds.length||selected.length!==requestedIds.length||requestedIds.some((id,index)=>selected[index]?.id!==id)||requestedIds[0]!==draft.selected_media_id)throw new InstagramPublishError("선택 이미지를 확인해 주세요.","incomplete");

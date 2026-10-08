@@ -19,7 +19,7 @@ export function DeckEditor({state}:{state:GenerationState}){
   const full=slides.length>=MAX_DECK_SLIDES;
   // AI 이미지로 새 장을 만드는 길은 AI·사진+AI 캐러셀에서만 보인다(실제 사진 캐러셀에서 몰래 비용이 들지 않게).
   const sources:[NewSlideSource,string][]=plan
-    ?[["photo","사진으로"],...(mode==="ai"||mode==="mix"?[["ai","AI 이미지로 (비용 발생)"] as [NewSlideSource,string]]:[]),["text","글자 카드로"]]
+    ?[["photo","사진으로"],...(mode==="ai"?[["ai","AI 이미지로 (비용 발생)"] as [NewSlideSource,string]]:[]),["text","글자 카드로"]]
     :[["raw","사진 그대로"]];
   const [open,setOpen]=useState(false);
   const [chosen,setSource]=useState<NewSlideSource>(sources[0][0]);

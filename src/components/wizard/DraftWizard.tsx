@@ -8,7 +8,7 @@ import type { TopicSuggestion } from "@/features/topics/schema";
 import { fallbackTopics } from "@/features/topics/service";
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { selectedDraftMedia } from "@/features/drafts/selection";
-import { acknowledgeAuto, adoptImages, cancelGeneration, approvedDeck, createAutomatically, deckComplete, deckPhotoNotes, designStyleOf, ensureGeneration, markApproved, storeCardPending, useGenerationState, type ApprovedImage, type GenerationInput } from "@/features/images/generationStore";
+import { STOP_RUNNING_QUESTION, acknowledgeAuto, adoptImages, cancelGeneration, approvedDeck, createAutomatically, deckComplete, deckPhotoNotes, designStyleOf, ensureGeneration, generatingDraftId, isGenerating, markApproved, runningAuto, storeCardPending, useGenerationState, type ApprovedImage, type GenerationInput } from "@/features/images/generationStore";
 import { CURRENT_DRAFT_KEY, CURRENT_TOPIC_KEY, forgetCurrentDraft, rememberCurrentDraft, saveDraftCaption, saveDraftImages, writePostText, type DraftMeta } from "@/features/drafts/draftSave";
 import { clearWizardSession, readWizardSession, saveWizardSession } from "@/features/drafts/wizardSession";
 import { readJsonResponse } from "@/lib/http/readJson";
@@ -41,6 +41,8 @@ function planLinkFrom(date:string|null|undefined):{date:string}|null {
 }
 // 장 수는 갈래가 정한다(두 갈래 모두 5장 + 맨 뒤 가게 홍보 카드). 설정의 장 수는 예전 화면에만 쓰였다.
 const SLIDES=TRACK_SLIDE_COUNT;
+// 이미 다 만든 게시물에서 "만들기"를 다시 누르면 그림을 새로 만든다(시간·돈이 든다). 멈춘 뒤 '다시 해 보기'는 묻지 않는다.
+const REMAKE_QUESTION="이미 만든 게시물이 있어요. 처음부터 다시 만들까요? 그림을 새로 만들어요.";
 const hasAiImages=(images:ApprovedImage[])=>images.some(image=>image.source==="ai-generated"||image.source==="ai-edited");
 
 export function DraftWizard() {
@@ -85,9 +87,13 @@ export function DraftWizard() {
   // 아직 저장하지 않은 작업: 이 게시물을 만드는 중이거나(사진·저장·글), 글을 고치고 저장하기 전.
   const autoBusy=generationMine&&(generation.auto.stage==="working"||generation.auto.stage==="saving"||generation.auto.stage==="writing");
   const paidWork=generationMine&&(generation.phase!=="idle"||autoBusy);
+  // 이 게시물을 지금 만드는 중인지(자동 만들기·이 장 다시 만들기). 다른 주제·새로 만들기로 옮기기 전에 따로 묻는다.
+  const running=generationMine&&isGenerating(generation);
   const unsavedWork=paidWork||(caption.trim()!==""&&caption!==savedCaption);
   const unsavedRef=useRef(unsavedWork);
   useEffect(()=>{unsavedRef.current=unsavedWork;},[unsavedWork]);
+  const runningRef=useRef(running);
+  useEffect(()=>{runningRef.current=running;},[running]);
   // 새로고침·탭 닫기·로그아웃으로 만들던 것이 사라지기 전에 브라우저가 한 번 묻게 한다.
   useEffect(()=>{
     if(!unsavedWork)return;
@@ -95,7 +101,8 @@ export function DraftWizard() {
     window.addEventListener("beforeunload",warn);
     return()=>window.removeEventListener("beforeunload",warn);
   },[unsavedWork]);
-  const confirmDiscard=()=>!unsavedRef.current||window.confirm("아직 저장하지 않은 사진·글이 있어요. 다른 주제로 바꾸면 사라져요. 바꿀까요?");
+  // 만드는 중이면 "그만두고 새로 시작할까요?"(취소하면 만들던 것을 그대로 둔다), 아니면 저장 안 한 글이 있을 때만 묻는다.
+  const confirmDiscard=()=>runningRef.current?window.confirm(STOP_RUNNING_QUESTION):!unsavedRef.current||window.confirm("아직 저장하지 않은 사진·글이 있어요. 다른 주제로 바꾸면 사라져요. 바꿀까요?");
   // 지금 게시물이 어떤 주제에서 시작했는지(추천 카드·한 달 계획·저장된 게시물의 제목). 직접 고친 제목이 이것과 비슷하면 같은 게시물로 본다.
   const anchorTopicRef=useRef(topic);
   const changeTopic=useCallback((nextTopic:string,nextAudience:"A"|"B"|"C",nextImageBrief="",preserveDraft=false,nextContentBrief="",keepAnchor=false)=>{
@@ -234,9 +241,31 @@ export function DraftWizard() {
       const session=readWizardSession();
       if(session?.track)setTrack(session.track);
       const query=new URLSearchParams(initialQueryRef.current);
-      if(query.get("new")==="1"){startNewDraft();return;}
-      const requestedId=query.get("draft");
-      const requestedTopic=query.get("topic")?.trim();
+      // 다른 화면에 다녀오는 사이에도 만들기는 이 모듈에서 계속 돈다. 화면이 새로 열렸을 때:
+      // - 주소가 다른 게시물·새로 만들기·새 주제를 가리키면 한 번 묻는다. "확인"이면 그 만들기를 멈추고 주소대로 연다.
+      // - 그냥 "만들기" 메뉴로 왔거나 "취소"면 만드는 중인 게시물로 돌아가 진행 화면을 보여 준다(소리 없이 멈추지 않게).
+      const runningId=generatingDraftId();
+      let requestedId=query.get("draft");
+      if(runningId){
+        const wantsOther=query.get("new")==="1"||Boolean(requestedId&&requestedId!==runningId)||(!requestedId&&Boolean(query.get("topic")?.trim()));
+        if(wantsOther&&window.confirm(STOP_RUNNING_QUESTION))cancelGeneration(`${runningId}|${SLIDES}`);
+        else{
+          // 개발 모드에서 effect가 다시 돌아도 같은 질문을 두 번 하지 않게 처음 주소를 비운다.
+          initialQueryRef.current="";if(window.location.search)window.history.replaceState({},"","/");
+          const auto=runningAuto();
+          if(auto){
+            const {meta}=auto;
+            changeTopic(meta.topic,meta.audience,meta.imageBrief,true,meta.contentBrief);setPlanLink(planLinkFrom(meta.planDate));
+            draftIdRef.current=meta.id;createdAtRef.current=meta.createdAt;setDraftId(meta.id);if(auto.track)setTrack(auto.track);
+            setStep("image");
+            return;
+          }
+          // 확인 화면의 "이 장 다시 만들기"처럼 저장된 게시물을 고치는 중이면 그 게시물을 다시 연다.
+          requestedId=runningId;
+        }
+      }
+      if(query.get("new")==="1"&&!generatingDraftId()){startNewDraft();return;}
+      const requestedTopic=requestedId===query.get("draft")?query.get("topic")?.trim():undefined;
       const requestedAudienceValue=query.get("audience");
       const requestedAudience=requestedAudienceValue==="B"||requestedAudienceValue==="C"?requestedAudienceValue:"A";
       const requestedImageBriefValue=query.get("imageBrief")?.trim()??"";
@@ -297,11 +326,24 @@ export function DraftWizard() {
     if(!sessionLoaded)return;
     saveWizardSession({draftId,topic,audience,imageBrief,contentBrief,step,track,...(planLink?{planDate:planLink.date}:{})});
   },[sessionLoaded,draftId,topic,audience,imageBrief,contentBrief,step,planLink,track]);
-  const canVisit:WizardStep[]=["topic",...(topic.trim()?["image" as const]:[]),...(images.length&&saveState==="saved"?["review" as const]:[])];
+  // 만드는 중에는 3단계로 건너뛰지 않는다(다 만들면 저절로 넘어간다. 예전 사진을 보다가 새 장과 섞이지 않게).
+  const canVisit:WizardStep[]=["topic",...(topic.trim()?["image" as const]:[]),...(images.length&&saveState==="saved"&&!running?["review" as const]:[])];
   const planDay=planLink?new Date(`${planLink.date}T00:00:00`):null;
   const planNote=planLink&&planDay?<p className="season-line plan-line">한 달 계획 · {planDay.getMonth()+1}/{planDay.getDate()}({"일월화수목금토"[planDay.getDay()]}) {PLAN_POST_TIME_KST}에 올릴 글</p>:null;
   const shell={canVisit,onStepChange:setStep,onNewDraft:step==="topic"?undefined:()=>{if(confirmDiscard())startNewDraft();}};
-  const make=()=>{ensureGeneration(genKey,genInput,[]);void createAutomatically(meta());};
+  const make=()=>{
+    if(images.length&&(generationMine?generation.auto.stage:"idle")!=="error"&&!window.confirm(REMAKE_QUESTION))return;
+    ensureGeneration(genKey,genInput,[]);void createAutomatically(meta());
+  };
+  // 1단계 "다음". 만드는 중에 아예 다른 주제를 적었으면 여기서 묻는다(글자를 칠 때마다 물을 수는 없어서 적는 동안은 그대로 둔다).
+  // "확인"이면 새 주제로 새 게시물, "취소"면 만들던 주제로 되돌리고 진행 화면으로 간다.
+  const goNext=()=>{
+    if(running&&topicSimilarity(topic,generation.input.topic)<SAME_TOPIC_SIMILARITY){
+      if(window.confirm(STOP_RUNNING_QUESTION))changeTopic(topic,audience,"",false,"");
+      else changeTopic(generation.input.topic,audience,imageBrief,true,contentBrief);
+    }
+    setStep("image");
+  };
   if(loadError)return <WizardShell step="topic" {...shell}><div className="state-card"><p role="alert">{loadError}</p><Link className="button secondary" href="/drafts">내 게시물로 돌아가기</Link></div></WizardShell>;
   if(step==="image")return <WizardShell step={step} {...shell}>{planNote}<MakeStep topic={topic} track={track} onTrack={setTrack} state={generationMine?generation:{...generation,auto:{stage:"idle",error:""},photos:[],slides:[],phase:"idle",error:""}} onMake={make} onBack={()=>setStep("topic")}/></WizardShell>;
   if(step==="review")return <WizardShell step={step} {...shell}><ReviewStep draftId={draftId} topic={topic} audience={audience} images={images} generation={generationMine?generation:null} caption={caption} onCaption={setCaption} captionStatus={captionShown} writing={writing} copyError={copyError} onRewrite={rewrite} onSaveCaption={()=>caption===savedCaption?Promise.resolve(true):saveCaption(caption)} onFreeCards={cards=>{adoptImages(cards);void saveImages(cards);}} imageNotice={imageNotice}/></WizardShell>;
@@ -314,6 +356,6 @@ export function DraftWizard() {
     {topicsFallback&&!topicsLoading&&<p role="status" className="field-help">추천을 불러오지 못해 준비된 주제를 보여 드려요. 잠시 뒤 &apos;다른 주제 보기&apos;를 눌러 보세요.</p>}
     <div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><span className="topic-badges"><span className="soft-badge">{topicCardLabel(index)}</span>{item.season&&<span className="season-badge">이번 철 · {item.season}</span>}</span><strong>{item.title}</strong><span>{item.summary}</span></button>)}</div>
     <label className="custom-topic"><span>직접 쓰기</span><input maxLength={120} value={topic} placeholder="예: 비 오는 날 홍어전" onChange={e=>editTopicText(e.target.value)} /></label>
-    <div className="bottom-action"><span/><button type="button" className="button primary big" disabled={!topic.trim()} onClick={()=>setStep("image")}>다음</button></div>
+    <div className="bottom-action"><span/><button type="button" className="button primary big" disabled={!topic.trim()} onClick={goNext}>다음</button></div>
   </WizardShell>;
 }

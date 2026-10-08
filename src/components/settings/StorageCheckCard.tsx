@@ -15,7 +15,7 @@ export function StorageCheckCard(){
     catch(error){setResult({configured:false,ok:false,message:error instanceof Error?error.message:"확인하지 못했어요. 잠시 뒤 다시 눌러 주세요."});}
     finally{setBusy(false);}
   };
-  return <section className="settings-section"><div><h2>영구 저장소</h2><p>초안·사진·Instagram 연결 정보를 서버 재시작 뒤에도 남기는 저장소(Supabase)예요.</p></div><div className="connection-panel">
+  return <section className="settings-section"><div><h2>영구 저장소</h2><p>게시물·사진·Instagram 연결 정보를 서버 재시작 뒤에도 남기는 저장소(Supabase)예요.</p></div><div className="connection-panel">
     {result&&<div className="connection-card"><span className={`status-dot${result.ok?" on":""}`}/><div><strong>{result.ok?"정상":result.configured?"설정은 됐지만 문제가 있어요":"설정되지 않았어요"}</strong><p role={result.ok?"status":"alert"}>{result.message}</p></div></div>}
     <div className="connection-actions"><button type="button" className="button secondary" disabled={busy} onClick={()=>void check()}>{busy?"확인 중…":"저장소 연결 확인"}</button></div>
   </div></section>;

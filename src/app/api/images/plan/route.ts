@@ -11,7 +11,7 @@ import { PLAN_FALLBACK_MESSAGES, lenientPlanSchema, planFallbackReason, type Pla
 
 export async function POST(request:Request) { const denied=await ownerApiError(); if(denied)return denied;
   const parsed=CarouselPlanInputSchema.safeParse(await request.json());
-  if(!parsed.success)return NextResponse.json({message:"캐러셀 설정을 확인해 주세요."},{status:400});
+  if(!parsed.success)return NextResponse.json({message:"만들기 설정을 확인해 주세요."},{status:400});
   // 갈래(사진 중심·글 중심)가 오면 장 수는 5장으로 고정한다(track.ts). AI에 보내는 장 수·검사 기준도 같은 값을 쓴다.
   const input={data:withTrackCount(parsed.data)};
 

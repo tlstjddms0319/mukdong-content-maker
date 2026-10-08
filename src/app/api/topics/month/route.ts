@@ -46,7 +46,7 @@ export async function POST(request:Request){
     const keptDates=new Set(kept.map(item=>item.date));
     const dates=openDates.filter(date=>!keptDates.has(date));
     if(!dates.length){
-      if(previous&&kept.length)return NextResponse.json({plan:previous,fallbackWeeks:0,kept:kept.length,message:"남은 게시일은 모두 초안을 시작했거나 지난 날짜라 그대로 두었어요."});
+      if(previous&&kept.length)return NextResponse.json({plan:previous,fallbackWeeks:0,kept:kept.length,message:"남은 게시일은 모두 만들기 시작했거나 지난 날짜라 그대로 두었어요."});
       return NextResponse.json({message:"이 달에는 남은 게시일이 없어요. 다음 달을 기획해 보세요."},{status:400});
     }
     // 사장님이 적어 둔 성과에서 반응 좋았던 주제(없으면 빈 목록).

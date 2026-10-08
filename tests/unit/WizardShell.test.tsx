@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WizardShell } from "@/components/wizard/WizardShell";
-import { ensureGeneration, resetGenerationStore, startPlan } from "@/features/images/generationStore";
+import { addLibraryPhoto, buildPhotoCarousel, ensureGeneration, resetGenerationStore } from "@/features/images/generationStore";
 
 describe("WizardShell", () => {
   afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
@@ -9,7 +9,8 @@ describe("WizardShell", () => {
   it("shows a badge while a post keeps being made on another screen", () => {
     vi.stubGlobal("fetch",vi.fn(()=>new Promise(()=>{})));
     ensureGeneration("draft-1",{topic:"홍어",slideCount:3});
-    void startPlan();
+    addLibraryPhoto({id:"p1",preview:"data:image/jpeg;base64,AAAA",name:"사진"});
+    void buildPhotoCarousel();
     render(<WizardShell step="topic" section="drafts"><h1>내 게시물</h1></WizardShell>);
     expect(screen.getByText("만드는 중")).toBeInTheDocument();
     expect(screen.getByRole("link",{name:"만들기"})).toBeInTheDocument();
@@ -23,6 +24,10 @@ describe("WizardShell", () => {
     expect(steps).toHaveTextContent("2 만들기");
     expect(steps).toHaveTextContent("3 확인하고 올리기");
     expect(steps).not.toHaveTextContent("문안");
+    // 좁은 휴대폰에서는 짧은 이름(1 주제 · 2 만들기 · 3 올리기)이 보이고, 버튼 이름은 폭과 상관없이 긴 이름이다.
+    expect([...steps.querySelectorAll(".step-short")].map(item=>item.textContent)).toEqual(["1 주제","2 만들기","3 올리기"]);
+    expect([...steps.querySelectorAll(".step-full")].map(item=>item.textContent)).toEqual(["1 무엇을 올릴까요","2 만들기","3 확인하고 올리기"]);
+    for(const name of ["1 무엇을 올릴까요","2 만들기","3 확인하고 올리기"])expect(screen.getByRole("button",{name})).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "주요 메뉴" })).toBeVisible();
   });
 

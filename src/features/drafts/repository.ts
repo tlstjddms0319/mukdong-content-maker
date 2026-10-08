@@ -121,7 +121,7 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
             draftNames = remote ? await remote.list("drafts") : await readdir(draftsDirectory);
           } catch (error) {
             if ((error as NodeJS.ErrnoException).code === "ENOENT") draftNames = [];
-            else throw new StorageError("저장된 초안 목록을 읽을 수 없습니다.", { cause: error });
+            else throw new StorageError("저장된 게시물 목록을 읽지 못했어요.", { cause: error });
           }
           const ids = draftNames.filter(name => name.endsWith(".json") && zUuid(name.slice(0, -5))).map(name => name.slice(0, -5));
           const summaryNames = new Set(await side.list(SUMMARY_DIR).catch(() => [] as string[]));
@@ -181,7 +181,7 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
         return DraftSchema.parse(JSON.parse(raw));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-        throw new StorageError("저장된 초안을 읽을 수 없습니다.", { cause: error });
+        throw new StorageError("저장된 게시물을 읽지 못했어요.", { cause: error });
       }
     },
 
@@ -193,7 +193,7 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
       }
       catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-        throw new StorageError("저장된 초안 목록을 읽을 수 없습니다.", { cause:error });
+        throw new StorageError("저장된 게시물 목록을 읽지 못했어요.", { cause:error });
       }
       const drafts = await Promise.all(names.filter(name => name.endsWith(".json") && zUuid(name.slice(0,-5))).map(name => repo.readDraft(name.slice(0,-5))));
       return drafts.filter((draft): draft is Draft => draft !== null).sort((a,b) => b.updated_at.localeCompare(a.updated_at));

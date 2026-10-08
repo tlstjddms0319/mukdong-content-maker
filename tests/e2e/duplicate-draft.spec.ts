@@ -10,7 +10,14 @@ test("duplicates a saved draft and opens the copy", async ({ page }) => {
   const created=await page.request.post("/api/drafts",{data:{id,status:"ready",topic,audience:"A",media_candidates:[{id:mediaId,source:"photo",file_id:"data:image/png;base64,iVBORw0KGgo=",purpose:"instagram-primary"}],selected_media_id:mediaId,copy:null,caption:"작년에 반응 좋던 문안",facts_to_verify:[],store_profile_version:"2026-09-10",created_at:"2026-09-22T00:00:00.000Z",updated_at:"2026-09-22T00:00:00.000Z"}});
   expect(created.status()).toBe(201);
   await page.goto("/drafts");
-  await page.getByRole("button",{name:`${topic} 복제해서 고치기`}).click();
+  // 카드의 주인공 버튼은 "열기" 하나이고, 복제·같은 주제로 새로·지우기는 접힌 "더보기" 안에 있다.
+  const card=page.locator(".draft-card").filter({hasText:topic});
+  await expect(card.getByRole("link",{name:`${topic} 열기`})).toBeVisible();
+  await expect(card.getByRole("button",{name:`${topic} 복제해서 고치기`})).toBeHidden();
+  await card.getByText("더보기",{exact:true}).click();
+  await expect(card.getByRole("button",{name:`${topic} 지우기`})).toBeVisible();
+  await expect(card.getByRole("link",{name:`${topic} 같은 주제로 새로 만들기`})).toBeVisible();
+  await card.getByRole("button",{name:`${topic} 복제해서 고치기`}).click();
   await expect(page).toHaveURL(/\/\?draft=/);
   expect(new URL(page.url()).searchParams.get("draft")).not.toBe(id);
   await expect(page.getByRole("heading",{name:"확인하고 올리기"})).toBeVisible();

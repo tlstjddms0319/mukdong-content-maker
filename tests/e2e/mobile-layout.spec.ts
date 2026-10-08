@@ -56,6 +56,13 @@ test("every main screen fits a phone and has finger-sized controls", async ({ pa
   expect(next?.height??0).toBeGreaterThanOrEqual(52);
   await page.getByRole("button", { name: "다음" }).click();
   await expectPhoneFriendly(page,"2단계");
+  // 단계 표시는 한 줄: 좁은 휴대폰에서는 짧은 이름(1 주제 · 2 만들기 · 3 올리기)을 쓰고, 버튼 이름은 긴 이름 그대로다.
+  const steps=page.getByRole("list",{name:"만드는 순서"});
+  await expect(steps).toHaveText(/1 주제\s*2 만들기\s*3 올리기/,{useInnerText:true});
+  const tops=await steps.getByRole("listitem").evaluateAll(items=>items.map(item=>Math.round(item.getBoundingClientRect().top)));
+  expect(new Set(tops).size,"단계 세 개가 한 줄").toBe(1);
+  await expect(steps.getByRole("button",{name:"1 무엇을 올릴까요"})).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("phone-step2.png") });
   expect((await page.getByRole("button", { name: "만들기", exact: true }).boundingBox())?.height??0).toBeGreaterThanOrEqual(52);
   await page.getByLabel("사진 파일").setInputFiles(["assets/design/samples/hands-makgeolli.jpg","assets/design/samples/studio-hongeo.jpg","assets/design/samples/table-topdown.jpg"]);
   await expect(page.getByRole("list", { name: "고른 사진" }).getByRole("listitem")).toHaveCount(3, { timeout: 60_000 });

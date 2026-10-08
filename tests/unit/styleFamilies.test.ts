@@ -4,7 +4,6 @@ import sharp from "sharp";
 import { buildCarouselPlanPrompt, createFallbackCarouselPlan, type CarouselPlan } from "@/features/images/carousel";
 import { composeSlideImage } from "@/features/images/composeSlide";
 import { DEFAULT_DESIGN } from "@/features/images/design";
-import { effectiveDesign } from "@/features/images/generationStore";
 import { buildImagePrompt } from "@/features/images/openaiRequest";
 import { STYLES, StyleIdSchema, styleCatalogText } from "@/features/images/styleCatalog";
 import { diversifyCarouselDesign } from "@/features/images/variety";
@@ -45,11 +44,8 @@ describe("style families", () => {
     for(let seed=0;seed<6;seed++)expect(diversifyCarouselDesign(chosen,seed).design.style).toBe("hanji");
   });
 
-  it("offers the families to the plan AI and lets the owner override", () => {
+  it("offers the families to the plan AI", () => {
     expect(buildCarouselPlanPrompt({topic:"비 오는 날 홍어",slideCount:5})).toContain(styleCatalogText());
-    const recommended={palette:"warm" as const,style:"webtoon" as const,theme:"classic" as const,titleFont:"pretendard" as const,bodyFont:"pretendard" as const,tone:"loud" as const,season:"none" as const};
-    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"auto",style:"auto"}).style).toBe("webtoon");
-    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto",theme:"auto",style:"neon"}).style).toBe("neon");
   });
 
   it("asks the image model for photos the family can process", () => {

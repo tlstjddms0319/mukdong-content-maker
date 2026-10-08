@@ -226,9 +226,16 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .image-gallery-details p { margin:0; color:var(--muted); }
 .image-gallery-details .button { margin-top:auto; }
 .draft-details { min-width:0; }
-/* 초안 카드 오른쪽 버튼 묶음: 다시 열기 · 복제해서 고치기 · 같은 주제로 새로 */
+/* 게시물 카드 오른쪽: 주인공 "열기" 하나 + 작은 "더보기"(복제해서 고치기 · 같은 주제로 새로 · 지우기) */
 .draft-actions { display:flex; flex-direction:column; align-items:stretch; gap:8px; }
 .draft-actions .field-help { margin:0; max-width:180px; }
+.draft-tools > summary { min-height:44px; display:flex; align-items:center; justify-content:center; padding:0 12px; border-radius:var(--control-radius); cursor:pointer; color:var(--muted); font-size:16px; font-weight:700; list-style:none; }
+.draft-tools > summary::-webkit-details-marker { display:none; }
+.draft-tools > summary::after { content:"▾"; margin-left:6px; }
+.draft-tools[open] > summary::after { content:"▴"; }
+.draft-tools-body { display:grid; gap:8px; margin-top:4px; }
+/* 링크(같은 주제로 새로)와 버튼(복제·지우기)이 같은 모양으로 보이게 바탕을 맞춘다. */
+.draft-tools-body .button.secondary { background:#fff; font-size:17px; cursor:pointer; }
 .draft-details h2 { margin:9px 0 5px; font-size:22px; }
 .draft-details p { overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; margin:0 0 6px; color:var(--muted); }
 .draft-details small { color:var(--muted); }
@@ -296,6 +303,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
   .draft-card > .button, .draft-actions { grid-column:1 / -1; justify-content:center; }
   .draft-actions { flex-direction:row; flex-wrap:wrap; }
   .draft-actions .button { flex:1 1 140px; }
+  .draft-tools { flex:1 1 100%; }
   .draft-planning, .performance-form, .publish-status { grid-column:1 / -1; }
   .draft-planning input[type="datetime-local"],.draft-planning .button { width:100%; }
 }
@@ -585,6 +593,13 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
   .step-list li { flex:none; }
   .step-list button { min-width:44px; padding:4px 2px; white-space:nowrap; }
   .step-bar .button.secondary { min-height:44px; font-size:16px; }
+}
+/* 단계 이름: 넓은 화면은 긴 이름("1 무엇을 올릴까요"), 좁은 휴대폰은 짧은 이름("1 주제")으로 세 단계를 한 줄에 둔다. */
+.step-short { display:none; }
+@media (max-width:520px) {
+  .step-list { flex-wrap:nowrap; }
+  .step-full { display:none; }
+  .step-short { display:inline; }
 }
 .help-steps li strong { display:block; font-size:21px; }
 /* 접힌 더보기 안의 링크는 확실히 숨긴다(휴대폰에서 펼침 창을 absolute로 띄우므로 접힌 상태에서도 상자가 잡히던 문제). */

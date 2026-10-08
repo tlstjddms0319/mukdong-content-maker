@@ -8,7 +8,6 @@ import { DesignSpecSchema } from "@/features/images/design";
 import { CarouselPlanSchema, buildCarouselPlanPrompt, type CarouselSlidePlan } from "@/features/images/carousel";
 import { composeSlideImage } from "@/features/images/composeSlide";
 import { mascotLayer } from "@/features/images/decor";
-import { effectiveDesign } from "@/features/images/generationStore";
 import { toStrictJsonSchema } from "@/lib/ai/jsonSchema";
 
 const slide:CarouselSlidePlan={role:"pairing",headline:"홍어 한 점은 씹을수록 진한 감칠맛이 올라와요",points:["홍어 살은 얇게 썰려 빛에 비치면 고유의 결이 보여요","특유의 알싸한 향이 입안에 퍼지며 침이 돌게 만들어요","다음 장에서는 이 맛이 왜 수육을 만나는지 살펴볼게요"],visualPrompt:"홍어회 한 접시를 위에서 담은 사진",textPosition:"top",layout:"illustration",keywords:["홍어"],figure:""};
@@ -32,13 +31,6 @@ describe("title and body fonts", () => {
     for(const id of TitleFontIdSchema.options)expect(prompt).toContain(`${id}(${TITLE_FONTS[id].label}`);
     for(const id of BodyFontIdSchema.options)expect(prompt).toContain(`${id}(${BODY_FONTS[id].label}`);
     expect(prompt).toContain("design 객체(style, palette, theme, titleFont, bodyFont, tone, season)");
-  });
-
-  it("lets the owner override only the font they picked", () => {
-    const recommended={palette:"night" as const,style:"template" as const,theme:"classic" as const,titleFont:"batang" as const,bodyFont:"batang" as const,tone:"loud" as const,season:"none" as const};
-    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"auto"})).toEqual(recommended);
-    expect(effectiveDesign(recommended,{titleFont:"jua",bodyFont:"auto"})).toEqual({palette:"night",style:"template",theme:"classic",titleFont:"jua",bodyFont:"batang",tone:"loud",season:"none"});
-    expect(effectiveDesign(recommended,{titleFont:"auto",bodyFont:"dodum"})).toEqual({palette:"night",style:"template",theme:"classic",titleFont:"batang",bodyFont:"dodum",tone:"loud",season:"none"});
   });
 
   it("draws the chosen fonts and keeps concurrent cards from mixing them", async () => {

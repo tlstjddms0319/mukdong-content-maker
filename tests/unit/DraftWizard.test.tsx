@@ -127,6 +127,124 @@ describe("DraftWizard",()=>{
     expect(textarea().value).toContain("AI 첫 문장");
   });
 
+  // ── 만드는 중인 게시물을 소리 없이 잃지 않기(간소화 C) ──
+  // 구성안에서 붙잡아 두는 처리기: release()를 부르기 전까지 "만들고 있어요" 화면에 머문다.
+  function heldMaking(track:"photo"|"text"="text",extra:Record<string,Handler>={}){
+    let release:()=>void=()=>{};
+    const hold=new Promise<void>(resolve=>{release=resolve;});
+    const request=api(makingRoutes(track,{"/api/images/plan":async()=>{await hold;return {plan:trackPlan(track),provider:"gemini"};},...extra}));
+    vi.stubGlobal("fetch",request);
+    return {request,release:()=>release()};
+  }
+  const STOP="지금 만드는 게시물이 있어요. 그만두고 새로 시작할까요?";
+
+  it("comes back to the progress screen from the 만들기 menu while making, even after leaving from step 1",async()=>{
+    const {request,release}=heldMaking();
+    const first=render(<DraftWizard/>);
+    await goMake("text");
+    expect(await screen.findByRole("heading",{name:"만들고 있어요"})).toBeInTheDocument();
+    const topic=calls(request,"/api/images/plan")[0]?.topic??"";
+    // 만드는 중에 1단계로 돌아갔다가 다른 메뉴로 나간 경우(예전에는 새 추천 주제가 골라져 만들던 것이 소리 없이 멈췄다).
+    fireEvent.click(screen.getByRole("button",{name:"1 무엇을 올릴까요"}));
+    // 만드는 중에는 3단계로 건너뛸 수 없다.
+    expect(screen.getByRole("button",{name:"3 확인하고 올리기"})).toBeDisabled();
+    first.unmount();
+    render(<DraftWizard/>);
+    expect(await screen.findByRole("heading",{name:"만들고 있어요"})).toBeInTheDocument();
+    await act(async()=>{release();});
+    await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
+    expect(calls(request,"/api/drafts","POST")[0]).toMatchObject({topic});
+  });
+
+  it("asks before opening another post from 내 게시물 while making, and keeps making on cancel",async()=>{
+    const other="33333333-3333-4333-8333-333333333333";
+    const {request,release}=heldMaking("text",{"/api/drafts?*":()=>({id:other,topic:"다른 게시물",audience:"A",caption:"다른 글",created_at:"2026-09-24T00:00:00.000Z",media_candidates:[{id:"44444444-4444-4444-8444-444444444444",source:"photo",file_id:"data:image/png;base64,aA==",purpose:"instagram-primary"}],selected_media_id:"44444444-4444-4444-8444-444444444444"})});
+    const first=render(<DraftWizard/>);
+    await goMake("text");
+    await screen.findByRole("heading",{name:"만들고 있어요"});
+    first.unmount();
+    const confirm=vi.fn(()=>false);vi.stubGlobal("confirm",confirm);
+    window.history.replaceState({},"",`/?draft=${other}`);
+    render(<DraftWizard/>);
+    expect(await screen.findByRole("heading",{name:"만들고 있어요"})).toBeInTheDocument();
+    expect(confirm).toHaveBeenCalledWith(STOP);
+    expect(window.location.search).toBe("");
+    expect(request.mock.calls.some(([url])=>String(url).startsWith("/api/drafts?"))).toBe(false);
+    await act(async()=>{release();});
+    await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
+    expect(calls(request,"/api/drafts","POST")).toHaveLength(1);
+  });
+
+  it("stops the running post and opens the chosen one when the owner agrees",async()=>{
+    const other="33333333-3333-4333-8333-333333333333";
+    const {request,release}=heldMaking("text",{"/api/drafts?*":()=>({id:other,topic:"다른 게시물",audience:"A",caption:"다른 글",created_at:"2026-09-24T00:00:00.000Z",media_candidates:[{id:"44444444-4444-4444-8444-444444444444",source:"photo",file_id:"data:image/png;base64,aA==",purpose:"instagram-primary"}],selected_media_id:"44444444-4444-4444-8444-444444444444"})});
+    const first=render(<DraftWizard/>);
+    await goMake("text");
+    await screen.findByRole("heading",{name:"만들고 있어요"});
+    first.unmount();
+    vi.stubGlobal("confirm",vi.fn(()=>true));
+    window.history.replaceState({},"",`/?draft=${other}`);
+    render(<DraftWizard/>);
+    await waitFor(()=>expect(textarea().value).toBe("다른 글"));
+    await act(async()=>{release();await new Promise(resolve=>setTimeout(resolve,0));});
+    // 멈춘 게시물은 늦게 끝나도 저장하지 않는다.
+    expect(calls(request,"/api/drafts","POST")).toHaveLength(0);
+    expect(textarea().value).toBe("다른 글");
+  });
+
+  it("asks before 새로 만들기 while making and keeps making on cancel",async()=>{
+    const {request,release}=heldMaking();
+    render(<DraftWizard/>);
+    await goMake("text");
+    await screen.findByRole("heading",{name:"만들고 있어요"});
+    const confirm=vi.fn(()=>false);vi.stubGlobal("confirm",confirm);
+    fireEvent.click(screen.getByRole("button",{name:"새로 만들기"}));
+    expect(confirm).toHaveBeenCalledWith(STOP);
+    expect(screen.getByRole("heading",{name:"만들고 있어요"})).toBeInTheDocument();
+    await act(async()=>{release();});
+    await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
+    expect(calls(request,"/api/drafts","POST")).toHaveLength(1);
+  });
+
+  it("asks when a different topic is typed while making: cancel returns to the running post, OK starts a new one",async()=>{
+    const {request,release}=heldMaking();
+    render(<DraftWizard/>);
+    await goMake("text");
+    await screen.findByRole("heading",{name:"만들고 있어요"});
+    const running=calls(request,"/api/images/plan")[0].topic as string;
+    fireEvent.click(screen.getByRole("button",{name:"1 무엇을 올릴까요"}));
+    fireEvent.change(screen.getByLabelText("직접 쓰기"),{target:{value:"막걸리와 즐기는 저녁 한 상"}});
+    const confirm=vi.fn(()=>false);vi.stubGlobal("confirm",confirm);
+    fireEvent.click(screen.getByRole("button",{name:"다음"}));
+    expect(confirm).toHaveBeenCalledWith(STOP);
+    expect(screen.getByRole("heading",{name:"만들고 있어요"})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"1 무엇을 올릴까요"}));
+    expect(screen.getByLabelText("직접 쓰기")).toHaveValue(running);
+    fireEvent.change(screen.getByLabelText("직접 쓰기"),{target:{value:"막걸리와 즐기는 저녁 한 상"}});
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button",{name:"다음"}));
+    expect(screen.getByRole("heading",{name:"어떻게 만들까요?"})).toBeInTheDocument();
+    expect(screen.getByText("주제: 막걸리와 즐기는 저녁 한 상")).toBeInTheDocument();
+    await act(async()=>{release();await new Promise(resolve=>setTimeout(resolve,0));});
+    expect(calls(request,"/api/drafts","POST")).toHaveLength(0);
+  });
+
+  it("asks before making a finished post again from the start",async()=>{
+    const request=api(makingRoutes("text"));
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);
+    await goMake("text");
+    await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
+    fireEvent.click(screen.getByRole("button",{name:"2 만들기"}));
+    const confirm=vi.fn(()=>false);vi.stubGlobal("confirm",confirm);
+    fireEvent.click(screen.getByRole("button",{name:"만들기"}));
+    expect(confirm).toHaveBeenCalledWith("이미 만든 게시물이 있어요. 처음부터 다시 만들까요? 그림을 새로 만들어요.");
+    expect(calls(request,"/api/images/plan")).toHaveLength(1);
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button",{name:"만들기"}));
+    await waitFor(()=>expect(calls(request,"/api/images/plan")).toHaveLength(2));
+    await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
+  });
+
   it("stops with a plain sentence when a slide fails and continues from that slide on '다시 해 보기'",async()=>{
     let failSlide3=true;
     const base=makingRoutes("photo");

@@ -10,10 +10,12 @@ import { GenerationBadge } from "./GenerationBadge";
 // id "image"는 예전 이름 그대로 둔다(탭 세션·테스트가 쓰는 값). 화면에 보이는 이름만 "만들기"다.
 export type WizardStep = "topic" | "image" | "review";
 
-const steps: Array<{ id: WizardStep; label: string }> = [
-  { id: "topic", label: "1 무엇을 올릴까요" },
-  { id: "image", label: "2 만들기" },
-  { id: "review", label: "3 확인하고 올리기" },
+// short: 좁은 휴대폰(360px)에서 세 단계가 한 줄에 들어가게 쓰는 짧은 이름. 넓은 화면은 긴 이름 그대로.
+// 버튼 이름(화면 읽기·시험)은 화면 폭과 상관없이 긴 이름 하나로 둔다(폭에 따라 이름이 바뀌지 않게).
+const steps: Array<{ id: WizardStep; label: string; short: string }> = [
+  { id: "topic", label: "1 무엇을 올릴까요", short: "1 주제" },
+  { id: "image", label: "2 만들기", short: "2 만들기" },
+  { id: "review", label: "3 확인하고 올리기", short: "3 올리기" },
 ];
 
 type Section="create"|"drafts"|"images"|"library"|"settings"|"help"|"plan";
@@ -59,7 +61,7 @@ export function WizardShell({ step, children, canVisit=[], onStepChange, onNewDr
           {section==="create"&&<div className="step-bar"><ol className="step-list" aria-label="만드는 순서">
             {steps.map((item) => (
               <li key={item.id} aria-current={item.id === step ? "step" : undefined}>
-                <button type="button" disabled={!onStepChange||!canVisit.includes(item.id)} onClick={()=>onStepChange?.(item.id)}>{item.label}</button>
+                <button type="button" aria-label={item.label} disabled={!onStepChange||!canVisit.includes(item.id)} onClick={()=>onStepChange?.(item.id)}><span className="step-full">{item.label}</span><span className="step-short" aria-hidden="true">{item.short}</span></button>
               </li>
             ))}
           </ol>{onNewDraft&&<button type="button" className="button secondary" onClick={onNewDraft}>새로 만들기</button>}</div>}
