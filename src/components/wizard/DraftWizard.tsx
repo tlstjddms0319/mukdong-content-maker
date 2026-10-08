@@ -30,6 +30,8 @@ const DEFAULT_TOPICS:TopicSuggestion[] = fallbackTopics(0,[],seasonContext());
 // 준비된 주제를 보여 줄 때 붙이는 이유(서버가 이유를 주지 않았을 때, 서버에 아예 닿지 못했을 때).
 const TOPIC_FALLBACK_NOTE="잠시 뒤 '다른 주제 보기'를 눌러 보세요.";
 const TOPIC_OFFLINE_NOTE="서버와 연결이 잠시 끊겼어요(오래 쉬던 서버는 깨어나는 데 1분쯤 걸려요). 잠시 뒤 '다른 주제 보기'를 눌러 보세요.";
+// 직접 쓰는 주제의 최대 글자 수(구성안·이미지·글 쓰기 요청이 받는 주제 길이와 같다).
+const TOPIC_MAX=200;
 const topicCardLabel=(index:number)=>`추천 ${String.fromCharCode(65+index)}`;
 // 이 브라우저에서 최근에 보여 준 추천 주제(최대 15개)와 마지막 추천 회차 번호. 같은 주제가 매번 나오지 않게 서버에 알려 준다.
 const RECENT_TOPICS_KEY="mukdong-recent-topics",TOPIC_ROUND_KEY="mukdong-topic-round";
@@ -319,7 +321,7 @@ export function DraftWizard() {
       // 한 달 계획에서 시작하면 주제 설명(brief)도 함께 넘어와 글·구성의 설명 방향이 된다.
       const requestedBriefValue=query.get("brief")?.trim()??"";
       const requestedBrief=requestedBriefValue.length<=600?requestedBriefValue:"";
-      if(!requestedId&&requestedTopic&&requestedTopic.length<=120){
+      if(!requestedId&&requestedTopic&&requestedTopic.length<=TOPIC_MAX){
         forgetCurrentDraft();
         changeTopic(requestedTopic,requestedAudience,requestedImageBrief,false,requestedBrief);
         setPlanLink(planLinkFrom(query.get("planDate")));
@@ -448,7 +450,8 @@ export function DraftWizard() {
     {/* 추천을 기다리는 동안은 카드 자리만 보인다(글자 없는 빈 카드). */}
     {!topics.length&&<div className="topic-grid" aria-hidden="true">{[0,1,2].map(index=><div key={index} className="topic-card topic-card-placeholder"><span className="topic-card-label">{topicCardLabel(index)}</span><span className="placeholder-line"/><span className="placeholder-line short"/></div>)}</div>}
     {topics.length>0&&<div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><TopicCardBody label={topicCardLabel(index)} title={item.title} season={item.season} trend={item.trend} selected={topic===item.title}/></button>)}</div>}
-    <label className="custom-topic"><span>직접 쓰기</span><input maxLength={120} value={topic} placeholder="예: 비 오는 날 홍어전" onChange={e=>editTopicText(e.target.value)} /></label>
+    {/* 직접 쓰기: 넓은 두 줄 칸(TOPIC_MAX자까지). 줄바꿈은 주제에 넣지 않고 띄어쓰기로 바꾼다(Enter를 눌러도 한 줄 주제). */}
+    <label className="custom-topic"><span>직접 쓰기 <small aria-hidden="true">({topic.length}/{TOPIC_MAX}자)</small></span><textarea aria-label="직접 쓰기" rows={2} maxLength={TOPIC_MAX} value={topic} placeholder="예: 비 오는 날 홍어전엔 왜 막걸리가 생각날까?" onChange={e=>editTopicText(e.target.value.replace(/\s*\n\s*/g," "))} /></label>
     <div className="bottom-action"><span/><button type="button" className="button primary big" disabled={!topic.trim()} onClick={goNext}>다음</button></div>
   </WizardShell>;
 }

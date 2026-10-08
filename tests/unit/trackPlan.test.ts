@@ -178,3 +178,22 @@ describe("track-only design families", () => {
     for(const month of ["2026-01","2026-10","2027-05"])expect(rotateStyles(30,month).some(style=>TRACK_ONLY.has(style))).toBe(false);
   });
 });
+
+// 실제 사례: 4번째 장이 "왜 물기가 생기지 않을까요?" + "물기가 없어 오래 보관해도 맛이 유지돼요"처럼
+// 질문을 던지고 결과만 되풀이했다. 갈래 게시물은 질문을 표지에서만 던지고, 본문은 답 + 이유·확인 방법으로 쓴다.
+describe("body slides answer instead of asking", () => {
+  it("tells the plan AI to ask only on the cover and to give the reason in the short line", () => {
+    const prompt=buildCarouselPlanPrompt({topic:"홍어무침엔 왜 막걸리일까?",slideCount:5,track:"photo"});
+    expect(prompt).toContain("질문은 표지에서만 던집니다");
+    expect(prompt).toContain("이유·근거나 확인하는 방법 하나");
+    expect(prompt).toContain("물기가 없어 맛이 유지돼요");
+  });
+  it("flags a question headline on a body slide for the review pass", () => {
+    const plan=applyTrack(createFallbackCarouselPlan({topic:"홍어무침",slideCount:5,track:"photo"}),"photo");
+    const asked={...plan,slides:plan.slides.map((slide,i)=>i===3?{...slide,headline:"왜 물기가 생기지 않을까요?",points:["물기가 없어 오래 보관해도 맛이 유지돼요."]}:slide)};
+    expect(slideCopyIssues(asked,"photo").filter(issue=>issue.slide===4&&issue.field==="headline").map(issue=>issue.message).join(" ")).toContain("질문 대신");
+    // 표지 질문은 괜찮다.
+    const cover={...plan,slides:plan.slides.map((slide,i)=>i===0?{...slide,headline:"홍어무침엔 왜 막걸리일까요?"}:slide)};
+    expect(slideCopyIssues(cover,"photo").some(issue=>issue.slide===1&&issue.message.includes("질문 대신"))).toBe(false);
+  });
+});
