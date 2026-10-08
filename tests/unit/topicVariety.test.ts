@@ -69,6 +69,26 @@ describe("topic variety", () => {
     expect(topics[2].id).toMatch(/^fallback-/);
   });
 
+  it("prefers fresh AI topics over recent ones, but uses recent ones before prepared topics", () => {
+    const recent=["과메기는 왜 찬바람이 불면 찾을까?","미나리전엔 왜 막걸리가 생각날까?","홍어애탕은 어떤 국물일까?"];
+    const aetang={...make(recent[2]),summary:"찬바람 부는 날 홍어애탕 한 그릇을 소개하고 재료와 맛은 사장님께 확인한 뒤 씁니다."};
+    // 셋 다 최근에 보여 준 제목이어도(예전에는 전부 준비된 주제로 바뀜) AI 추천을 그대로 쓴다.
+    const all=assembleTopics([makeMenu(recent[0]),makeJeon(recent[1]),aetang],{...base,avoidTitles:recent});
+    expect(all.filled).toBe(0);
+    // 새 제목이 있으면 새 제목이 먼저 들어간다.
+    const mixed=assembleTopics([makeMenu(recent[0]),makeJeon("전은 왜 비 오는 날 생각날까?"),aetang],{...base,avoidTitles:recent});
+    expect(mixed.topics[0].title).toBe("전은 왜 비 오는 날 생각날까?");
+    // 지금 화면의 제목(excludeTitles)은 여전히 쓰지 않고, 그 이유를 센다.
+    const now=assembleTopics([makeMenu(recent[0]),makeJeon("전은 왜 비 오는 날 생각날까?"),{...aetang,title:"홍어애탕은 어떤 국물일까"}],{...base,excludeTitles:[recent[0]]});
+    expect(now.topics.map(topic=>topic.title)).not.toContain(recent[0]);
+    expect(now.rejected).toEqual({current:1,question:1});
+  });
+
+  it("accepts a quoted question title and a menu named only in the title", () => {
+    const {filled}=assembleTopics([{...makeMenu("“과메기는 왜 겨울에 찾을까?”"),summary:"찬바람 부는 계절에 사람들이 찾는 이유를 출처를 확인해 설명하는 방향입니다."},makeJeon("전은 왜 비 오는 날 생각날까?"),make("홍어는 왜 삭혀 먹을까?")],base);
+    expect(filled).toBe(0);
+  });
+
   it("replaces a topic shown recently or already drafted", () => {
     const {topics,filled}=assembleTopics([make("수육에는 왜 김치를 곁들일까?"),make("굴은 왜 겨울에 맛있을까?"),makeMenu("과메기는 왜 겨울에 찾을까?")],{...base,avoidTitles:["수육에는 왜 김치를 곁들일까?"]});
     expect(filled).toBe(1);
@@ -92,7 +112,7 @@ describe("topic variety", () => {
     expect(onPartial).toHaveBeenCalledWith(1);
     expect(partial.slice(0,2).map(topic=>topic.id)).toEqual(["1","3"]);
     const broken=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[1,2,3].map(n=>({...make(`광고 ${n}`,String(n)),summary:"짧음"}))},onFallback);
-    expect(onFallback).toHaveBeenCalledWith(expect.stringContaining("broke the topic rules"),undefined);
+    expect(onFallback).toHaveBeenCalledWith(expect.stringContaining("broke the topic rules"),undefined,{question:3});
     expect(broken.every(topic=>topic.id.startsWith("fallback-"))).toBe(true);
   });
 

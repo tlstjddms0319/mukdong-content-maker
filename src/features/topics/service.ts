@@ -163,24 +163,50 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
   return picked.map(topic=>({...topic,season:topic.season||(season&&timely.has(menuId(topic))?season.season:""),trend:trendOf(topic),id:topic.id||`fallback-${index+1}-${++n}`}));
 }
 
-// 주제 한 개가 기본 조건(물음표 질문, 가게 이름 없음, 가게 메뉴로 이어지는 설명)을 지키는지.
-const meetsTopicBasics=(topic:TopicSuggestion,storeName:string)=>/[?？]$/.test(topic.title.trim())&&!topic.title.includes(storeName)&&topic.summary.trim().length>=30&&menuOf(topic.summary).length>0;
+// 주제 한 개가 기본 조건을 못 지키는 이유(지키면 undefined).
+// - 제목 끝 물음표 뒤의 따옴표·괄호·공백은 봐준다(AI가 "…일까?" 처럼 따옴표로 감싸 보내곤 한다).
+// - 가게 메뉴는 제목과 설명을 함께 본다(제목에만 메뉴 이름을 쓴 주제를 버리지 않게).
+export type TopicRejectReason="question"|"store"|"summary"|"menu"|"current"|"duplicate"|"same-menu";
+export const TOPIC_REJECT_LABELS:Record<TopicRejectReason,string>={
+  question:"물음표 질문이 아니어서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
+  current:"지금 화면 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",
+};
+function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason|undefined {
+  if(!/[?？]["'”’」』)\]\s]*$/.test(topic.title.trim()))return "question";
+  if(topic.title.includes(storeName))return "store";
+  if(topic.summary.trim().length<30)return "summary";
+  if(!menuOf(`${topic.title} ${topic.summary}`).length)return "menu";
+  return undefined;
+}
+const meetsTopicBasics=(topic:TopicSuggestion,storeName:string)=>!basicsProblem(topic,storeName);
 // 세 주제가 메뉴를 고르게 다루는지: 하나 이상은 홍어회·삼합이 아닌 메뉴, 셋 다 같은 메뉴는 아님(순서와 상관없음).
 const isVariedSet=(topics:TopicSuggestion[])=>topics.some(isOtherMenuTopic)&&new Set(topics.map(topic=>topicMenu(topic)?.id)).size>1;
 
-// AI가 준 주제 3개를 순서 그대로 살린다(첫 번째가 AI가 가장 추천하는 주제). 기본 조건에 안 맞거나 지금 화면·최근에 나온 제목,
+// AI가 준 주제 3개를 순서 그대로 살린다(첫 번째가 AI가 가장 추천하는 주제). 기본 조건에 안 맞거나 지금 화면 제목,
 // 겹치는 제목, 앞 주제와 주인공 메뉴가 겹치거나 두 번째 삼합 주제만 빼고, 모자란 만큼만 준비된 주제(이번 시기·최근에 안 보인 것 우선)로 채운다.
+// 최근에 보여 준 제목(avoidTitles)은 되도록 피하지만 버리지는 않는다: 새 제목을 먼저 고르고, 모자라면 준비된 주제보다 먼저 쓴다
+// (예전에는 최근 제목을 통째로 버려, 계절 주제를 비슷하게 다시 낸 AI 추천이 전부 준비된 주제로 바뀌곤 했다).
 // 셋이 메뉴를 고르게 다루지 않으면(모두 홍어회·삼합, 또는 셋 다 같은 메뉴) 맨 뒤 하나를 다른 메뉴 주제로 바꾼다.
-// filled = 준비된 주제로 바꾼 개수.
-export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:string;round:number;excludeTitles:readonly string[];avoidTitles:readonly string[];season?:SeasonContext;hints?:TopicHints}):{topics:TopicSuggestion[];filled:number} {
-  const blocked=new Set([...options.excludeTitles,...options.avoidTitles].map(titleKey));
+// filled = 준비된 주제로 바꾼 개수. rejected = 쓰지 못한 AI 주제의 이유별 개수(화면 안내·로그용).
+export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:string;round:number;excludeTitles:readonly string[];avoidTitles:readonly string[];season?:SeasonContext;hints?:TopicHints}):{topics:TopicSuggestion[];filled:number;rejected:Partial<Record<TopicRejectReason,number>>} {
+  const current=new Set(options.excludeTitles.map(titleKey));
+  const recentKeys=new Set(options.avoidTitles.map(titleKey));
   const used=new Set<string>();
   const take=(topic:TopicSuggestion)=>{used.add(titleKey(topic.title));return topic;};
   const picked:TopicSuggestion[]=[];
-  for(const topic of suggestions)if(picked.length<3&&meetsTopicBasics(topic,options.storeName)&&!blocked.has(titleKey(topic.title))&&!used.has(titleKey(topic.title))&&fitsWith(picked,topic))picked.push(take(topic));
+  // 이 AI 주제를 지금 고를 수 없는 이유(고를 수 있으면 undefined).
+  const problem=(topic:TopicSuggestion):TopicRejectReason|undefined=>basicsProblem(topic,options.storeName)
+    ??(current.has(titleKey(topic.title))?"current":used.has(titleKey(topic.title))?"duplicate":!fitsWith(picked,topic)?"same-menu":undefined);
+  // 1) 최근에 안 보인 제목 → 2) 최근에 보인 제목(준비된 주제보다는 낫다).
+  for(const allowRecent of [false,true])for(const topic of suggestions){
+    if(picked.length>=3||picked.includes(topic))continue;
+    if(!allowRecent&&recentKeys.has(titleKey(topic.title)))continue;
+    if(!problem(topic))picked.push(take(topic));
+  }
+  const rejected:Partial<Record<TopicRejectReason,number>>={};
+  for(const topic of suggestions)if(!picked.includes(topic)){const reason=problem(topic)??"same-menu";rejected[reason]=(rejected[reason]??0)+1;}
   // 채울 후보: 이번 회차 준비된 주제부터 차례로 돌며, 최근에 안 보인 것 → 제외 목록만 피한 것 순서.
-  const excluded=new Set(options.excludeTitles.map(titleKey));
-  const avoided=new Set(options.avoidTitles.map(titleKey));
+  const excluded=current,avoided=recentKeys;
   const pool=Array.from({length:PREPARED_ROUNDS},(_,offset)=>fallbackTopics((options.round+offset)%PREPARED_ROUNDS,[],options.season,options.avoidTitles,options.hints)).flat();
   // 최근에 자주 나온 메뉴와 이미 고른 주제의 메뉴는 되도록 피한다(메뉴를 고르게 돌리기).
   const recent=options.hints?.recentMenus??new Set<string>();
@@ -204,7 +230,7 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   // 시기·검색 흐름을 반영한 주제를 앞으로(같은 무리 안에서는 AI가 준 순서 그대로). 화면은 첫 주제를 먼저 골라 둔다.
   const tagged=(topic:TopicSuggestion)=>Number(Boolean(topic.season||topic.trend));
   picked.sort((a,b)=>tagged(b)-tagged(a));
-  return {topics:picked,filled};
+  return {topics:picked,filled,rejected};
 }
 
 // Structural editorial checks, not a fact checker or a judgment of marketing performance.
@@ -244,14 +270,14 @@ export function normalizeTrendLabels(topics:TopicSuggestion[],trends:readonly st
 }
 
 // onFallback(reason, error): 준비된 주제로 바꾼 이유(로그용 글)와, AI 호출이 실패했으면 그 오류(화면에 보여 줄 이유를 고르는 데 쓴다).
-export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string,error?:unknown)=>void,season?:SeasonContext,onPartial?:(filled:number)=>void,hints:TopicHints={}):Promise<TopicSuggestion[]> {
+export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallback?:(reason:string,error?:unknown,rejected?:Partial<Record<TopicRejectReason,number>>)=>void,season?:SeasonContext,onPartial?:(filled:number)=>void,hints:TopicHints={}):Promise<TopicSuggestion[]> {
   const parsed=TopicInputSchema.parse(input);
-  const fallback=(reason="no AI client",error?:unknown)=>{onFallback?.(reason,error);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season,parsed.avoidTitles,hints);};
+  const fallback=(reason="no AI client",error?:unknown,rejected?:Partial<Record<TopicRejectReason,number>>)=>{onFallback?.(reason,error,rejected);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season,parsed.avoidTitles,hints);};
   if(!ai)return fallback();
   try{
     const suggestions=normalizeTrendLabels(normalizeSeasonLabels(TopicSuggestionsSchema.parse(await ai.suggest(parsed)),season),hints.trends);
-    const {topics,filled}=assembleTopics(suggestions,{storeName:parsed.storeName,round:parsed.recommendationRound,excludeTitles:parsed.excludeTitles,avoidTitles:parsed.avoidTitles,season,hints});
-    if(filled>=3)return fallback(`suggestions broke the topic rules: ${suggestions.map(topic=>topic.title).join(" / ").slice(0,200)}`);
+    const {topics,filled,rejected}=assembleTopics(suggestions,{storeName:parsed.storeName,round:parsed.recommendationRound,excludeTitles:parsed.excludeTitles,avoidTitles:parsed.avoidTitles,season,hints});
+    if(filled>=3)return fallback(`suggestions broke the topic rules (${Object.entries(rejected).map(([reason,count])=>`${reason}×${count}`).join(", ")}): ${suggestions.map(topic=>topic.title).join(" / ").slice(0,200)}`,undefined,rejected);
     if(filled>0)onPartial?.(filled);
     return topics;
   }catch(error){return fallback(error instanceof Error?error.message.replace(/\s+/g," ").slice(0,300):"AI request failed",error);}
