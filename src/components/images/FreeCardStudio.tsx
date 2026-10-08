@@ -1,4 +1,5 @@
 "use client";
+import { shrinkPhoto } from "@/lib/files/shrinkPhoto";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ASSET_KIND_LABELS, rankAssets, type LibraryAsset, type FreeCard } from "@/features/images/freeCards";
@@ -27,7 +28,7 @@ export function FreeCardStudio({topic,onApprove}:{topic:string;onApprove:(images
     event.preventDefault();if(!file)return;
     const request=++run.current;setBusy(true);setError("");setPreview(undefined);
     try{
-      const form=new FormData();form.append("file",file);form.append("name",name);form.append("tags",tags);form.append("kind",kind);form.append("credit",credit);
+      const form=new FormData();form.append("file",await shrinkPhoto(file));form.append("name",name);form.append("tags",tags);form.append("kind",kind);form.append("credit",credit);
       const response=await fetch("/api/images/assets",{method:"POST",body:form}),data=await readJsonResponse(response);
       if(request!==run.current)return;if(!response.ok)throw new Error(data.message);
       setAssets(current=>[data.asset,...current]);setSelection([data.asset.id]);setFile(undefined);setName("");setTags("");

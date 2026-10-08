@@ -7,6 +7,8 @@ import { createMediaStore, MediaValidationError } from "@/lib/files/mediaStore";
 import { remoteStore } from "@/lib/files/remoteStore";
 import { photoQuality } from "./render/photoEnhance";
 import { AssetDetailsSchema, LibraryAssetSchema, type AssetDetails, type LibraryAsset } from "./freeCards";
+// 사진을 읽을 때 화소 수 상한(sharp 기본값과 비슷, 휴대폰 2억 화소 사진까지). 사진 처리하는 곳이 함께 쓴다.
+export const MAX_INPUT_PIXELS=250_000_000;
 
 const QUALITY_BACKFILL=3;
 // 미리보기가 깨져 잴 수 없던 사진. 같은 서버 프로세스에서는 다시 시도하지 않아 다른 사진 차례를 막지 않는다.
@@ -70,8 +72,9 @@ export function createAssetLibrary(root=process.env.DATA_DIR??path.join(process.
       let preview:Buffer;
       // 미리보기(카드에 쓰는 사진): 세로·정사각 사진은 긴 변 1400, 가로 사진은 가로 2160까지 둔다.
       // 가로 사진은 표지+2장 파노라마(render/panorama.ts)에서 2160 폭으로 펼쳐지므로 늘리지 않아도 되게.
-      try{preview=await sharp(bytes,{limitInputPixels:40_000_000}).rotate().resize(2160,1400,{fit:"inside",withoutEnlargement:true}).flatten({background:"#f5f1e8"}).jpeg({quality:88}).toBuffer();}
-      catch{throw new MediaValidationError("읽을 수 있는 이미지 파일을 골라 주세요. 최대 4천만 화소까지 지원해요.");}
+      // 화소 제한은 2억 5천만(휴대폰 고화소 모드 2억 화소 사진까지). JPEG는 줄여 읽기(shrink-on-load)라 2억 화소도 메모리 200MB 안쪽이다.
+      try{preview=await sharp(bytes,{limitInputPixels:MAX_INPUT_PIXELS}).rotate().resize(2160,1400,{fit:"inside",withoutEnlargement:true}).flatten({background:"#f5f1e8"}).jpeg({quality:88}).toBuffer();}
+      catch{throw new MediaValidationError("이 사진 파일을 읽지 못했어요. 휴대폰 사진첩에서 다시 골라 주세요(JPG·PNG·WebP).");}
       const original=await createMediaStore(root).saveOriginal(file);
       // 사진 품질(어두움·흔들림 등)은 원본으로 한 번 잰다. 측정이 실패해도 사진 등록은 막지 않는다.
       const quality=await photoQuality(bytes).catch(()=>null);

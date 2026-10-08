@@ -1,4 +1,5 @@
 "use client";
+import { shrinkPhoto } from "@/lib/files/shrinkPhoto";
 import { useEffect, useRef, useState } from "react";
 import { readJsonResponse } from "@/lib/http/readJson";
 
@@ -36,9 +37,10 @@ export function PosterCard(){
     catch(cause){setError(message(cause,fallback));}
     finally{setBusy(false);if(input.current)input.current.value="";}
   };
-  const upload=(file:File|undefined)=>{
+  const upload=async(file:File|undefined)=>{
     if(!file)return;
-    const form=new FormData();form.append("file",file);
+    // 고화소 사진은 휴대폰에서 먼저 줄여 보낸다(shrinkPhoto).
+    const form=new FormData();form.append("file",await shrinkPhoto(file));
     void run({method:"POST",body:form},"새 포스터로 바꿨어요. 이제부터 만드는 카드뉴스 마지막 장에 들어가요.","포스터를 올리지 못했어요.");
   };
   const revert=()=>{
@@ -58,7 +60,7 @@ export function PosterCard(){
         <div className="connection-actions">
           <label className={`button primary${busy?" disabled":""}`} aria-disabled={busy}>
             {busy?"처리 중…":"새 포스터 올리기"}
-            <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden disabled={busy} onChange={event=>upload(event.target.files?.[0])}/>
+            <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden disabled={busy} onChange={event=>void upload(event.target.files?.[0])}/>
           </label>
           {state?.source==="custom"&&<button type="button" className="button secondary" disabled={busy} onClick={revert}>기본 포스터로 되돌리기</button>}
         </div>

@@ -48,12 +48,12 @@ export async function saveCustomPoster(file:{type:string;size:number;arrayBuffer
   const bytes=Buffer.from(await file.arrayBuffer());
   let image:Buffer;
   try{
-    const meta=await sharp(bytes,{limitInputPixels:40_000_000}).rotate().metadata();
+    const meta=await sharp(bytes,{limitInputPixels:250_000_000}).rotate().metadata();
     const turned=(meta.orientation??1)>=5;
     const width=(turned?meta.height:meta.width)??0,height=(turned?meta.width:meta.height)??0;
     if(Math.min(width,height)<600)throw new MediaValidationError("그림이 너무 작아요. 짧은 쪽이 600px 이상인 그림을 올려 주세요.");
     // 투명한 부분은 크림색으로 채운다(카드 바탕과 어울리게).
-    image=await sharp(bytes,{limitInputPixels:40_000_000}).rotate().resize(2160,2700,{fit:"inside",withoutEnlargement:true}).flatten({background:"#f5f1e8"}).jpeg({quality:92}).toBuffer();
+    image=await sharp(bytes,{limitInputPixels:250_000_000}).rotate().resize(2160,2700,{fit:"inside",withoutEnlargement:true}).flatten({background:"#f5f1e8"}).jpeg({quality:92}).toBuffer();
   }catch(error){
     if(error instanceof MediaValidationError)throw error;
     throw new MediaValidationError("그림을 읽지 못했어요. 다른 파일로 올려 주세요.");
