@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
 import type { AppSettings } from "@/features/settings/schema";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 async function saveSettings(value: AppSettings) {
   const response = await fetch("/api/settings", { method:"PUT", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(value) });
@@ -22,6 +23,7 @@ export function SettingsForm({ onSave = saveSettings, connections = { gemini:fal
       <label>문안 AI<select aria-label="문안 AI" value={settings.textAiProvider} onChange={e=>update("textAiProvider",e.target.value as AppSettings["textAiProvider"])}><option value="automatic">자동 (Gemini → Groq → Cloudflare)</option><option value="gemini">Gemini만</option><option value="groq">Groq만</option><option value="cloudflare">Cloudflare만 (이미지와 무료 한도 공유)</option></select></label>
     </div></section>
     <section className="settings-section"><div><h2>브랜드 키트</h2><p>모든 디자인 계열의 카드 바닥글에 가게 이름과 함께 같은 모양으로 찍혀요. 비우면 가게 이름만 찍혀요.</p></div><div className="field-grid">
+      <div className="brand-kit-logo"><BrandLogo size={64} alt="묵동홍어마을 공용 로고"/><p><strong>가게 공용 로고</strong><small className="field-help">앱 아이콘(브라우저 탭·휴대폰 홈 화면)과 화면 위쪽 표식에 쓰여요.</small></p></div>
       <label>Instagram 계정<input aria-label="Instagram 계정" placeholder="@mukdong_hongeo" maxLength={31} value={settings.brandHandle??""} onChange={e=>update("brandHandle",e.target.value.trim())}/><small className="field-help">카드 예시: 묵동홍어마을 · {settings.brandHandle?.trim()?`@${settings.brandHandle.trim().replace(/^@/,"")}`:"@계정"}</small></label>
     </div></section>
     <section className="settings-section"><div><h2>원격 누끼 (선택)</h2><p>켜면 누끼가 어려운 사진을 Higgsfield로 배경 제거합니다. 사진 1장당 크레딧이 들고, 같은 사진은 한 번만 처리합니다.</p></div><div className="field-grid">

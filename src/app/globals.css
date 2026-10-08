@@ -34,7 +34,11 @@ button { color: inherit; }
   border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; text-decoration: none; }
-.brand-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); }
+/* 가게 공용 원형 로고(components/brand/BrandLogo). 크기는 width·height 속성으로 정하고, 찌그러지지 않게 줄어들지 않게 둔다. */
+.brand-logo { border-radius: 50%; flex: none; }
+.login-brand { gap: 14px; font-size: 18px; }
+.brand-kit-logo { display: flex; align-items: center; gap: 14px; }
+.brand-kit-logo p { margin: 0; display: grid; gap: 2px; }
 .topbar-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .topbar-actions form { margin:0; }
 .topbar-actions button { background:transparent; cursor:pointer; }
@@ -437,6 +441,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 /* 360px대 작은 휴대폰: 가게 이름과 버튼 두 개가 한 줄에 들어가도록 글자를 한 단계 줄인다. */
 @media (max-width:400px) {
   .brand { font-size:15px; gap:8px; }
+  .topbar .brand-logo { width:28px; height:28px; }
   .topbar-actions .button { padding-inline:10px; font-size:14px; }
 }
 @media (max-width:720px) {
