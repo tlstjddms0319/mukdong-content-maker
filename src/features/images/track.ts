@@ -18,11 +18,12 @@ export const TRACK_STYLES:Record<CarouselTrack,StyleId>={photo:"photo-focus",tex
 export const TRACK_LABELS:Record<CarouselTrack,string>={photo:"사진 중심",text:"글 중심"};
 
 // 글 길이 상한(글자 수, 띄어쓰기 포함). 카드에서 제목 한 줄·짧은 글 한 줄로 읽히는 길이다.
-//   표지: 제목 24자(두 줄까지), 부제 20자.  사진 중심 본문: 제목 18자 + 짧은 글 1개(24자).  글 중심 본문: 제목 18자 + 짧은 글 2개(각 20자).
+//   표지: 제목 24자(두 줄까지), 부제 20자.  사진 중심 본문: 제목 18자 + 짧은 글 1개(24자).  글 중심 본문: 제목 14자 + 짧은 글 2개(각 18자).
+//   글 중심은 제목 84px 이상·짧은 글 58px로 크게 그리므로, 제목이 한 줄·짧은 글이 각각 한 줄에 들어가는 길이로 줄였다(B 단계).
 export const TRACK_COPY={
   cover:{headline:24,subline:20},
   photo:{headline:18,points:1,point:24},
-  text:{headline:18,points:2,point:20},
+  text:{headline:14,points:2,point:18},
 } as const;
 
 export function trackLayout(track:CarouselTrack,role:CarouselRole):CardLayout {

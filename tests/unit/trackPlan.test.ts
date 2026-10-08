@@ -132,7 +132,7 @@ describe("track plans", () => {
     expect(photo).not.toContain(styleCatalogText());
     const text=buildCarouselPlanPrompt({topic:"비 오는 날 홍어",track:"text"});
     expect(text).toContain("[갈래: 글 중심]");
-    expect(text).toContain("짧은 글(points) 1~2개(각 20자 이내)");
+    expect(text).toContain("짧은 글(points) 1~2개(각 18자 이내)");
     expect(text).toContain("나머지 장은 browser");
     const plain=buildCarouselPlanPrompt({topic:"비 오는 날 홍어",slideCount:7});
     expect(plain).not.toContain("[갈래");

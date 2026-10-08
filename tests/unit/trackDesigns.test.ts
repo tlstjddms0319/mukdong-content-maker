@@ -74,12 +74,19 @@ describe("track design families", () => {
       // 사진을 넘겨도(예전 초안의 사진 장) 본문 장에는 쓰지 않는다.
       const {image,report}=await composeSlideCard([dark],{...copy[index-1],layout:"frame"},index,5,"card",{palette:"warm",style:"text-focus"},{contrast:true});
       expect(report.metrics.photoArea).toBe(0);
-      // 제목(64px 이상)과 짧은 글(44px 이상)만 센다. 큰 장 번호(200px)와 바닥글(30px)은 글 줄이 아니다.
+      // 제목(84px 이상)과 짧은 글(58px 이상)만 센다. 큰 장 번호(300px)와 바닥글(30px)은 글 줄이 아니다.
       const copyBoxes=report.boxes.filter(box=>box.size>=44&&box.size<=120);
-      const title=copyBoxes.find(box=>box.size>=64)!;
+      const title=copyBoxes.find(box=>box.size>=84)!;
       expect(title).toBeTruthy();
       expect(copyBoxes.reduce((sum,box)=>sum+linesOf(box),0)).toBeLessThanOrEqual(3);
-      for(const box of copyBoxes)expect(box.size).toBeGreaterThanOrEqual(44);
+      for(const box of copyBoxes)expect(box.size).toBeGreaterThanOrEqual(58);
+      // 큰 장 번호 + 글 덩어리가 바닥글 위 남는 높이의 가운데에 있다(예전에는 글 아래로 330px 넘는 빈 띠가 남았다).
+      if(index<5){
+      const numeral=report.boxes.find(box=>box.size>=200)!,footer=report.boxes.filter(box=>box.size<=30).reduce((min,box)=>Math.min(min,box.top),1350);
+      const textBottom=Math.max(...copyBoxes.map(box=>box.top+box.height));
+      expect(Math.abs((numeral.top-96)-(footer-56-textBottom)),`${index}장 위아래 여백`).toBeLessThan(140);
+      expect(footer-textBottom,`${index}장 글 아래 빈자리`).toBeLessThan(330);
+      }
       if(index<5){const {data}=await sharp(image).extract({left:8,top:8,width:1,height:1}).raw().toBuffer({resolveWithObject:true});corners.push([...data].join(","));}
     }
     // 이어지는 본문 장은 바탕색이 다르다(크림 → 겨자 → 밤색).
