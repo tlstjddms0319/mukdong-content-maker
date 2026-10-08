@@ -47,6 +47,9 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     for(const word of CLICHES)if(headline.includes(word))add(n,"headline",`광고 상투어 '${word}'를 빼고 구체적인 정보로 바꾸세요.`);
     if(SLOGAN.test(headline))add(n,"headline","명사로 끝나는 슬로건 대신 해요체 문장이나 질문으로 쓰세요.");
     if((headline.match(/!/g)??[]).length>1)add(n,"headline","느낌표를 줄이세요.");
+    // 갈래 게시물은 질문을 표지에서만 던진다. 본문 장 제목이 "왜 ~일까요?"면 짧은 글 한 줄로는 결과만 되풀이하기 쉽다(실제 사례:
+    // "왜 물기가 생기지 않을까요?" + "물기가 없어 오래 보관해도 맛이 유지돼요"). 답을 제목으로, 이유·확인 방법을 짧은 글로 쓰게 한다.
+    if(track&&slide.role!=="cover"&&/[?？]$/.test(headline))add(n,"headline","본문 장 제목은 질문 대신 이 장이 알려 주는 답(핵심 사실)을 해요체 문장으로 쓰고, 짧은 글에는 그 이유나 확인하는 방법을 쓰세요.");
     // 카드는 게시 뒤 고칠 수 없으니 확인 안 된 사실·보장·가게 제공 단정을 검수 단계에서 먼저 고치게 한다.
     const claim=(text:string)=>{const result=checkTextClaims(text);return [...result.blocked,...result.verify,...servingClaimIssues(text)];};
     for(const message of claim(headline))add(n,"headline",`제목: ${message} 확인된 정보 없이 쓸 수 있는 말로 바꾸세요.`);
@@ -103,8 +106,8 @@ export function buildPlanReviewPrompt(plan:CarouselPlan,topic:string,issues:Slid
 ${found}
 
 [편집 기준]
-1. 각 장은 앞 장이 남긴 궁금증에 답하고 다음 장으로 이어집니다. 장끼리 같은 말이나 같은 정보를 반복하지 마세요.
-2. ${context.track?`제목은 ${TRACK_COPY[context.track].headline}자 이내(표지는 ${TRACK_COPY.cover.headline}자 이내)의 해요체 문장이나 질문 하나, 요점은 ${TRACK_COPY[context.track].point}자 이내의 해요체 완결 문장입니다. 글자 수를 늘리지 마세요.`:"제목은 12~30자의 해요체 문장이나 질문 하나, 요점은 12~28자의 해요체 완결 문장입니다."} 명사로 끝나는 슬로건, 광고 상투어, 느낌표 남발은 쓰지 마세요.
+1. 각 장은 앞 장이 남긴 궁금증에 답하고 다음 장으로 이어집니다. 장끼리 같은 말이나 같은 정보를 반복하지 마세요.${context.track?" 질문은 표지에서만 던지고, 본문 장 제목은 답(핵심 사실), 짧은 글은 그 이유나 확인하는 방법입니다. 짧은 글이 제목의 결과를 말만 바꿔 되풀이하면 안 됩니다.":""}
+2. ${context.track?`본문 장 제목은 ${TRACK_COPY[context.track].headline}자 이내의 해요체 문장 하나(질문은 표지 제목만, ${TRACK_COPY.cover.headline}자 이내), 요점은 ${TRACK_COPY[context.track].point}자 이내의 해요체 완결 문장입니다. 글자 수를 늘리지 마세요.`:"제목은 12~30자의 해요체 문장이나 질문 하나, 요점은 12~28자의 해요체 완결 문장입니다."} 명사로 끝나는 슬로건, 광고 상투어, 느낌표 남발은 쓰지 마세요.
 3. ${heroLine(topic,context.menu??mainMenuOf(topic))}
 4. "입안의 리듬" 같은 추상적 비유 대신 눈이나 입으로 확인할 수 있는 구체적 관찰(색, 결, 식감, 먹는 순서)로 쓰세요.
 5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.

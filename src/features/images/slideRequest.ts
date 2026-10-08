@@ -8,7 +8,7 @@ import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH } from "./carousel";
 // 여기서는 문안 AI에게 요청을 주고 카드 제목·요점·사진 장면을 새로 짓게 한다. AI가 없거나 실패하면 규칙으로 짓는다.
 
 export const SlideRequestSchema=z.object({
-  topic:z.string().trim().min(1).max(120),
+  topic:z.string().trim().min(1).max(200),
   request:z.string().trim().min(1).max(400),        // 사장님이 적은 제목칸+요점칸을 합친 글
   previous:z.string().trim().max(200).default(""),  // 바로 앞 장 제목(이야기 흐름을 잇기 위해)
   next:z.string().trim().max(200).default(""),      // 바로 뒤 장 제목

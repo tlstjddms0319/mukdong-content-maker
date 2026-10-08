@@ -28,7 +28,7 @@ it("stays quiet for AI suggestions", async () => {
   vi.stubGlobal("fetch", fetch);
   render(<DraftWizard />);
   await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
-  await screen.findByText("기본 주제 1?");
+  await screen.findByText("기본 주제 1?", { selector: ":not(textarea)" });
   expect(screen.queryByText(/준비된 주제를 보여 드려요/)).toBeNull();
 });
 
@@ -40,7 +40,7 @@ it("shows empty placeholder cards (not prepared topics) until the recommendation
   expect(container.querySelectorAll("button.topic-card")).toHaveLength(0);
   expect((screen.getByLabelText("직접 쓰기") as HTMLInputElement).value).toBe("");
   answer({ ok: true, json: async () => ({ topics: topics.map(t => ({ ...t, id: "ai-" + t.id })), source: "ai" }) });
-  expect(await screen.findByText("기본 주제 1?")).toBeInTheDocument();
+  expect(await screen.findByText("기본 주제 1?", { selector: ":not(textarea)" })).toBeInTheDocument();
   expect(container.querySelectorAll(".topic-card-placeholder")).toHaveLength(0);
   expect((screen.getByLabelText("직접 쓰기") as HTMLInputElement).value).toBe("기본 주제 1?");
 });

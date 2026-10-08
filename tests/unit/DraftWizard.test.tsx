@@ -497,8 +497,8 @@ describe("DraftWizard",()=>{
     expect(request).not.toHaveBeenCalledWith("/api/topics",expect.anything());
   });
 
-  it("ignores a topic query longer than 120 characters",async()=>{
-    window.history.replaceState({},"","/?topic="+"가".repeat(121));
+  it("ignores a topic query longer than 200 characters",async()=>{
+    window.history.replaceState({},"","/?topic="+"가".repeat(201));
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({})})));
     render(<DraftWizard/>);
     // 서버에 닿지 못하면 오늘 계절에 맞춘 준비된 주제의 첫 제목이 들어간다.
@@ -523,7 +523,7 @@ describe("DraftWizard",()=>{
     const first=render(<DraftWizard/>);
     await waitFor(()=>expect(bodies).toHaveLength(1));
     expect(bodies[0]).toMatchObject({recommendationRound:0,recentTitles:[]});
-    await screen.findByText("굴은 왜 겨울에 맛있을까?");
+    await screen.findByText("굴은 왜 겨울에 맛있을까?",{selector:":not(textarea)"});
     first.unmount();sessionStorage.clear();localStorage.removeItem("mukdong-current-draft");
     render(<DraftWizard/>);
     await waitFor(()=>expect(bodies).toHaveLength(2));
@@ -600,8 +600,8 @@ describe("DraftWizard",()=>{
   it("removes a recommendation image brief after the topic is edited directly",async()=>{
     const topics=[{id:"one",title:"추천 주제",summary:"",reason:"이유",audience:"A",imageBrief:"광택 나는 한 상"},{id:"two",title:"다른 추천",summary:"",reason:"이유",audience:"B",imageBrief:"다른 이미지"},{id:"three",title:"세 번째 추천",summary:"",reason:"이유",audience:"C",imageBrief:"세 번째 이미지"}];
     const request=api({"/api/topics":()=>({topics}),"/api/images/plan":()=>FAIL});
-    vi.stubGlobal("fetch",request);render(<DraftWizard/>);await screen.findByText("추천 주제");
-    fireEvent.click(screen.getByText("추천 주제").closest("button")!);
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);await screen.findByText("추천 주제",{selector:":not(textarea)"});
+    fireEvent.click(screen.getByText("추천 주제",{selector:":not(textarea)"}).closest("button")!);
     fireEvent.change(screen.getByDisplayValue("추천 주제"),{target:{value:"직접 수정한 주제"}});
     await goMake("text");
     await waitFor(()=>expect(calls(request,"/api/images/plan")).toHaveLength(1));
@@ -636,7 +636,7 @@ describe("DraftWizard",()=>{
       const body=JSON.parse(String(init?.body));
       return body.recommendationRound===1?new Promise(resolve=>{resolveRefresh=resolve;}):Promise.resolve({ok:true,json:async()=>({topics:first})});
     });
-    vi.stubGlobal("fetch",request);render(<DraftWizard/>);await screen.findByText("첫 추천");
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);await screen.findByText("첫 추천",{selector:":not(textarea)"});
     fireEvent.click(screen.getByRole("button",{name:"다른 주제 보기"}));
     const refreshBody=JSON.parse(String((request.mock.calls.at(-1)?.[1] as RequestInit).body));
     expect(refreshBody.excludeTitles).toEqual(["첫 추천","둘째 추천","셋째 추천"]);

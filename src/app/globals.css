@@ -123,6 +123,9 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .topic-card.selected { border:2px solid var(--accent); padding:19px; box-shadow:0 8px 28px rgb(31 90 67 / 10%); }
 .custom-topic { display:flex; flex-direction:column; gap:7px; margin-top:20px; font-weight:700; }
 .custom-topic input { max-width:640px; min-height:56px; padding:10px 14px; font-size:19px; border:1px solid var(--line); border-radius:var(--control-radius); background:white; }
+/* 1단계 직접 쓰기: 화면 폭 가득, 두 줄 높이(글이 길어지면 손으로 늘릴 수 있음). */
+.custom-topic textarea { width:100%; box-sizing:border-box; min-height:84px; padding:12px 14px; font:inherit; font-size:19px; font-weight:500; line-height:1.5; resize:vertical; border:1px solid var(--line); border-radius:var(--control-radius); background:white; }
+.custom-topic small { color:var(--muted); font-weight:500; }
 .bottom-action { display:flex; justify-content:space-between; align-items:center; gap:15px; margin-top:26px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); }
 .post-image { aspect-ratio:4/5; display:grid; place-items:end start; padding:18px; border-radius:var(--panel-radius); background:radial-gradient(circle at 52% 48%,#d9bea2 0 17%,#773d31 18% 30%,#e3d6bd 31% 43%,transparent 44%),linear-gradient(145deg,#233c31,#a47851); background-position:center; background-size:cover; color:white; font-weight:800; }
 .post-image span { padding:5px 9px; border-radius:7px; background:rgb(0 0 0 / 56%); }
