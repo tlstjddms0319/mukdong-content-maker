@@ -2,7 +2,8 @@ import sharp, { type OverlayOptions } from "sharp";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { STORE_NAME } from "../slideLayout";
-import { rolesForCount, type CarouselSlidePlan } from "../carousel";
+import type { CarouselSlidePlan } from "../carousel";
+import { teaserText } from "../teaser";
 import { noteAudit } from "../render/audit";
 import { seeded } from "./handDrawn";
 import { brandHandle, cleanPoints, currentRemoteCutout, currentStoreCard, finishPhoto, textLayer, type TextEmphasis, type Font, type Layer } from "../render/primitives";
@@ -42,7 +43,7 @@ export const STYLE_FONTS={
 
 // 장 하나를 스타일이 그리기 쉬운 모양으로 정리한다. 표지·사진 장·글자 장 가운데 어느 쪽인지 kind로 알려 준다.
 //   subline : 표지 부제(큰 훅 제목 아래 작은 한 줄). 표지가 아니거나 구성안에 없으면 "".
-//   teaser  : 표지 하단 예고 띠 글("먹는 법 · 곁들임 · 방문 전 확인 — 5장"). 표지가 아니면 "".
+//   teaser  : 표지 하단 예고 띠 글("먹는 법 · 곁들임 · 방문 전 확인", 전체 장 수는 쓰지 않음). 표지가 아니면 "".
 export type StyleContent={
   headline:string;subline:string;teaser:string;points:string[];keywords:string[];index:number;total:number;cover:boolean;last:boolean;
   kind:"cover"|"photo"|"photos"|"text";
@@ -61,20 +62,8 @@ export function contentOf(slide:CarouselSlidePlan,inputs:Buffer[],index:number,t
 }
 
 // ── 표지 예고 띠·넘김 표시·마지막 장 명함(계획서 B9) ──────────────────────────────────────────
-// 장 역할의 짧은 이름. 표지 예고 띠에 "이 뒤에 무엇이 나오는지"로 쓴다.
-const ROLE_LABELS:Record<string,string>={overview:"한 상 미리보기",detail:"가까이 보기","how-to":"먹는 법",pairing:"곁들임",process:"준비 과정",occasion:"함께 먹기",mood:"분위기",visit:"방문 전 확인",cta:"마무리"};
-// 표지 예고 띠 글. 구성안 장 수(3/5/7/10)면 역할 순서표에서 뒤 장 이름을 최대 3개, 장을 고친 캐러셀이면 장 수만.
-export function teaserText(total:number,storeCard=false):string {
-  // 홍보 카드가 붙으면 내용 장의 역할 순서는 그 한 장을 뺀 수로 본다(띠에 적는 장 수는 전체 그대로).
-  const content=storeCard?total-1:total;
-  if(content!==3&&content!==5&&content!==7&&content!==10)return total>1?`넘겨 보세요 — ${total}장`:"";
-  // 보는 사람이 가장 궁금해하는 순서(먹는 법 → 곁들임 → 방문 전 확인 → 나머지)로 3개를 고르고, 띠에는 장 순서대로 적는다.
-  const PRIORITY=["how-to","pairing","visit","detail","overview","occasion","process","mood","cta"];
-  const roles=rolesForCount(content).slice(1);
-  const picked=new Set([...roles].sort((a,b)=>PRIORITY.indexOf(a)-PRIORITY.indexOf(b)).slice(0,3));
-  const shown=roles.filter(role=>picked.has(role)).map(role=>ROLE_LABELS[role]).filter(Boolean);
-  return `${shown.join(" · ")} — ${total}장`;
-}
+// 표지 예고 띠 글은 화면도 쓰므로 sharp 없는 teaser.ts에 둔다(여기서는 그대로 내보낸다).
+export { teaserText } from "../teaser";
 
 // 본문 장 오른쪽 아래 "넘겨 보기 ›": 글자(검수 추적)와 화살표(SVG)를 따로 돌려준다. 마지막 장에는 쓰지 않는다.
 // 화살표 글리프(▸)는 대부분 글꼴에 없어 SVG 경로로 그린다. width·height는 글자+화살표 전체 크기.

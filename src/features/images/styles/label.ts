@@ -204,7 +204,7 @@ export const renderLabel:CardRenderer=async(inputs,slide,index,total)=>{
 
   // ── 바닥글을 먼저 재서(꼬리표 폭) 넘겨 보기 자리를 정한다 ──
   const brand=await fitText(brandName(),{sizes:[28,26],width:640,maxHeight:44,color:BODY,font:STYLE_FONTS.serif});
-  const folio=await textLayer(`No. ${index}/${total}`,{size:32,color:FRAME,width:220,height:48,font:STYLE_FONTS.condensed,features:"tnum"});
+  const folio=await textLayer(`No. ${index}`,{size:32,color:FRAME,width:220,height:48,font:STYLE_FONTS.condensed,features:"tnum"});
   const padL=48,mid=30,padR=30;
   const tagW=padL+brand.info.width+mid+folio.info.width+padR,tagH=54,tagX=Math.round(540-tagW/2);
   // 넘겨 보기: 표지·마지막 장이 아닐 때만. 꼬리표 오른쪽에 자리가 있으면 같은 줄에, 계정이 길어 꼬리표가 넓으면 꼬리표 위 오른쪽에.

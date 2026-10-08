@@ -2,7 +2,7 @@ import sharp, { type OverlayOptions } from "sharp";
 import type { CarouselSlidePlan } from "../carousel";
 import { STORE_NAME } from "../slideLayout";
 import { inkOn, mutedOn, readableOn } from "../design";
-import { CONTENT, FONTS, MARGIN, META, brandName, canvas, cleanPoints, croppedPhoto, currentTheme, currentVariant, grainLayer, mascotLayer, pointLayers, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, type CardRenderer, type Layer } from "./primitives";
+import { CONTENT, FONTS, MARGIN, META, brandName, canvas, cleanPoints, croppedPhoto, currentStoreCard, currentTheme, currentVariant, grainLayer, mascotLayer, pointLayers, ring, softShadow, sparkles, svg, svgLayer, textLayer, washiTape, wavyUnderline, type CardRenderer, type Layer } from "./primitives";
 import { MIN_STROKE, closingBlock, emphasisOf, fitText, nextCue, teaserText } from "../styles/shared";
 import { registerPhoto } from "./audit";
 import { ROLE_POSES, contactShadow, propLayer, shadowLayer, textureLayer, type PropName, type TextureName } from "../decor";
@@ -38,9 +38,9 @@ export async function slideTitle(slide:CarouselSlidePlan,options:{sizes:number[]
     emphasis:emphasisOf({headline,keywords:slide.keywords},options.accent)});
 }
 
-// 장 번호: 숫자 폭을 고정(tnum)해 "1 / 5"와 "10 / 10"이 흔들리지 않게 한다.
-export const counterLayer=(index:number,total:number,color:string,shadow=false)=>
-  textLayer(`${index} / ${total}`,{size:META,color,width:200,height:40,font:FONTS.semibold,features:"tnum",shadow});
+// 장 번호: 이 장이 몇 번째인지만 쓴다(전체 장 수는 빼서, 장을 넣고 빼도 앞 장을 다시 그리지 않게). total은 예전 호출과 맞추려고 받기만 한다.
+export const counterLayer=(index:number,_total:number,color:string,shadow=false)=>
+  textLayer(`${index}`,{size:META,color,width:200,height:40,font:FONTS.semibold,features:"tnum",shadow});
 
 // 표지 부제(제목 아래 한 줄, 길면 두 줄). 표지가 아니거나 부제가 없으면 null.
 export async function sublineLayer(slide:CarouselSlidePlan,options:{color:string;width?:number;align?:"left"|"centre";shadow?:boolean}):Promise<Layer|null> {
@@ -48,9 +48,10 @@ export async function sublineLayer(slide:CarouselSlidePlan,options:{color:string
   return text?textLayer(text,{size:SUBLINE,color:options.color,width:options.width??CONTENT,height:SUBLINE*3,font:FONTS.semibold,align:options.align,spacing:8,shadow:options.shadow}):null;
 }
 
-// 표지 예고 띠("먹는 법 · 곁들임 · 방문 전 확인 — 5장"). 표지가 아니면 null.
+// 표지 예고 띠("먹는 법 · 곁들임 · 방문 전 확인"). 표지가 아니면 null.
+// 홍보 카드가 붙는지(currentStoreCard)도 넘긴다. 예전에는 빠져 있어, 홍보 카드를 켜고 끌 때 기본 템플릿 표지만 띠 글이 바뀌었다.
 export async function teaserLayer(slide:CarouselSlidePlan,total:number,color:string,shadow=false):Promise<Layer|null> {
-  const text=isCover(slide)?teaserText(total):"";
+  const text=isCover(slide)?teaserText(total,currentStoreCard()):"";
   return text?textLayer(text,{size:TEASER,color,width:CONTENT,height:44,font:FONTS.semibold,shadow}):null;
 }
 

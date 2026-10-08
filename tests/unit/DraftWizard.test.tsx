@@ -325,4 +325,14 @@ describe("DraftWizard",()=>{
     const planBody=JSON.parse(String((request.mock.calls.find(([url])=>url==="/api/images/plan")?.[1] as RequestInit).body));
     expect(planBody).toMatchObject({topic:"과메기는 왜 찬바람 불 때 찾을까?",imageBrief:"김과 쪽파를 곁들인 과메기 한 접시",contentBrief:"찬바람과 제철"});
   });
+  it("labels recommendation cards A, B, C in screen order and shows the reader type by name",async()=>{
+    // 사장님이 본 문제: 독자 유형 글자를 그대로 찍어 "추천 B, 추천 B, 추천 A"처럼 겹치고 순서도 맞지 않았다.
+    const topics=[{id:"one",title:"첫 주제",summary:"",reason:"이유",audience:"B",imageBrief:""},{id:"two",title:"둘째 주제",summary:"",reason:"이유",audience:"B",imageBrief:""},{id:"three",title:"셋째 주제",summary:"",reason:"이유",audience:"A",imageBrief:""}];
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>url==="/api/topics"?{ok:true,json:async()=>({topics})}:{ok:false,json:async()=>({})}));
+    render(<DraftWizard/>);
+    await screen.findByText("셋째 주제");
+    const cards=screen.getAllByRole("button").filter(button=>button.classList.contains("topic-card"));
+    expect(cards.map(card=>card.querySelector(".soft-badge")?.textContent)).toEqual(["추천 A","추천 B","추천 C"]);
+    expect(cards.map(card=>card.querySelector(".audience-badge")?.textContent)).toEqual(["약속 결정형","약속 결정형","음식 탐색형"]);
+  });
 });

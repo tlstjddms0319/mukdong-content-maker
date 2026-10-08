@@ -151,7 +151,7 @@ export const renderHanji:CardRenderer=async(inputs,slide,index,total)=>{
     layers.push({input:vertical.data,left:44,top:130});
   }
   if(!content.cover){
-    const no=await textLayer(`${index} / ${total}`,{size:26,color:DIM,width:300,height:40,font:STYLE_FONTS.serif,features:"tnum"});
+    const no=await textLayer(`${index}`,{size:26,color:DIM,width:300,height:40,font:STYLE_FONTS.serif,features:"tnum"});
     layers.push({input:no.data,left:M,top:60});
   }
   // 제목: 붓글씨. 뒤에 번진 먹. 핵심어는 낙관과 같은 붉은색(종이 위 5:1 이상).

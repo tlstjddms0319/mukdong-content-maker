@@ -38,10 +38,13 @@ describe("keyword emphasis", () => {
 
 describe("cover teaser", () => {
   it("names what follows in a planned deck and falls back for edited decks", () => {
-    expect(teaserText(5)).toBe("먹는 법 · 곁들임 · 방문 전 확인 — 5장");
-    expect(teaserText(10)).toBe("먹는 법 · 곁들임 · 방문 전 확인 — 10장");
-    expect(teaserText(3)).toBe("먹는 법 · 방문 전 확인 — 3장");
-    expect(teaserText(4)).toBe("넘겨 보세요 — 4장");
+    // 전체 장 수("— 5장")는 쓰지 않는다(장을 넣고 빼도 표지를 다시 그리지 않게).
+    expect(teaserText(5)).toBe("먹는 법 · 곁들임 · 방문 전 확인");
+    expect(teaserText(10)).toBe("먹는 법 · 곁들임 · 방문 전 확인");
+    expect(teaserText(3)).toBe("먹는 법 · 방문 전 확인");
+    expect(teaserText(4)).toBe("넘겨 보세요");
+    // 홍보 카드가 붙으면 내용 장 수(전체-1)로 고른다.
+    expect(teaserText(6,true)).toBe("먹는 법 · 곁들임 · 방문 전 확인");
   });
 
   it("gives fallback plans a short cover subline", () => {

@@ -313,7 +313,7 @@ export const renderTicket:CardRenderer=async(inputs,slide,index,total)=>{
   const account=brandHandle();
   const handle=account?await fitText(account,{sizes:[28,26],width:CW-200-40,maxHeight:44,color:TEXT,font:STYLE_FONTS.sansSemi,balance:false}):null;
   const handleH=handle?4+handle.info.height:0;
-  const pageNo=await textLayer(`${index} / ${total}`,{size:32,color:TEXT,width:300,height:50,font:STYLE_FONTS.mono,spacing:0,features:"tnum"});
+  const pageNo=await textLayer(`${index}`,{size:32,color:TEXT,width:300,height:50,font:STYLE_FONTS.mono,spacing:0,features:"tnum"});
   // 표지 예고 띠(이 뒤에 무엇이 나오는지)는 스텁 맨 아래 한 줄로 본체 폭 전체에 쓴다. 예고가 없으면 예전처럼 키워드(#홍어 #막걸리)를
   // 장 번호 아래에 두되, 바코드 왼쪽 칸(430px)에 한 줄로 안 들어가면 뒤 키워드부터 뺀다.
   const teaser=content.teaser?await textLayer(content.teaser,{size:26,color:TEXT,width:CW,height:44,font:STYLE_FONTS.sansSemi}):null;

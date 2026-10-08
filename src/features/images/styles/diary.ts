@@ -181,7 +181,7 @@ export const renderDiary:CardRenderer=async(inputs,slide,index,total)=>{
   const NOTE_BOTTOM=NY+NH-16;
   const hasPhoto=inputs.length>0;
   // 손글씨 서명은 가게 이름+쪽수만(긴 계정을 손글씨로 쓰면 줄어 읽히지 않는다). 계정은 고운돋움 26px로 따로 적는다.
-  const signText=`${STORE_NAME}  ${index}/${total}`;
+  const signText=`${STORE_NAME}  ${index}`;
   const account=brandHandle();
   const handleLayer=account?await textLayer(account,{size:26,color:PEN,width:560,height:50,font:STYLE_FONTS.dodum}):null;
   // 마지막 장: 노트 아래쪽에 마스킹 테이프로 붙인 가게 명함 카드. 높이를 먼저 예약하고 요점·사진을 그 위에 맞춘다.

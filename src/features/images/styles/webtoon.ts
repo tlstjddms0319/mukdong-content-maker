@@ -318,7 +318,7 @@ export const renderWebtoon:CardRenderer=async(inputs,slide,index,total)=>{
   if(coverTitle)layers.push(coverTitle);
   // 칸 밖 아래: 가운데 "가게 이름 · N화 / 전체"(tnum), 표지·마지막 장이 아니면 오른쪽 끝에 "다음 화 ›".
   // 마지막 장은 명함 칸에 계정이 있으니 바닥글엔 가게 이름만(같은 계정 두 번 금지).
-  const page=await textLayer(`${content.last?STORE_NAME:brandName()}  ·  ${index}화 / ${total}`,{size:26,color:LINE,width:900,height:40,font:STYLE_FONTS.comic,align:"centre",features:"tnum"});
+  const page=await textLayer(`${content.last?STORE_NAME:brandName()}  ·  ${index}화`,{size:26,color:LINE,width:900,height:40,font:STYLE_FONTS.comic,align:"centre",features:"tnum"});
   const pageTop=1350-M-page.info.height+4;
   layers.push({input:page.data,left:Math.round((1080-page.info.width)/2),top:pageTop});
   if(body){

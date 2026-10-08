@@ -174,7 +174,7 @@ export const renderColorBlock:CardRenderer=async(inputs,slide,index,total)=>{
   // 별 스티커 속 장 번호. 숫자 폭을 고정(tnum)해 1/5와 10/10의 자리가 흔들리지 않게 한다.
   const counterAt=async(cx:number,cy:number,r:number)=>{
     layers.push(svgLayer(burst(cx,cy,r,block.pop)));
-    const counter=await textLayer(`${index}/${total}`,{size:30,color:"#111111",width:120,height:44,font:STYLE_FONTS.heavy,align:"centre",features:"tnum"});
+    const counter=await textLayer(`${index}`,{size:30,color:"#111111",width:120,height:44,font:STYLE_FONTS.heavy,align:"centre",features:"tnum"});
     layers.push({input:counter.data,left:cx-Math.round(counter.info.width/2),top:cy-Math.round(counter.info.height/2)});
   };
   let titleY=titleTop;

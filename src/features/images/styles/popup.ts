@@ -244,7 +244,7 @@ export const renderPopup:CardRenderer=async(inputs,slide,index,total)=>{
     frontText.push({input:closing.chip.data,left:chipX,top:chipY});
   }
   // 바닥글: 왼쪽 가게 이름, 오른쪽 장 번호(숫자 폭 고정). 본문 장은 장 번호 바로 위에 "넘겨 보기 ›" 종이 탭.
-  const number=await textLayer(`${index} / ${total}`,{size:28,color:"#FFFFFF",width:160,height:44,font:STYLE_FONTS.sansSemi,features:"tnum"});
+  const number=await textLayer(`${index}`,{size:28,color:"#FFFFFF",width:160,height:44,font:STYLE_FONTS.sansSemi,features:"tnum"});
   const brand=await fitText(brandName(),{sizes:[28,26],width:W-number.info.width-40,maxHeight:44,color:"#FFFFFF",font:STYLE_FONTS.sansSemi});
   frontText.push({input:brand.data,left:M,top:1350-70},{input:number.data,left:1080-M-number.info.width,top:1350-70});
   if(!content.cover&&!content.last){

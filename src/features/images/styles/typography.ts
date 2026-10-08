@@ -104,7 +104,7 @@ export const renderTypography:CardRenderer=async(inputs,slide,index,total)=>{
     layers.push({input:closing.chip.data,left:M+26,top:cy});
   }
   // 바닥글: 가게 이름과 장 번호(26px, 숫자 폭 고정). 마지막 장은 명함에 계정이 있으므로 이름만.
-  const folio=await textLayer(`${content.last?STORE_NAME:brandName()}   ${String(index).padStart(2,"0")} / ${String(total).padStart(2,"0")}`,{size:26,color:"#E2E2E2",width:W,height:40,font:STYLE_FONTS.sansSemi,features:"tnum"});
+  const folio=await textLayer(`${content.last?STORE_NAME:brandName()}   ${String(index).padStart(2,"0")}`,{size:26,color:"#E2E2E2",width:W,height:40,font:STYLE_FONTS.sansSemi,features:"tnum"});
   layers.push({input:folio.data,left:M,top:1350-70});
   if(!content.cover&&!content.last){
     // 넘겨 보기: 바닥글 줄 오른쪽 끝. 긴 계정과 부딪히면 한 줄 위로 올린다.

@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
 import { ImageBriefSchema } from "@/features/images/schema";
-import { addLibraryPhoto, addSlide, approvedDeck, postTotal, setStoreCardIncluded, swapSlidePhoto, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
+import { addLibraryPhoto, addSlide, approvedDeck, postTotal, setStoreCardIncluded, setTitleFont, swapSlidePhoto, buildPhotoCarousel, deckComplete, deckTotal, ensureGeneration, removeSlide, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
 
 const photo=(n:number)=>`data:image/jpeg;base64,PHOTO${n}`;
 const card=(n:number)=>`data:image/jpeg;base64,CARD${n}`;
@@ -43,8 +43,9 @@ describe("deck editing", () => {
     expect(state.plan!.slides.map(slide=>slide.headline)).not.toContain(removedHeadline);
     expect(deckTotal(state)).toBe(4);
     expect(deckComplete(state)).toBe(true);
-    // 남은 4장을 모두 "n / 5"(맨 뒤 홍보 카드 포함)로 다시 그린다. 고친 캐러셀 표시(deckEdited)를 함께 보낸다.
-    expect(bodies.map(body=>[body.slideIndex,body.slideTotal,body.deckEdited])).toEqual([[1,5,true],[2,5,true],[3,5,true],[4,5,true]]);
+    // 카드에는 장 번호만 찍히므로, 번호가 당겨진 뒤 장(3·4번)과 예고 띠가 바뀐 표지(5장 → 4장이라 "넘겨 보세요")만 다시 그린다.
+    // 앞쪽 2번 장은 그대로 둔다(예전에는 남은 4장을 모두 다시 그렸다). 고친 캐러셀 표시(deckEdited)를 함께 보낸다.
+    expect(bodies.map(body=>[body.slideIndex,body.slideTotal,body.deckEdited])).toEqual([[1,5,true],[3,5,true],[4,5,true]]);
     expect(state.phase).toBe("idle");
     expect(state.approved).toBe(false);
   });
@@ -67,10 +68,35 @@ describe("deck editing", () => {
     expect(state.photos.map(item=>item.id)).toContain("p9");
     expect(state.photoAssignment[2]).toEqual([state.photos.findIndex(item=>item.id==="p9")]);
     expect(state.activeSlide).toBe(2);
-    // 첫 요청이 새 장(3번째 자리, 새 사진), 이어서 나머지 5장을 "n / 7"(맨 뒤 홍보 카드 포함)로 다시 그린다.
+    // 첫 요청이 새 장(3번째 자리, 새 사진). 이어서 번호가 밀린 뒤 장(4·5·6번)과 예고 띠가 바뀐 표지만 다시 그린다(2번 장은 그대로).
     expect(bodies[0]).toMatchObject({slideIndex:3,slideTotal:7,deckEdited:true,storeCard:true,photos:[photo(9)]});
-    expect(bodies.slice(1).map(body=>body.slideIndex)).toEqual([1,2,4,5,6]);
+    expect(bodies.slice(1).map(body=>body.slideIndex)).toEqual([1,4,5,6]);
     expect(bodies.every(body=>body.slideTotal===7)).toBe(true);
+  });
+
+  it("redraws only what changes when a slide is appended at the end or the store card is toggled", async () => {
+    const {hook,bodies}=await builtDeck();
+    // 맨 뒤(5번 장 뒤)에 한 장: 새 장만 그리고, 표지는 예고 띠(5장 → 6장이라 "넘겨 보세요")가 바뀌어서 다시 그린다. 2~5번 장은 그대로.
+    act(()=>setActiveSlide(4));
+    await act(async()=>{await addSlide({headline:"다음엔 직접 맛보세요",points:["저장해 두면 편해요"],source:"text",verbatim:true});});
+    expect(hook.result.current.slides).toHaveLength(6);
+    expect(bodies.map(body=>body.slideIndex)).toEqual([6,1]);
+    bodies.length=0;
+    // 홍보 카드를 끄면 마지막 내용 장(6번)만 "마지막 장"(가게 명함)이 되어 다시 그린다.
+    await act(async()=>{await setStoreCardIncluded(false);});
+    expect(bodies.map(body=>[body.slideIndex,body.slideTotal])).toEqual([[6,6]]);
+  });
+
+  it("redraws every slide in the new font when the font changed after the deck was finished", async () => {
+    // 다 만든 뒤 글꼴을 바꾸고 장을 빼면, 예전에는 번호가 바뀐 장만 새 글꼴로 그려져 한 캐러셀에 글꼴이 섞였다.
+    const {hook,bodies}=await builtDeck();
+    act(()=>setTitleFont("jua"));
+    act(()=>setActiveSlide(3));
+    await act(async()=>{await removeSlide();});
+    expect(hook.result.current.slides).toHaveLength(4);
+    // 남은 4장을 모두 같은 새 글꼴로 다시 그린다(2번 장도 포함).
+    expect(bodies.map(body=>body.slideIndex)).toEqual([1,2,3,4]);
+    expect(bodies.every(body=>(body.design as {titleFont?:string}).titleFont==="jua")).toBe(true);
   });
 
   it("adds a text-only card without photos", async () => {
@@ -221,5 +247,22 @@ describe("review fixes in the deck", () => {
     expect(bodies[1]).toMatchObject({slideIndex:1});
     expect(bodies[1].panorama).toBeUndefined();
     expect(hook.result.current.photoAssignment[1]).toEqual([2]);
+  });
+  it("redraws the panorama cover as a single card when slide 2 is removed even if nothing else on the cover changes", async () => {
+    // 10장 → 9장(홍보 카드 끔)으로 만든 뒤 2번째 장을 빼면 9장 → 8장: 표지의 장 번호·예고 띠("넘겨 보세요")는 그대로다.
+    // 예전에는 그래서 표지를 다시 그리지 않아, 짝(2번째 장)이 사라진 표지가 파노라마 왼쪽 반쪽으로 남았다.
+    const {hook,bodies}=await build(10,{panorama:true});
+    await act(async()=>{await setStoreCardIncluded(false);});
+    act(()=>setActiveSlide(5));
+    await act(async()=>{await removeSlide();});
+    expect(hook.result.current.slides).toHaveLength(9);
+    bodies.length=0;
+    act(()=>setActiveSlide(1));
+    await act(async()=>{await removeSlide();});
+    expect(hook.result.current.slides).toHaveLength(8);
+    const cover=bodies.find(body=>body.slideIndex===1);
+    expect(cover).toBeDefined();
+    expect(cover!.panorama).toBeUndefined();
+    expect(bodies.every(body=>body.panorama===undefined)).toBe(true);
   });
 });

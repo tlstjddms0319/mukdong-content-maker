@@ -21,7 +21,8 @@ const HEADER_RULE=56,CONTENT_TOP=134,FOOTER_RULE=1272,CONTENT_BOTTOM=FOOTER_RULE
 const COVER_M=60,COVER_W=1080-COVER_M*2;
 const MIN_PHOTO=320,MAX_PHOTO=760;
 
-const folioOf=(content:StyleContent)=>`${content.index} / ${content.total}`;
+// 장 번호만 쓴다(전체 장 수는 빼서, 장을 넣고 빼도 앞 장을 다시 그리지 않게).
+const folioOf=(content:StyleContent)=>`${content.index}`;
 // 제목 핵심어 강조색: 내지(흰 종이)는 잡지 빨강, 표지(어두운 그라데이션 위)는 밝은 산호색이어야 3:1을 넘는다.
 const COVER_ACCENT="#FF8A78";
 // 한글 눈썹 글자(섹션 라벨·책등): 자간을 넓힌 굵은 고딕. 영문 전용 좁은 글꼴(condensed)에는 한글이 없다.
