@@ -7,11 +7,12 @@ vi.mock("@/features/settings/repository", () => ({ readSettings }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/ai/geminiClient", () => ({ createGeminiClient: () => ({ generateJson }) }));
 import { POST } from "@/app/api/topics/route";
+import { resetTopicPace } from "@/features/topics/refreshPace";
 
 const call = () => POST(new Request("http://localhost/api/topics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ storeProfile: { name: "묵동홍어마을" }, recommendationRound: 0 }) }));
 
 describe("topic source reporting", () => {
-  beforeEach(() => { generateJson.mockReset(); readSettings.mockReset(); readSettings.mockImplementation(async () => ({ textAiProvider:"automatic" })); vi.restoreAllMocks(); });
+  beforeEach(() => { resetTopicPace(); generateJson.mockReset(); readSettings.mockReset(); readSettings.mockImplementation(async () => ({ textAiProvider:"automatic" })); vi.restoreAllMocks(); });
   it("marks fallback topics and logs why Gemini was not used", async () => {
     generateJson.mockRejectedValue(new Error("Gemini API 오류 (429)"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

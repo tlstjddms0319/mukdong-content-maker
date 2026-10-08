@@ -12,6 +12,7 @@ import { likedTopicTitles } from "@/features/drafts/performance";
 import { cachedTrendResult, trendLabel, trendMenu } from "@/features/topics/naverTrend";
 import { PLAN_FALLBACK_MESSAGES, planFallbackReason } from "@/features/images/planRepair";
 import { seasonContext } from "@/features/topics/season";
+import { recordTopicRefresh, topicCooldownSeconds, topicRefreshWait } from "@/features/topics/refreshPace";
 
 const RequestSchema = z.object({
   storeProfile: z.object({ name: z.string().trim().min(1).max(80) }),
@@ -25,6 +26,7 @@ const RequestSchema = z.object({
 export async function POST(request: Request) { const denied=await ownerApiError(); if(denied)return denied;
   try {
     const body = RequestSchema.parse(await request.json());
+
     // 초안 목록: 반응 좋았던 주제(성과 기록)와 최근에 만든 주제(반복 피하기)에 함께 쓴다. 못 읽어도 추천은 계속한다.
     const drafts = await createDraftRepository().listDraftSummaries().catch(() => []);
     const recentDraftTopics = [...drafts].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 10).map((draft) => draft.topic).filter((title) => title.trim().length > 0 && title.length <= 120);
@@ -44,16 +46,25 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const hints = { recentMenus, trends: trends.map(({ keyword }) => keyword) };
     const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
+    // 무료 문안 AI의 분당 한도를 넘기지 않게 "다른 주제 보기" 간격을 지킨다(refreshPace.ts). 너무 빨리 다시 누르면 AI를 부르지 않고
+    // 몇 초 뒤에 다시 볼 수 있는지만 알려 준다(화면은 지금 추천을 그대로 두고 버튼에 남은 초를 띄운다).
+    // - 화면을 처음 열 때(제외할 제목이 없음)는 막지 않는다(열었는데 추천이 안 나오면 안 되므로). 대신 그 요청도 횟수에 센다.
+    // - 문안 AI가 하나도 연결되지 않았으면 한도가 없으니 기다리지 않는다(준비된 주제만 나온다).
+    const paced = client.configured.length > 0;
+    const wait = paced && input.excludeTitles.length ? topicRefreshWait() : 0;
+    if (wait > 0) return NextResponse.json({ message: `조금만 기다려 주세요. ${wait}초 뒤에 다른 주제를 볼 수 있어요.`, paced: true, cooldownSeconds: wait }, { status: 429 });
     let source: "ai" | "fallback" = "ai";
     // 준비된 주제로 바꾼 이유와, AI 추천 중 규칙에 안 맞아 준비된 주제로 바꾼 개수(화면에 알린다).
     let fallbackMessage = "";
     let filledSlots = 0;
-    const topics = await suggestTopics(input, { suggest:async () => readTopicGeneration(await client.generateJson(
+    // AI가 분당 한도(429)에 걸려 준비된 주제로 넘어갔으면 다음 추천까지 1분을 쉰다.
+    let rateLimited = false;
+    const topics = await suggestTopics(input, { suggest:async () => { if (paced) recordTopicRefresh(); return readTopicGeneration(await client.generateJson(
       buildTopicPrompt(input, season, likedTitles, trends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name)),
       topicGenerationSchema(),
-    )) }, (reason, error) => { source = "fallback"; fallbackMessage = topicFallbackMessage(error); console.warn("[topics] using prepared topics:", reason); }, season,
+    )); } }, (reason, error) => { source = "fallback"; rateLimited = planFallbackReason(error) === "quota"; fallbackMessage = topicFallbackMessage(error); console.warn("[topics] using prepared topics:", reason); }, season,
     (filled) => { filledSlots = filled; console.warn(`[topics] AI 추천 중 ${filled}개가 규칙에 맞지 않아 준비된 주제로 바꿨어요.`); }, hints);
-    return NextResponse.json({ topics, source, ...(fallbackMessage ? { fallbackMessage } : {}), ...(filledSlots ? { filled: filledSlots } : {}), provider: source === "ai" ? client.provider : null, season: { name: season.season, events: season.events.map(({ name, daysAway }) => ({ name, daysAway })) }, trends: trends.map(({ keyword, growth }) => ({ keyword, growth })), trendStatus });
+    return NextResponse.json({ topics, source, cooldownSeconds: paced ? topicCooldownSeconds(Date.now(), { rateLimited }) : 0, ...(fallbackMessage ? { fallbackMessage } : {}), ...(filledSlots ? { filled: filledSlots } : {}), provider: source === "ai" ? client.provider : null, season: { name: season.season, events: season.events.map(({ name, daysAway }) => ({ name, daysAway })) }, trends: trends.map(({ keyword, growth }) => ({ keyword, growth })), trendStatus });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: "입력 내용을 확인해 주세요." }, { status: 400 });
