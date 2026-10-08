@@ -137,7 +137,7 @@ Higgsfield 호출은 `generateHiggsfieldImages(brief)`(`src/features/images/higg
 
 - 샘플 열 장에 대한 의견.
 - 가게 이름 영문 표기(풀스크린 위 오른쪽, 인용구 출처 줄에 쓸 것). 없으면 한글 유지.
-- ~~로고 파일.~~ → 받음(2026-10). `assets/brand/logo-round.png`(원 바깥 투명)·`logo-original.webp`. 앱 아이콘·상단·로그인·설정 브랜드 키트에 씀. 카드·릴스에 넣을 자리는 사장님 선택 대기.
+- ~~로고 파일.~~ → 받음(2026-10). `assets/brand/logo-round.png`(원 바깥 투명)·`logo-original.webp`. 앱 아이콘·상단·로그인·설정 브랜드 키트에 씀. 카드에 넣을 자리는 사장님 선택 대기.
 - 레퍼런스 카드뉴스 파일. 로컬 `C:\Users\s4034\OneDrive\Desktop\인스타 그램 자동화\레퍼런스`에 있다고 했으나 저장소에는 올라오지 않았다. 올리려면 `docs/reference/`에 넣고 커밋·푸시.
 - 배포 여부. 브랜치를 master에 머지하려면 PR이 필요하다. 이전에는 "PR 만들어줘" → "PR 머지해줘" 순서로 진행했고, squash 머지를 썼다.
 

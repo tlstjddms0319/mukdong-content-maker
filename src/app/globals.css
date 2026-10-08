@@ -406,15 +406,6 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .month-plan-date { font-weight:700; }
 @media (max-width:700px){ .month-plan-item { grid-template-columns:1fr; } }
 
-/* 릴스 만들기(ReelMaker) */
-.reel-maker { margin:24px 0; padding:20px; border:1px solid var(--line); border-radius:var(--panel-radius); background:white; display:grid; gap:12px; }
-.reel-maker h2 { margin:0 0 4px; }
-.reel-maker>div>p { margin:0; color:var(--muted); }
-.reel-option { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.reel-option small { color:var(--muted); }
-.reel-actions { display:flex; flex-wrap:wrap; gap:8px; }
-.reel-preview canvas, .reel-preview video { width:min(100%,300px); aspect-ratio:9/16; border-radius:12px; background:#000; display:block; }
-.reel-preview canvas[hidden] { display:none; }
 
 /* ── 휴대폰 화면 다듬기 ──
    사장님이 휴대폰으로 쓰는 경우를 기준으로 맞춘다.
