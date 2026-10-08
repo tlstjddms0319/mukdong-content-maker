@@ -13,7 +13,9 @@ const TRACKS:Array<{id:CarouselTrack;icon:string;title:string;help:string}>=[
 
 // 사진 유무·갈래에 따라 걸리는 시간을 쉬운 말로 한 줄.
 function timeNote(track:CarouselTrack,photos:number):string {
-  if(photos)return track==="text"?"올린 첫 사진이 표지가 되고, 나머지 장은 큰 글씨로 만들어요. 1분 안쪽이면 돼요.":"올린 사진으로 5장을 만들어요. 1~2분이면 돼요.";
+  if(photos&&track==="text")return "올린 첫 사진이 표지가 되고, 나머지 장은 큰 글씨로 만들어요. 1분 안쪽이면 돼요.";
+  // 사진이 5장보다 적으면 모자란 장은 AI가 올린 사진(같은 음식)을 참고해 그 장 글에 맞는 새 장면을 그린다.
+  if(photos)return photos>=5?"올린 사진으로 5장을 만들어요. 1~2분이면 돼요.":"사진이 모자란 장은 AI가 올린 사진을 참고해 글에 맞는 장면으로 새로 그려요. 3~5분쯤 걸려요.";
   return track==="text"?"사진이 없으면 AI가 표지 한 장만 그려요. 3분쯤 걸려요.":"사진이 없으면 AI가 5장을 모두 그려요. 10분쯤 걸려요.";
 }
 
@@ -25,7 +27,7 @@ export function MakeStep({topic,track,onTrack,state,onMake,onBack}:{topic:string
     return <section className="make-progress" aria-labelledby="make-title">
       <h1 id="make-title">만들고 있어요</h1>
       <p className="lead">다 되면 저절로 다음 화면으로 넘어가요. 다른 메뉴에 다녀와도 계속 만들어요. 다만 이 창을 닫거나 새로고침하지는 마세요.</p>
-      <GenerationProgress stage={`${auto.stage}-${state.phase}-${state.slides.length}`} message={message||"만들고 있어요"} progress={progress} hint={state.photos.length?"조금만 기다려 주세요.":"AI가 사진을 그리는 데 시간이 걸려요. 조금만 기다려 주세요."}/>
+      <GenerationProgress stage={`${auto.stage}-${state.phase}-${state.slides.length}`} message={message||"만들고 있어요"} progress={progress} hint={state.photos.length>=5||(state.photos.length&&track==="text")?"조금만 기다려 주세요.":"AI가 사진을 그리는 데 시간이 걸려요. 조금만 기다려 주세요."}/>
       {state.slides.length>0&&<div className="make-thumbs" aria-label="지금까지 만든 장">{state.slides.map((slide,index)=><span key={slide.id} className="feed-thumb" role="img" aria-label={`${index+1}번째 장`} style={slide.preview?{backgroundImage:`url(${slide.preview})`}:undefined}/>)}</div>}
     </section>;
   }

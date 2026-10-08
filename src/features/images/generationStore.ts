@@ -22,7 +22,8 @@ import { rememberCurrentDraft, saveDraftCaption, saveDraftImages, writePostText,
 // bases: 글자를 얹기 전 밑바탕 사진(AI 이미지). 카드 글자만 고쳐 다시 그릴 때 쓴다. 초안에는 저장하지 않는다(화면에서만).
 // droppedPoints: 카드 자리가 모자라 그리지 못한 짧은 글 수(서버가 알려 줌).
 // drawnAt: 이 그림을 그릴 때의 "자리 정보"(positionKey). 장을 넣고 뺄 때 이것이 바뀐 장만 다시 그린다.
-export type ApprovedImage={id:string;preview?:string;referencePreview?:string;bases?:string[];source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]};droppedPoints?:number;drawnAt?:string};
+// refPhoto: 사진 중심에서 사진이 모자란 장을 AI가 그릴 때 참고한 사장님 사진 번호(이 장 다시 만들기에도 같은 사진을 참고한다).
+export type ApprovedImage={id:string;preview?:string;referencePreview?:string;bases?:string[];source:"photo"|"design"|"ai-generated"|"ai-edited";role?:CarouselRole;check?:{score:number;note:string;warnings:string[]};droppedPoints?:number;drawnAt?:string;refPhoto?:number};
 const droppedOf=(data:unknown)=>{const value=(data as {droppedPoints?:unknown})?.droppedPoints;return typeof value==="number"&&value>0?{droppedPoints:value}:{};};
 // photo: 사장님 사진으로 그린 묶음, ai: AI가 그린 묶음. 저장된 게시물을 다시 열면 photo(구성안 없음)로 시작한다.
 export type StudioMode="photo"|"ai";
@@ -190,18 +191,20 @@ function requestBase(){const {topic,imageBrief}=state.input;return {topic,...(im
 // 통일감은 구성안의 공통 스타일(styleAnchor)로 잇는다.
 const sourceOf=(reported?:string)=>(reported??"ai-generated") as ApprovedImage["source"];
 
-async function generate(slide:CarouselPlan["slides"][number],index:number):Promise<ApprovedImage>{
+// dish: 사장님 사진(photo번)을 참고해 같은 음식으로 이 장 글에 맞는 새 장면을 그린다(사진 중심의 모자란 장).
+async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:{photo:number}):Promise<ApprovedImage>{
   // 요청을 보내는 순간의 자리 정보(서버가 이 번호·장 수로 그린다).
   const drawnAt=positionKey(state,index-1);
   // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
   // 디자인 계열(기본 템플릿 아님)은 한 장에 사진을 두 장까지만 그린다. 그 이상 만들면 돈만 들고 안 쓰인다.
   const style=state.plan!.design.style;
   const count=state.slideLayout==="card"?Math.min(Math.max(1,photosNeeded(normalizeCardLayout(slide))),!style||style==="template"?3:2):1;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count})});
+  const reference=dish?state.photos[dish.photo]?.preview:undefined;
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count,...(reference?{referenceImage:reference,referenceMode:"dish"}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("장 그림을 받지 못했어요.");
-  return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],...(data.baseImages?.[0]?{bases:data.baseImages[0]}:{}),source:sourceOf(data.source),role:slide.role,...droppedOf(data),drawnAt};
+  return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],...(data.baseImages?.[0]?{bases:data.baseImages[0]}:{}),source:sourceOf(data.source),role:slide.role,...droppedOf(data),drawnAt,...(reference&&dish?{refPhoto:dish.photo}:{})};
 }
 
 // 한 번에 만드는 AI 장 수. 이미지 AI(Higgsfield·Cloudflare·OpenAI)가 동시에 받아 주는 범위 안에서 두 장.
@@ -248,7 +251,9 @@ async function regenerateSlide(){
   const index=activeSlideIndex(state),token=++run;
   patch({phase:"slides",error:""});
   try{
-    const replacement=await generate(plan.slides[index],index+1);
+    // 사장님 사진을 참고해 그린 장(사진 중심)은 다시 만들 때도 같은 사진을 참고한다.
+    const refPhoto=state.slides[index]?.refPhoto;
+    const replacement=await generate(plan.slides[index],index+1,refPhoto!==undefined&&state.photos[refPhoto]?{photo:refPhoto}:undefined);
     if(token!==run)return;
     patch({slides:state.slides.map((item,i)=>i===index?replacement:item),...(index===0?{cover:replacement}:{}),approved:false});
   }catch(error){
@@ -334,7 +339,7 @@ async function describePhotos(photos:StudioPhoto[],topic:string):Promise<string[
   }catch{return photos.map(()=>"");}
 }
 
-// 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. AI 이미지는 만들지 않는다.
+// 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. 사진이 모자란 장만 사장님 사진을 참고해 AI가 그린다.
 export async function buildPhotoCarousel(){
   if(!state.photos.length)return;
   const token=++run;
@@ -358,17 +363,45 @@ export async function buildPhotoCarousel(){
     const fitted=track?fitPlanToPhotos(data.plan as CarouselPlan,photos.length,{track}):fitPlanToPhotos(data.plan as CarouselPlan,photos.length,{maxPerSlide:!style||style==="template"?3:2});
     // 2) 장마다 사진 칸 수는 그대로 두고, 사진 내용이 그 장의 글과 맞는 사진을 넣는다(표지는 첫 사진 그대로).
     const matched=photoNotes?{...fitted,...matchPhotosToSlides(fitted.plan,fitted.assignment,notes)}:fitted;
-    // 3) 사진이 모자라 글자 카드로 남은 장에는 같은 사진을 "가까이"·"결 확대"로 다시 쓴다(사진 한 장이 최대 세 장면).
+    // 3) 사진이 모자라 글자 카드로 남은 장에 넣을 사진 칸을 정한다(fillWithPhotoViews: 그 장 글과 맞는 사진·레이아웃).
     const fit=fillWithPhotoViews(matched.plan,matched.assignment,photos.length,notes,track);
-    // 기본 문안(AI가 구성을 못 짠 경우)이어도 비용이 들지 않으니 멈추지 않는다.
-    patch({plan:fit.plan,photoAssignment:fit.assignment,photoViews:fit.views,phase:"slides"});
+    // 4) 그 장들(같은 사진의 "가까이"·"결 확대" 자리)은 AI가 그 사진을 참고해 같은 음식으로 이 장 글에 맞는 새 장면을 그린다
+    //    (예: "시원한 막걸리와 잘 어울려요" → 이 무침 옆에 막걸리 사발). 예전에는 같은 사진을 확대만 해서 글과 사진이 따로 놀았다.
+    //    이미지 AI를 못 쓰면(키 없음·크레딧 부족·실패) 예전처럼 확대 사진으로 그린다.
+    const assignment=fit.assignment.map(slots=>[...slots]),views=fit.views.map(list=>[...list]);
+    const aiSlides=new Set(views.flatMap((list,i)=>i>0&&list.length&&list[0]!=="full"?[i]:[]));
+    patch({plan:fit.plan,photoAssignment:assignment,photoViews:views,phase:"slides"});
+    const draw=async(i:number):Promise<ApprovedImage>=>{
+      if(aiSlides.has(i)){
+        try{
+          const card=await generate(fit.plan.slides[i],i+1,{photo:assignment[i][0]});
+          // AI 장은 사장님 사진 칸이 없다(글자 고치기는 AI 원본 밑바탕으로, 다시 만들기는 AI로).
+          assignment[i]=[];views[i]=[];
+          return card;
+        }catch(error){console.warn("[photo-deck] AI 장면을 못 그려 확대 사진으로 그려요:",error instanceof Error?error.message:error);}
+      }
+      return composePhotoSlide(fit.plan,i,assignment[i],views[i]);
+    };
+    // AI 장은 1~3분 걸려 두 장씩 함께 그린다. 화면에는 앞 장부터 순서대로 붙인다.
     let next:ApprovedImage[]=[];
-    for(let i=0;i<fit.plan.slides.length;i++){
-      const card=await composePhotoSlide(fit.plan,i,fit.assignment[i],fit.views[i]);
-      if(token!==run)return;
-      next=[...next,card];
-      patch({slides:next,...(i===0?{cover:card}:{})});
-    }
+    const ready=new Map<number,ApprovedImage>();
+    let cursor=0,failure:unknown=null;
+    const worker=async()=>{
+      while(cursor<fit.plan.slides.length&&failure===null){
+        const i=cursor++;
+        try{
+          const card=await draw(i);
+          if(token!==run)return;
+          ready.set(i,card);
+          const add:ApprovedImage[]=[];
+          while(ready.has(next.length+add.length))add.push(ready.get(next.length+add.length)!);
+          if(add.length){next=[...next,...add];patch({slides:next,photoAssignment:assignment.map(slots=>[...slots]),photoViews:views.map(list=>[...list]),...(next[0]&&!state.cover?{cover:next[0]}:{})});}
+        }catch(error){failure??=error;}
+      }
+    };
+    await Promise.all(Array.from({length:SLIDE_CONCURRENCY},worker));
+    if(token!==run)return;
+    if(failure!==null)throw failure;
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"사진 묶음을 만들지 못했어요."});
   }finally{
@@ -387,7 +420,15 @@ export async function resumePhotoCarousel(){
   let next=state.slides;
   try{
     for(let i=next.length;i<plan.slides.length;i++){
-      const card=await composePhotoSlide(plan,i,state.photoAssignment[i]??[],state.photoViews[i]);
+      // 확대 사진 자리(가까이·결 확대)는 처음 만들 때처럼 사진을 참고해 AI가 새 장면을 그린다. 못 그리면 확대 사진.
+      const slots=state.photoAssignment[i]??[],views=state.photoViews[i]??[];
+      let card:ApprovedImage|undefined;
+      if(i>0&&slots.length&&views[0]&&views[0]!=="full"){
+        try{card=await generate(plan.slides[i],i+1,{photo:slots[0]});}catch{/* 아래에서 확대 사진으로 */}
+        if(token!==run)return;
+        if(card)patch({photoAssignment:state.photoAssignment.map((item,k)=>k===i?[]:item),photoViews:state.photoViews.map((item,k)=>k===i?[]:item)});
+      }
+      card??=await composePhotoSlide(plan,i,slots,views);
       if(token!==run)return;
       next=[...next,card];
       patch({slides:next,...(i===0?{cover:card}:{})});

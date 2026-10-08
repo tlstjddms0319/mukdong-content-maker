@@ -17,6 +17,8 @@ async function builtDeck(){
     if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
     // 맨 뒤 가게 홍보 카드는 따로 그린다(내용 장 요청 목록에는 세지 않는다).
     if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
+    // 사진이 모자란 장의 AI 장면(사진 참고)은 이 테스트에서 못 그린 것으로 두어, 예전처럼 확대 사진으로 그려지게 한다.
+    if(JSON.parse(String(init?.body)).referenceImage)return {ok:false,json:async()=>({message:"이미지 AI 없음"})};
     bodies.push(JSON.parse(String(init?.body)));
     return {ok:true,json:async()=>({images:[card(++n)],source:"photo"})};
   }));
