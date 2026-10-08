@@ -72,6 +72,8 @@ Authorization: Bearer <INSTAGRAM_SCHEDULER_SECRET>
 
 응답은 이번 점검에서 대상·게시·건너뜀·실패한 초안 목록입니다. 로그인한 상태에서 같은 주소를 호출해도 됩니다.
 
+이 저장소에는 같은 요청을 **1시간마다** 보내는 GitHub Actions(`.github/workflows/instagram-scheduler.yml`)가 들어 있습니다. 저장소 **Settings → Secrets and variables → Actions**에 `INSTAGRAM_SCHEDULER_SECRET`(Render 환경 변수와 같은 값)을 등록하면 동작합니다. 예약 글은 최대 1시간 남짓 늦게 게시될 수 있습니다. **Actions** 탭에서 **Run workflow**로 바로 시험해 볼 수 있습니다.
+
 ## 6. 자동 게시 멈추기
 
 - 잠깐 멈추려면 `INSTAGRAM_AUTOPUBLISH=off` 로 바꾸고 재배포합니다. 바로 게시 버튼은 계속 동작하고, 장기 토큰 갱신도 계속합니다(꺼 둔 동안 연결이 끊기지 않게).

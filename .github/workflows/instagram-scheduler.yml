@@ -1,0 +1,36 @@
+# Render 무료 서버는 15분 동안 요청이 없으면 잠들고, 잠든 동안 서버 안 예약 게시 타이머도 멈춘다.
+# 1시간마다 예약 게시 점검 주소를 불러 서버를 깨우고 시각이 지난 예약 글을 게시한다(최대 1시간 남짓 늦게 게시될 수 있음).
+# 예약 시각에서 6시간이 지나면 게시하지 않으므로 GitHub 예약 실행이 조금 늦어도 괜찮다.
+# 비공개 저장소 무료 한도(월 2,000분): 깨우기 포함 회당 최대 2분 × 24회 × 30일 ≈ 1,440분.
+# 필요한 저장소 Secret: INSTAGRAM_SCHEDULER_SECRET (Render 환경 변수와 같은 값)
+name: Instagram 예약 게시 점검
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: instagram-scheduler
+  cancel-in-progress: false
+
+jobs:
+  run-scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 예약 게시 점검 호출
+        env:
+          SCHEDULER_SECRET: ${{ secrets.INSTAGRAM_SCHEDULER_SECRET }}
+          SCHEDULER_URL: https://mukdong-content-maker-0319.onrender.com/api/instagram/scheduler
+        run: |
+          if [ -z "$SCHEDULER_SECRET" ]; then
+            echo "::error::저장소 Secret INSTAGRAM_SCHEDULER_SECRET 이 없습니다."
+            exit 1
+          fi
+          # 잠든 서버가 깨어나는 데 1분 가까이 걸릴 수 있어 넉넉히 기다리고 재시도한다.
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-delay 20 --retry-all-errors --max-time 150 \
+            -X POST -H "Authorization: Bearer $SCHEDULER_SECRET" \
+            "$SCHEDULER_URL"
+          echo
