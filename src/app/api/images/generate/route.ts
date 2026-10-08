@@ -103,7 +103,12 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     };
     // 이 장의 사진 칸 비율을 미리 재서 이미지 AI가 그 비율로 만들게 한다(세로 그림을 가로 칸에 넣으며 접시가 잘리던 문제).
     const windowRatio=parsed.data.slide?await photoWindowRatio(parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,cardOptions):undefined;
-    const brief:ImageBrief={...parsed.data,...(windowRatio?{windowRatio}:{})};
+    // 표지를 이어 가는 장(continuity)에는 표지 이미지를 어느 이미지 AI에도 넘기지 않는다. Cloudflare·OpenAI도 참고 이미지를
+    // 너무 따라 해서 장마다 표지와 같은 구도(같은 그릇·같은 사람·같은 술병)를 거의 그대로 다시 그렸다(Higgsfield는 이미 빼 둠).
+    // 장 사이의 통일감은 프롬프트의 공통 스타일(styleAnchor)로 잇는다. 사장님 사진을 살리는 source·style 모드는 그대로 쓴다.
+    const {referenceImage,referenceMode,...rest}=parsed.data;
+    const keepReference=referenceImage&&referenceMode!=="continuity";
+    const brief:ImageBrief={...rest,...(keepReference?{referenceImage,referenceMode}:{}),...(windowRatio?{windowRatio}:{})};
     let images:string[]=[];
     const used:ImageProvider[]=[];
     // 모든 제공자가 실패하면 마지막 오류가 아니라 가장 도움이 되는 이유(크레딧 부족·안전 필터·한도 초과)를 보여 준다.

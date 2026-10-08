@@ -41,6 +41,8 @@ export const ImageBriefSchema = z.object({
   candidateOffset:z.number().int().min(0).max(3).optional(),
   // 이 한 장만의 구도 지시. 후보마다 다른 각도·거리로 만들기 위해 서버가 채운다.
   variant:z.string().trim().min(1).max(200).optional(),
+  // 사진 여러 칸 레이아웃(비교·폴라로이드·콜라주)에서 이 한 장이 보여 줄 피사체. 서버가 채운다(candidateBriefs).
+  photoFocus:z.string().trim().min(1).max(300).optional(),
 }).superRefine((brief,ctx)=>{
   if(!brief.slide)return;
   if(brief.slideIndex===undefined)ctx.addIssue({code:"custom",path:["slideIndex"],message:"슬라이드 순번이 필요합니다."});

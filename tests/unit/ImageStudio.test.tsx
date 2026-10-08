@@ -17,7 +17,8 @@ describe("ImageStudio carousel",()=>{
     fireEvent.click(await screen.findByRole("button",{name:"표지 후보 2 선택"}));fireEvent.click(screen.getByRole("button",{name:"이 표지로 3장 완성하기"}));
     await screen.findByRole("button",{name:"이 캐러셀 사용"});
     const bodies=request.mock.calls.filter(([url])=>url==="/api/images/generate").map(([,init])=>JSON.parse(String(init?.body)));
-    expect(bodies.slice(1).every(body=>body.referenceImage==="clean-cover-2"&&body.referenceMode==="continuity")).toBe(true);
+    // 표지 원본은 뒤 장에 참고 이미지로 보내지 않는다(이미지 AI가 표지를 그대로 베꼈다). 통일감은 공통 스타일로 잇는다.
+    expect(bodies.slice(1).every(body=>body.referenceImage===undefined&&body.referenceMode===undefined)).toBe(true);
     fireEvent.click(screen.getByRole("button",{name:"생성된 슬라이드 2 보기"}));
     fireEvent.change(screen.getByLabelText("이 장의 수정 요청"),{target:{value:"빛을 부드럽게 하고 접시 주변 여백을 넓혀 주세요"}});
     fireEvent.click(screen.getByRole("button",{name:"이 장만 다시 만들기"}));

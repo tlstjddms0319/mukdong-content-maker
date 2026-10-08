@@ -1,7 +1,7 @@
 import { framingDirection, openaiSize } from "./imageAspect";
 import type { ImageBrief } from "./schema";
 import { IMAGE_STYLE_DIRECTIONS, resolveImageStyle } from "./style";
-import { CARD_LAYOUTS } from "./design";
+import { CARD_LAYOUTS, normalizeCardLayout, photosNeeded } from "./design";
 import { STYLES } from "./styleCatalog";
 import { CHOPSTICK_SCENE } from "./carousel";
 import { heroMenu, josa, menuOf, type StoreMenuItem } from "@/features/store/menu";
@@ -110,16 +110,42 @@ export const CANDIDATE_VARIANTS:readonly string[]=[
   "옆에서 낮게. 테이블 위 그릇의 높이 차이와 조명의 결이 보이게",
 ];
 
+// 사진 여러 칸 레이아웃에서 n번째 칸(0부터)이 보여 줄 피사체. 표지 후보처럼 같은 장면의 후보를 여러 장 만들 때는 없다.
+// 예전에는 칸마다 같은 장면 설명에 각도만 달리 보내서, 비교·폴라로이드 칸에 거의 같은 그림(같은 사발에 막걸리 따르기)이 두 번 들어갔다.
+// - 비교(versus): 키워드 앞 두 개가 양쪽 이름이므로 칸마다 한쪽만 그린다.
+// - 그 밖(폴라로이드·콜라주): 요점을 칸마다 하나씩 장면으로. 요점이 모자라면 곁들임·사람 손·분위기처럼 다른 요소로.
+const EXTRA_FOCUS=["주인공 음식 옆의 곁들임과 잔이 주인공인 가까운 장면","마주 앉은 사람의 손과 잔, 나눠 먹는 순간","테이블 전체와 주변 분위기가 보이는 넓은 장면"] as const;
+export function photoFocusOf(input:Pick<ImageBrief,"slide"|"slideLayout">,index:number):string|undefined {
+  const slide=input.slide;
+  if(!slide||slide.role==="cover"||input.slideLayout==="overlay")return undefined;
+  const layout=normalizeCardLayout(slide);
+  const slots=photosNeeded(layout);
+  if(slots<2||index>=slots)return undefined;
+  const keywords=slide.keywords.filter(Boolean);
+  if(layout==="versus"&&keywords.length>=2){
+    const [mine,other]=index===0?[keywords[0],keywords[1]]:[keywords[1],keywords[0]];
+    return `이 사진에는 '${mine}'만 보여 줄 것('${other}'는 넣지 말 것. 비교하는 두 사진이 한눈에 다르게 보여야 한다)`;
+  }
+  const point=slide.points[index]?.trim();
+  const others="같은 장의 다른 사진과 피사체·구도가 겹치지 않게";
+  return point?`이 사진의 장면: ${point} (${others})`:`이 사진의 장면: ${EXTRA_FOCUS[index%EXTRA_FOCUS.length]} (${others})`;
+}
+
 // 후보 한 장마다 구도가 다른 요청으로 나눈다. 한 장만 만들 때는 구도를 따로 주지 않는다.
+// 사진 여러 칸 레이아웃이면 칸마다 피사체(photoFocus)도 다르게 준다.
 export function candidateBriefs(input:ImageBrief):ImageBrief[] {
   const offset=input.candidateOffset??0;
   const total=offset+input.count;
-  return Array.from({length:input.count},(_,index)=>({
-    ...input,
-    count:1,
-    candidateOffset:undefined,
-    variant:total>1?CANDIDATE_VARIANTS[(offset+index)%CANDIDATE_VARIANTS.length]:input.variant,
-  }));
+  return Array.from({length:input.count},(_,index)=>{
+    const focus=photoFocusOf(input,offset+index);
+    return {
+      ...input,
+      count:1,
+      candidateOffset:undefined,
+      variant:total>1?CANDIDATE_VARIANTS[(offset+index)%CANDIDATE_VARIANTS.length]:input.variant,
+      ...(focus?{photoFocus:focus}:{}),
+    };
+  });
 }
 
 // 참고 이미지를 어떻게 쓸지 알려 주는 문장. 어떤 모드든 참고 이미지 속 글자·표·캐릭터를 베끼지 않게 한다.
@@ -157,7 +183,7 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 이미지 모델은 '홍어'를 보면 젓가락으로 한 점 집어 든 사진으로 가기 쉽다. 장면이 그걸 말하지 않으면 막는다.
     input.slide&&!CHOPSTICK_SCENE.test(input.slide.visualPrompt)
       ? "이 장면에는 젓가락으로 한 점을 집어 든 모습을 넣지 말고, 음식은 접시·그릇·식탁 위에 놓인 모습으로 보여 줄 것. Do NOT show chopsticks lifting a slice in this image; the food rests on the plate or table." : "",
-    input.slide ? `슬라이드 역할: ${input.slide.role}. 장면: ${input.slide.visualPrompt}.` : `세로 4:5 구도, 하나의 음식 피사체가 선명하고 먹음직스럽게 보이며 자연스러운 조명과 여백이 있는 ${styleId==="photo"?"실제 음식 사진 스타일":`${style.medium} 스타일`}.`,
+    input.slide ? `슬라이드 역할: ${input.slide.role}. 장면: ${input.slide.visualPrompt}.${input.photoFocus?` ${input.photoFocus}.`:""}` : `세로 4:5 구도, 하나의 음식 피사체가 선명하고 먹음직스럽게 보이며 자연스러운 조명과 여백이 있는 ${styleId==="photo"?"실제 음식 사진 스타일":`${style.medium} 스타일`}.`,
     // 공통 스타일은 모든 장에 붙으므로 음식 이름을 걷어 내고 색·빛·그릇·테이블만 보낸다(예전에 저장된 구성안 포함).
     input.styleAnchor ? `전체 캐러셀 공통 스타일: ${foodFreeAnchor(input.styleAnchor)}.` : "",
     style.look,

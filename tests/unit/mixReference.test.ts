@@ -16,9 +16,9 @@ describe("photo + AI reference use per slide", () => {
     expect(referenceFieldsFor("cover",state).referenceMode).toBe("style");
   });
 
-  it("continues the chosen AI cover in plain AI mode", () => {
+  it("does not send the AI cover to later slides in plain AI mode (the image AI copied it onto every slide)", () => {
     const cover={id:"c",preview:photo,referencePreview:photo,source:"ai-generated" as const};
-    expect(referenceFieldsFor("detail",{mode:"ai",photoPreview:"",referenceUse:"source",cover})).toEqual({referenceImage:photo,referenceMode:"continuity"});
+    expect(referenceFieldsFor("detail",{mode:"ai",photoPreview:"",referenceUse:"source",cover})).toEqual({});
     expect(referenceFieldsFor("detail",{mode:"ai",photoPreview:"",referenceUse:"source",cover:undefined})).toEqual({});
   });
 });

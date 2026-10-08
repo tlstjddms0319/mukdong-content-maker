@@ -109,6 +109,18 @@ describe("OpenAI image request", () => {
     expect(generateImage).not.toHaveBeenCalled();
   });
 
+  it("never attaches the cover to later slides, even if an old screen still sends it as continuity", async () => {
+    // Cloudflare(flux)가 첨부한 표지를 거의 그대로 베껴, 장마다 같은 그릇·같은 사람·같은 술병이 다시 그려졌다.
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","account-123");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN","token-123");
+    const request=vi.fn().mockResolvedValue(new Response(JSON.stringify({success:true,result:{image:"Y2xvdWRmbGFyZS1pbWFnZQ=="}}),{status:200,headers:{"Content-Type":"application/json"}}));
+    vi.stubGlobal("fetch",request);
+    const reference=`data:image/jpeg;base64,${(await sharp({create:{width:40,height:40,channels:3,background:"#c08070"}}).jpeg().toBuffer()).toString("base64")}`;
+    await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어 한 상",count:1,aspectRatio:"4:5",referenceImage:reference,referenceMode:"continuity"})}));
+    const form=request.mock.calls.find(([url])=>String(url).includes("cloudflare"))![1].body as FormData;
+    expect(form.has("input_image_0")).toBe(false);
+  });
+
   it("falls back to OpenAI when Cloudflare fails in automatic mode", async () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","account-123");
     vi.stubEnv("CLOUDFLARE_API_TOKEN","token-123");
