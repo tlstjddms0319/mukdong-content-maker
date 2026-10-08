@@ -98,4 +98,13 @@ describe("topic route", () => {
     expect(body.source).toBe("fallback");
     expect(body.cooldownSeconds).toBe(RATE_LIMITED_COOLDOWN_SECONDS);
   });
+
+  it("says which rule the AI topics broke when none could be used", async () => {
+    generateJson.mockImplementation(async (_prompt, schema) => schema.parse({ topics:[1,2,3].map(n => ({ id:String(n), title:`광고 문구 ${n}`, summary:"익숙한 음식의 향과 식감에 대해 설명한 뒤 홍어를 관련 사례로 연결한다.", reason:"이유", audience:"A", imageBrief:"사진", season:"", trend:"" })) }));
+    const response = await POST(new Request("http://localhost/api/topics", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ storeProfile:{ name:"묵동홍어마을" }, recommendationRound:1 }) }));
+    const body = await response.json();
+    expect(body.source).toBe("fallback");
+    expect(body.fallbackMessage).toBe("AI 추천이 기준에 맞지 않았어요(물음표 질문이 아니어서 3개). '다른 주제 보기'를 누르면 다시 받아요.");
+    expect(body.cooldownSeconds).not.toBe(RATE_LIMITED_COOLDOWN_SECONDS);
+  });
 });

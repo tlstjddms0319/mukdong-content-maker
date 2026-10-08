@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { z } from "zod";
-import { overusedMenus, suggestTopics } from "@/features/topics/service";
+import { TOPIC_REJECT_LABELS, overusedMenus, suggestTopics, type TopicRejectReason } from "@/features/topics/service";
 import { STORE_MENU } from "@/features/store/menu";
 import { TopicInputSchema } from "@/features/topics/schema";
 import { buildTopicPrompt, readTopicGeneration, topicGenerationSchema } from "@/features/topics/prompt";
@@ -62,7 +62,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const topics = await suggestTopics(input, { suggest:async () => { if (paced) recordTopicRefresh(); return readTopicGeneration(await client.generateJson(
       buildTopicPrompt(input, season, likedTitles, trends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name)),
       topicGenerationSchema(),
-    )); } }, (reason, error) => { source = "fallback"; rateLimited = planFallbackReason(error) === "quota"; fallbackMessage = topicFallbackMessage(error); console.warn("[topics] using prepared topics:", reason); }, season,
+    )); } }, (reason, error, rejected) => { source = "fallback"; rateLimited = error !== undefined && planFallbackReason(error) === "quota"; fallbackMessage = topicFallbackMessage(error, rejected); console.warn("[topics] using prepared topics:", reason); }, season,
     (filled) => { filledSlots = filled; console.warn(`[topics] AI 추천 중 ${filled}개가 규칙에 맞지 않아 준비된 주제로 바꿨어요.`); }, hints);
     return NextResponse.json({ topics, source, cooldownSeconds: paced ? topicCooldownSeconds(Date.now(), { rateLimited }) : 0, ...(fallbackMessage ? { fallbackMessage } : {}), ...(filledSlots ? { filled: filledSlots } : {}), provider: source === "ai" ? client.provider : null, season: { name: season.season, events: season.events.map(({ name, daysAway }) => ({ name, daysAway })) }, trends: trends.map(({ keyword, growth }) => ({ keyword, growth })), trendStatus });
   } catch (error) {
@@ -74,8 +74,12 @@ export async function POST(request: Request) { const denied=await ownerApiError(
 }
 
 // 준비된 주제로 바꾼 이유를 사장님 말로. AI 호출 오류가 없으면(답은 왔는데 규칙에 안 맞음) 그 사실을 말한다.
-function topicFallbackMessage(error: unknown): string {
-  if (error === undefined) return "AI 추천이 기준(메뉴 고르게·질문형 등)에 맞지 않았어요. '다른 주제 보기'를 누르면 다시 받아요.";
+// rejected: AI 주제를 못 쓴 이유별 개수. 어떤 기준에 걸렸는지 한 줄로 붙인다(사장님이 알려 주면 기준을 고칠 수 있게).
+function topicFallbackMessage(error: unknown, rejected: Partial<Record<TopicRejectReason, number>> = {}): string {
+  if (error === undefined) {
+    const why = Object.entries(rejected).map(([reason, count]) => `${TOPIC_REJECT_LABELS[reason as TopicRejectReason]} ${count}개`).join(", ");
+    return `AI 추천이 기준에 맞지 않았어요${why ? `(${why})` : ""}. '다른 주제 보기'를 누르면 다시 받아요.`;
+  }
   const reason = planFallbackReason(error);
   if (reason === "format") return "AI가 보낸 추천 형식이 맞지 않았어요. '다른 주제 보기'를 누르면 대개 됩니다.";
   // 주제 추천의 한도 초과는 대개 분당 한도라 1분 쉬면 풀린다(버튼도 1분 잠긴다, refreshPace.ts).
