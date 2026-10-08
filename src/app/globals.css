@@ -546,7 +546,7 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .review-text-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; }
 .review-text-actions .field-help { margin:0; }
 .review-text [role="alert"], .review-preview [role="alert"] { margin:0; color:#a33d32; }
-.share-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:28px; padding-top:24px; border-top:1px solid var(--line); }
+.share-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:28px; padding-top:24px; border-top:1px solid var(--line); }
 .share-action { display:grid; gap:6px; align-content:start; }
 .share-action .field-help { margin:0; text-align:center; }
 .share-button { width:100%; }
@@ -626,3 +626,12 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .topic-card-placeholder .placeholder-line.short { width:55%; }
 @keyframes placeholder-pulse { 0%,100% { opacity:.45; } 50% { opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .topic-card-placeholder .placeholder-line { animation:none; } }
+
+/* 예약해서 올리기: 버튼 아래로 펼치는 시각 고르기(빠른 시각 버튼 + 직접 고르기 + 예약하기). */
+.schedule-picker { display:grid; gap:10px; padding:14px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; }
+.schedule-choices { display:grid; gap:8px; }
+.schedule-choices .button { width:100%; font-size:18px; }
+.schedule-choices .button.selected { border-color:var(--accent, #1f5c43); background:#e8efe9; font-weight:800; }
+.schedule-custom { display:grid; gap:4px; font-size:16px; color:var(--muted); }
+.schedule-custom input { min-height:48px; padding:8px 10px; font-size:17px; border:1px solid var(--line); border-radius:var(--control-radius); }
+.schedule-picker .button.primary { width:100%; }

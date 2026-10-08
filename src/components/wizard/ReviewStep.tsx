@@ -3,6 +3,7 @@ import { useState } from "react";
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { InstagramPublish } from "@/components/review/InstagramPublish";
 import { SaveToPhone } from "@/components/review/SaveToPhone";
+import { ScheduleShare } from "@/components/review/ScheduleShare";
 import { ExportActions } from "@/components/review/ExportActions";
 import type { ReviewImage } from "@/components/review/exportFiles";
 import { SlideTextEditor } from "@/components/images/SlideTextEditor";
@@ -10,7 +11,7 @@ import { DeckEditor } from "@/components/images/DeckEditor";
 import { FreeCardStudio } from "@/components/images/FreeCardStudio";
 import { canEditSlideText, redoSlide, redoSlideKind, setActiveSlide, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
-// 3단계 "확인하고 올리기": 사진과 글을 한 화면에서 보고, 큰 버튼 두 개(바로 올리기·휴대폰에 저장) 중 하나를 누른다.
+// 3단계 "확인하고 올리기": 사진과 글을 한 화면에서 보고, 큰 버튼 세 개(바로 올리기·예약해서 올리기·휴대폰에 저장) 중 하나를 누른다.
 // 작은 버튼은 "이 장 다시 만들기"와 "글 다시 쓰기"뿐. 장 고치기·글자 고치기·글자 카드·파일 받기는 "더보기" 안에 접어 둔다.
 // generation: 이 게시물의 만들기 상태(장 다시 만들기·장 고치기에 쓴다). 예전 초안처럼 구성안이 없으면 다시 만들 것이 없어 버튼을 숨긴다.
 export type CaptionStatus="saved"|"saving"|"unsaved"|"error";
@@ -67,6 +68,8 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,onC
     </div>
     <div className="share-actions">
       <InstagramPublish draftId={draftId} caption={caption} imageUrls={urls.map(image=>image.url)} primary={instagramReady} onBeforePublish={onSaveCaption} onReady={setInstagramReady}/>
+      {/* 사진이 바뀌면(장 다시 만들기 등) 서버가 예약 확인을 풀므로, 다시 읽도록 사진 목록을 key로 준다. */}
+      <ScheduleShare key={urls.map(image=>image.url.slice(-24)).join("|")} draftId={draftId} ready={instagramReady&&urls.length>0} onBeforeSchedule={onSaveCaption}/>
       <SaveToPhone images={urls} caption={caption} title={topic} primary={!instagramReady}/>
     </div>
     <details className="more-tools">
