@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { shrinkPhoto } from "@/lib/files/shrinkPhoto";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan, type CarouselRole, type CarouselSlideCount } from "./carousel";
 import type { ImageStyle } from "./style";
 import { DEFAULT_SLIDE_LAYOUT, type SlideLayout } from "./slideLayout";
@@ -264,7 +265,8 @@ async function regenerateSlide(){
 // 사진 한 장을 보관함에 저장하고 스튜디오 사진 형태로 돌려준다(사진 캐러셀 올리기·장 추가에서 함께 쓴다).
 async function uploadStudioPhoto(file:File):Promise<StudioPhoto>{
   const body=new FormData();
-  body.append("file",file);
+  // 고화소 사진은 휴대폰에서 먼저 줄여 보낸다(빨리 올라가고 크기 제한에 안 걸리게).
+  body.append("file",await shrinkPhoto(file));
   // 보관함 검색용 이름·검색어. 이름은 파일명, 검색어는 지금 주제("주제:" 표시).
   // 주제는 "이 사진을 올릴 때 쓰던 글"일 뿐 사진 속 음식이 아니다. 예전엔 주제를 그냥 태그로 붙여서, 과메기 글을 쓰다 올린
   // 삼합 사진이 "과메기" 사진처럼 쌓였다. "주제:"를 붙여 두면 사진·메뉴 불일치 검사(photoAnalysis.ts)가 이 태그를 믿지 않는다.
