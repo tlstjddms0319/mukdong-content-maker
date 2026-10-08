@@ -19,12 +19,12 @@ test("shows question outlines and refreshes to another set", async ({page},testI
   await page.goto("/");
   const round=(await sent).postDataJSON().recommendationRound as number;
   const first=fallbackTopics(round);
-  await expect(page.getByLabel("직접 주제를 적고 싶다면")).toHaveValue(first[0].title);
+  await expect(page.getByLabel("직접 쓰기")).toHaveValue(first[0].title);
   await expect(page.locator(".topic-card")).toHaveCount(3);
   for(const topic of first)await expect(page.locator(".topic-card").filter({hasText:topic.title})).toContainText(topic.summary);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:testInfo.outputPath("curiosity-topics.png"),fullPage:true});
-  await page.getByRole("button",{name:"AI 추천 새로고침"}).click();
-  await expect(page.getByLabel("직접 주제를 적고 싶다면")).toHaveValue(fallbackTopics(round+1,first.map(topic=>topic.title))[0].title);
+  await page.getByRole("button",{name:"다른 주제 보기"}).click();
+  await expect(page.getByLabel("직접 쓰기")).toHaveValue(fallbackTopics(round+1,first.map(topic=>topic.title))[0].title);
   await expect(page.locator(".topic-card").filter({hasText:first[0].title})).toHaveCount(0);
 });

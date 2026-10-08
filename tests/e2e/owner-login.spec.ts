@@ -5,7 +5,7 @@ test("anonymous drafts redirect to login and owner can return to drafts", async 
   await page.goto("/drafts");
   await expect(page).toHaveURL(/\/login\?next=%2Fdrafts$/);
   await loginAsOwner(page, "/drafts");
-  await expect(page.getByRole("heading", { name: "내 초안" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "내 게시물" })).toBeVisible();
 });
 
 test("wrong password stays on login, then logout blocks drafts", async ({ page }) => {

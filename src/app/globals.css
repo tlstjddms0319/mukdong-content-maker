@@ -577,3 +577,13 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .admin-settings > summary::before { content:"＋"; margin-right:8px; color:var(--accent); }
 .admin-settings[open] > summary::before { content:"－"; }
 .brand-form .settings-actions { margin-top:0; }
+/* 휴대폰: 단계 세 개가 한 줄에 들어가게 조금 작게 */
+@media (max-width:720px) {
+  .step-list { flex:1 1 100%; gap:2px 12px; font-size:15px; }
+  .step-list li { flex:none; }
+  .step-list button { min-width:44px; padding:4px 2px; white-space:nowrap; }
+  .step-bar .button.secondary { min-height:44px; font-size:16px; }
+}
+.help-steps li strong { display:block; font-size:21px; }
+/* 접힌 더보기 안의 링크는 확실히 숨긴다(휴대폰에서 펼침 창을 absolute로 띄우므로 접힌 상태에서도 상자가 잡히던 문제). */
+.nav-more:not([open]) .nav-more-links { display:none; }

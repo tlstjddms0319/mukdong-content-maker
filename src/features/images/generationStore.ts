@@ -335,12 +335,12 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
     const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(nextPlan.slides[0]),styleAnchor:nextPlan.styleAnchor,design:effectiveDesign(nextPlan.design),slideIndex:1,count:2,...(state.refinements[0]?.trim()?{refinement:state.refinements[0].trim()}:{}),...(state.mode==="mix"?{referenceImage:state.photoPreview,referenceMode:state.referenceUse}:{})})});
     const data=await readJsonResponse(response);
     if(token!==run)return;
-    if(!response.ok)throw new Error(data.message||"표지 후보를 만들지 못했습니다.");
+    if(!response.ok)throw new Error(data.message||"표지를 만들지 못했어요.");
     if(!Array.isArray(data.images)||data.images.length!==2)throw new Error("표지 후보는 정확히 2장이 필요합니다.");
     const source=sourceOf(data.source);
     patch({...(data.fallback?{providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."}:{}),covers:data.images.map((preview:string,i:number)=>({id:crypto.randomUUID(),preview,referencePreview:data.referenceImages?.[i],...(data.baseImages?.[i]?{bases:data.baseImages[i]}:{}),source,role:nextPlan.slides[0].role,...(data.checks?.[i]?{check:data.checks[i]}:{}),drawnAt:coverAt}))});
   }catch(error){
-    if(token===run)patch({error:error instanceof Error?error.message:"표지 후보를 만들지 못했습니다."});
+    if(token===run)patch({error:error instanceof Error?error.message:"표지를 만들지 못했어요."});
   }finally{
     if(token===run)patch({phase:"idle"});
   }
@@ -350,7 +350,7 @@ export async function requestCovers(nextPlan:CarouselPlan|undefined=state.plan,t
 function reviewNotice(review?:{applied?:boolean;before?:number;after?:number}|null):Partial<GenerationState> {
   if(!review?.applied)return {};
   const fixed=Math.max(0,(review.before??0)-(review.after??0));
-  return {providerNotice:fixed?`AI가 카드 문안을 한 번 더 검수해 ${fixed}곳을 다듬었어요.`:"AI가 카드 문안의 흐름을 한 번 더 다듬었어요."};
+  return {providerNotice:fixed?`AI가 카드 글을 한 번 더 살펴 ${fixed}곳을 다듬었어요.`:"AI가 카드 글의 흐름을 한 번 더 다듬었어요."};
 }
 
 export async function startPlan(){
@@ -361,14 +361,14 @@ export async function startPlan(){
     const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:state.imageStyle,...trackField()})});
     const data=await readJsonResponse(response);
     if(token!==run)return;
-    if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
+    if(!response.ok)throw new Error(data.message||"글 순서를 정하지 못했어요.");
     const next=data.plan as CarouselPlan;
     // 기본 문안은 주제와 무관한 일반 문장이라, 그걸로 이미지를 만들어 크레딧을 쓰기 전에 멈추고 알린다.
     if(data.provider==="fallback"){patch({plan:next,planFallback:true,planFallbackMessage:fallbackMessageOf(data),phase:"idle"});return;}
     patch({plan:next,planFallback:false,planFallbackMessage:"",...reviewNotice(data.review)});
     void requestCovers(next,token);
   }catch(error){
-    if(token===run)patch({error:error instanceof Error?error.message:"구성안을 만들지 못했습니다.",phase:"idle"});
+    if(token===run)patch({error:error instanceof Error?error.message:"글 순서를 정하지 못했어요.",phase:"idle"});
   }
 }
 
@@ -382,7 +382,7 @@ async function generate(slide:CarouselPlan["slides"][number],index:number,refine
   const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:effectiveSlide(slide),styleAnchor:state.plan!.styleAnchor,design:effectiveDesign(state.plan!.design),slideIndex:index,count,...(refinement.trim()?{refinement:refinement.trim()}:{}),...referenceFieldsFor(slide.role)})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
-  if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("슬라이드 이미지는 정확히 1장이 필요합니다.");
+  if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("장 그림을 받지 못했어요.");
   if(data.fallback)patch({providerNotice:data.notice??"처음 고른 이미지 AI가 실패해 다른 AI로 전환했어요."});
   return {id:crypto.randomUUID(),preview:data.images[0],referencePreview:data.referenceImages?.[0],...(data.baseImages?.[0]?{bases:data.baseImages[0]}:{}),source:sourceOf(data.source),role:slide.role,...droppedOf(data),drawnAt};
 }
@@ -419,7 +419,7 @@ export async function finishSlides(){
     if(token!==run)return;
     if(failure!==null)throw failure;
   }catch(error){
-    if(token===run)patch({error:error instanceof Error?error.message:"남은 슬라이드를 만들지 못했습니다."});
+    if(token===run)patch({error:error instanceof Error?error.message:"남은 장을 만들지 못했어요."});
   }finally{
     if(token===run){patch({phase:"idle"});finishDeck();}
   }
@@ -542,7 +542,7 @@ export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
     const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:"photo",...(photoNotes?{photoNotes}:{}),...trackField()})});
     const data=await readJsonResponse(response);
     if(token!==run)return;
-    if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
+    if(!response.ok)throw new Error(data.message||"글 순서를 정하지 못했어요.");
     // 디자인 계열(칠판·한지 등)은 한 장에 사진을 두 장까지만 그려서, 세 장짜리 콜라주는 기본 템플릿일 때만 만든다.
     // 갈래가 있으면 갈래가 장마다 사진 수를 정한다(사진 중심 1장까지, 글 중심은 표지만). 파노라마는 쓰지 않는다.
     const style=effectiveDesign((data.plan as CarouselPlan).design).style;
@@ -562,7 +562,7 @@ export async function buildPhotoCarousel(options:{panorama?:boolean}={}){
       patch({slides:next,...(i===0?{cover:card}:{})});
     }
   }catch(error){
-    if(token===run)patch({error:error instanceof Error?error.message:"사진 캐러셀을 만들지 못했어요."});
+    if(token===run)patch({error:error instanceof Error?error.message:"사진 묶음을 만들지 못했어요."});
   }finally{
     if(token===run){patch({phase:"idle"});finishDeck();}
   }
@@ -631,9 +631,9 @@ export function slideTextProblem(edit:SlideTextEdit):string|null {
   if(!headline)return "제목을 적어 주세요.";
   if(headline.length>42)return `제목은 42자까지예요(지금 ${headline.length}자).`;
   const points=edit.points.map(point=>point.trim()).filter(Boolean);
-  if(points.length>SLIDE_POINT_MAX_COUNT)return `요점은 ${SLIDE_POINT_MAX_COUNT}줄까지예요.`;
+  if(points.length>SLIDE_POINT_MAX_COUNT)return `짧은 글은 ${SLIDE_POINT_MAX_COUNT}줄까지예요.`;
   const long=points.findIndex(point=>point.length>SLIDE_POINT_MAX_LENGTH);
-  if(long>=0)return `${long+1}번째 요점이 ${SLIDE_POINT_MAX_LENGTH}자를 넘어요(지금 ${points[long].length}자).`;
+  if(long>=0)return `${long+1}번째 짧은 글이 ${SLIDE_POINT_MAX_LENGTH}자를 넘어요(지금 ${points[long].length}자).`;
   return null;
 }
 
@@ -711,7 +711,7 @@ async function redrawDeck(token:number,skip=-1){
   }
   finishDeck();
   // 카드로 그린 장인데 밑바탕이 없어 다시 못 그린 경우에만 알린다(사진 그대로 쓴 장은 장 번호가 없다).
-  if(missed&&state.slides.some(slide=>slide.source!=="photo"||state.plan))patch({providerNotice:"저장된 초안에서 다시 연 카드는 장 번호(예: 3)를 다시 그리지 못해요. 장을 넣거나 뺀 뒤에는 카드에 적힌 번호가 실제 순서와 다를 수 있어요."});
+  if(missed&&state.slides.some(slide=>slide.source!=="photo"||state.plan))patch({providerNotice:"예전에 만든 게시물을 다시 연 카드는 장 번호(예: 3)를 다시 그리지 못해요. 장을 넣거나 뺀 뒤에는 카드에 적힌 번호가 실제 순서와 다를 수 있어요."});
 }
 
 // 지금 보고 있는 장을 뺀다. 표지(첫 장)는 빼지 않는다(표지를 바꾸려면 다시 만들기).
@@ -761,7 +761,7 @@ function newSlidePlan(input:NewSlide&{visualPrompt?:string;keywords?:string[]},a
 //          상관없이 이 길로 간다(카드를 그릴 디자인 정보가 없다).
 // 반환값: 새 장을 넣었으면(또는 홍보 카드 요청을 처리했으면) true. 화면은 true일 때만 입력란을 비운다(실패하면 다시 적지 않게).
 export async function addSlide(input:NewSlide):Promise<boolean>{
-  if(state.slides.length>=MAX_DECK_SLIDES){patch({error:`캐러셀은 ${MAX_DECK_SLIDES}장까지예요.`});return false;}
+  if(state.slides.length>=MAX_DECK_SLIDES){patch({error:`한 게시물은 ${MAX_DECK_SLIDES}장까지예요.`});return false;}
   if(state.phase!=="idle")return false;
   const position=Math.min(activeSlideIndex(state)+1,state.slides.length);
   if(!state.plan){
@@ -874,7 +874,7 @@ async function buildAiCarousel(){
     const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:state.imageStyle,...trackField()})});
     const data=await readJsonResponse(response);
     if(token!==run)return;
-    if(!response.ok)throw new Error(data.message||"구성안을 만들지 못했습니다.");
+    if(!response.ok)throw new Error(data.message||"글 순서를 정하지 못했어요.");
     const plan=data.plan as CarouselPlan;
     patch({plan,planFallback:data.provider==="fallback",planFallbackMessage:data.provider==="fallback"?fallbackMessageOf(data):"",phase:"cover",...reviewNotice(data.review)});
     const count=state.input.track==="text"?2:1;

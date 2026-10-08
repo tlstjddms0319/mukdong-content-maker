@@ -13,7 +13,7 @@ describe("slide text editing", () => {
     expect(slideTextProblem({headline:"  ",points:[]})).toBe("제목을 적어 주세요.");
     expect(slideTextProblem({headline:"가".repeat(43),points:[]})).toContain("42자");
     expect(slideTextProblem({headline:"제목",points:["하나","둘","셋","넷","다섯"]})).toContain("4줄");
-    expect(slideTextProblem({headline:"제목",points:["가".repeat(41)]})).toContain("1번째 요점");
+    expect(slideTextProblem({headline:"제목",points:["가".repeat(41)]})).toContain("1번째 짧은 글");
     expect(slideTextProblem({headline:"제목",points:["하나","","둘"]})).toBeNull();
   });
 

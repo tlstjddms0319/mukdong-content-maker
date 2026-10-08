@@ -11,7 +11,7 @@ describe("InstagramConnectPrompt",()=>{
   it("로그인 뒤 연결이 없으면 바로 연결 창을 띄운다",async()=>{
     vi.stubGlobal("fetch",respond({connected:false,setup}));
     render(<InstagramConnectPrompt/>);
-    expect(await screen.findByRole("dialog")).toHaveTextContent("Instagram을 연결할까요?");
+    expect(await screen.findByRole("dialog")).toHaveTextContent("인스타그램을 연결할까요?");
     expect(screen.getByRole("link",{name:"지금 연결"})).toHaveAttribute("href","/api/instagram/connect");
   });
 

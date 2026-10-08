@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { loginAsOwner } from "./helpers";
 
-// 지난 초안 복제: 내 초안에서 "복제해서 고치기" → 새 초안이 같은 사진·문안으로 열리고, 원본은 그대로 남는다.
+// 지난 게시물 복제: 내 게시물에서 "복제해서 고치기" → 새 초안이 같은 사진·문안으로 열리고, 원본은 그대로 남는다.
 test("duplicates a saved draft and opens the copy", async ({ page }) => {
   await loginAsOwner(page);
   const id=randomUUID(), mediaId=randomUUID();
@@ -13,8 +13,8 @@ test("duplicates a saved draft and opens the copy", async ({ page }) => {
   await page.getByRole("button",{name:`${topic} 복제해서 고치기`}).click();
   await expect(page).toHaveURL(/\/\?draft=/);
   expect(new URL(page.url()).searchParams.get("draft")).not.toBe(id);
-  await expect(page.getByRole("heading",{name:"게시하기 전에 한 번만 확인해요"})).toBeVisible();
-  await expect(page.getByText("작년에 반응 좋던 문안").first()).toBeVisible();
+  await expect(page.getByRole("heading",{name:"확인하고 올리기"})).toBeVisible();
+  await expect(page.getByRole("textbox",{name:"올릴 글"})).toHaveValue("작년에 반응 좋던 문안");
   await page.goto("/drafts");
   await expect(page.locator(".draft-card").filter({hasText:topic})).toHaveCount(2);
 });

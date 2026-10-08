@@ -48,7 +48,7 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,onC
         <div className="carousel-thumbnails" aria-label="모든 장">{urls.map((image,slide)=><button key={`${image.url.slice(-24)}-${slide}`} type="button" aria-label={`${slide+1}번째 장 보기`} aria-pressed={shown===slide} className="feed-thumb" style={{backgroundImage:`url(${image.url})`}} onClick={()=>go(slide)}/>)}</div>
         {redo&&!busy&&<button type="button" className="button secondary" onClick={()=>{setActiveSlide(shown);void redoSlide();}}>이 장 다시 만들기</button>}
         {busy&&generation&&<GenerationProgress stage={`redo-${generation.phase}`} message={generation.deckStatus||"이 장을 다시 만들고 있어요"} hint="AI가 그리는 장은 1~3분 걸려요."/>}
-        {generation?.error&&!busy&&<p role="alert">{generation.error}</p>}
+        {generation?.error&&!busy&&<div className="make-error" role="alert"><p>이 장을 바꾸지 못했어요. 잠시 뒤 다시 눌러 주세요.</p><details><summary>자세한 이유</summary><p>{generation.error}</p></details></div>}
         {imageNotice&&<p role="status" className="field-help">{imageNotice}</p>}
         {ai&&<p className="field-help">AI가 그린 사진은 실제 음식과 다를 수 있어요. 올리기 전에 한 번 봐 주세요.</p>}
       </div>
