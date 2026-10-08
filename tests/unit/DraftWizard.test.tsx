@@ -656,10 +656,11 @@ describe("DraftWizard",()=>{
     render(<DraftWizard/>);
     await screen.findByText("셋째 주제");
     const cards=screen.getAllByRole("button").filter(button=>button.classList.contains("topic-card"));
-    expect(cards.map(card=>card.querySelector(".soft-badge")?.textContent)).toEqual(["추천 A","추천 B","추천 C"]);
-    expect(cards[0]).toHaveTextContent("이번 철 · 가을");
+    expect(cards.map(card=>card.querySelector(".topic-card-label")?.textContent)).toEqual(["추천 A","추천 B","추천 C"]);
+    expect(cards[0]).toHaveTextContent("🍂 가을");
+    expect(cards[0]).toHaveTextContent("✓ 선택");
     // 네이버 검색 흐름을 반영한 카드에는 그 말을, 위에는 반영했다는 한 줄을 보인다(증가율 숫자는 내지 않는다).
-    expect(cards[0]).toHaveTextContent("요즘 많이 찾는 말 · 방어");
+    expect(cards[0]).toHaveTextContent("🔍 요즘 검색 · 방어");
     expect(screen.getByText("네이버에서 요즘 많이 찾는 말: 방어 · 표시가 붙은 추천 주제에 넣었어요.")).toBeInTheDocument();
     // 카드에는 주제 제목만. 긴 설명·독자 유형·증가율은 화면에 내지 않는다(설명은 저장해 두고 글 쓸 때 쓴다).
     expect(document.body.textContent).not.toMatch(/약속 결정형|음식 탐색형|\+40%|이 긴 설명/);

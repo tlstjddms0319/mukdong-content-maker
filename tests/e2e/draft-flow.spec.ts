@@ -62,7 +62,7 @@ test("makes a five-slide post with one press, then checks and saves it without l
   await page.goto("/");
   // 1단계: 추천 카드에는 "추천 A"와 이번 철 배지만 있다.
   const card=page.getByRole("button", { name: new RegExp(topic) });
-  await expect(card).toContainText("이번 철 · 가을");
+  await expect(card).toContainText("🍂 가을");
   await card.click();
   await page.getByRole("button", { name:"다음" }).click();
   // 2단계: 갈래 카드 두 개 중 사진 중심(처음부터 골라져 있음) → 만들기 한 번.
