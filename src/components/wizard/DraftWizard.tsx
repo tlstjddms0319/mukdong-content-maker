@@ -4,6 +4,7 @@ import Link from "next/link";
 import { WizardShell, type WizardStep } from "./WizardShell";
 import { MakeStep } from "./MakeStep";
 import { TrendLine } from "./TrendLine";
+import { TopicCardBody } from "./TopicCardBody";
 import type { TrendStatus } from "@/features/topics/naverTrend";
 import { ReviewStep, type CaptionStatus } from "./ReviewStep";
 import type { TopicSuggestion } from "@/features/topics/schema";
@@ -20,7 +21,7 @@ import { SAME_TOPIC_SIMILARITY, topicSimilarity } from "@/features/topics/topicS
 import { TRACK_SLIDE_COUNT, type CarouselTrack } from "@/features/images/track";
 
 const DEFAULT_TOPICS:TopicSuggestion[] = fallbackTopics();
-// 추천 카드 배지: 화면에 놓인 순서대로 "추천 A · B · C". 배지는 이것과 "이번 철" 하나만 둔다
+// 추천 카드 이름: 화면에 놓인 순서대로 "추천 A · B · C". 카드 속 모양은 TopicCardBody(제목이 주인공, 계절·검색 표시는 맨 아래 한 줄)
 // (예전의 독자 유형·검색 증가율 숫자는 사장님이 읽을 필요가 없어 뺐다. 추천 기준에는 그대로 쓰인다).
 const topicCardLabel=(index:number)=>`추천 ${String.fromCharCode(65+index)}`;
 // 이 브라우저에서 최근에 보여 준 추천 주제(최대 15개)와 마지막 추천 회차 번호. 같은 주제가 매번 나오지 않게 서버에 알려 준다.
@@ -382,7 +383,7 @@ export function DraftWizard() {
     <div className="topic-tools"><button type="button" className="button secondary" disabled={topicsLoading||refreshWait>0} onClick={()=>void loadTopics(recommendationRound + 1,topics.map(item=>item.title))}>{refreshWait>0?`다른 주제 보기 (${refreshWait}초)`:"다른 주제 보기"}</button>{topicsLoading&&<GenerationProgress label="추천 주제를"/>}{!topicsLoading&&refreshWait>0&&<span className="field-help refresh-wait">AI가 쉬지 않게 {refreshWait}초 뒤에 다시 볼 수 있어요.</span>}</div>
     {topicsFallback&&!topicsLoading&&<p role="status" className="field-help">추천을 불러오지 못해 준비된 주제를 보여 드려요. 잠시 뒤 &apos;다른 주제 보기&apos;를 눌러 보세요.</p>}
     {trendInfo&&!topicsLoading&&<TrendLine info={trendInfo} used={topics.filter(item=>item.trend).map(item=>item.trend)} prepared={topicsFallback}/>}
-    <div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><span className="topic-badges"><span className="soft-badge">{topicCardLabel(index)}</span>{item.season&&<span className="season-badge">이번 철 · {item.season}</span>}{item.trend&&<span className="season-badge trend-badge">요즘 많이 찾는 말 · {item.trend}</span>}</span><strong>{item.title}</strong></button>)}</div>
+    <div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><TopicCardBody label={topicCardLabel(index)} title={item.title} season={item.season} trend={item.trend} selected={topic===item.title}/></button>)}</div>
     <label className="custom-topic"><span>직접 쓰기</span><input maxLength={120} value={topic} placeholder="예: 비 오는 날 홍어전" onChange={e=>editTopicText(e.target.value)} /></label>
     <div className="bottom-action"><span/><button type="button" className="button primary big" disabled={!topic.trim()} onClick={goNext}>다음</button></div>
   </WizardShell>;
