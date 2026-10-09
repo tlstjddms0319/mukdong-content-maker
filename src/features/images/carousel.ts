@@ -7,6 +7,7 @@ import { MENU_BY_ID, heroMenu, josa, mainMenuOf, type StoreMenuItem } from "@/fe
 import { SKATE_TABLE, copyMentionsSkate, foodFreeAnchor, isOtherMenu } from "./sceneFoods";
 import { CarouselTrackSchema, TRACK_SLIDE_COUNT, applyTrack, ellipsize, trackPromptRules } from "./track";
 import { TRACK_STYLES } from "./styleCatalog";
+import { EXPLAIN_REASONS_RULE, NO_PROMO_IN_CARDS } from "@/features/copy/explain";
 
 export const CarouselPlanInputSchema=z.object({
   topic:z.string().trim().min(1).max(200),
@@ -184,8 +185,8 @@ export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan
 function heroRule(menu:StoreMenuItem|undefined,topic:string):string {
   const samhap=/삼합|수육|묵은지/.test(topic);
   const noSamhap=samhap?"":` 이 주제에는 삼합이 없으니 수육·묵은지·삼합을 꺼내지 마세요(삼합은 기본 구성이 아닙니다).`;
-  if(!menu||menu.id==="hongeo-hoe")return `[주인공 메뉴: 홍어] 선택 주제의 메뉴가 주인공입니다. 이 주제는 홍어 이야기이므로 headline과 points의 주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰세요. 곁들임은 ${samhap?'"홍어 한 점을 묵은지에 싸요"':'"홍어 한 점에 초장을 살짝 찍어요"'}처럼 홍어 문장 뒤에 붙는 말로만 넣고, 곁들임으로 시작하는 요점이나 단계 설명은 쓰지 마세요. 먹는 순서를 설명할 때도 첫 단계는 홍어를 고르는 데서 시작합니다.${noSamhap}`;
-  return `[주인공 메뉴: ${menu.short}] 선택 주제의 메뉴가 주인공입니다. 이 주제는 ${menu.short} 이야기이므로 headline과 points의 주어와 첫 동작은 ${josa(menu.short,"으로","로")} 쓰고, 모든 음식 장면에서 ${josa(menu.short,"이","가")} 가장 크고 앞에 초점이 맞게 놓이게 하세요. 홍어·삼합을 억지로 끌어오지 마세요. 다른 메뉴는 글이 직접 말할 때만 곁들임으로 짧게 쓰세요.${noSamhap} 겉모습 참고: ${menu.lookKo}.`;
+  if(!menu||menu.id==="hongeo-hoe")return `[주인공 메뉴: 홍어] 선택 주제의 메뉴가 주인공입니다. 이 주제는 홍어 이야기이므로 음식을 말하는 문장의 주어와 첫 동작은 홍어(홍어 한 점, 홍어 살, 홍어 향)로 쓰세요. 이유를 설명하는 문장은 발효·지방·산미·혀와 코의 감각 같은 원리가 주어여도 됩니다. 곁들임은 ${samhap?'"홍어 한 점을 묵은지에 싸요"':'"홍어 한 점에 초장을 살짝 찍어요"'}처럼 홍어 문장 뒤에 붙는 말로만 넣고, 곁들임으로 시작하는 요점이나 단계 설명은 쓰지 마세요. 먹는 순서를 설명할 때도 첫 단계는 홍어를 고르는 데서 시작합니다.${noSamhap}`;
+  return `[주인공 메뉴: ${menu.short}] 선택 주제의 메뉴가 주인공입니다. 이 주제는 ${menu.short} 이야기이므로 음식을 말하는 문장의 주어와 첫 동작은 ${josa(menu.short,"으로","로")} 쓰고(이유를 설명하는 문장은 발효·지방·산미·혀와 코의 감각 같은 원리가 주어여도 됩니다), 모든 음식 장면에서 ${josa(menu.short,"이","가")} 가장 크고 앞에 초점이 맞게 놓이게 하세요. 홍어·삼합을 억지로 끌어오지 마세요. 다른 메뉴는 글이 직접 말할 때만 곁들임으로 짧게 쓰세요.${noSamhap} 겉모습 참고: ${menu.lookKo}.`;
 }
 
 function sceneExamples(menu:StoreMenuItem|undefined):string {
@@ -204,10 +205,10 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
   return [
     `한국 음식점 Instagram 캐러셀 구성안을 JSON 객체로 작성하세요. 선택한 주제 "${parsed.topic}"를 바꾸지 말고 모든 장면에 일관되게 반영하세요. 기존 이미지 설명: ${parsed.imageBrief ?? "없음"}. 내용 메모: ${parsed.contentBrief ?? "없음"}. slideCount는 ${parsed.slideCount}, slides의 role 순서는 ${roles.join(" → ")}를 정확히 지키세요.`,
     // 한 편의 이야기: 장마다 독립된 자랑을 나열하지 않고, 앞 장이 남긴 궁금증을 다음 장이 받는다.
-    track?track.story:`[이야기 구조] ${parsed.slideCount}장은 한 사람이 친구에게 이 음식을 설명해 주는 한 편의 이야기입니다. 표지는 독자가 실제로 가질 법한 구체적인 궁금증 하나를 질문이나 한 문장으로 던지고, 각 본문 장은 앞 장이 남긴 궁금증에 답하면서 마지막 요점 한 줄로 다음 장의 내용을 예고하세요. 마지막 장은 첫 장의 궁금증이 어떻게 풀렸는지 한 줄로 돌아본 뒤 방문 전 확인할 것으로 닫으세요. 장마다 "우리 대단하죠" 식의 자랑이나 감탄으로 끝내지 말고, 정보가 한 방향으로 쌓이게 하세요.`,
+    track?track.story:`[이야기 구조] ${parsed.slideCount}장은 한 사람이 친구에게 이 음식을 설명해 주는 한 편의 이야기입니다. 표지는 독자가 실제로 가질 법한 구체적인 궁금증 하나를 질문이나 한 문장으로 던지고, 각 본문 장은 앞 장이 남긴 궁금증에 답하면서 마지막 요점 한 줄로 다음 장의 내용을 예고하세요. 본문 장은 겉모습 묘사만 하지 말고 사람이 왜 그렇게 느끼는지 이유를 답하세요. 마지막 장은 첫 장의 궁금증이 어떻게 풀렸는지 한 줄 결론으로 닫으세요. ${NO_PROMO_IN_CARDS} 장마다 "우리 대단하죠" 식의 자랑이나 감탄으로 끝내지 말고, 정보가 한 방향으로 쌓이게 하세요.`,
     // 사람이 쓴 글처럼: 명사형 슬로건과 광고 상투어를 막고, 관찰 가능한 구체 정보로 쓴다.
     track?track.style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰면 결이 비쳐 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요. 표지 headline은 넘기고 싶게 만드는 짧은 훅(8~18자, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(30자 이내 해요체 한 줄)에 넣으세요. 표지가 아닌 장의 subline은 빈 문자열로 두세요.`,
-    `[사실 기준] 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어무침·홍어애탕(그리고 홍어전·찜)의 조리법을 구분하세요. 선택 주제나 내용 메모에 삼합이 없으면 삼합 구성(홍어·수육·묵은지)을 쓰지 마세요. 삼합은 이 가게의 기본값이 아니라 여러 메뉴 가운데 하나입니다. 메뉴에 들어가는 재료와 곁들임 구성, 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요.`,
+    `[사실 기준] 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어무침·홍어애탕(그리고 홍어전·찜)의 조리법을 구분하세요. 선택 주제나 내용 메모에 삼합이 없으면 삼합 구성(홍어·수육·묵은지)을 쓰지 마세요. 삼합은 이 가게의 기본값이 아니라 여러 메뉴 가운데 하나입니다. 메뉴에 들어가는 재료와 곁들임 구성, 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요.${track?"":`\n${EXPLAIN_REASONS_RULE}`}`,
     // 글도 주제의 메뉴가 주인공: 곁들임이 문장을 이끌면 그림보다 글에서 먼저 주인공이 바뀐다. 과메기 주제면 과메기, 홍어 주제일 때만 홍어.
     heroRule(menu,[parsed.topic,parsed.contentBrief].filter(Boolean).join(" ")),
     // A vs B 장은 글로 말한 차이가 두 사진에서 보여야 한다. 코 모양처럼 썬 회 사진에 안 나오는 차이는 쓰지 않는다.

@@ -3,6 +3,7 @@ import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
+import { EXPLAIN_REASONS_RULE, PROMO_IN_CARD } from "@/features/copy/explain";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
 // 1) slideCopyIssues: 코드로 잡을 수 있는 문제를 장 번호와 함께 찾는다(광고 상투어, 반복, 끝맺음, 길이 등).
@@ -59,6 +60,12 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     // 갈래 게시물은 질문을 표지에서만 던진다. 본문 장 제목이 "왜 ~일까요?"면 짧은 글 한 줄로는 결과만 되풀이하기 쉽다(실제 사례:
     // "왜 물기가 생기지 않을까요?" + "물기가 없어 오래 보관해도 맛이 유지돼요"). 답을 제목으로, 이유·확인 방법을 짧은 글로 쓰게 한다.
     if(track&&slide.role!=="cover"&&/[?？]$/.test(headline))add(n,"headline","본문 장 제목은 질문 대신 이 장이 알려 주는 답(핵심 사실)을 해요체 문장으로 쓰고, 짧은 글에는 그 이유나 확인하는 방법을 쓰세요.");
+    // 갈래 게시물 카드는 궁금증을 푸는 이야기만 담는다. 가게 홍보는 맨 뒤 홍보 카드와 캡션 끝 한 줄이 맡는다
+    // (사장님 요청 2026-10-09: 장마다 "묵동홍어마을로 오세요"가 나오면 사람도 알고리즘도 광고로 보고 넘긴다).
+    if(track){
+      if(PROMO_IN_CARD.test(headline))add(n,"headline","카드 제목에 가게 이름·방문 권유가 있어요. 홍보는 맨 뒤 홍보 카드가 맡으니, 표지 질문의 이유를 말하는 제목으로 바꾸세요.");
+      for(const point of slide.points)if(PROMO_IN_CARD.test(point))add(n,"points",`요점 '${point.trim()}'에 가게 이름·방문 권유가 있어요. 제목을 뒷받침하는 이유나 원리로 바꾸세요.`);
+    }
     if(track&&slide.role!=="cover"){
       const cover=plan.slides[0]?.headline??"";
       if(ASKS_WHY.test(cover)&&HOW_TO.test(headline)&&!GIVES_REASON.test(headline))add(n,"headline",`표지가 "${cover.trim()}"라고 이유를 묻는데 이 장 제목은 먹는 법이에요. 제목만 이어 읽어도 흐름이 이어지게 표지 질문의 이유(근거) 하나를 답하는 제목으로 바꾸세요.`);
@@ -126,7 +133,8 @@ ${found}
 1. ${context.track?`(가장 중요) 독자는 큰 글씨(제목)만 훑고 넘깁니다. 표지 제목은 질문 하나, 본문 장 제목은 모두 그 표지 질문에 답하는 조각(이유·근거), 마지막 장 제목은 한 줄 결론입니다. 아래 [제목만 이어 읽기]가 표지 질문에 답하는 한 단락처럼 읽히게 고치세요. 표지 질문과 상관없는 제목(먹는 법·메뉴 정의·방문 안내)은 표지 질문의 이유로 바꾸세요. role은 장 위치일 뿐 내용 지시가 아닙니다. 짧은 글은 그 장 제목을 뒷받침하는 근거나 확인하는 방법 하나이고, 제목·표지에 없는 새 음식·새 이야기를 꺼내지 않으며, 제목의 결과를 말만 바꿔 되풀이하지 않습니다.`:"각 장은 앞 장이 남긴 궁금증에 답하고 다음 장으로 이어집니다."} 장끼리 같은 말이나 같은 정보를 반복하지 마세요.
 2. ${context.track?`본문 장 제목은 ${TRACK_COPY[context.track].headline}자 이내의 해요체 문장 하나(질문은 표지 제목만, ${TRACK_COPY.cover.headline}자 이내), 요점은 ${TRACK_COPY[context.track].point}자 이내의 해요체 완결 문장입니다. 글자 수를 늘리지 마세요.`:"제목은 12~30자의 해요체 문장이나 질문 하나, 요점은 12~28자의 해요체 완결 문장입니다."} 명사로 끝나는 슬로건, 광고 상투어, 느낌표 남발은 쓰지 마세요.
 3. ${heroLine(topic,context.menu??mainMenuOf(topic))}
-4. "입안의 리듬" 같은 추상적 비유 대신 눈이나 입으로 확인할 수 있는 구체적 관찰(색, 결, 식감, 먹는 순서)로 쓰세요.
+4. "입안의 리듬" 같은 추상적 비유 대신 구체적으로 쓰세요. ${context.track?`겉모습 묘사만 하지 말고 사람이 왜 그렇게 느끼는지 이유를 쓰고, 카드에는 가게 이름·방문 권유·예약 안내를 쓰지 마세요(맨 뒤 홍보 카드가 따로 붙어요).
+${EXPLAIN_REASONS_RULE}`:"눈이나 입으로 확인할 수 있는 관찰(색, 결, 식감, 먹는 순서)이나 널리 알려진 이유로 쓰세요."}
 5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.
 6. 문제가 없는 장은 그대로 두세요. 장 수, 장 순서, 장마다 요점 개수(표지는 빈 배열)는 바꾸지 마세요. 표지의 points는 빈 배열입니다.
 
