@@ -12,6 +12,8 @@ import { StorageWarning } from "@/components/states/StorageWarning";
 import { draftThumbnailUrl } from "@/features/drafts/summary";
 import { KeepRunningLink } from "@/components/drafts/KeepRunningLink";
 import { ArchiveToggleButton } from "@/components/drafts/ArchiveToggleButton";
+import { purgeExpiredDraftsIfDue } from "@/features/drafts/purge";
+import { DRAFT_RETENTION_DAYS, daysUntilDeletion } from "@/features/drafts/retention";
 
 export const dynamic="force-dynamic";
 
@@ -23,6 +25,8 @@ export const dynamic="force-dynamic";
 export default async function DraftsPage({searchParams}:{searchParams:Promise<{view?:string}>}) {
   await requireOwnerPage();
   const archiveView=(await searchParams).view==="archive";
+  // 만든 지 30일이 지난 게시물(보관함 제외)을 먼저 지운다(6시간에 한 번만 실제로 돈다).
+  await purgeExpiredDraftsIfDue().catch(()=>{});
   // 목록은 가벼운 요약만 읽는다(이미지는 썸네일 주소로 따로 받는다).
   const all=await createDraftRepository().listDraftSummaries();
   const archivedCount=all.filter(draft=>draft.archived).length;
@@ -41,12 +45,13 @@ export default async function DraftsPage({searchParams}:{searchParams:Promise<{v
     <h1>내 게시물</h1>
     <StorageWarning/>
     <p className="lead">만든 게시물을 다시 열어 보고, 올리거나 고칠 수 있어요.</p>
+    <p className="field-help retention-note">{archiveView?"보관함에 넣은 게시물은 지워지지 않고 계속 남아요.":`만든 지 ${DRAFT_RETENTION_DAYS}일이 지나면 저절로 지워져요(예약이 걸려 있어도). 계속 남기려면 ‘더보기 → 보관함에 넣기’를 눌러 주세요.`}</p>
     <nav className="drafts-tabs" aria-label="게시물 / 보관함"><a href="/drafts" aria-current={archiveView?undefined:"page"}>게시물 {all.length-archivedCount}</a><a href="/drafts?view=archive" aria-current={archiveView?"page":undefined}>보관함 {archivedCount}</a></nav>
     {drafts.length===0&&archiveView?<div className="state-card drafts-empty"><h2>보관함이 비어 있어요</h2><p>확인 화면에서 ‘보관함에 보관하기’를 누르면 여기에 모여요.</p></div>
     :drafts.length===0?<div className="state-card drafts-empty"><h2>아직 만든 게시물이 없어요</h2><p>‘만들기’에서 주제를 고르고 만들기를 누르면 여기에 저절로 모여요.</p><KeepRunningLink className="button primary big" href="/?new=1">새로 만들기</KeepRunningLink></div>
       :<><div className="drafts-toolbar"><span>{archiveView?"보관함":"게시물"} {drafts.length}개 · 최근 고친 순</span><KeepRunningLink className="button secondary" href="/?new=1">새로 만들기</KeepRunningLink></div><ul className="drafts-list">{drafts.map(draft=>{const thumbnail=draftThumbnailUrl(draft);const cover=draft.imageCount>0;const status=statusOf(draft);return <li key={draft.id} className="draft-card">
         <div className="draft-cover" role="img" aria-label={`${draft.topic} 첫 장`} style={thumbnail?{backgroundImage:`url(${thumbnail})`}:undefined}/>
-        <div className="draft-details"><span className="soft-badge">{draft.caption?.trim()?"사진·글 완성":cover?"사진만 있어요":"아직 만드는 중"}</span><h2>{draft.topic}</h2><p>{draft.caption?.trim()||"글은 열어서 확인할 수 있어요."}</p><small>마지막으로 고친 날 {new Intl.DateTimeFormat("ko-KR",{dateStyle:"medium"}).format(new Date(draft.updated_at))}</small></div>
+        <div className="draft-details"><span className="soft-badge">{draft.caption?.trim()?"사진·글 완성":cover?"사진만 있어요":"아직 만드는 중"}</span><h2>{draft.topic}</h2><p>{draft.caption?.trim()||"글은 열어서 확인할 수 있어요."}</p><small>마지막으로 고친 날 {new Intl.DateTimeFormat("ko-KR",{dateStyle:"medium"}).format(new Date(draft.updated_at))}</small>{(()=>{const left=daysUntilDeletion(draft,now);return left!==null&&left<=7?<small className="retention-left">{left<=1?"곧 지워져요":`${left}일 뒤 지워져요`} · 남기려면 보관함에</small>:null;})()}</div>
         <div className="draft-actions"><KeepRunningLink className="button primary" aria-label={`${draft.topic} 열기`} draftId={draft.id} href={`/?draft=${encodeURIComponent(draft.id)}`}>열기</KeepRunningLink>
           <details className="draft-tools"><summary aria-label={`${draft.topic} 더보기`}>더보기</summary><div className="draft-tools-body">
             {cover&&<DuplicateDraftButton draftId={draft.id} topic={draft.topic}/>}

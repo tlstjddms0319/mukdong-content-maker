@@ -207,3 +207,33 @@ it("archives a draft: turns off its schedule, survives re-saving, moves it to th
   expect(await repository.readDraft(id)).toMatchObject({archived:false,final_review_complete:true});
   expect((await patch({id,archived:"yes"})).status).toBe(400);
 });
+
+it("stores the making state (plan + bases) with the post, shrunk, and never blocks the save for a bad one", async () => {
+  directory=await mkdtemp(path.join(tmpdir(),"mukdong-studio-"));
+  process.env.DATA_DIR=directory;
+  vi.resetModules();
+  const sharp=(await import("sharp")).default;
+  const big=`data:image/jpeg;base64,${(await sharp({create:{width:2400,height:2400,channels:3,background:"#c05030"}}).jpeg({quality:95}).toBuffer()).toString("base64")}`;
+  const { createDraftRepository }=await import("@/features/drafts/repository");
+  const { POST }=await import("@/app/api/drafts/route");
+  const repository=createDraftRepository(directory);
+  const id="33333333-3333-4333-8333-333333333333",mediaId="44444444-4444-4444-8444-444444444444";
+  const draft={id,status:"ready",topic:"홍어 한 점",audience:"A",media_candidates:[{id:mediaId,source:"ai-edited",file_id:"data:image/jpeg;base64,CARD",purpose:"instagram-cover"}],selected_media_id:mediaId,copy:null,facts_to_verify:[],store_profile_version:"2026-09-10",created_at:"2026-10-09T00:00:00.000Z",updated_at:"2026-10-09T00:00:00.000Z"};
+  const studio={version:1,plan:{any:"plan"},mode:"photo",imageStyle:"photo",slideLayout:"card",photos:[{id:"p1",preview:big}],slides:[{bases:[big],assignment:[],views:[]}],storeCard:false};
+  const save=(body:unknown)=>POST(new Request("http://localhost/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}));
+  const response=await save({...draft,studio});
+  expect(response.status).toBe(201);
+  // 응답은 상태만(사진 없이).
+  expect(await response.json()).not.toHaveProperty("media_candidates");
+  const stored=(await repository.readDraft(id))!;
+  expect(stored.studio?.plan).toEqual({any:"plan"});
+  const base=stored.studio!.slides[0].bases![0];
+  const meta=await sharp(Buffer.from(base.slice(base.indexOf(",")+1),"base64")).metadata();
+  expect(Math.max(meta.width!,meta.height!)).toBeLessThanOrEqual(1350);
+  expect(base.length).toBeLessThan(big.length);
+  // 모양이 틀린 만들기 상태는 버리고 사진·글은 그대로 저장한다.
+  const bad=await save({...draft,topic:"다시 저장",studio:{version:2}});
+  expect(bad.status).toBe(201);
+  expect(await repository.readDraft(id)).toMatchObject({topic:"다시 저장"});
+  expect((await repository.readDraft(id))!.studio).toBeUndefined();
+});

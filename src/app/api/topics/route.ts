@@ -7,6 +7,7 @@ import { TopicInputSchema } from "@/features/topics/schema";
 import { buildTopicPrompt, readTopicGeneration, topicGenerationSchema } from "@/features/topics/prompt";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
+import { purgeExpiredDraftsIfDue } from "@/features/drafts/purge";
 import { createDraftRepository } from "@/features/drafts/repository";
 import { likedTopicTitles } from "@/features/drafts/performance";
 import { cachedTrendResult, trendLabel, trendMenu } from "@/features/topics/naverTrend";
@@ -30,6 +31,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const body = RequestSchema.parse(await request.json());
 
     // 초안 목록: 반응 좋았던 주제(성과 기록)와 최근에 만든 주제(반복 피하기)에 함께 쓴다. 못 읽어도 추천은 계속한다.
+    // 만든 지 30일이 지난 게시물(보관함 제외)을 지운다(6시간에 한 번만 실제로 돈다). 주제 추천은 앱을 열 때마다 불려 가장 자주 돈다.
+    await purgeExpiredDraftsIfDue().catch(() => {});
     const drafts = await createDraftRepository().listDraftSummaries().catch(() => []);
     const recentDraftTopics = [...drafts].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 10).map((draft) => draft.topic).filter((title) => title.trim().length > 0 && title.length <= 120);
     // 피할 주제 = 이 브라우저에서 최근에 보여 준 것 + 최근 초안 주제(중복 없이 최대 30개).

@@ -15,7 +15,7 @@ import { selectedDraftMedia } from "@/features/drafts/selection";
 import { addLibraryPhoto, describePhotos, uploadStudioPhoto, type StudioPhoto } from "@/features/images/generationStore";
 import { TopicPhotoBox } from "./TopicPhotoBox";
 import { meaningfulPhotoName } from "@/features/images/photoName";
-import { STOP_RUNNING_QUESTION, acknowledgeAuto, adoptImages, cancelGeneration, approvedDeck, createAutomatically, deckComplete, deckPhotoNotes, designStyleOf, ensureGeneration, generatingDraftId, isGenerating, markApproved, runningAuto, storeCardPending, useGenerationState, type ApprovedImage, type GenerationInput } from "@/features/images/generationStore";
+import { STOP_RUNNING_QUESTION, acknowledgeAuto, adoptImages, cancelGeneration, approvedDeck, createAutomatically, deckComplete, deckPhotoNotes, designStyleOf, ensureGeneration, studioSnapshotOf, generatingDraftId, isGenerating, markApproved, runningAuto, storeCardPending, useGenerationState, type ApprovedImage, type GenerationInput } from "@/features/images/generationStore";
 import { CURRENT_DRAFT_KEY, CURRENT_TOPIC_KEY, forgetCurrentDraft, rememberCurrentDraft, saveDraftCaption, saveDraftImages, writePostText, type DraftMeta } from "@/features/drafts/draftSave";
 import { clearWizardSession, readWizardSession, saveWizardSession } from "@/features/drafts/wizardSession";
 import { readJsonResponse } from "@/lib/http/readJson";
@@ -232,7 +232,8 @@ export function DraftWizard() {
     const savingDraftId=draftIdRef.current;
     setImages(approved);setSaveState("saving");setImageNotice("바뀐 사진을 저장하는 중…");
     try{
-      await saveDraftImages(meta(),approved,generation.key===`${savingDraftId}|${SLIDES}`?designStyleOf(generation):undefined);
+      const mine=generation.key===`${savingDraftId}|${SLIDES}`;
+      await saveDraftImages(meta(),approved,mine?designStyleOf(generation):undefined,mine?studioSnapshotOf(generation):undefined);
       if(draftIdRef.current!==savingDraftId)return;
       rememberCurrentDraft(savingDraftId,topic);setSaveState("saved");
       // 새로 넣은 장에 AI 그림이 있는데 글에 "AI 연출 이미지" 안내가 없으면 붙여 저장한다(글은 처음 쓸 때만 안내를 붙였다, B-8).
@@ -279,9 +280,12 @@ export function DraftWizard() {
   // 2단계·3단계는 이 게시물의 만들기 상태를 쓴다. 3단계는 저장된 사진을 넘겨, 저장된 게시물을 다시 열었을 때도 장 고치기를 쓸 수 있게 한다.
   const genInput:GenerationInput={topic,...(imageBrief.trim()?{imageBrief:imageBrief.trim()}:{}),...(contentBrief.trim()?{contentBrief:contentBrief.trim()}:{}),slideCount:SLIDES,track};
   const genInputKey=JSON.stringify(genInput);
+  // 내 게시물에서 다시 연 게시물의 만들기 상태(그 게시물 id와 함께). 다른 게시물에는 쓰지 않는다.
+  const studioRef=useRef<{draftId:string;studio:unknown}|null>(null);
   useEffect(()=>{
     if(step==="topic")return;
-    ensureGeneration(genKey,JSON.parse(genInputKey) as GenerationInput,step==="review"?images:[]);
+    const saved=step==="review"&&studioRef.current&&genKey.startsWith(`${studioRef.current.draftId}|`)?studioRef.current.studio:undefined;
+    ensureGeneration(genKey,JSON.parse(genInputKey) as GenerationInput,step==="review"?images:[],saved);
   },[step,genKey,genInputKey,images]);
   // 자동 만들기가 끝나면(다른 화면에 다녀왔어도) 만든 장·글을 가져와 3단계로 넘어간다.
   // 그사이 1단계로 돌아가 있으면 화면을 옮기지 않고 3단계 단추만 열어 둔다(주제를 적는 중에 화면이 바뀌지 않게).
@@ -373,6 +377,8 @@ export function DraftWizard() {
             if(active&&draft?.id&&draft?.topic){
               // 예전 계열·예전 방식으로 만든 게시물도 저장된 사진·글 그대로 연다(다시 그리지 않는다).
               const restored=selected.map(item=>({id:item.id,preview:item.file_id,source:item.source}));
+              // 함께 저장한 만들기 상태(구성안·밑바탕)가 있으면 3단계에서 장 고치기를 그대로 쓰게 되살린다.
+              studioRef.current=draft.studio?{draftId:draft.id,studio:draft.studio}:null;
               // 아주 예전 게시물은 글이 caption이 아니라 copy(나눠 쓴 글)에만 있다. 그 글을 그대로 이어 보여 주고(곧 caption으로 저장된다),
               // 새로 써서 덮어쓰지 않는다.
               const savedText=draft.caption?.trim()?draft.caption as string:draft.copy?formatCopy(draft.copy):"";

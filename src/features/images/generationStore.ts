@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from "react";
 import { shrinkPhoto } from "@/lib/files/shrinkPhoto";
-import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan, type CarouselRole, type CarouselSlideCount } from "./carousel";
-import type { ImageStyle } from "./style";
-import { DEFAULT_SLIDE_LAYOUT, type SlideLayout } from "./slideLayout";
+import { CarouselPlanSchema, SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan, type CarouselRole, type CarouselSlideCount } from "./carousel";
+import { ImageStyleSchema, type ImageStyle } from "./style";
+import { DEFAULT_SLIDE_LAYOUT, SlideLayoutSchema, type SlideLayout } from "./slideLayout";
+import { StudioSnapshotSchema, type StudioSnapshotInput } from "@/features/drafts/studio";
 import { normalizeCardLayout, photosNeeded, type CardLayout } from "./design";
 import { AnalyzeResponseSchema, TOPIC_TAG, photoNote } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
@@ -105,8 +106,9 @@ const trackField=()=>state.input.track?{track:state.input.track}:{};
 export function resetGenerationStore(){run++;autoRun++;storeRun++;drawnScenes.clear();replace(initialGenerationState("",EMPTY_INPUT));}
 
 // 다른 초안으로 바뀌면 새로 시작하고, 같은 초안이면 진행 중인 상태를 그대로 이어 간다.
-export function ensureGeneration(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]){
-  if(state.key!==key){run++;drawnScenes.clear();replace(initialGenerationState(key,input,approvedImages));return;}
+// studio: 저장된 게시물을 다시 열 때 함께 저장해 둔 만들기 상태(구성안·밑바탕). 있으면 장 고치기를 그대로 쓸 수 있게 되살린다.
+export function ensureGeneration(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[],studio?:unknown){
+  if(state.key!==key){run++;drawnScenes.clear();replace(restoreStudio(initialGenerationState(key,input,approvedImages),studio));return;}
   if(state.input.topic!==input.topic||state.input.imageBrief!==input.imageBrief||state.input.contentBrief!==input.contentBrief||state.input.slideCount!==input.slideCount||state.input.track!==input.track)patch({input});
 }
 
@@ -838,6 +840,52 @@ async function buildAiCarousel(){
 
 // 이 초안 카드에 쓴 디자인 계열(성과를 계열별로 비교하는 데 쓴다). 구성안 없이 사진만 쓴 초안은 없다.
 export const designStyleOf=(current:GenerationState):StyleId|undefined=>current.plan?.design?.style;
+
+// ── 다시 열어도 고칠 수 있게: 만들기 상태 저장·되살리기(features/drafts/studio.ts) ──────────────────────────
+// 게시물과 함께 저장할 만들기 상태. 구성안이 없거나(글자 카드로 바꾼 사진 등) 장 수가 구성안과 다르면 저장하지 않는다.
+// 그림은 data URL만 담는다(서버 검사·저장 형식). 사장님 사진 가운데 data URL이 아닌 것이 있으면 통째로 저장하지 않는다.
+const isDataUrl=(value:string|undefined):value is string=>Boolean(value&&/^data:image\/(?:png|jpeg|webp);base64,/.test(value));
+export function studioSnapshotOf(current:GenerationState):StudioSnapshotInput|undefined {
+  const plan=current.plan;
+  if(!plan||!current.slides.length||current.slides.length!==plan.slides.length||current.slides.some(slide=>!slide.preview))return undefined;
+  if(current.photos.some(photo=>!isDataUrl(photo.preview)))return undefined;
+  return {
+    version:1,plan,mode:current.mode,imageStyle:current.imageStyle,slideLayout:current.slideLayout,
+    photos:current.photos.slice(0,10).map(photo=>({id:photo.id,preview:photo.preview,...(photo.name?{name:photo.name.slice(0,200)}:{})})),
+    slides:current.slides.map((slide,i)=>{
+      const bases=(slide.bases??[]).filter(isDataUrl).slice(0,3);
+      return {...(bases.length?{bases}:{}),assignment:(current.photoAssignment[i]??[]).slice(0,3),views:(current.photoViews[i]??[]).slice(0,3),
+        ...(slide.refPhoto!==undefined?{refPhoto:slide.refPhoto}:{}),...(slide.drawnAt?{drawnAt:slide.drawnAt}:{})};
+    }),
+    storeCard:approvedDeck(current).length>current.slides.length,
+  };
+}
+// 다시 연 게시물(저장된 그림만 있는 상태)에 저장해 둔 만들기 상태를 입힌다. 저장된 그림 수·구성안이 맞지 않으면 예전처럼 그림만 연다.
+function restoreStudio(base:GenerationState,studio:unknown):GenerationState {
+  if(studio===undefined||!base.slides.length)return base;
+  const snapshot=StudioSnapshotSchema.safeParse(studio);
+  if(!snapshot.success)return base;
+  const plan=CarouselPlanSchema.safeParse(snapshot.data.plan);
+  const count=snapshot.data.slides.length;
+  if(!plan.success||plan.data.slides.length!==count||base.slides.length!==count+(snapshot.data.storeCard?1:0))return base;
+  const slides=base.slides.slice(0,count).map((image,i)=>{
+    const saved=snapshot.data.slides[i];
+    return {...image,...(saved.bases?.length?{bases:saved.bases}:{}),...(saved.refPhoto!==undefined?{refPhoto:saved.refPhoto}:{}),...(saved.drawnAt?{drawnAt:saved.drawnAt}:{})};
+  });
+  const imageStyle=ImageStyleSchema.safeParse(snapshot.data.imageStyle),slideLayout=SlideLayoutSchema.safeParse(snapshot.data.slideLayout);
+  const next:GenerationState={...base,
+    plan:plan.data,mode:snapshot.data.mode,
+    imageStyle:imageStyle.success?imageStyle.data:base.imageStyle,slideLayout:slideLayout.success?slideLayout.data:base.slideLayout,
+    photos:snapshot.data.photos.map(photo=>({id:photo.id,preview:photo.preview,name:photo.name??"사진"})),
+    photoAssignment:snapshot.data.slides.map(slide=>slide.assignment.filter(index=>index<snapshot.data.photos.length)),
+    photoViews:snapshot.data.slides.map(slide=>slide.views),
+    slides,cover:slides[0],deckEdited:count!==base.input.slideCount,
+    storeCard:{include:snapshot.data.storeCard},
+  };
+  // 붙였던 홍보 카드는 저장된 그림(마지막 장)을 그대로 쓴다(지금 디자인·장 수로 그린 것으로 본다).
+  const storeImage=snapshot.data.storeCard?base.slides[count]:undefined;
+  return storeImage?{...next,storeCard:{include:true,image:storeImage,key:storeCardKey(next)}}:next;
+}
 const hasAi=(images:ApprovedImage[])=>images.some(image=>image.source==="ai-generated"||image.source==="ai-edited");
 
 // 사장님에게 보여 줄 멈춘 이유(쉬운 말 한 줄). 자세한 이유(AI 이름 등)는 detail로 따로 둔다(접어서 보여 준다).
@@ -863,7 +911,7 @@ export async function createAutomatically(meta:DraftMeta){
     if(!alive())return;
     patchAuto({stage:"saving"});
     const images=approvedDeck(state);
-    await saveDraftImages(meta,images,designStyleOf(state));
+    await saveDraftImages(meta,images,designStyleOf(state),studioSnapshotOf(state));
     if(!alive())return;
     patch({approved:true});
     rememberCurrentDraft(meta.id,meta.topic);

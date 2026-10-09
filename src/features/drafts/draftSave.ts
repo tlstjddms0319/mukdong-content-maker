@@ -2,22 +2,24 @@ import type { ApprovedImage } from "@/features/images/generationStore";
 import type { StyleId } from "@/features/images/styleCatalog";
 import { formatCopy } from "@/features/copy/writing";
 import { readJsonResponse } from "@/lib/http/readJson";
+import type { StudioSnapshotInput } from "./studio";
 
 // 초안 저장·글 쓰기 요청. 화면(DraftWizard)과 자동 만들기(generationStore.createAutomatically)가 함께 쓴다.
 // 자동 만들기는 화면이 사라져도(다른 메뉴로 이동) 끝까지 돌아야 하므로, 컴포넌트 상태가 아니라 넘겨받은 값만 쓴다.
 export type DraftMeta={id:string;topic:string;audience:"A"|"B"|"C";imageBrief:string;contentBrief:string;createdAt:string;planDate?:string;caption?:string};
 
 // 장마다 쓰임(purpose): 한 장이면 대표 사진, 여러 장이면 장 역할(표지·본문). 예전 화면과 같은 모양으로 저장한다.
-export function draftBody(meta:DraftMeta,images:ApprovedImage[],designStyle?:StyleId){
+// studio: 다시 열어도 장별로 고칠 수 있게 함께 저장하는 만들기 상태(구성안·밑바탕). 없으면(글자 카드로 바꾼 사진 등) 저장하지 않는다.
+export function draftBody(meta:DraftMeta,images:ApprovedImage[],designStyle?:StyleId,studio?:StudioSnapshotInput){
   return {id:meta.id,status:"ready",topic:meta.topic,audience:meta.audience,image_brief:meta.imageBrief,content_brief:meta.contentBrief,
     media_candidates:images.map((item,index)=>({id:item.id,source:item.source,file_id:item.preview ?? item.id,purpose:images.length===1?"instagram-primary":`instagram-${item.role ?? (index===0?"cover":"slide")}`})),
     selected_media_id:images[0]?.id ?? null,...(images.length?{selected_media_ids:images.map(item=>item.id)}:{}),copy:null,
-    ...(meta.caption?.trim()?{caption:meta.caption}:{}),...(meta.planDate?{plan_date:meta.planDate}:{}),...(designStyle?{design_style:designStyle}:{}),
+    ...(meta.caption?.trim()?{caption:meta.caption}:{}),...(meta.planDate?{plan_date:meta.planDate}:{}),...(designStyle?{design_style:designStyle}:{}),...(studio?{studio}:{}),
     facts_to_verify:[],store_profile_version:"2026-09-10",created_at:meta.createdAt,updated_at:new Date().toISOString()};
 }
 
-export async function saveDraftImages(meta:DraftMeta,images:ApprovedImage[],designStyle?:StyleId):Promise<void> {
-  const response=await fetch("/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(draftBody(meta,images,designStyle))});
+export async function saveDraftImages(meta:DraftMeta,images:ApprovedImage[],designStyle?:StyleId,studio?:StudioSnapshotInput):Promise<void> {
+  const response=await fetch("/api/drafts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(draftBody(meta,images,designStyle,studio))});
   if(!response.ok)throw new Error("만든 사진을 저장하지 못했어요. '다시 해 보기'를 눌러 주세요.");
 }
 

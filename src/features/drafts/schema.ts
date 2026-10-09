@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DesignStyleSchema, PerformanceSchema } from "./performance";
+import { StudioSnapshotSchema } from "./studio";
 
 export const MediaCandidateSchema = z.object({
   id: z.string().uuid(),
@@ -43,6 +44,8 @@ export const DraftSchema = z.object({
   design_style: DesignStyleSchema.optional(),
   // 게시 후 사장님이 직접 적은 성과(좋아요·댓글·저장·공유·도달).
   performance: PerformanceSchema.optional(),
+  // 다시 열어도 장별로 고칠 수 있게 함께 저장하는 만들기 상태(구성안 + 장마다 밑바탕, studio.ts). 사진을 다시 저장할 때마다 새로 바뀐다.
+  studio: StudioSnapshotSchema.optional(),
   facts_to_verify: z.array(z.string()),
   store_profile_version: z.string(),
   created_at: z.string().datetime(),

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { WizardShell } from "@/components/wizard/WizardShell";
+import { purgeExpiredDraftsIfDue } from "@/features/drafts/purge";
 import { createDraftRepository } from "@/features/drafts/repository";
 import { requireOwnerPage } from "@/features/auth/guard";
 import { ContentCalendar } from "@/components/drafts/ContentCalendar";
@@ -16,6 +17,7 @@ export const dynamic="force-dynamic";
 export default async function PlanPage() {
   await requireOwnerPage();
   // 보관함 게시물은 계획·달력·진행 상태에서 뺀다(지금은 안 올리기로 한 것이라 "확인 필요"로 보이면 헷갈린다). 반응 기록 통계에는 넣는다.
+  await purgeExpiredDraftsIfDue().catch(()=>{});
   const allDrafts=await createDraftRepository().listDraftSummaries();
   const drafts=allDrafts.filter(draft=>!draft.archived);
   // Dynamic server page: compare against the time of this request, not a build-time value.
