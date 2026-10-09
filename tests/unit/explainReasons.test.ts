@@ -55,4 +55,21 @@ describe("explain reasons instead of promoting", () => {
     expect(messages).toContain("결과만 말하고 이유가 없어요");
     for(const text of ["찬바람에 얼었다 녹으며 말라요","식초의 신맛이 기름진 느낌을 덜어 줘요","기름이 올라 고소한 맛이 진해져요"])expect(VAGUE_REASON.test(text),text).toBe(false);
   });
+
+  // 맥락 잇기: 처음엔 질문, 마지막엔 그 질문의 핵심 말을 다시 짚는 분명한 결론.
+  it("asks for one question carried to a clear conclusion in cards and caption", () => {
+    for(const track of ["text","photo",undefined] as const)expect(buildCarouselPlanPrompt({topic:"과메기는 왜 찬바람이 불면 찾을까?",slideCount:5,...(track?{track}:{})})).toContain("[맥락 잇기]");
+    const caption=buildCopyPrompt({topic:"과메기는 왜 찬바람이 불면 찾을까?",audience:"A",slideOutline:["과메기는 왜 찬바람이 불면 찾을까?","찬바람에 얼었다 녹으며 말라요","찬바람에 꾸덕하게 말라야 과메기가 제맛이에요"]} as Parameters<typeof buildCopyPrompt>[0],"medium");
+    expect(caption).toContain("[맥락 잇기]");
+    expect(caption).toContain("\"찬바람에 꾸덕하게 말라야 과메기가 제맛이에요\"");
+  });
+
+  it("flags a last card that does not answer the cover question", () => {
+    const base=createFallbackCarouselPlan({topic:"과메기는 왜 찬바람이 불면 찾을까?",slideCount:5,track:"text"});
+    const last=base.slides.length-1;
+    const withEnd=(headline:string):CarouselPlan=>({...base,slides:base.slides.map((slide,i)=>i===0?{...slide,headline:"과메기는 왜 찬바람이 불면 찾을까?"}:i===last?{...slide,headline}:slide)});
+    const endIssues=(plan:CarouselPlan)=>slideCopyIssues(plan,"text").filter(issue=>issue.slide===last+1).map(issue=>issue.message).join("\n");
+    expect(endIssues(withEnd("추운 날엔 따뜻하게 드세요"))).toContain("표지 질문의 '과메기'");
+    expect(endIssues(withEnd("찬바람에 말라야 과메기가 제맛이에요"))).not.toContain("표지 질문의");
+  });
 });
