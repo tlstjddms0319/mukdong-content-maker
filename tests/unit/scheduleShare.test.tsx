@@ -53,6 +53,28 @@ describe("ScheduleShare", () => {
     expect(JSON.parse(String(patch[1]!.body))).toEqual({id:ID,planned_publish_at:null,final_review_complete:false});
   });
 
+  it("re-reads the reservation after the caption or photos are saved and says when it was released", async () => {
+    const at=new Date(Date.now()+3*60*60*1000).toISOString();
+    let reserved=true;
+    const fetch=vi.fn(async()=>({ok:true,json:async()=>({id:ID,final_review_complete:reserved,planned_publish_at:at})}));
+    vi.stubGlobal("fetch",fetch);
+    const {rerender}=render(<ScheduleShare draftId={ID} ready refreshKey="글 1"/>);
+    expect(await screen.findByText(`${formatKstTime(at)}에 올라가요.`)).toBeInTheDocument();
+    // 글을 고쳐 저장하면 서버가 예약을 끈다 → 다시 읽고 풀렸다고 알린다.
+    reserved=false;
+    rerender(<ScheduleShare draftId={ID} ready refreshKey="글 2"/>);
+    expect(await screen.findByText("글이나 사진을 고쳐서 예약이 풀렸어요.")).toBeInTheDocument();
+    expect(screen.queryByText(/에 올라가요\./)).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("can't be scheduled while the post text is being rewritten", () => {
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:false,json:async()=>({})})));
+    render(<ScheduleShare draftId={ID} ready busy/>);
+    expect(screen.getByRole("button",{name:"예약해서 올리기"})).toBeDisabled();
+    expect(screen.getByText("글을 다 쓴 뒤 예약할 수 있어요")).toBeInTheDocument();
+  });
+
   it("is off until Instagram is connected, and shows the server's reason on failure", async () => {
     vi.stubGlobal("fetch",vi.fn(async(_url:string,init?:RequestInit)=>init?.method==="PATCH"?{ok:false,json:async()=>({error:"사진과 글을 만들고 올릴 날짜를 정한 뒤 확인해 주세요."})}:{ok:false,json:async()=>({})}));
     vi.stubGlobal("confirm",vi.fn(()=>true));

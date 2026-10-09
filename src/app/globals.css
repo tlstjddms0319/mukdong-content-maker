@@ -645,3 +645,6 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 .drafts-tabs { display:flex; gap:8px; margin-top:20px; }
 .drafts-tabs a { min-height:48px; display:inline-flex; align-items:center; padding:0 18px; border:1px solid var(--line); border-radius:999px; font-size:18px; font-weight:700; color:var(--muted); text-decoration:none; background:#fff; }
 .drafts-tabs a[aria-current="page"] { border-color:#1f5c43; background:#1f5c43; color:#fff; }
+
+/* 예약이 풀렸다는 알림(글·사진을 고친 뒤). */
+.schedule-released { background:#fbe9e3; color:#7a2a1d; }

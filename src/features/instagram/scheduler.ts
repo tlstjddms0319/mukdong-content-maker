@@ -31,15 +31,17 @@ export type SchedulerRun={
   tokenRefreshed:boolean;
   due:string[];
   published:{draftId:string;mediaId:string|null;alreadyPublished:boolean}[];
-  skipped:{draftId:string;reason:"published"|"cooldown"|"in-progress"|"needs-check"}[];
+  // changed: 목록(요약)에서는 예약 대상이었는데, 저장된 게시물을 다시 읽어 보니 예약이 꺼졌거나 보관함에 들어갔거나 시각이 바뀜.
+  skipped:{draftId:string;reason:"published"|"cooldown"|"in-progress"|"needs-check"|"changed"}[];
   failed:{draftId:string;message:string}[];
 };
 
 // 예약 시각이 지났고, 너무 오래(6시간 넘게) 지나지는 않은 초안만. 오래 지난 것은 "예약 놓침"으로 화면에 보여 주고 게시하지 않는다.
 // 예약 점검에 필요한 칸만. 초안 요약(DraftSummary)과 전체 초안(Draft) 둘 다 이 모양을 만족한다.
-export type ScheduleView=Pick<Draft,"id"|"final_review_complete"|"planned_publish_at"|"selected_media_id"|"caption">&Partial<Pick<DraftSummary,"hasCaption">>;
+export type ScheduleView=Pick<Draft,"id"|"final_review_complete"|"planned_publish_at"|"selected_media_id"|"caption"|"archived">&Partial<Pick<DraftSummary,"hasCaption">>;
 export function isDueForPublishing(draft:ScheduleView,now:Date):boolean {
-  if(draft.final_review_complete!==true||typeof draft.planned_publish_at!=="string")return false;
+  // 보관함에 넣은 게시물은 예약이 남아 있어도 올리지 않는다(보관 = 지금은 안 올림).
+  if(draft.final_review_complete!==true||typeof draft.planned_publish_at!=="string"||draft.archived===true)return false;
   const late=now.getTime()-Date.parse(draft.planned_publish_at);
   return late>=0&&late<=MAX_PUBLISH_LATENESS_MS
     &&Boolean(draft.selected_media_id)
@@ -90,8 +92,12 @@ export async function runPublishScheduler(deps:SchedulerDeps):Promise<SchedulerR
   for(const draft of due){
     const reason=skipReason(await deps.repo.readPublication(draft.id),now);
     if(reason){run.skipped.push({draftId:draft.id,reason});continue;}
+    // 목록 요약은 잠깐 옛 상태일 수 있다(다시 읽는 중 취소·보관·글 수정). 올리기 직전에 저장된 게시물을 다시 읽어
+    // 예약이 아직 켜져 있고 시각·보관 상태가 맞는지 확인하고, 그 게시물의 지금 글로 올린다.
+    const current=await deps.readDraft(draft.id).catch(()=>null);
+    if(!current||!isDueForPublishing(current,now)){run.skipped.push({draftId:draft.id,reason:"changed"});continue;}
     try{
-      const result=await publishApprovedDraft({draftId:draft.id,approved:true,caption:draft.caption},publishDeps);
+      const result=await publishApprovedDraft({draftId:draft.id,approved:true,caption:current.caption},publishDeps);
       run.published.push({draftId:draft.id,mediaId:result.mediaId,alreadyPublished:result.alreadyPublished});
       deps.log?.(`[instagram] 자동 게시 완료: ${draft.id} → ${result.mediaId??"(id 없음)"}`);
     }catch(error){

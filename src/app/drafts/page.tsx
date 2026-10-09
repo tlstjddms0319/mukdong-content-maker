@@ -33,7 +33,10 @@ export default async function DraftsPage({searchParams}:{searchParams:Promise<{v
   // 게시물마다 인스타그램 올린 기록을 읽어 상태(올림·실패·확인 필요·예약 놓침…)를 보여 준다. 기록 파일은 작아서 함께 읽어도 가볍다.
   const instagram=createInstagramRepository();
   const publications=new Map(await Promise.all(drafts.map(async draft=>[draft.id,await instagram.readPublication(draft.id).catch(()=>null)] as const)));
-  const statusOf=(draft:typeof drafts[number])=>publishStatusOf(draft,publications.get(draft.id)??null,now);
+  // 저장된 인스타그램 연결(이 서버의 저장소만 읽는다. 인스타그램에 묻지 않음). 없거나 만료면 예약돼 있어도 올라가지 않는다고 보여 준다.
+  const connection=await instagram.readConnection().catch(()=>null);
+  const connected=Boolean(connection&&Date.parse(connection.expiresAt)>now);
+  const statusOf=(draft:typeof drafts[number])=>publishStatusOf(draft,publications.get(draft.id)??null,now,{connected});
   return <WizardShell step="topic" section="drafts">
     <h1>내 게시물</h1>
     <StorageWarning/>
@@ -51,7 +54,7 @@ export default async function DraftsPage({searchParams}:{searchParams:Promise<{v
             <ArchiveToggleButton draftId={draft.id} topic={draft.topic} archived={Boolean(draft.archived)}/>
             <DeleteDraftButton draftId={draft.id} topic={draft.topic} published={status.state==="published"}/>
           </div></details></div>
-        <PublishStatusBadge draftId={draft.id} status={status}/>
+        <PublishStatusBadge key={`${status.state}|${status.label}`} draftId={draft.id} status={status}/>
         <details className="draft-more"><summary>올릴 날짜 · 반응 적기</summary>
           <PlanningControls draftId={draft.id} topic={draft.topic} plannedPublishAt={draft.planned_publish_at} finalReviewComplete={draft.final_review_complete} canReview={cover&&draft.hasCaption}/>
           {cover&&<PerformanceForm draftId={draft.id} topic={draft.topic} performance={draft.performance}/>}

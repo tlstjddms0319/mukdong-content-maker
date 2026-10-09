@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatKstTime, isoToLocalInput, localInputToIso, quickScheduleChoices } from "@/features/instagram/scheduleChoices";
 import { readJsonResponse } from "@/lib/http/readJson";
 
@@ -12,13 +12,19 @@ import { readJsonResponse } from "@/lib/http/readJson";
 type Mode="closed"|"picking"|"saving";
 
 // onChange: 예약·취소한 뒤 부르면 부모가 보관 버튼도 서버 상태를 다시 읽게 한다(예약하면 보관함에서 나온다).
-export function ScheduleShare({draftId,ready,onBeforeSchedule,onChange}:{draftId:string;ready:boolean;onBeforeSchedule?:()=>Promise<boolean>;onChange?:()=>void}) {
+// refreshKey: 저장된 글·사진이 바뀔 때마다 바뀌는 값. 바뀌면 예약 상태를 다시 읽는다(서버는 글·사진이 바뀌면 예약을 끈다).
+//   그때 예약이 풀렸으면 "글이나 사진을 고쳐 예약이 풀렸어요"를 알린다(예전에는 풀린 뒤에도 "○시에 올라가요"가 그대로 보였다).
+// busy: 글을 다시 쓰는 중(끝나면 글이 바뀌어 예약이 풀리므로 그동안은 예약하지 못하게 한다).
+export function ScheduleShare({draftId,ready,busy=false,refreshKey="",onBeforeSchedule,onChange}:{draftId:string;ready:boolean;busy?:boolean;refreshKey?:string;onBeforeSchedule?:()=>Promise<boolean>;onChange?:()=>void}) {
   const [reservedAt,setReservedAt]=useState<string|null>(null);
   const [mode,setMode]=useState<Mode>("closed");
   const [picked,setPicked]=useState("");
   const [custom,setCustom]=useState("");
   const [error,setError]=useState("");
   const [choices,setChoices]=useState(()=>quickScheduleChoices());
+  const [released,setReleased]=useState(false);
+  // 마지막으로 서버에서 확인한 예약(있었는지). 다시 읽었을 때 없어졌으면 풀렸다고 알린다.
+  const reservedRef=useRef<string|null>(null);
 
   // 이 게시물에 이미 걸린 예약을 읽는다(최종 확인 완료 + 앞으로 올 시각일 때만 "예약됨"). 못 읽어도 버튼은 그대로 쓴다.
   useEffect(()=>{
@@ -26,10 +32,13 @@ export function ScheduleShare({draftId,ready,onBeforeSchedule,onChange}:{draftId
     fetch(`/api/drafts?id=${encodeURIComponent(draftId)}`,{cache:"no-store"}).then(response=>response.ok?readJsonResponse(response):null).then(draft=>{
       if(!active||!draft)return;
       const at=typeof draft.planned_publish_at==="string"?draft.planned_publish_at:null;
-      if(draft.final_review_complete&&at&&Date.parse(at)>Date.now())setReservedAt(at);
+      const current=draft.final_review_complete&&at&&Date.parse(at)>Date.now()?at:null;
+      if(reservedRef.current&&!current)setReleased(true);
+      reservedRef.current=current;
+      setReservedAt(current);
     }).catch(()=>{});
     return()=>{active=false;};
-  },[draftId]);
+  },[draftId,refreshKey]);
 
   const save=async(plannedIso:string|null)=>{
     setMode("saving");setError("");
@@ -38,6 +47,7 @@ export function ScheduleShare({draftId,ready,onBeforeSchedule,onChange}:{draftId
       const response=await fetch("/api/drafts",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:draftId,planned_publish_at:plannedIso,final_review_complete:Boolean(plannedIso)})});
       const data=await readJsonResponse(response).catch(()=>({}));
       if(!response.ok)throw new Error(String((data as {error?:unknown}).error||"예약하지 못했어요. 잠시 뒤 다시 눌러 주세요."));
+      reservedRef.current=plannedIso;setReleased(false);
       setReservedAt(plannedIso);setMode("closed");setPicked("");setCustom("");onChange?.();
     }catch(cause){setError(cause instanceof Error?cause.message:"예약하지 못했어요.");setMode(plannedIso?"picking":"closed");}
   };
@@ -52,18 +62,19 @@ export function ScheduleShare({draftId,ready,onBeforeSchedule,onChange}:{draftId
   const cancel=()=>{if(window.confirm("예약을 취소할까요? 취소하면 저절로 올라가지 않아요."))void save(null);};
 
   if(reservedAt)return <div className="share-action">
-    <p role="status" className="share-done"><strong>{formatKstTime(reservedAt)}에 올라가요.</strong> 그때 인스타그램에 저절로 올라가요(1~2분 늦을 수 있어요). 글이나 사진을 고치면 예약이 풀려요.</p>
+    <p role="status" className="share-done"><strong>{formatKstTime(reservedAt)}에 올라가요.</strong> 그때 인스타그램에 저절로 올라가요(서버가 쉬고 있으면 최대 1시간쯤 늦을 수 있어요). 글이나 사진을 고치면 예약이 풀려요.</p>
     <button type="button" className="button secondary" disabled={mode==="saving"} onClick={cancel}>{mode==="saving"?"취소하는 중…":"예약 취소"}</button>
     {error&&<p role="alert" className="field-help">{error}</p>}
   </div>;
 
   return <div className="share-action">
-    <button type="button" className="button big secondary share-button" aria-expanded={mode!=="closed"} disabled={!ready} onClick={()=>{setChoices(quickScheduleChoices());setError("");setMode(mode==="closed"?"picking":"closed");}}>예약해서 올리기</button>
-    {mode==="closed"?<p className="field-help">{ready?"정한 시각에 저절로 올라가요":"인스타그램을 연결하면 예약할 수 있어요"}</p>
+    {released&&<p role="alert" className="share-done schedule-released"><strong>글이나 사진을 고쳐서 예약이 풀렸어요.</strong> 확인하고 다시 예약해 주세요.</p>}
+    <button type="button" className="button big secondary share-button" aria-expanded={mode!=="closed"} disabled={!ready||busy} onClick={()=>{setChoices(quickScheduleChoices());setError("");setMode(mode==="closed"?"picking":"closed");}}>예약해서 올리기</button>
+    {mode==="closed"?<p className="field-help">{!ready?"인스타그램을 연결하면 예약할 수 있어요":busy?"글을 다 쓴 뒤 예약할 수 있어요":"정한 시각에 저절로 올라가요"}</p>
       :<div className="schedule-picker" role="group" aria-label="올릴 시각 고르기">
         <div className="schedule-choices">{choices.map(choice=><button key={choice.iso} type="button" className={`button secondary ${picked===choice.iso?"selected":""}`} aria-pressed={picked===choice.iso} onClick={()=>{setPicked(choice.iso);setCustom("");setError("");}}>{choice.label}</button>)}</div>
         <label className="schedule-custom"><span>다른 날짜·시각</span><input type="datetime-local" value={custom} min={isoToLocalInput(new Date().toISOString())} onChange={event=>{setCustom(event.target.value);setPicked("");setError("");}}/></label>
-        <button type="button" className="button primary" disabled={!target||mode==="saving"} onClick={reserve}>{mode==="saving"?"예약하는 중…":target?`${formatKstTime(target)}에 예약하기`:"시각을 골라 주세요"}</button>
+        <button type="button" className="button primary" disabled={!target||mode==="saving"||busy} onClick={reserve}>{mode==="saving"?"예약하는 중…":target?`${formatKstTime(target)}에 예약하기`:"시각을 골라 주세요"}</button>
         {error&&<p role="alert" className="field-help">{error}</p>}
       </div>}
   </div>;

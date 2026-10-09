@@ -18,12 +18,12 @@ import { canEditSlideText, redoSlide, redoSlideKind, setActiveSlide, type Approv
 export type CaptionStatus="saved"|"saving"|"unsaved"|"error";
 type Props={
   draftId:string;topic:string;audience:"A"|"B"|"C";images:ApprovedImage[];generation:GenerationState|null;
-  caption:string;onCaption:(text:string)=>void;captionStatus:CaptionStatus;writing:boolean;copyError:string;onRewrite:()=>void;
+  caption:string;savedCaption:string;onCaption:(text:string)=>void;captionStatus:CaptionStatus;writing:boolean;copyError:string;onRewrite:()=>void;
   onSaveCaption:()=>Promise<boolean>;onFreeCards:(images:ApprovedImage[])=>void;imageNotice:string;
 };
 const CAPTION_STATUS:Record<CaptionStatus,string>={saved:"글을 저장했어요",saving:"글을 저장하는 중…",unsaved:"고친 글은 곧 저장돼요",error:"글을 저장하지 못했어요. 잠시 뒤 다시 저장해요"};
 
-export function ReviewStep({draftId,topic,audience,images,generation,caption,onCaption,captionStatus,writing,copyError,onRewrite,onSaveCaption,onFreeCards,imageNotice}:Props) {
+export function ReviewStep({draftId,topic,audience,images,generation,caption,savedCaption,onCaption,captionStatus,writing,copyError,onRewrite,onSaveCaption,onFreeCards,imageNotice}:Props) {
   const urls:ReviewImage[]=images.flatMap(image=>image.preview?[{url:image.preview,source:image.source}]:[]);
   const [index,setIndex]=useState(0);
   // 바로 올릴 수 있으면 "바로 올리기"가, 아니면(연결 전·연결 기간 끝남) "휴대폰에 저장하기"가 주인공 버튼이다(한 화면에 주인공은 하나).
@@ -73,7 +73,7 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,onC
     <div className="share-actions">
       <InstagramPublish draftId={draftId} caption={caption} imageUrls={urls.map(image=>image.url)} primary={instagramReady} onBeforePublish={onSaveCaption} onReady={setInstagramReady}/>
       {/* 사진이 바뀌면(장 다시 만들기 등) 서버가 예약 확인을 풀므로, 다시 읽도록 사진 목록을 key로 준다. */}
-      <ScheduleShare key={`${shareTick}|${urls.map(image=>image.url.slice(-24)).join("|")}`} draftId={draftId} ready={instagramReady&&urls.length>0} onBeforeSchedule={onSaveCaption} onChange={bumpShare}/>
+      <ScheduleShare key={shareTick} draftId={draftId} ready={instagramReady&&urls.length>0} busy={writing} refreshKey={`${savedCaption}|${urls.map(image=>image.url.slice(-24)).join("|")}`} onBeforeSchedule={onSaveCaption} onChange={bumpShare}/>
       <SaveToPhone images={urls} caption={caption} title={topic} primary={!instagramReady}/>
       <ArchiveShare key={shareTick} draftId={draftId} onBeforeArchive={onSaveCaption} onChange={bumpShare}/>
     </div>

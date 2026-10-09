@@ -8,6 +8,13 @@ const at=(minutes:number)=>new Date(NOW+minutes*60_000).toISOString();
 const record=(overrides:Partial<Publication>):Publication=>({draftId:"11111111-1111-4111-8111-111111111111",status:"preparing",containerId:null,mediaId:null,safeError:null,attemptedAt:at(-1),publishedAt:null,...overrides});
 
 describe("publish status shown on draft cards",()=>{
+  it("does not call a post scheduled when Instagram isn't connected or the post is archived",()=>{
+    const notConnected=publishStatusOf({planned_publish_at:at(60),final_review_complete:true},null,NOW,{connected:false});
+    expect(notConnected).toMatchObject({state:"scheduled",label:"연결 전이라 안 올라가요"});
+    expect(publishStatusOf({planned_publish_at:at(60),final_review_complete:true},null,NOW,{connected:true}).label).toBe("예약됨");
+    expect(publishStatusOf({planned_publish_at:at(60),final_review_complete:true,archived:true},null,NOW).state).toBe("none");
+  });
+
   it("reads scheduled, due and missed from the plan when nothing was published yet",()=>{
     expect(publishStatusOf({planned_publish_at:at(60),final_review_complete:true},null,NOW).state).toBe("scheduled");
     expect(publishStatusOf({planned_publish_at:at(-30),final_review_complete:true},null,NOW).state).toBe("due");
