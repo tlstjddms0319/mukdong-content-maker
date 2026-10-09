@@ -14,11 +14,12 @@ import { GenerationProgress } from "@/components/states/GenerationState";
 import { selectedDraftMedia } from "@/features/drafts/selection";
 import { addLibraryPhoto, describePhotos, uploadStudioPhoto, type StudioPhoto } from "@/features/images/generationStore";
 import { TopicPhotoBox } from "./TopicPhotoBox";
+import { meaningfulPhotoName } from "@/features/images/photoName";
 import { STOP_RUNNING_QUESTION, acknowledgeAuto, adoptImages, cancelGeneration, approvedDeck, createAutomatically, deckComplete, deckPhotoNotes, designStyleOf, ensureGeneration, generatingDraftId, isGenerating, markApproved, runningAuto, storeCardPending, useGenerationState, type ApprovedImage, type GenerationInput } from "@/features/images/generationStore";
 import { CURRENT_DRAFT_KEY, CURRENT_TOPIC_KEY, forgetCurrentDraft, rememberCurrentDraft, saveDraftCaption, saveDraftImages, writePostText, type DraftMeta } from "@/features/drafts/draftSave";
 import { clearWizardSession, readWizardSession, saveWizardSession } from "@/features/drafts/wizardSession";
 import { readJsonResponse } from "@/lib/http/readJson";
-import { formatCopy } from "@/features/copy/writing";
+import { formatCopy, withAiDisclosure } from "@/features/copy/writing";
 import { PLAN_DATE_PATTERN, PLAN_POST_TIME_KST } from "@/features/drafts/planLink";
 import { SAME_TOPIC_SIMILARITY, topicSimilarity } from "@/features/topics/topicSimilarity";
 import { TRACK_SLIDE_COUNT, type CarouselTrack } from "@/features/images/track";
@@ -117,7 +118,10 @@ export function DraftWizard() {
   const paidWork=generationMine&&(generation.phase!=="idle"||autoBusy);
   // 이 게시물을 지금 만드는 중인지(자동 만들기·이 장 다시 만들기). 다른 주제·새로 만들기로 옮기기 전에 따로 묻는다.
   const running=generationMine&&isGenerating(generation);
-  const unsavedWork=paidWork||(caption.trim()!==""&&caption!==savedCaption);
+  // 만들기 화면에 사진을 넣어 두고 아직 만들지 않았으면 그 사진도 저장 안 한 것으로 본다. 다른 주제를 고르면 새 게시물로 바뀌어
+  // 사진이 묻지 않고 사라졌다(검수 보고서: 2단계 사진 사라짐). 이제는 바꾸기 전에 한 번 묻는다.
+  const pendingPhotos=generationMine&&generation.photos.length>0&&generation.slides.length===0&&images.length===0;
+  const unsavedWork=paidWork||pendingPhotos||(caption.trim()!==""&&caption!==savedCaption);
   const unsavedRef=useRef(unsavedWork);
   useEffect(()=>{unsavedRef.current=unsavedWork;},[unsavedWork]);
   const runningRef=useRef(running);
@@ -163,7 +167,10 @@ export function DraftWizard() {
   const [topicPhotos,setTopicPhotos]=useState<StudioPhoto[]>([]);
   const [topicPhotoStatus,setTopicPhotoStatus]=useState("");
   const [topicPhotoError,setTopicPhotoError]=useState("");
+  // topicPhotos와 같은 순서: 사진마다 보이는 것(사진을 못 읽었으면 ""). 추천 요청에는 읽은 것만 보낸다.
   const photoNotesRef=useRef<string[]>([]);
+  // 넣은 사진을 읽었는지(하나라도). 못 읽었으면 "사진을 보고 고른 주제예요"라고 하지 않는다(검수 보고서 B-7).
+  const [topicPhotosRead,setTopicPhotosRead]=useState(false);
   // round를 주지 않으면(처음 열 때) 지난번 다음 회차로 시작한다.
   const loadTopics=useCallback(async(requestedRound?:number,excludeTitles:string[]=[])=>{
     const round=requestedRound??nextInitialRound();
@@ -171,7 +178,7 @@ export function DraftWizard() {
     const topicAtRequest=topicSelectionRef.current.topic;
     setTopicsLoading(true);
     try{
-      const response=await fetch("/api/topics", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({storeProfile:{name:"묵동홍어마을"},recommendationRound:round,excludeTitles,recentTitles:readRecentTopics(),...(photoNotesRef.current.length?{photoNotes:photoNotesRef.current}:{})}) });
+      const response=await fetch("/api/topics", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({storeProfile:{name:"묵동홍어마을"},recommendationRound:round,excludeTitles,recentTitles:readRecentTopics(),...(photoNotesRef.current.some(Boolean)?{photoNotes:photoNotesRef.current.filter(Boolean)}:{})}) });
       // 너무 빨리 다시 누른 경우(서버가 AI를 부르지 않음): 지금 추천을 그대로 두고 남은 초만 받는다.
       if(response.status===429){const data=await readJsonResponse(response).catch(()=>({}));if(requestId===topicRequestRef.current)holdRefresh((data as {cooldownSeconds?:unknown}).cooldownSeconds??10);return;}
       if(!response.ok) throw new Error();
@@ -197,6 +204,8 @@ export function DraftWizard() {
     const nextDraftId=crypto.randomUUID();draftIdRef.current=nextDraftId;createdAtRef.current=new Date().toISOString();
     setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopyError("");setLoadError("");setPlanLink(null);setDraftId(nextDraftId);
     forgetCurrentDraft();clearWizardSession();
+    // 1단계에 넣어 둔 주제용 사진과 그 메모도 비운다(새 게시물의 추천이 지난 사진을 따라가지 않게. 검수 보고서 B-5).
+    setTopicPhotos([]);photoNotesRef.current=[];setTopicPhotosRead(false);
     if(window.location.search)window.history.replaceState({},"","/");
     // 준비된 주제를 먼저 보이지 않고 곧장 새 추천을 받는다(오면 첫 주제를 골라 둔다).
     setTopics([]);changeTopic("","C","",true,"");
@@ -211,7 +220,11 @@ export function DraftWizard() {
     try{
       await saveDraftImages(meta(),approved,generation.key===`${savingDraftId}|${SLIDES}`?designStyleOf(generation):undefined);
       if(draftIdRef.current!==savingDraftId)return;
-      rememberCurrentDraft(savingDraftId,topic);setSaveState("saved");setImageNotice("바뀐 사진을 저장했어요.");
+      rememberCurrentDraft(savingDraftId,topic);setSaveState("saved");
+      // 새로 넣은 장에 AI 그림이 있는데 글에 "AI 연출 이미지" 안내가 없으면 붙여 저장한다(글은 처음 쓸 때만 안내를 붙였다, B-8).
+      const disclosed=hasAiImages(approved)&&!writing?withAiDisclosure(caption):caption;
+      if(disclosed!==caption){setCaption(disclosed);void saveCaption(disclosed);setImageNotice("바뀐 사진을 저장했어요. AI 그림이 들어가 글에 'AI 연출 이미지' 안내를 붙였어요.");}
+      else setImageNotice("바뀐 사진을 저장했어요.");
     }catch(error){if(draftIdRef.current===savingDraftId){setSaveState("error");setImageNotice(error instanceof Error?error.message:"사진을 저장하지 못했어요.");}}
   };
   // 글 저장. 성공하면 true(바로 올리기 전에도 부른다).
@@ -398,7 +411,8 @@ export function DraftWizard() {
     if(topicPhotos.length&&!backToRunning){
       ensureGeneration(`${draftIdRef.current}|${SLIDES}`,{...genInput,topic:topicSelectionRef.current.topic},[]);
       topicPhotos.forEach(photo=>addLibraryPhoto(photo));
-      setTopicPhotos([]);
+      // 사진은 이 게시물로 옮겼으니 주제 추천에서는 더 쓰지 않는다(이후 "다른 주제 보기"·새로 만들기가 그 사진 기준으로 나오던 문제, B-5).
+      setTopicPhotos([]);photoNotesRef.current=[];setTopicPhotosRead(false);
     }
     setStep("image");
   };
@@ -421,8 +435,9 @@ export function DraftWizard() {
     if(!next.length){setTopicPhotoStatus("");return;}
     setTopicPhotoStatus("사진을 보고 주제를 생각하고 있어요…");
     const notes=await describePhotos(next,"");
-    // 사진을 못 읽었으면(AI 키 없음 등) 사진 이름으로 대신한다.
-    photoNotesRef.current=notes.map((note,i)=>note||next[i].name).filter(Boolean);
+    // 사진을 못 읽었으면(AI 키 없음 등) 뜻이 있는 사진 이름("홍어무침.jpg")만 대신 쓴다. "IMG_1234"·"KakaoTalk_…" 같은 이름은 쓰지 않는다.
+    photoNotesRef.current=notes.map((note,i)=>note||meaningfulPhotoName(next[i].name));
+    setTopicPhotosRead(photoNotesRef.current.some(Boolean));
     setTopicPhotoStatus("");
     await loadTopics(recommendationRound+1,[]);
   };
@@ -431,6 +446,7 @@ export function DraftWizard() {
     setTopicPhotos(next);
     photoNotesRef.current=photoNotesRef.current.filter((_,i)=>i!==index);
     if(!next.length)photoNotesRef.current=[];
+    setTopicPhotosRead(photoNotesRef.current.some(Boolean));
     void loadTopics(recommendationRound+1,[]);
   };
   const shell={canVisit,onStepChange:visitStep,onCreateMenu:backToProgress,onNewDraft:step==="topic"?undefined:()=>{if(confirmDiscard())startNewDraft();}};
@@ -443,7 +459,7 @@ export function DraftWizard() {
     <p className="lead">추천 주제 하나를 누르거나, 아래 칸에 직접 쓰세요.</p>
     {planNote}
     <TopicPhotoBox photos={topicPhotos} busy={topicsLoading||topicPhotoStatus!==""} status={topicPhotoStatus} error={topicPhotoError} onAdd={files=>void addTopicPhotos(files)} onRemove={removeTopicPhoto}/>
-    {topicPhotos.length>0&&!topicsLoading&&!topicPhotoStatus&&<p className="field-help topic-photo-note">넣은 사진을 보고 고른 주제예요.</p>}
+    {topicPhotos.length>0&&!topicsLoading&&!topicPhotoStatus&&<p className="field-help topic-photo-note">{topicPhotosRead?"넣은 사진을 보고 고른 주제예요.":"사진에 무엇이 있는지 읽지 못해 평소처럼 추천했어요. 넣은 사진은 만들기에서 그대로 써요."}</p>}
     <div className="topic-tools"><button type="button" className="button secondary" disabled={topicsLoading||refreshWait>0} onClick={()=>void loadTopics(recommendationRound + 1,topics.map(item=>item.title))}>{refreshWait>0?`다른 주제 보기 (${refreshWait}초)`:"다른 주제 보기"}</button>{topicsLoading&&<GenerationProgress label="추천 주제를"/>}{!topicsLoading&&refreshWait>0&&<span className="field-help refresh-wait">AI가 쉬지 않게 {refreshWait}초 뒤에 다시 볼 수 있어요.</span>}</div>
     {topicsFallback&&!topicsLoading&&<p role="status" className="field-help">준비된 주제를 보여 드려요. {topicsFallback}</p>}
     {trendInfo&&!topicsLoading&&<TrendLine info={trendInfo} used={topics.filter(item=>item.trend).map(item=>item.trend)} prepared={topicsFallback!==""}/>}

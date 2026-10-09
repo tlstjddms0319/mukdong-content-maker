@@ -154,7 +154,8 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
       if(excluded.has(key)||(strict&&avoided.has(key))||picked.some(item=>titleKey(item.title)===key))continue;
       if(varied&&recent.has(menuId(topic)))continue;
       if(!anySeason&&offSeason(topic)==="closed")continue;
-      if(!fitsWith(picked,topic))continue;
+      // 사진 속 메뉴 주제는 같은 메뉴끼리 겹쳐도 된다(사진 한 접시로 세 질문을 만든다).
+      if(!fitsWith(picked,topic)&&!photoMenus.has(menuId(topic)))continue;
       picked.push(topic);
     }
   }
@@ -169,10 +170,10 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
 // 주제 한 개가 기본 조건을 못 지키는 이유(지키면 undefined).
 // - 제목 끝 물음표 뒤의 따옴표·괄호·공백은 봐준다(AI가 "…일까?" 처럼 따옴표로 감싸 보내곤 한다).
 // - 가게 메뉴는 제목과 설명을 함께 본다(제목에만 메뉴 이름을 쓴 주제를 버리지 않게).
-export type TopicRejectReason="question"|"store"|"summary"|"menu"|"current"|"duplicate"|"same-menu";
+export type TopicRejectReason="question"|"store"|"summary"|"menu"|"current"|"duplicate"|"same-menu"|"photo";
 export const TOPIC_REJECT_LABELS:Record<TopicRejectReason,string>={
   question:"물음표 질문이 아니어서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
-  current:"지금 화면 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",
+  current:"지금 화면 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",photo:"넣은 사진 속 메뉴가 아니어서",
 };
 function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason|undefined {
   if(!/[?？]["'”’」』)\]\s]*$/.test(topic.title.trim()))return "question";
@@ -199,10 +200,12 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   const picked:TopicSuggestion[]=[];
   // 이 AI 주제를 지금 고를 수 없는 이유(고를 수 있으면 undefined).
   // 사진으로 주제 정하기: 사진 속 음식 하나로 세 질문을 만드는 게 맞으므로 "주인공 메뉴 겹침"·"메뉴 고르게" 검사를 하지 않는다.
-  const photoMode=options.hints?.photoMenus!==undefined;
+  const photoMode=Boolean(options.hints?.photoMenus?.size);
   const fits=(list:readonly TopicSuggestion[],topic:TopicSuggestion)=>photoMode||fitsWith(list,topic);
+  // 사진으로 주제 정하기에서는 사진 속 메뉴를 다루지 않는 AI 주제를 받지 않는다(사진과 상관없는 주제가 "사진을 보고 고른 주제"로 나오지 않게).
+  const aboutPhoto=(topic:TopicSuggestion)=>!photoMode||menuOf(`${topic.title} ${topic.summary}`).some(item=>options.hints!.photoMenus!.has(item.id));
   const problem=(topic:TopicSuggestion):TopicRejectReason|undefined=>basicsProblem(topic,options.storeName)
-    ??(current.has(titleKey(topic.title))?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
+    ??(!aboutPhoto(topic)?"photo":current.has(titleKey(topic.title))?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
   // 1) 최근에 안 보인 제목 → 2) 최근에 보인 제목(준비된 주제보다는 낫다).
   for(const allowRecent of [false,true])for(const topic of suggestions){
     if(picked.length>=3||picked.includes(topic))continue;

@@ -25,6 +25,17 @@ export function formatCopy(copy:GeneratedCopy):string {
   return [copy.hook,copy.information,copy.store_connection,copy.call_to_action,copy.image_disclosure,normalizeHashtags(copy.hashtags).join(" ")].filter(Boolean).join("\n\n");
 }
 
+// 글에 "AI 연출 이미지" 안내를 붙인다(이미 있으면 그대로). 글을 쓴 뒤 확인 화면에서 AI 장을 넣은 경우에 쓴다(검수 보고서 B-8).
+// formatCopy와 같은 자리: 맨 끝 문단이 해시태그면 그 앞, 아니면 맨 끝.
+export function withAiDisclosure(caption:string):string {
+  const text=caption.trimEnd();
+  if(!text||text.includes("AI 연출 이미지"))return caption;
+  const parts=text.split(/\n{2,}/);
+  const last=parts.at(-1)??"";
+  if(parts.length>1&&/^#\S/.test(last.trim()))return [...parts.slice(0,-1),AI_IMAGE_DISCLOSURE,last].join("\n\n");
+  return `${text}\n\n${AI_IMAGE_DISCLOSURE}`;
+}
+
 // 가게 메뉴 목록(문안 프롬프트용). 메뉴 데이터 한 곳(store/menu.ts)에서 만들어 홍어찜처럼 새 메뉴가 빠지지 않게 한다.
 export const COPY_MENU_LIST=STORE_MENU.map(item=>item.id==="hongeo-hoe"?"홍어회·삼합":item.name).join(", ");
 

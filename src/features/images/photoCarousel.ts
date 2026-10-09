@@ -160,11 +160,15 @@ export const PHOTO_VIEW_LABELS:Record<PhotoView,string>={full:"사진 그대로"
 const outranks=(a:readonly number[],b:readonly number[])=>{for(let k=0;k<a.length;k++)if(a[k]!==b[k])return a[k]>b[k];return false;};
 
 // track "text"(글 중심)이면 본문 장은 사진 없이 두므로 채우지 않는다.
-export function fillWithPhotoViews(plan:CarouselPlan,assignment:number[][],photoCount:number,notes:readonly string[]=[],track?:CarouselTrack):{plan:CarouselPlan;assignment:number[][];views:PhotoView[][]} {
+// track "photo"(사진 중심)이면 이 자리들은 AI가 사진을 참고해 새 장면을 그리므로, 사진마다 두 번(가까이·결 확대)으로 막지 않고
+// 남은 장을 모두 채운다(검수 보고서 B-3: 사진 1장이면 5장 중 2장이 글자 카드였다). 두 번을 넘겨 다시 쓴 자리는 sceneOnly에 적는다:
+// AI가 못 그리면 확대 사진이 앞 장과 똑같아지므로, 그 장은 확대 사진 대신 예전처럼 글자 카드(sceneFallbackSlide)로 그린다.
+export function fillWithPhotoViews(plan:CarouselPlan,assignment:number[][],photoCount:number,notes:readonly string[]=[],track?:CarouselTrack):{plan:CarouselPlan;assignment:number[][];views:PhotoView[][];sceneOnly:number[]} {
   const slides=[...plan.slides];
   const next=assignment.map(slots=>[...slots]);
   const views:PhotoView[][]=assignment.map(slots=>slots.map(()=>"full" as const));
-  if(track==="text")return {plan:{...plan,slides},assignment:next,views};
+  const sceneOnly:number[]=[];
+  if(track==="text")return {plan:{...plan,slides},assignment:next,views,sceneOnly};
   // 사진마다 이미 쓴 거리.
   const used=Array.from({length:photoCount},()=>new Set<PhotoView>());
   next.forEach(slots=>slots.forEach(photo=>used[photo]?.add("full")));
@@ -174,18 +178,25 @@ export function fillWithPhotoViews(plan:CarouselPlan,assignment:number[][],photo
     const prefer:PhotoView[]=role==="detail"?["detail","close"]:["close","detail"];
     const neighbours=new Set([...(next[i-1]??[]),...(next[i+1]??[])]);
     let best:{photo:number;view:PhotoView;rank:number[]}|null=null;
+    // 사진 중심은 두 거리를 다 쓴 사진도 다시 고를 수 있다(맨 뒤 순위: 아직 남은 거리가 있는 사진이 먼저).
+    let reused=false;
     for(let photo=0;photo<photoCount;photo++){
-      const view=prefer.find(item=>!used[photo].has(item));
+      const fresh=prefer.find(item=>!used[photo].has(item));
+      const view=fresh??(track==="photo"?prefer[0]:undefined);
       if(!view)continue;
-      // 높을수록 좋음: 글과 맞음, 덜 씀, 이웃과 다름, 앞 사진.
-      const rank=[photoMatchScore(slides[i],notes[photo]??""),-used[photo].size,neighbours.has(photo)?0:1,-photo];
-      if(!best||outranks(rank,best.rank))best={photo,view,rank};
+      // 높을수록 좋음: 아직 안 쓴 거리, 글과 맞음, 덜 씀, 이웃과 다름, 앞 사진.
+      const rank=[fresh?1:0,photoMatchScore(slides[i],notes[photo]??""),-used[photo].size,neighbours.has(photo)?0:1,-photo];
+      if(!best||outranks(rank,best.rank)){best={photo,view,rank};reused=!fresh;}
     }
     if(!best)break;
     used[best.photo].add(best.view);
+    if(reused)sceneOnly.push(i);
     next[i]=[best.photo];views[i]=[best.view];
     const layout=SINGLE_LAYOUT;
     slides[i]={...slides[i],layout,variant:Math.min(slides[i].variant??0,LAYOUT_VARIANTS[layout]-1)};
   }
-  return {plan:{...plan,slides},assignment:next,views};
+  return {plan:{...plan,slides},assignment:next,views,sceneOnly};
 }
+
+// sceneOnly 자리를 AI가 못 그렸을 때 쓰는 글자 카드 모양(사진 중심의 사진 없는 장, fitPlanToPhotos와 같은 layout).
+export const sceneFallbackSlide=<T extends CarouselSlidePlan>(slide:T):T=>({...slide,layout:TRACK_TEXT_LAYOUT,variant:0});

@@ -48,7 +48,9 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 사진으로 주제 정하기: 사진 속 가게 메뉴. 그 메뉴는 "최근에 자주 나온 메뉴"여도 이번에는 쓴다(사진이 먼저).
     const photoMenus = new Set(input.photoNotes.flatMap((note) => menuOf(note).map((item) => item.id)));
     for (const id of photoMenus) recentMenus.delete(id);
-    const hints = { recentMenus, trends: trends.map(({ keyword }) => keyword), ...(input.photoNotes.length ? { photoMenus } : {}) };
+    // 사진에서 가게 메뉴를 하나도 못 찾았으면(사진을 못 읽음·메뉴에 없는 음식) "사진 모드"로 보지 않는다: 메뉴 고르게 규칙을 그대로 지킨다
+    // (예전에는 사진 메모만 있으면 규칙이 꺼져 삼합 주제만 둘 나오기도 했다. 검수 보고서 B-7).
+    const hints = { recentMenus, trends: trends.map(({ keyword }) => keyword), ...(photoMenus.size ? { photoMenus } : {}) };
     const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     // 무료 문안 AI의 분당 한도를 넘기지 않게 "다른 주제 보기" 간격을 지킨다(refreshPace.ts). 너무 빨리 다시 누르면 AI를 부르지 않고
