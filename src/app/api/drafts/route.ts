@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { createDraftRepository, withDraftLock } from "@/features/drafts/repository";
 import { DraftSchema, type Draft } from "@/features/drafts/schema";
+import { compactStudio } from "@/features/drafts/studioCompact";
+import { StudioSnapshotSchema } from "@/features/drafts/studio";
 import { selectedDraftMedia } from "@/features/drafts/selection";
 import { plannedAtFromPlanDate } from "@/features/drafts/planLink";
 import { PerformanceSchema } from "@/features/drafts/performance";
@@ -21,8 +23,13 @@ export async function GET(request: Request) { const denied=await ownerApiError()
 }
 
 export async function POST(request: Request) { const denied=await ownerApiError(); if(denied)return denied;
-  const parsed = DraftSchema.safeParse(await request.json().catch(()=>null));
+  const body=await request.json().catch(()=>null);
+  // 만들기 상태(studio)는 따로 확인한다: 모양이 틀려도 사진·글 저장은 막지 않고 만들기 상태만 버린다(다시 열면 예전처럼 그림만).
+  const { studio:rawStudio, ...fields }=body&&typeof body==="object"?body as Record<string,unknown>:{studio:undefined};
+  const parsed = DraftSchema.safeParse(fields);
   if (!parsed.success) return privateJson({ error: "게시물 내용을 확인해 주세요." }, { status: 400 });
+  const studioInput=rawStudio===undefined?null:StudioSnapshotSchema.safeParse(rawStudio);
+  if(studioInput&&!studioInput.success)console.warn("[drafts] 만들기 상태 모양이 맞지 않아 저장하지 않아요:",studioInput.error.issues.slice(0,3).map(issue=>issue.path.join(".")).join(", "));
   // 읽고 → 고쳐 → 쓰기는 게시물마다 한 번에 하나씩(withDraftLock): 동시에 온 저장이 예약·보관을 덮어쓰지 않게.
   return withDraftLock(parsed.data.id, async () => {
   const previous=await repository.readDraft(parsed.data.id);
@@ -31,7 +38,9 @@ export async function POST(request: Request) { const denied=await ownerApiError(
   const planned_publish_at=previous?previous.planned_publish_at??null:plannedAtFromPlanDate(plan_date);
   // 적어 둔 성과도 PATCH로만 바꾼다(이미지를 다시 저장해도 사라지지 않게 이전 값을 유지).
   // 보관함 여부도 PATCH(보관하기·꺼내기)로만 바꾼다(사진·글을 다시 저장해도 보관함에서 빠지지 않게).
-  return privateJson(await repository.saveDraft({...parsed.data,plan_date,planned_publish_at,final_review_complete:false,archived:previous?.archived??false,performance:previous?.performance}), { status: 201 });
+  // 함께 온 만들기 상태(구성안·밑바탕)는 그림을 줄여 저장한다. 없으면(글자 카드로 바꾼 사진 등) 예전 만들기 상태는 버린다(사진과 안 맞는다).
+  const studio=studioInput?.success?await compactStudio(studioInput.data):undefined;
+  return privateJson(statusOf(await repository.saveDraft({...parsed.data,studio,plan_date,planned_publish_at,final_review_complete:false,archived:previous?.archived??false,performance:previous?.performance})), { status: 201 });
   });
 }
 
