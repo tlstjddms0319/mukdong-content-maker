@@ -103,4 +103,12 @@ describe("explain reasons instead of promoting", () => {
       expect(plan.slides.slice(1,-1).some(slide=>slide.points.some(point=>point.includes("묵동홍어마을")))).toBe(false);
     }
   });
+
+  // 일반 사용자 비판 C1·C2: 표지 부제가 광고 말이면 고치게 하고, 이유 개수를 알려 끝이 보이게 한다.
+  it("tells how many reasons on the cover and flags ad words there", () => {
+    const plan=applyTrack(rainy([["빗소리가 전 부치는 소리 같아요",["그래서 전이 떠오른다고 해요"]],["막걸리 산미가 기름기를 씻어요",["신맛이 입안을 개운하게 해요"]],["쌀술이 입안을 부드럽게 해요",["단맛이 짠맛을 눌러 줘요"]],["비 오면 미나리전엔 막걸리예요",["빗소리에 전, 전엔 막걸리예요"]]]),"text");
+    expect(plan.slides[0].subline).toMatch(/· 이유 3가지$/);
+    expect(applyTrack(plan,"text").slides[0].subline).toBe(plan.slides[0].subline);
+    expect(slideCopyIssues(plan,"text").some(issue=>issue.slide===1&&issue.message.includes("'유혹'"))).toBe(true);
+  });
 });
