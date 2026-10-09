@@ -32,6 +32,15 @@ type CopyLimits={headline:number;coverHeadline:number;minPoints:number;point?:nu
 const DEFAULT_LIMITS:CopyLimits={headline:30,coverHeadline:30,minPoints:2};
 export const copyLimitsOf=(track?:CarouselTrack):CopyLimits=>track?{headline:TRACK_COPY[track].headline,coverHeadline:TRACK_COPY.cover.headline,minPoints:1,point:TRACK_COPY[track].point}:DEFAULT_LIMITS;
 
+// 큰 글씨만 훑는 독자를 위한 흐름 검사(갈래 게시물). 표지가 "왜"를 묻는데 본문 제목이 먹는 법이면 흐름이 끊긴다
+// (사장님 지적: "홍어랑 삼합은 왜 같이 먹을까?" 뒤에 "홍어를 묵은지에 가볍게 감싸요").
+const ASKS_WHY=/왜|이유/;
+// 먹는 법(지시·동작) 제목: 감싸요·싸 먹어요·올려요·찍어요·집어요·드세요 …. 이유를 말하는 말(때문·라서·덕분 …)이 있으면 답으로 본다.
+const HOW_TO=/(?:감싸|싸서|싸\s*먹|올려|얹어|찍어|집어|덜어|곁들여|드세요|드셔|드시|먹어\s*보|맛보세요)/;
+const GIVES_REASON=/때문|라서|해서|덕분|니까|으니|어서|아서|잡아|눌러|줄여|살려|채워|맞춰/;
+// 짧은 글이 그 장 제목·표지에 없는 새 음식을 꺼내는지 볼 낱말(가게 메뉴·곁들임).
+const SIDE_SUBJECTS=["묵은지","수육","초장","막걸리","미나리","과메기","애탕","무침","홍어찜","삼합"];
+
 export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCopyIssue[] {
   const limits=copyLimitsOf(track);
   const issues:SlideCopyIssue[]=[];
@@ -50,6 +59,14 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     // 갈래 게시물은 질문을 표지에서만 던진다. 본문 장 제목이 "왜 ~일까요?"면 짧은 글 한 줄로는 결과만 되풀이하기 쉽다(실제 사례:
     // "왜 물기가 생기지 않을까요?" + "물기가 없어 오래 보관해도 맛이 유지돼요"). 답을 제목으로, 이유·확인 방법을 짧은 글로 쓰게 한다.
     if(track&&slide.role!=="cover"&&/[?？]$/.test(headline))add(n,"headline","본문 장 제목은 질문 대신 이 장이 알려 주는 답(핵심 사실)을 해요체 문장으로 쓰고, 짧은 글에는 그 이유나 확인하는 방법을 쓰세요.");
+    if(track&&slide.role!=="cover"){
+      const cover=plan.slides[0]?.headline??"";
+      if(ASKS_WHY.test(cover)&&HOW_TO.test(headline)&&!GIVES_REASON.test(headline))add(n,"headline",`표지가 "${cover.trim()}"라고 이유를 묻는데 이 장 제목은 먹는 법이에요. 제목만 이어 읽어도 흐름이 이어지게 표지 질문의 이유(근거) 하나를 답하는 제목으로 바꾸세요.`);
+      for(const point of slide.points){
+        const fresh=SIDE_SUBJECTS.find(word=>point.includes(word)&&!headline.includes(word)&&!cover.includes(word));
+        if(fresh)add(n,"points",`요점 '${point.trim()}'이 제목·표지에 없는 '${fresh}' 이야기를 꺼내요. 이 장 제목을 뒷받침하는 내용만 쓰세요.`);
+      }
+    }
     // 카드는 게시 뒤 고칠 수 없으니 확인 안 된 사실·보장·가게 제공 단정을 검수 단계에서 먼저 고치게 한다.
     const claim=(text:string)=>{const result=checkTextClaims(text);return [...result.blocked,...result.verify,...servingClaimIssues(text)];};
     for(const message of claim(headline))add(n,"headline",`제목: ${message} 확인된 정보 없이 쓸 수 있는 말로 바꾸세요.`);
@@ -106,14 +123,17 @@ export function buildPlanReviewPrompt(plan:CarouselPlan,topic:string,issues:Slid
 ${found}
 
 [편집 기준]
-1. 각 장은 앞 장이 남긴 궁금증에 답하고 다음 장으로 이어집니다. 장끼리 같은 말이나 같은 정보를 반복하지 마세요.${context.track?" 질문은 표지에서만 던지고, 본문 장 제목은 답(핵심 사실), 짧은 글은 그 이유나 확인하는 방법입니다. 짧은 글이 제목의 결과를 말만 바꿔 되풀이하면 안 됩니다.":""}
+1. ${context.track?`(가장 중요) 독자는 큰 글씨(제목)만 훑고 넘깁니다. 표지 제목은 질문 하나, 본문 장 제목은 모두 그 표지 질문에 답하는 조각(이유·근거), 마지막 장 제목은 한 줄 결론입니다. 아래 [제목만 이어 읽기]가 표지 질문에 답하는 한 단락처럼 읽히게 고치세요. 표지 질문과 상관없는 제목(먹는 법·메뉴 정의·방문 안내)은 표지 질문의 이유로 바꾸세요. role은 장 위치일 뿐 내용 지시가 아닙니다. 짧은 글은 그 장 제목을 뒷받침하는 근거나 확인하는 방법 하나이고, 제목·표지에 없는 새 음식·새 이야기를 꺼내지 않으며, 제목의 결과를 말만 바꿔 되풀이하지 않습니다.`:"각 장은 앞 장이 남긴 궁금증에 답하고 다음 장으로 이어집니다."} 장끼리 같은 말이나 같은 정보를 반복하지 마세요.
 2. ${context.track?`본문 장 제목은 ${TRACK_COPY[context.track].headline}자 이내의 해요체 문장 하나(질문은 표지 제목만, ${TRACK_COPY.cover.headline}자 이내), 요점은 ${TRACK_COPY[context.track].point}자 이내의 해요체 완결 문장입니다. 글자 수를 늘리지 마세요.`:"제목은 12~30자의 해요체 문장이나 질문 하나, 요점은 12~28자의 해요체 완결 문장입니다."} 명사로 끝나는 슬로건, 광고 상투어, 느낌표 남발은 쓰지 마세요.
 3. ${heroLine(topic,context.menu??mainMenuOf(topic))}
 4. "입안의 리듬" 같은 추상적 비유 대신 눈이나 입으로 확인할 수 있는 구체적 관찰(색, 결, 식감, 먹는 순서)로 쓰세요.
 5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.
 6. 문제가 없는 장은 그대로 두세요. 장 수, 장 순서, 장마다 요점 개수(표지는 빈 배열)는 바꾸지 마세요. 표지의 points는 빈 배열입니다.
 
-[현재 문안]
+${context.track?`[제목만 이어 읽기]
+${plan.slides.map((slide,i)=>`${i+1}. ${slide.headline}`).join("\n")}
+
+`:""}[현재 문안]
 ${JSON.stringify(slides)}
 
 출력: {"slides":[{"headline":"...","points":["..."]}, ...]} 형식으로 모든 장을 순서대로.`;
