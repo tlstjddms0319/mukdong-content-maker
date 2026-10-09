@@ -135,9 +135,11 @@ describe("deck editing", () => {
 
 describe("image request schema for edited decks", () => {
   const base={topic:"홍어",count:1,styleAnchor:"따뜻한 조명의 홍어 한 상 사진",slide:{...createFallbackCarouselPlan({topic:"홍어",slideCount:5}).slides[1]}};
-  it("rejects a 4-card total unless the deck was edited", () => {
-    expect(ImageBriefSchema.safeParse({...base,slideIndex:2,slideTotal:4}).success).toBe(false);
-    expect(ImageBriefSchema.safeParse({...base,slideIndex:2,slideTotal:4,deckEdited:true}).success).toBe(true);
+  // 구성안 장 수는 3~10장(갈래 게시물은 AI가 4~9장 중 정한다). 그 밖의 장 수는 장을 고친 캐러셀만 받는다.
+  it("rejects a total outside 3 to 10 unless the deck was edited", () => {
+    expect(ImageBriefSchema.safeParse({...base,slideIndex:2,slideTotal:4}).success).toBe(true);
+    expect(ImageBriefSchema.safeParse({...base,slideIndex:2,slideTotal:2}).success).toBe(false);
+    expect(ImageBriefSchema.safeParse({...base,slideIndex:2,slideTotal:2,deckEdited:true}).success).toBe(true);
   });
   it("still checks the role order for untouched decks", () => {
     expect(ImageBriefSchema.safeParse({...base,slideIndex:3,slideTotal:5}).success).toBe(false);
