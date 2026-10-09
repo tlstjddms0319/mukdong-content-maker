@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CarouselPlan, CarouselRole, CarouselSlidePlan } from "./carousel";
-import { DEFAULT_DESIGN, type CardLayout, type DesignSpec } from "./design";
+import { DEFAULT_DESIGN, type CardLayout, type DesignSpec, type PaletteId } from "./design";
 import type { StyleId } from "./styleCatalog";
 import { CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, STORY_ARC_RULE, closingInvite } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
@@ -36,7 +36,20 @@ export function trackLayout(track:CarouselTrack,role:CarouselRole):CardLayout {
   if(role==="cover")return "fullscreen";
   return track==="photo"?"frame":"browser";
 }
-export const trackDesign=(track:CarouselTrack):DesignSpec=>({...DEFAULT_DESIGN,style:TRACK_STYLES[track]});
+export const trackDesign=(track:CarouselTrack,palette:PaletteId=DEFAULT_DESIGN.palette):DesignSpec=>({...DEFAULT_DESIGN,palette,style:TRACK_STYLES[track]});
+
+// 주제(표지 글)에 맞는 색 조합. 예전에는 갈래마다 한 벌(따뜻한 종이)로 고정이라 어느 주제든 같은 템플릿처럼 보였다(사장님 지적 2026-10-09).
+// 레이아웃·글자 크기는 그대로 두고 색만 주제 분위기로 바꾼다(그리는 쪽은 styles/trackLooks.ts). 앞에 있는 규칙이 먼저다.
+const TOPIC_PALETTES:ReadonlyArray<[RegExp,PaletteId]>=[
+  [/비\s*(?:오|가|내)|빗|장마|바다|과메기|생선|해산물|회\b/,"sea"],
+  [/막걸리|술|송년|연말|신년|밤|저녁|모임|퇴근/,"night"],
+  [/미나리|봄|무침|새콤|산뜻|채소|나물|입맛/,"herb"],
+  [/묵은지|발효|삭힌|삭히|삭혀|암모니아|톡\s*쏘/,"plum"],
+  [/애탕|탕|국물|찜|김장|수육|숙성|전통|잔치|명절|찬\s*바람|추운|겨울/,"clay"],
+];
+export function paletteForTopic(text:string):PaletteId {
+  return TOPIC_PALETTES.find(([pattern])=>pattern.test(text))?.[1]??"warm";
+}
 
 // ── 글 길이 맞추기 ─────────────────────────────────────────────────────────────────────
 // 한국어 카드 문장은 끝(서술어 "~요")이 있어야 읽힌다. 앞부분만 남기면 "처음이라면 덜 삭힌 쪽부터 작게"처럼 말이 끊기므로
@@ -201,7 +214,8 @@ export function applyTrack(plan:CarouselPlan,track:CarouselTrack,options:{copy?:
   const slides:CarouselPlan["slides"]=plan.slides.map(slide=>({
     ...slide,...(copy?fitTrackCopy(slide,track):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
   }));
-  return {...plan,design:trackDesign(track),slides:copy?withClosingInvite(slides,track):slides};
+  const cover=plan.slides[0];
+  return {...plan,design:trackDesign(track,paletteForTopic(`${cover?.headline??""} ${cover?.subline??""}`)),slides:copy?withClosingInvite(slides,track):slides};
 }
 
 // 마지막(결론) 장의 짧은 글 맨 끝을 "미나리전과 막걸리를 묵동홍어마을에서 즐겨 보세요"로 맺는다(사장님 요청 2026-10-09).

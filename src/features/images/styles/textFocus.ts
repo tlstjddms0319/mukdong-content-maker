@@ -2,7 +2,8 @@ import sharp, { type OverlayOptions } from "sharp";
 import { croppedPhoto, svgLayer, textLayer, type CardRenderer, type Layer } from "../render/primitives";
 import { textureLayer } from "../decor";
 import { contentOf, emphasisOf, snap, type StyleContent } from "./shared";
-import { SANS, SANS_BOLD, SANS_SEMI, TITLE_SERIF, TRACK_SURFACES, countLines, fitLines, folioMark, footerRow, logoMark, storeCardBlock, type TrackSurface } from "./trackKit";
+import { SANS, SANS_BOLD, SANS_SEMI, TITLE_SERIF, countLines, fitLines, folioMark, footerRow, logoMark, storeCardBlock, type TrackSurface } from "./trackKit";
+import { TRACK_LOOKS, trackLookOf, type TrackLook } from "./trackLooks";
 
 // 글 중심(갈래 "글"). 큰 글자 세 줄이면 끝나는 카드: 본문 장은 사진 없이 제목 한 줄(84px 이상) + 짧은 글 두 줄까지(62px).
 // 예전(제목 64px·짧은 글 52px)은 글 덩어리가 작아 글 아래로 큰 빈 띠(330px)가 남았다. 글자를 키우고 큰 장 번호와 글을
@@ -13,8 +14,8 @@ import { SANS, SANS_BOLD, SANS_SEMI, TITLE_SERIF, TRACK_SURFACES, countLines, fi
 //   마지막 장 : 크림 바탕에 제목·짧은 글, 아래에 크게 놓은 원형 로고와 계정·"저장해 두고 다시 보세요"(가게 명함).
 // 줄 수는 그린 결과로 센다: 제목이 두 줄로 접히면 짧은 글을 하나만, 세 줄이면 짧은 글 없이(합쳐서 세 줄 이내).
 const X=76,W=1080-X*2;
-const BODY_ORDER=[TRACK_SURFACES.cream,TRACK_SURFACES.mustard,TRACK_SURFACES.brown] as const;
-export const textSurfaceOf=(index:number):TrackSurface=>BODY_ORDER[((index-2)%3+3)%3];
+// 색은 구성안의 색 조합을 따른다(trackLooks.ts). 본문 장은 밝은 → 중간 → 짙은 바탕을 차례로 돌린다.
+export const textSurfaceOf=(index:number,look:TrackLook=TRACK_LOOKS.warm):TrackSurface=>[look.light,look.mid,look.dark][((index-2)%3+3)%3];
 const LINE_SIZE=62,LINE_SPACING=18;
 
 // 줄 수만 재는 측정. 한글 음절을 같은 폭의 "홍"으로 바꿔 재므로(한글 글꼴은 음절 폭이 같다) 재기만 하고 버린 글이
@@ -46,8 +47,8 @@ async function textBlock(content:StyleContent,surface:TrackSurface,options:{alig
 // ── 본문 장 ──────────────────────────────────────────────────────────────────────────
 // 큰 장 번호(함렛 명조 300px, 강조색) → 짧은 선 → 제목 → 짧은 글을 한 덩어리로 바닥글 위 남는 높이의 가운데에 둔다.
 // 큰 번호는 순서를 한눈에 알려 주는 장 번호이자, 글 세 줄뿐인 카드의 빈자리를 의도한 여백으로 보이게 하는 장식이다.
-async function body(content:StyleContent,index:number):Promise<Buffer> {
-  const surface=textSurfaceOf(index);
+async function body(content:StyleContent,index:number,look:TrackLook):Promise<Buffer> {
+  const surface=textSurfaceOf(index,look);
   const block=await textBlock(content,surface,{align:"left",sizes:[112,108,104,100,96,92,88,84]});
   const numeral=await textLayer(String(index).padStart(2,"0"),{size:300,color:surface.accent,width:600,height:400,font:TITLE_SERIF,features:"tnum",letterSpacing:-6,spacing:0});
   const foot=await footerRow({color:surface.dim,cueColor:surface.ink,ring:surface.name==="brown"?surface.ring:undefined,cue:!content.last,left:X,right:X});
@@ -69,8 +70,8 @@ async function body(content:StyleContent,index:number):Promise<Buffer> {
 }
 
 // ── 마지막 장(가게 명함) ─────────────────────────────────────────────────────────────────
-async function last(content:StyleContent,index:number):Promise<Buffer> {
-  const surface=TRACK_SURFACES.cream;
+async function last(content:StyleContent,index:number,look:TrackLook):Promise<Buffer> {
+  const surface=look.light;
   const block=await textBlock(content,surface,{align:"centre",sizes:[96,92,88,84]});
   const card=await storeCardBlock({logoSize:300,wordmark:false,surface,halo:{color:surface.soft,pad:36}});
   const folio=await folioMark(index,surface.accent,{rule:false});
@@ -92,8 +93,8 @@ async function last(content:StyleContent,index:number):Promise<Buffer> {
 }
 
 // ── 표지 ──────────────────────────────────────────────────────────────────────────────
-async function cover(photo:Buffer|undefined,content:StyleContent):Promise<Buffer> {
-  const panel=TRACK_SURFACES.brown;
+async function cover(photo:Buffer|undefined,content:StyleContent,look:TrackLook):Promise<Buffer> {
+  const panel=look.dark;
   const title=await fitLines(content.headline,{sizes:[100,92,86,80,74],width:W,font:SANS_BOLD,color:panel.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.06),letterSpacing:size=>-size*.02,emphasis:emphasisOf(content,panel.accent)});
   const sub=content.subline?await textLayer(content.subline,{size:40,color:panel.accent,width:W,height:4000,font:SANS_SEMI,spacing:10}):null;
   const foot=await footerRow({color:panel.dim,cueColor:panel.ink,ring:panel.ring,cue:!content.last,left:X,right:X});
@@ -123,10 +124,11 @@ async function cover(photo:Buffer|undefined,content:StyleContent):Promise<Buffer
   return sharp({create:{width:1080,height:1350,channels:3,background:panel.bg}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();
 }
 
-export const renderTextFocus:CardRenderer=async(inputs,slide,index,total)=>{
+export const renderTextFocus:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const content=contentOf(slide,inputs,index,total);
+  const look=trackLookOf(palette);
   // 표지만 사진을 쓴다. 본문 장은 사진이 들어와도(예전 초안·사진 장 레이아웃) 쓰지 않는다 — 글 중심은 글이 주인공.
-  if(content.cover)return cover(inputs[0],content);
-  if(content.last)return last(content,index);
-  return body(content,index);
+  if(content.cover)return cover(inputs[0],content,look);
+  if(content.last)return last(content,index,look);
+  return body(content,index,look);
 };

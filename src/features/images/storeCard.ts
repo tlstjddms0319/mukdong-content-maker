@@ -11,6 +11,7 @@ import { readCustomPoster } from "@/features/store/posterStore";
 import { FONTS, blob, brandHandle, canvas, currentTone, sparkles, svgLayer, textLayer, withRenderContext, type Font, type Layer } from "./render/primitives";
 import { contactShadow, doodleArrow, mascotLayer, propLayer, textureLayer, type PropName, type TextureName } from "./decor";
 import { STYLE_FONTS, brandSeal, snap } from "./styles/shared";
+import { trackLookOf } from "./styles/trackLooks";
 
 // 가게 홍보 카드: 모든 캐러셀 맨 뒤에 자동으로 붙는 "묵동홍어마을" 한 장(사장님 결정: 내용 장은 그대로, 맨 뒤에 한 장 더).
 // 이미지 AI를 부르지 않고 코드로만 그린다(비용 없음). 장 고치기에서 뺄 수 있게 생성 흐름이 따로 붙인다(이 파일은 그리기만).
@@ -115,7 +116,13 @@ const styleOf=(design?:DesignSpecInput):StyleId=>{
 };
 export const storeTokensOf=(design?:DesignSpecInput):StoreTokens=>{
   const style=styleOf(design);
-  return style==="template"?templateTokens(paletteOf(design)):STORE_TOKENS[style];
+  if(style==="template")return templateTokens(paletteOf(design));
+  // 두 갈래의 홍보 카드도 카드들과 같은 색 묶음(주제마다 바뀌는 색, styles/trackLooks.ts)을 따른다. 사진 중심은 밝은 종이, 글 중심은 짙은 바탕.
+  if(style==="photo-focus"||style==="text-focus"){
+    const look=trackLookOf(paletteOf(design)),surface=style==="photo-focus"?look.light:look.dark;
+    return {...STORE_TOKENS[style],base:surface.bg,surface:surface.bg,ink:surface.ink,sub:surface.dim,accent:surface.accent,chip:surface.chip,seal:isLight(surface.bg)?"light":"dark"};
+  }
+  return STORE_TOKENS[style];
 };
 
 // ── 그리기 ──────────────────────────────────────────────────────────────────────────────
@@ -441,14 +448,14 @@ const DECOR:Record<StyleId,(input:DecoInput)=>Deco>={
       +`<circle cx="${mascotCenter(places).cx}" cy="${mascotCenter(places).cy}" r="${Math.min(mascotCenter(places).r*.95,320)}" fill="#EDEDED"/>`,over:""};
   },
   // 사진 중심: 크림 종이에 한 톤 짙은 큰 원(접시 자리)과 워드마크 아래 짧은 적갈 선.
-  "photo-focus":({places})=>{
-    const w=places.word,m=mascotCenter(places);
-    return {under:`<rect x="${540-36}" y="${w.y+w.h+22}" width="72" height="6" rx="3" fill="#A9472A"/><circle cx="${m.cx}" cy="${m.cy}" r="${Math.min(m.r*.95,320)}" fill="#EAE0D0"/>`,over:""};
+  "photo-focus":({places,palette})=>{
+    const w=places.word,m=mascotCenter(places),paper=trackLookOf(palette).light;
+    return {under:`<rect x="${540-36}" y="${w.y+w.h+22}" width="72" height="6" rx="3" fill="${paper.accent}"/><circle cx="${m.cx}" cy="${m.cy}" r="${Math.min(m.r*.95,320)}" fill="${paper.soft}"/>`,over:""};
   },
   // 글 중심: 밤색 바탕에 한 톤 밝은 큰 원과 겨자 막대.
-  "text-focus":({places})=>{
-    const w=places.word,m=mascotCenter(places);
-    return {under:`<rect x="${540-36}" y="${w.y+w.h+22}" width="72" height="8" rx="4" fill="#E9BC5C"/><circle cx="${m.cx}" cy="${m.cy}" r="${Math.min(m.r*.95,320)}" fill="#5C4844"/>`,over:""};
+  "text-focus":({places,palette})=>{
+    const w=places.word,m=mascotCenter(places),panel=trackLookOf(palette).dark;
+    return {under:`<rect x="${540-36}" y="${w.y+w.h+22}" width="72" height="8" rx="4" fill="${panel.accent}"/><circle cx="${m.cx}" cy="${m.cy}" r="${Math.min(m.r*.95,320)}" fill="${panel.soft}"/>`,over:""};
   },
 };
 

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildCarouselPlanPrompt, createFallbackCarouselPlan, planCarousel, type CarouselPlan } from "@/features/images/carousel";
 import { photosNeeded, normalizeCardLayout } from "@/features/images/design";
 import { PICKABLE_STYLES, STYLE_OPTIONS, TRACK_STYLES as TRACK_ONLY, styleCatalogText } from "@/features/images/styleCatalog";
-import { TRACK_COPY, TRACK_FIT, applyTrack, fitLine, splitHeadline, trackPointCount, trackPointRoom, type CarouselTrack } from "@/features/images/track";
+import { TRACK_COPY, TRACK_FIT, applyTrack, paletteForTopic, fitLine, splitHeadline, trackPointCount, trackPointRoom, type CarouselTrack } from "@/features/images/track";
 import { pickFittingStyle } from "@/features/images/variety";
 import { rotateStyles } from "@/features/topics/monthPlan";
 import { slideCopyIssues } from "@/features/images/planReview";
@@ -33,7 +33,8 @@ const wholeWords=(short:string,original:string)=>words(short).every(word=>words(
 function expectTrackRules(plan:CarouselPlan,track:CarouselTrack){
   expect(plan.slideCount).toBe(5);
   expect(plan.slides).toHaveLength(5);
-  expect(plan.design).toEqual({palette:"warm",style:track==="photo"?"photo-focus":"text-focus",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none"});
+  // 색 조합은 표지 글(주제)로 고른다(paletteForTopic). 나머지 디자인은 갈래가 정한 그대로.
+  expect(plan.design).toEqual({palette:paletteForTopic(`${plan.slides[0].headline} ${plan.slides[0].subline??""}`),style:track==="photo"?"photo-focus":"text-focus",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none"});
   const photos=plan.slides.map(slide=>photosNeeded(normalizeCardLayout(slide)));
   expect(photos).toEqual(track==="photo"?[1,1,1,1,1]:[1,0,0,0,0]);
   expect(plan.slides[0].layout).toBe("fullscreen");
@@ -298,5 +299,16 @@ describe("headlines alone answer the cover question", () => {
     const prompt=buildPlanReviewPrompt(drifting,"홍어랑 삼합은 왜 같이 먹을까?",slideCopyIssues(drifting,"text"),{track:"text"});
     expect(prompt).toContain("[제목만 이어 읽기]\n1. 홍어랑 삼합은 왜 같이 먹을까?\n2. 홍어는 톡 쏘는 향이 강해요\n3. 홍어를 묵은지에 가볍게 감싸요");
     expect(prompt).toContain("표지 질문과 상관없는 제목(먹는 법·메뉴 정의·방문 안내)은 표지 질문의 이유로 바꾸세요");
+  });
+});
+
+describe("track colors follow the topic", () => {
+  it("picks a palette from the cover question", () => {
+    expect(paletteForTopic("비 오는 날 미나리전엔 왜 막걸리가 생각날까?")).toBe("sea");
+    expect(paletteForTopic("막걸리의 날엔 어떤 안주가 어울릴까?")).toBe("night");
+    expect(paletteForTopic("입맛 없을 때 새콤한 홍어무침은 어떤 맛일까?")).toBe("herb");
+    expect(paletteForTopic("홍어는 왜 삭히면 톡 쏠까?")).toBe("plum");
+    expect(paletteForTopic("찬바람 불면 홍어애탕은 어떤 국물일까?")).toBe("clay");
+    expect(paletteForTopic("홍어를 처음 먹는다면 얼마나 올릴까?")).toBe("warm");
   });
 });

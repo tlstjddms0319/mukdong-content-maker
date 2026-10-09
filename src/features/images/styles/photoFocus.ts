@@ -3,7 +3,8 @@ import { croppedPhoto, finishPhoto, svgLayer, textLayer, type CardRenderer } fro
 import { registerPhoto } from "../render/audit";
 import { shadowLayer, textureLayer } from "../decor";
 import { contentOf, emphasisOf, snap, type StyleContent } from "./shared";
-import { MARGIN, ON_PHOTO, SANS, SHADE, TITLE_SERIF, TRACK_SURFACES, fitLines, folioMark, footerRow, logoMark, shortLines, storeCardBlock } from "./trackKit";
+import { MARGIN, ON_PHOTO, SANS, SHADE, TITLE_SERIF, TRACK_SURFACES, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines, storeCardBlock } from "./trackKit";
+import { trackLookOf } from "./trackLooks";
 import { renderTextFocus } from "./textFocus";
 
 // 사진 중심(갈래 "사진"). 사진을 그냥 붙이지 않고 한 가지 고급 모양으로 다듬는다.
@@ -97,7 +98,7 @@ async function bleed(photo:Buffer,content:StyleContent,index:number):Promise<Buf
 // ── 액자(짝수 본문 장·마지막 장) ──────────────────────────────────────────────────────────
 // 크림 종이에 리넨 결을 옅게 깔고, 위쪽에 둥근 모서리(28px) 큰 사진과 부드러운 그림자. 사진 높이는 아래 글이 차지하고 남는 높이.
 // 마지막 장은 사진 아래 글 + 명함 판(한 톤 짙은 크림 위에 로고·가게 이름·계정·저장 알약)을 둔다.
-async function framed(photo:Buffer,content:StyleContent,index:number):Promise<Buffer> {
+async function framed(photo:Buffer,content:StyleContent,index:number,PAPER:TrackSurface):Promise<Buffer> {
   const X=64,TOP=64,W=1080-X*2,R=28;
   const title=await bodyTitle(content,PAPER.ink,PAPER.accent);
   const line=shortLines(content,1)[0];
@@ -140,7 +141,8 @@ export const renderPhotoFocus:CardRenderer=async(inputs,slide,index,total,palett
   if(!inputs.length)return renderTextFocus(inputs,slide,index,total,palette);
   const content=contentOf(slide,inputs,index,total);
   if(content.cover)return cover(inputs[0],content);
-  if(content.last||index%2===0)return framed(inputs[0],content,index);
+  // 액자 장의 종이 색은 구성안의 색 조합을 따른다(trackLooks.ts, 주제마다 바뀐다).
+  if(content.last||index%2===0)return framed(inputs[0],content,index,trackLookOf(palette).light);
   return bleed(inputs[0],content,index);
 };
 
