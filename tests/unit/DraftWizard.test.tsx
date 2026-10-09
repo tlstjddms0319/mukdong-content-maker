@@ -4,7 +4,7 @@ import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DraftWizard } from "@/components/wizard/DraftWizard";
-import { resetGenerationStore } from "@/features/images/generationStore";
+import { addLibraryPhoto, resetGenerationStore } from "@/features/images/generationStore";
 
 // 새 3단계 화면(1 무엇을 올릴까요 → 2 만들기 → 3 확인하고 올리기)과 자동 만들기 흐름.
 // fetch는 주소별 처리기로 흉내 낸다. 처리기가 FAIL을 돌려주면 ok:false 응답이 된다.
@@ -550,6 +550,26 @@ describe("DraftWizard",()=>{
     expect(secondSave.id).not.toBe(firstSave.id);
     expect(calls(request,"/api/copy").at(-1)).toMatchObject({topic:"막걸리와 즐기는 저녁 한 상"});
     expect(calls(request,"/api/copy").at(-1)).not.toHaveProperty("contentBrief");
+  });
+
+  // 검수 보고서: 2단계에서 사진을 넣어 두고 1단계로 돌아가 다른 주제를 고르면 사진이 묻지 않고 사라졌다.
+  it("asks before another topic throws away photos put in step 2 but not made yet",async()=>{
+    vi.stubGlobal("fetch",api(makingRoutes("photo")));render(<DraftWizard/>);
+    const next=await screen.findByRole("button",{name:"다음"});
+    await waitFor(()=>expect(next).toBeEnabled(),{timeout:5000});
+    fireEvent.click(next);
+    act(()=>{addLibraryPhoto({id:"p1",preview:"data:image/jpeg;base64,P1",name:"홍어무침"});});
+    expect(await screen.findByRole("list",{name:"고른 사진"})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"1 무엇을 올릴까요"}));
+    const cards=await screen.findAllByRole("button",{pressed:false});
+    const other=cards.find(card=>card.classList.contains("topic-card"))!;
+    const confirm=vi.fn(()=>false);vi.stubGlobal("confirm",confirm);
+    fireEvent.click(other);
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("저장하지 않은 사진"));
+    // 취소하면 주제도 사진도 그대로.
+    expect(other).toHaveAttribute("aria-pressed","false");
+    fireEvent.click(screen.getByRole("button",{name:"다음"}));
+    expect(screen.getByRole("list",{name:"고른 사진"}).querySelectorAll("li")).toHaveLength(1);
   });
 
   it("stops the old post when the owner picks another topic while it is still saving",async()=>{

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
+import { meaningfulPhotoName } from "@/features/images/photoName";
 import { assembleTopics, fallbackTopics, isOtherMenuTopic, normalizeTrendLabels, overusedMenus, suggestTopics, titleMenu, topicMenu } from "@/features/topics/service";
 import { menusForDate } from "@/features/store/menu";
 import { seasonContext } from "@/features/topics/season";
@@ -266,8 +267,35 @@ describe("topics from the owner's photos", () => {
     expect(assembleTopics(ai,base).filled).toBe(2);
   });
 
-  it("fills prepared topics with the photographed menu first", () => {
+  it("fills prepared topics with the photographed menu first, more than once when there are several", () => {
     const topics=fallbackTopics(0,[],undefined,[],{photoMenus:new Set(["gwamegi"])});
     expect(topicMenu(topics[0])?.id).toBe("gwamegi");
+    // 예전에는 같은 메뉴를 한 번만 골라, 사진 메뉴 주제가 셋 중 하나뿐이었다(검수 보고서 B-7).
+    expect(topics.filter(topic=>topicMenu(topic)?.id==="gwamegi").length).toBeGreaterThanOrEqual(2);
+  });
+
+  // 검수 보고서 B-7: AI가 사진과 상관없는 주제를 줘도 "사진을 보고 고른 주제"로 나왔다.
+  it("does not keep AI topics about a menu that is not in the photo", () => {
+    const muchim=(title:string)=>({...make(title),summary:"붉은 양념의 홍어무침 한 접시에서 시작해 새콤한 맛과 어울리는 곁들임을 확인한 뒤 소개합니다."});
+    const aetang={...make("추운 날엔 왜 탕이 당길까?"),summary:"뜨끈한 홍어애탕 한 그릇에서 시작해 국물 맛과 건더기를 확인한 뒤 소개합니다."};
+    const {topics,rejected}=assembleTopics([muchim("홍어무침은 왜 새콤할까?"),aetang,muchim("홍어무침엔 왜 막걸리가 어울릴까?")],{...base,hints:{photoMenus:new Set(["hongeo-muchim"])}});
+    expect(topics.map(topic=>topic.title)).not.toContain("추운 날엔 왜 탕이 당길까?");
+    expect(rejected.photo).toBe(1);
+  });
+
+  it("keeps the menu-variety rules when no store menu was found in the photo", () => {
+    const samhap=(title:string)=>({...make(title),summary:"홍어 삼합 한 상에서 시작해 수육과 묵은지를 곁들이는 순서를 확인한 뒤 소개합니다."});
+    const ai=[samhap("삼합은 왜 셋이 함께일까?"),samhap("삼합은 어떤 순서로 먹을까?"),samhap("삼합엔 왜 묵은지일까?")];
+    // 빈 사진 메뉴 목록 = 사진 모드 아님: 삼합 주제가 겹치면 다른 메뉴 주제로 바뀐다.
+    expect(assembleTopics(ai,{...base,hints:{photoMenus:new Set<string>()}}).filled).toBeGreaterThan(0);
+  });
+});
+
+describe("photo file names as topic hints", () => {
+  it("uses only names a person gave the photo", () => {
+    expect(meaningfulPhotoName("홍어무침.jpg")).toBe("홍어무침");
+    expect(meaningfulPhotoName("미나리전_한_접시.png")).toBe("미나리전 한 접시");
+    for(const name of ["IMG_1234.JPG","KakaoTalk_20261009_123456789.jpg","스크린샷 2026-10-09 오후 3.12.45.png","사진 3.jpg","PXL_20261009.jpg","image.png","1696812345678.jpg"])
+      expect(meaningfulPhotoName(name),name).toBe("");
   });
 });

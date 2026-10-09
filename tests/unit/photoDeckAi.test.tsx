@@ -3,14 +3,17 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
-import { addLibraryPhoto, buildPhotoCarousel, ensureGeneration, redoSlide, redoSlideKind, resetGenerationStore, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
+import { addLibraryPhoto, buildPhotoCarousel, ensureGeneration, redoSlide, redoSlideKind, resetGenerationStore, resumePhotoCarousel, sceneNoticeOf, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
 import { buildImagePrompt } from "@/features/images/openaiRequest";
 import { ImageBriefSchema } from "@/features/images/schema";
 
 const photo="data:image/jpeg;base64,MUCHIM";
 const card=(n:number)=>`data:image/jpeg;base64,CARD${n}`;
 
+// mode.ai: 이미지 AI가 그리는지, mode.failCompose: 이 번호(slideIndex)의 사진 카드를 서버가 못 그린 것으로.
+const mode={ai:true,failCompose:0};
 function stub(aiWorks:boolean){
+  mode.ai=aiWorks;mode.failCompose=0;
   const plan=createFallbackCarouselPlan({topic:"홍어무침엔 왜 막걸리일까?",slideCount:5});
   const bodies:Array<Record<string,unknown>>=[];
   let n=0;
@@ -19,8 +22,9 @@ function stub(aiWorks:boolean){
     if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
     if(url!=="/api/images/generate")return {ok:false,json:async()=>({})};
     const body=JSON.parse(String(init?.body));bodies.push(body);
-    if(body.referenceImage)return aiWorks?{ok:true,json:async()=>({images:[card(100+ ++n)],baseImages:[["data:image/jpeg;base64,BASE"]],source:"ai-edited"})}:{ok:false,json:async()=>({message:"Higgsfield 크레딧이 부족해요."})};
-    return {ok:true,json:async()=>({images:[card(++n)],source:"photo"})};
+    if(body.referenceImage)return mode.ai?{ok:true,json:async()=>({images:[card(100+ ++n)],baseImages:[["data:image/jpeg;base64,BASE"]],source:"ai-edited"})}:{ok:false,json:async()=>({message:"Higgsfield 크레딧이 부족해요."})};
+    if(body.slideIndex===mode.failCompose)return {ok:false,json:async()=>({message:"카드를 만들지 못했어요."})};
+    return {ok:true,json:async()=>({images:[card(++n)],source:body.photos?"photo":"design"})};
   }));
   return bodies;
 }
@@ -68,6 +72,59 @@ describe("photo deck with too few photos", () => {
     expect(state.slides.every(slide=>slide.source!=="ai-edited")).toBe(true);
     expect(state.photoViews.flat().some(view=>view!=="full")).toBe(true);
     expect(state.error).toBe("");
+  });
+
+  // 검수 보고서 B-3: 사진 1장이면 사진을 두 번(가까이·결 확대)까지만 다시 써서, 5장 중 2장이 글자 카드였다.
+  it("fills every body slide with an AI scene from a single photo", async () => {
+    const bodies=stub(true);
+    const hook=await build();
+    const state=hook.result.current;
+    expect(bodies.filter(body=>body.referenceImage)).toHaveLength(4);
+    expect(state.slides.slice(1).every(slide=>slide.source==="ai-edited")).toBe(true);
+    expect(state.sceneMisses).toEqual([]);
+    expect(sceneNoticeOf(state)).toBe("");
+  });
+
+  // 검수 보고서 B-4: AI가 못 그려도 조용히 바뀌어 사장님은 이유를 몰랐다.
+  it("tells the owner which slides the AI could not draw and why, and redraws one with the AI on request", async () => {
+    stub(false);
+    const hook=await build();
+    let state=hook.result.current;
+    expect(state.sceneMisses.map(miss=>miss.index)).toEqual([1,2,3,4]);
+    expect(sceneNoticeOf(state)).toContain("AI 그림 4장");
+    expect(sceneNoticeOf(state)).toContain("Higgsfield 크레딧이 부족해요.");
+    // 사진을 세 번 넘게 쓰는 자리는 확대 사진이 앞 장과 똑같아지므로 글자 카드(사진 없는 장)로 그린다.
+    const zoomed=state.photoViews.flatMap((views,i)=>views.some(view=>view!=="full")?[i]:[]);
+    expect(zoomed).toHaveLength(2);
+    const text=[1,2,3,4].filter(i=>!zoomed.includes(i));
+    for(const i of text){expect(state.photoAssignment[i]).toEqual([]);expect(state.plan!.slides[i].layout).toBe("browser");expect(state.slides[i].source).toBe("design");}
+    // 글자 카드로 바뀐 장에서 "이 장 다시 만들기" → 같은 사진을 참고해 원래 모양(사진 장)으로 AI가 다시 그린다.
+    mode.ai=true;
+    act(()=>setActiveSlide(text[0]));
+    expect(redoSlideKind(hook.result.current)).toBe("scene");
+    await act(async()=>{await redoSlide();});
+    state=hook.result.current;
+    expect(state.slides[text[0]].source).toBe("ai-edited");
+    expect(state.plan!.slides[text[0]].layout).toBe("frame");
+    expect(state.sceneMisses.map(miss=>miss.index)).not.toContain(text[0]);
+    expect(sceneNoticeOf(state)).toContain("AI 그림 3장");
+  });
+
+  it("keeps AI scenes already drawn when a stopped photo deck is resumed", async () => {
+    const bodies=stub(true);
+    mode.failCompose=1;
+    const hook=renderHook(()=>useGenerationState());
+    act(()=>{ensureGeneration("ai-resume|5",{topic:"홍어무침엔 왜 막걸리일까?",slideCount:5,track:"photo"});addLibraryPhoto({id:"p1",preview:photo,name:"홍어무침"});});
+    await act(async()=>{await buildPhotoCarousel();});
+    // 표지(사진 카드)를 못 그려 멈췄다. 그사이 함께 그리던 AI 장은 이미 그렸다.
+    expect(hook.result.current.slides).toHaveLength(0);
+    const drawn=bodies.filter(body=>body.referenceImage).length;
+    expect(drawn).toBeGreaterThan(0);
+    mode.failCompose=0;
+    await act(async()=>{await resumePhotoCarousel();});
+    await waitFor(()=>expect(hook.result.current.slides).toHaveLength(5));
+    // 다시 해 보기에서 이미 그린 AI 장은 다시 그리지 않는다(이미지 AI 비용이 두 번 들지 않게). 본문 4장 = AI 호출 4번.
+    expect(bodies.filter(body=>body.referenceImage)).toHaveLength(4);
   });
 
   it("tells the image AI to keep the dish but build the slide's own scene", () => {
