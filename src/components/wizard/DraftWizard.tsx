@@ -116,7 +116,7 @@ export function DraftWizard() {
   // 아직 저장하지 않은 작업: 이 게시물을 만드는 중이거나(사진·저장·글), 글을 고치고 저장하기 전.
   const autoBusy=generationMine&&(generation.auto.stage==="working"||generation.auto.stage==="saving"||generation.auto.stage==="writing");
   const paidWork=generationMine&&(generation.phase!=="idle"||autoBusy);
-  // 이 게시물을 지금 만드는 중인지(자동 만들기·이 장 다시 만들기). 다른 주제·새로 만들기로 옮기기 전에 따로 묻는다.
+  // 이 게시물을 지금 만드는 중인지(자동 만들기·장 고치기). 다른 주제·새로 만들기로 옮기기 전에 따로 묻는다.
   const running=generationMine&&isGenerating(generation);
   // 만들기 화면에 사진을 넣어 두고 아직 만들지 않았으면 그 사진도 저장 안 한 것으로 본다. 다른 주제를 고르면 새 게시물로 바뀌어
   // 사진이 묻지 않고 사라졌다(검수 보고서: 2단계 사진 사라짐). 이제는 바꾸기 전에 한 번 묻는다.
@@ -297,7 +297,7 @@ export function DraftWizard() {
       if(stepRef.current==="image")setStep("review");
     });
   },[auto]);
-  // 3단계에서 장을 다시 만들거나(이 장 다시 만들기) 장 고치기·글자 고치기를 하면, 다 그린 뒤 저절로 다시 저장한다.
+  // 3단계에서 장을 다시 만들거나(장 고치기) 장 넣기·빼기를 하면, 다 그린 뒤 저절로 다시 저장한다.
   const deckToSave=step==="review"&&generationMine&&!generation.approved&&generation.phase==="idle"&&deckComplete(generation)&&!storeCardPending(generation)?approvedDeck(generation):null;
   const deckChanged=Boolean(deckToSave&&deckToSave.map(image=>image.id).join("|")!==images.map(image=>image.id).join("|"));
   const saveImagesRef=useRef(saveImages);
@@ -335,7 +335,7 @@ export function DraftWizard() {
             setStep("image");
             return;
           }
-          // 확인 화면의 "이 장 다시 만들기"처럼 저장된 게시물을 고치는 중이면 그 게시물을 다시 연다.
+          // 확인 화면의 "장 고치기"처럼 저장된 게시물을 고치는 중이면 그 게시물을 다시 연다.
           requestedId=runningId;
         }
       }

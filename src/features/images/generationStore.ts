@@ -16,7 +16,7 @@ import { rememberCurrentDraft, saveDraftCaption, saveDraftImages, writePostText,
 // 화면(만들기 2·3단계)이 언마운트돼도 상태와 진행 중인 fetch 루프는 살아 있고, 다시 마운트되면 그대로 이어 붙는다.
 // 새로고침을 하면 사라진다(모듈이 다시 로드되므로). 그 경우는 서버 작업 큐가 필요하다.
 // 예전 이미지 화면(방식 4개·계열/테마/글꼴/계절 고르기·표지 후보·파노라마·참고 사진)이 쓰던 상태와 함수는 화면과 함께 지웠다(간소화 C).
-// 지금은 자동 만들기(사진 묶음 또는 AI) → 확인 화면의 이 장 다시 만들기·장 고치기·글자 고치기만 이 상태를 쓴다.
+// 지금은 자동 만들기(사진 묶음 또는 AI) → 확인 화면의 장 고치기(그림·글)·장 넣기·빼기·글자 고치기만 이 상태를 쓴다.
 
 // check: AI 표지 점검 결과(coverCheck.ts).
 // bases: 글자를 얹기 전 밑바탕 사진(AI 이미지). 카드 글자만 고쳐 다시 그릴 때 쓴다. 초안에는 저장하지 않는다(화면에서만).
@@ -56,7 +56,7 @@ export type GenerationState={
   deckEdited:boolean;            // 사용자가 완성된 묶음에서 장을 빼거나 넣었는지. 그러면 장 수는 설정값이 아니라 지금 장 수다.
   deckStatus:string;             // 장을 빼고 넣은 뒤 장 번호를 다시 그리는 동안의 진행 안내.
   photoSceneOnly:number[];       // 사진 중심에서 AI 장면으로만 채운 장(같은 사진을 세 번 넘게 쓰는 자리). AI가 못 그리면 글자 카드로 그린다.
-  // AI 장면을 못 그려 확대 사진·글자 카드로 대신한 장(검수 보고서 B-4). 화면이 안내하고, "이 장 다시 만들기"는 이 장을 AI로 다시 그린다.
+  // AI 장면을 못 그려 확대 사진·글자 카드로 대신한 장(검수 보고서 B-4). 화면이 안내하고, "장 고치기 → 그림"은 이 장을 AI로 다시 그린다.
   // photo: 참고한 사장님 사진, layout: AI로 그릴 때의 모양(글자 카드로 바뀌었으면 되돌린다), reason: 못 그린 이유(서버의 쉬운 말).
   sceneMisses:SceneMiss[];
   // 맨 뒤 가게 홍보 카드(사장님 결정: 모든 묶음 끝에 "묵동홍어마을" 홍보 카드 한 장, 이미지 AI 비용 없음).
@@ -210,7 +210,8 @@ function requestBase(){const {topic,imageBrief}=state.input;return {topic,...(im
 const sourceOf=(reported?:string)=>(reported??"ai-generated") as ApprovedImage["source"];
 
 // dish: 사장님 사진(photo번)을 참고해 같은 음식으로 이 장 글에 맞는 새 장면을 그린다(사진 중심의 모자란 장).
-async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:{photo:number}):Promise<ApprovedImage>{
+// refinement: "이 장 고치기"에서 사장님이 고른 요청·직접 적은 말(그림 AI가 가장 먼저 따른다).
+async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:{photo:number},refinement?:string):Promise<ApprovedImage>{
   // 요청을 보내는 순간의 자리 정보(서버가 이 번호·장 수로 그린다).
   const drawnAt=positionKey(state,index-1);
   // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
@@ -218,7 +219,7 @@ async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:
   const style=state.plan!.design.style;
   const count=state.slideLayout==="card"?Math.min(Math.max(1,photosNeeded(normalizeCardLayout(slide))),!style||style==="template"?3:2):1;
   const reference=dish?state.photos[dish.photo]?.preview:undefined;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count,...(reference?{referenceImage:reference,referenceMode:"dish"}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count,...(reference?{referenceImage:reference,referenceMode:"dish"}:{}),...(refinement?.trim()?{refinement:refinement.trim().slice(0,300)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("장 그림을 받지 못했어요.");
@@ -227,7 +228,7 @@ async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:
 
 // 묶음을 만들며 그린 AI 그림을 기억해 둔다(같은 초안·같은 자리·같은 글·같은 참고 사진이면 다시 쓴다).
 // 두 장씩 동시에 그리다 앞 장이 실패하면, 이미 다 그린 뒤 장은 화면에 붙지 못하고 버려져 "다시 해 보기"에서 또 그렸다
-// (이미지 AI 비용이 두 번 든다. 검수 보고서 B-4). "이 장 다시 만들기"는 새 그림을 원하는 것이라 이 기억을 쓰지 않는다.
+// (이미지 AI 비용이 두 번 든다. 검수 보고서 B-4). "장 고치기 → 그림"은 새 그림을 원하는 것이라 이 기억을 쓰지 않는다.
 const drawnScenes=new Map<string,ApprovedImage>();
 async function generateOnce(slide:CarouselPlan["slides"][number],index:number,dish?:{photo:number}):Promise<ApprovedImage>{
   const key=JSON.stringify([state.key,index,slide.headline,slide.points,slide.visualPrompt,state.plan?.design??null,dish?.photo??null,dish?state.photos[dish.photo]?.id??null:null]);
@@ -242,7 +243,7 @@ export function sceneNoticeOf(current:Pick<GenerationState,"sceneMisses">):strin
   const misses=current.sceneMisses;
   if(!misses.length)return "";
   const reason=misses.map(miss=>miss.reason).find(text=>/[가-힣]/.test(text));
-  return `AI 그림 ${misses.length}장(${misses.map(miss=>`${miss.index+1}번`).join("·")} 장)을 못 그려서 사진 확대나 글자 카드로 대신했어요.${reason?` 이유: ${reason}`:""} 그대로 올려도 되고, 그 장에서 "이 장 다시 만들기"를 누르면 AI로 다시 그려요.`;
+  return `AI 그림 ${misses.length}장(${misses.map(miss=>`${miss.index+1}번`).join("·")} 장)을 못 그려서 사진 확대나 글자 카드로 대신했어요.${reason?` 이유: ${reason}`:""} 그대로 올려도 되고, 그 장의 "장 고치기"에서 그림을 다시 그리면 AI로 다시 그려요.`;
 }
 // 장을 빼거나 넣으면 못 그린 장 번호도 함께 옮긴다.
 const missesAfterRemove=(misses:SceneMiss[],removed:number)=>misses.filter(miss=>miss.index!==removed).map(miss=>miss.index>removed?{...miss,index:miss.index-1}:miss);
@@ -286,7 +287,7 @@ async function finishSlides(){
   }
 }
 
-async function regenerateSlide(){
+async function regenerateSlide(refinement?:string){
   const {plan,cover}=state;
   if(!plan||!cover)return;
   const index=activeSlideIndex(state),token=++run;
@@ -294,7 +295,7 @@ async function regenerateSlide(){
   try{
     // 사장님 사진을 참고해 그린 장(사진 중심)은 다시 만들 때도 같은 사진을 참고한다.
     const refPhoto=state.slides[index]?.refPhoto;
-    const replacement=await generate(plan.slides[index],index+1,refPhoto!==undefined&&state.photos[refPhoto]?{photo:refPhoto}:undefined);
+    const replacement=await generate(plan.slides[index],index+1,refPhoto!==undefined&&state.photos[refPhoto]?{photo:refPhoto}:undefined,refinement);
     if(token!==run)return;
     patch({slides:state.slides.map((item,i)=>i===index?replacement:item),...(index===0?{cover:replacement}:{}),approved:false});
   }catch(error){
@@ -305,14 +306,14 @@ async function regenerateSlide(){
 }
 
 // AI 장면을 못 그려 확대 사진·글자 카드로 대신한 장을 AI로 다시 그린다(사장님 사진 참고, 원래 모양으로).
-async function regenerateScene(){
+async function regenerateScene(refinement?:string){
   const plan=state.plan,index=activeSlideIndex(state),miss=state.sceneMisses.find(item=>item.index===index);
   if(!plan||!miss||!state.photos[miss.photo])return;
   const token=++run;
   patch({phase:"slides",error:""});
   try{
     const slide={...plan.slides[index],layout:miss.layout};
-    const card=await generate(slide,index+1,{photo:miss.photo});
+    const card=await generate(slide,index+1,{photo:miss.photo},refinement);
     if(token!==run)return;
     patch({
       slides:state.slides.map((item,i)=>i===index?card:item),
@@ -604,6 +605,37 @@ export async function editSlideText(index:number,edit:SlideTextEdit){
   }
 }
 
+// "이 장 고치기 → 글": 글 AI가 요청대로 이 장의 제목·짧은 글을 고치고, 같은 밑바탕으로 글자만 다시 그린다(이미지 AI 비용 없음).
+// 돌려주는 값: 고친 뒤 확인할 표현(과장·단정) 목록, 못 고쳤으면 그 이유. 화면이 그대로 보여 준다.
+export async function reviseSlideText(index:number,request:string):Promise<{ok:true;warnings:string[]}|{ok:false;message:string}>{
+  const {plan}=state;
+  const slide=plan?.slides[index];
+  if(!plan||!slide||!textEditBase(state,index)||state.phase!=="idle")return {ok:false,message:"이 장은 지금 글을 고칠 수 없어요."};
+  const ask=request.trim();
+  if(!ask)return {ok:false,message:"어떻게 고칠지 골라 주거나 적어 주세요."};
+  // 답을 기다리는 사이 다른 게시물로 바뀌면(새로 만들기 등) 고친 글을 그 게시물에 넣지 않는다.
+  const key=state.key;
+  patch({phase:"slides",error:"",deckStatus:"글을 고치는 중"});
+  let revised:{headline:string;points:string[];warnings:string[]};
+  try{
+    const response=await fetch("/api/images/slide/revise",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      topic:state.input.topic,headline:slide.headline,points:slide.points,request:ask,
+      previous:plan.slides[index-1]?.headline??"",next:plan.slides[index+1]?.headline??"",cover:index===0,...(state.input.track?{track:state.input.track}:{}),
+    })});
+    const data=await readJsonResponse(response);
+    if(!response.ok||typeof data.headline!=="string"||!Array.isArray(data.points))throw new Error(data.message||"글을 고치지 못했어요.");
+    revised={headline:data.headline,points:data.points,warnings:Array.isArray(data.warnings)?data.warnings:[]};
+  }catch(error){
+    const message=error instanceof Error?error.message:"글을 고치지 못했어요.";
+    if(state.key===key)patch({phase:"idle",deckStatus:""});
+    return {ok:false,message};
+  }
+  if(state.key!==key)return {ok:false,message:"다른 게시물로 바뀌어 고치지 않았어요."};
+  patch({phase:"idle",deckStatus:""});
+  await editSlideText(index,{headline:revised.headline,points:revised.points});
+  return state.error?{ok:false,message:state.error}:{ok:true,warnings:revised.warnings};
+}
+
 // ── 초안 고치기: 장 빼기·넣기 ─────────────────────────────────────────────────────────
 // 완성된 캐러셀(또는 저장된 초안을 다시 연 것)에서 장을 빼거나 새 장을 끼워 넣는다. 최대 10장(인스타 캐러셀 한도).
 // 카드에는 장 번호만 찍혀 있으므로, 장 수나 순서가 바뀌면 자리 정보가 바뀐 장만 밑바탕으로 다시 그린다(redrawDeck)
@@ -863,7 +895,7 @@ export function autoProgress(current:GenerationState):{message:string;progress:n
   return {message:"",progress:0};
 }
 
-// 확인 화면의 "이 장 다시 만들기": AI 그림 장은 그림을 새로 만들고, 사장님 사진 장은 다른 사진으로 바꿔 그린다.
+// 확인 화면 "장 고치기 → 그림": AI 그림 장은 그림을 새로 만들고(요청이 있으면 그대로), 사장님 사진 장은 다른 사진으로 바꿔 그린다.
 // 글만 있는 장(글 중심 본문·홍보 카드)이나 저장된 예전 초안(구성안 없음)은 다시 만들 것이 없어 null.
 export function redoSlideKind(current:GenerationState):"ai"|"photo"|"scene"|null {
   const index=activeSlideIndex(current),slide=current.slides[index];
@@ -874,10 +906,11 @@ export function redoSlideKind(current:GenerationState):"ai"|"photo"|"scene"|null
   if((current.photoAssignment[index]?.length??0)>0&&current.photos.length>1)return "photo";
   return null;
 }
-export async function redoSlide(){
+// refinement: "이 장 고치기 → 그림"에서 고른 요청·직접 적은 말. 사장님 사진 장(photo)은 사진을 바꾸므로 쓰지 않는다.
+export async function redoSlide(refinement?:string){
   const kind=redoSlideKind(state);
-  if(kind==="ai")return regenerateSlide();
-  if(kind==="scene")return regenerateScene();
+  if(kind==="ai")return regenerateSlide(refinement);
+  if(kind==="scene")return regenerateScene(refinement);
   if(kind==="photo"){const index=activeSlideIndex(state),current=state.photoAssignment[index][0];return swapSlidePhoto((current+1)%state.photos.length);}
 }
 
@@ -885,7 +918,7 @@ export async function redoSlide(){
 // 만들기는 화면 밖(이 모듈)에서 돈다. 그래서 다른 게시물을 열거나 새로 시작하면 지금 만드는 것이 소리 없이 멈출 수 있었다.
 // 그 전에 한 번 묻고(취소하면 만들던 것을 그대로 두고), 만들기 메뉴로 돌아오면 진행 화면을 다시 보여 준다.
 const autoBusy=(stage:AutoStage)=>stage==="working"||stage==="saving"||stage==="writing";
-// 지금 무언가를 만드는 중인지(자동 만들기, 이 장 다시 만들기, 장 고치기·글자 고치기의 다시 그리기). 사진 올리기는 넣지 않는다(돈이 들지 않고 금방 끝난다).
+// 지금 무언가를 만드는 중인지(자동 만들기, 장 고치기, 장 넣기·빼기·글자 고치기의 다시 그리기). 사진 올리기는 넣지 않는다(돈이 들지 않고 금방 끝난다).
 export const isGenerating=(current:GenerationState)=>current.phase==="planning"||current.phase==="cover"||current.phase==="slides"||autoBusy(current.auto.stage);
 // 만드는 중인 게시물의 id(열쇠 "id|장 수"의 앞부분). 만드는 중이 아니면 null.
 export const generatingDraftId=(current:GenerationState=state):string|null=>isGenerating(current)&&current.key?current.key.split("|")[0]:null;
