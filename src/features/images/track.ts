@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { CarouselPlan, CarouselRole, CarouselSlidePlan } from "./carousel";
 import { DEFAULT_DESIGN, type CardLayout, type DesignSpec } from "./design";
 import type { StyleId } from "./styleCatalog";
-import { EXPLAIN_REASONS_RULE, NO_PROMO_IN_CARDS, STORY_ARC_RULE } from "@/features/copy/explain";
+import { CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, STORY_ARC_RULE, closingInvite } from "@/features/copy/explain";
+import { menuOf } from "@/features/store/menu";
 
 // 갈래(계획서 SIMPLIFY_PLAN): 사장님은 "사진 중심 / 글 중심" 둘 중 하나만 고르고, 나머지는 갈래가 정한다.
 //   - 장 수: 구성안 AI가 내용에 맞춰 4~9장 중에서 정한다(표지 + 이유 장 + 결론). 맨 뒤 가게 홍보 카드는 생성 흐름이 따로 붙여
@@ -197,9 +198,26 @@ export function fitTrackCopy(slide:CarouselSlidePlan,track:CarouselTrack):Pick<C
 // copy:false면 글은 건드리지 않는다: AI 구성안은 검수 AI가 원래 문장을 보고 고치게 하고, 글 맞추기는 마지막에 한 번만 한다(B-2).
 export function applyTrack(plan:CarouselPlan,track:CarouselTrack,options:{copy?:boolean}={}):CarouselPlan {
   const copy=options.copy??true;
-  return {...plan,design:trackDesign(track),slides:plan.slides.map(slide=>({
+  const slides:CarouselPlan["slides"]=plan.slides.map(slide=>({
     ...slide,...(copy?fitTrackCopy(slide,track):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
-  }))};
+  }));
+  return {...plan,design:trackDesign(track),slides:copy?withClosingInvite(slides,track):slides};
+}
+
+// 마지막(결론) 장의 짧은 글 맨 끝을 "미나리전과 막걸리를 묵동홍어마을에서 즐겨 보세요"로 맺는다(사장님 요청 2026-10-09).
+// 본문 장은 홍보 없이 이유만, 결론 장 한 줄만 가볍게 권한다. 메뉴 이름은 표지 질문에서 찾고, 자리가 모자라면 이유 줄을 빼서라도 메뉴 이름을 살린다.
+// 이미 붙어 있으면 바꿔 붙이므로 여러 번 불러도 결과가 같다.
+function withClosingInvite<T extends CarouselSlidePlan>(slides:T[],track:CarouselTrack):T[] {
+  const last=slides.length-1;
+  if(last<1)return slides;
+  const end=slides[last];
+  const dishes=menuOf(slides[0].headline).map(item=>item.short);
+  const reasons=(end.points??[]).filter(point=>!point.includes(CLOSING_INVITE_TAIL)&&!PROMO_IN_CARD.test(point));
+  const count=trackPointCount(track,end.headline);
+  const make=(keep:string[])=>{const room=trackPointRoom(track,end.headline,keep.length+1);return [...keep,closingInvite(dishes,room)];};
+  let points=make(reasons.slice(0,Math.max(0,count-1)));
+  if(points.length>1&&dishes.length&&points.at(-1)===CLOSING_INVITE_TAIL)points=make([]);
+  return slides.map((slide,i)=>i===last?{...slide,points}:slide);
 }
 
 // 구성안 프롬프트에 넣는 갈래 안내(글 길이·장 구성·디자인). carousel.ts의 buildCarouselPlanPrompt가 쓴다.

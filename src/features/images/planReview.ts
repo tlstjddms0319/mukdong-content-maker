@@ -3,7 +3,7 @@ import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
-import { EXPLAIN_REASONS_RULE, PROMO_IN_CARD, STORY_ARC_RULE, VAGUE_REASON } from "@/features/copy/explain";
+import { CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, STORY_ARC_RULE, VAGUE_REASON } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
@@ -48,6 +48,13 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
   const issues:SlideCopyIssue[]=[];
   const add=(slide:number,field:SlideCopyIssue["field"],message:string)=>issues.push({slide,field,message});
   const allPoints:Array<{slide:number;text:string}>=[];
+  // 표지 질문에 붙은 상황·때(비 오는 날·찬바람…)를 본문 어느 장도 설명하지 않으면, 첫 이유 장에서 그 연결을 설명하게 한다.
+  if(track&&plan.slides.length>2){
+    const cover=plan.slides[0].headline;
+    const body=plan.slides.slice(1).map(slide=>[slide.headline,...slide.points].join(" ")).join(" ");
+    const missed=QUESTION_CONDITIONS.find(condition=>condition.asked.test(cover)&&!condition.answered.test(body));
+    if(missed)issues.push({slide:2,field:"headline",message:`표지가 '${missed.label}'에 왜 이 음식이 생각나는지 묻는데, 본문 어느 장도 ${missed.label}과(와) 음식의 연결을 설명하지 않아요. 첫 이유 장은 그 상황과 음식이 왜 이어지는지로 쓰세요.`});
+  }
   plan.slides.forEach((slide,i)=>{
     const n=i+1,headline=slide.headline.trim();
     const length=headline.replace(/\s/g,"").length;
@@ -65,7 +72,8 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     // (사장님 요청 2026-10-09: 장마다 "묵동홍어마을로 오세요"가 나오면 사람도 알고리즘도 광고로 보고 넘긴다).
     if(track){
       if(PROMO_IN_CARD.test(headline))add(n,"headline","카드 제목에 가게 이름·방문 권유가 있어요. 홍보는 맨 뒤 홍보 카드가 맡으니, 표지 질문의 이유를 말하는 제목으로 바꾸세요.");
-      for(const point of slide.points)if(PROMO_IN_CARD.test(point))add(n,"points",`요점 '${point.trim()}'에 가게 이름·방문 권유가 있어요. 제목을 뒷받침하는 이유나 원리로 바꾸세요.`);
+      // 결론 장 맨 끝 "~을 묵동홍어마을에서 즐겨 보세요" 한 줄은 앱이 붙이는 맺음말이라 홍보로 세지 않는다.
+      for(const point of slide.points)if(PROMO_IN_CARD.test(point)&&!(i===plan.slides.length-1&&point.includes(CLOSING_INVITE_TAIL)))add(n,"points",`요점 '${point.trim()}'에 가게 이름·방문 권유가 있어요. 제목을 뒷받침하는 이유나 원리로 바꾸세요.`);
     }
     // 결론 장: 표지 질문의 핵심 말(음식 이름)을 다시 짚어야 질문 → 답이 한눈에 이어진다(맥락 잇기).
     if(track&&i===plan.slides.length-1&&i>0){

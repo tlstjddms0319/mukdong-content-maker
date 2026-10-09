@@ -120,6 +120,8 @@ describe("track plans", () => {
         if(slide.role==="cover")continue;
         const raw=plain.slides.find(item=>item.role===slide.role)!;
         expect(slide.headline,topic).toBe(raw.headline);
+        // 마지막(결론) 장 짧은 글 맨 끝은 앱이 붙이는 "~을 묵동홍어마을에서 즐겨 보세요" 한 줄이다.
+        if(i===tracked.slides.length-1){expect(slide.points.at(-1),topic).toMatch(/묵동홍어마을에서 즐겨 보세요$/);continue;}
         expect(slide.points,`${topic} ${i}`).toEqual(raw.points.slice(0,TRACK_COPY[track].points));
       }
     }
