@@ -213,7 +213,7 @@ describe("topic variety", () => {
     const prompt=buildTopicPrompt({storeName:"묵동홍어마을",recommendationRound:0},seasonContext(new Date("2026-10-08T12:00:00+09:00")),[],["방어 +40%","과메기 +20%"]);
     expect(prompt).toContain("3개 모두 되도록 아래 둘 중 하나에서 출발하세요");
     expect(prompt).toContain("정말 이어질 거리가 없을 때만");
-    expect(prompt).toContain("되도록 모두 쓰세요");
+    expect(prompt).toContain("검색어 주제는 3개 중 최대 2개");
     // 예전 개수 상한(시기 1~2개, 검색 1개)은 없다.
     expect(prompt).not.toContain("3개 중 1~2개");
     expect(prompt).not.toContain("3개 중 1개는 그 가운데");

@@ -1,3 +1,4 @@
+import { SAME_TOPIC_SIMILARITY, topicSimilarity } from "./topicSimilarity";
 import { TopicInputSchema, TopicSuggestionSchema, TopicSuggestionsSchema, type TopicInput, type TopicSuggestion, type TopicSuggestionInput } from "./schema";
 import type { SeasonContext } from "./season";
 import { STORE_MENU, isHongeoHoe, mainMenuOf, menuOf, menusForDate, type StoreMenuItem } from "@/features/store/menu";
@@ -195,6 +196,10 @@ const isVariedSet=(topics:TopicSuggestion[])=>topics.some(isOtherMenuTopic)&&new
 export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:string;round:number;excludeTitles:readonly string[];avoidTitles:readonly string[];season?:SeasonContext;hints?:TopicHints}):{topics:TopicSuggestion[];filled:number;rejected:Partial<Record<TopicRejectReason,number>>} {
   const current=new Set(options.excludeTitles.map(titleKey));
   const recentKeys=new Set(options.avoidTitles.map(titleKey));
+  // 글자가 똑같지 않아도 낱말 몇 개만 바꾼 제목("10월부터" → "11월")은 같은 주제로 본다(topicSimilarity).
+  const near=(title:string,list:readonly string[])=>list.some(other=>topicSimilarity(title,other)>=SAME_TOPIC_SIMILARITY);
+  const onScreen=(topic:TopicSuggestion)=>current.has(titleKey(topic.title))||near(topic.title,options.excludeTitles);
+  const recentlyShown=(topic:TopicSuggestion)=>recentKeys.has(titleKey(topic.title))||near(topic.title,options.avoidTitles);
   const used=new Set<string>();
   const take=(topic:TopicSuggestion)=>{used.add(titleKey(topic.title));return topic;};
   const picked:TopicSuggestion[]=[];
@@ -205,24 +210,23 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   // 사진으로 주제 정하기에서는 사진 속 메뉴를 다루지 않는 AI 주제를 받지 않는다(사진과 상관없는 주제가 "사진을 보고 고른 주제"로 나오지 않게).
   const aboutPhoto=(topic:TopicSuggestion)=>!photoMode||menuOf(`${topic.title} ${topic.summary}`).some(item=>options.hints!.photoMenus!.has(item.id));
   const problem=(topic:TopicSuggestion):TopicRejectReason|undefined=>basicsProblem(topic,options.storeName)
-    ??(!aboutPhoto(topic)?"photo":current.has(titleKey(topic.title))?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
+    ??(!aboutPhoto(topic)?"photo":onScreen(topic)?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
   // 1) 최근에 안 보인 제목 → 2) 최근에 보인 제목(준비된 주제보다는 낫다).
   for(const allowRecent of [false,true])for(const topic of suggestions){
     if(picked.length>=3||picked.includes(topic))continue;
-    if(!allowRecent&&recentKeys.has(titleKey(topic.title)))continue;
+    if(!allowRecent&&recentlyShown(topic))continue;
     if(!problem(topic))picked.push(take(topic));
   }
   const rejected:Partial<Record<TopicRejectReason,number>>={};
   for(const topic of suggestions)if(!picked.includes(topic)){const reason=problem(topic)??"same-menu";rejected[reason]=(rejected[reason]??0)+1;}
   // 채울 후보: 이번 회차 준비된 주제부터 차례로 돌며, 최근에 안 보인 것 → 제외 목록만 피한 것 순서.
-  const excluded=current,avoided=recentKeys;
   const pool=Array.from({length:PREPARED_ROUNDS},(_,offset)=>fallbackTopics((options.round+offset)%PREPARED_ROUNDS,[],options.season,options.avoidTitles,options.hints)).flat();
   // 최근에 자주 나온 메뉴와 이미 고른 주제의 메뉴는 되도록 피한다(메뉴를 고르게 돌리기).
   const recent=options.hints?.recentMenus??new Set<string>();
   const fresh=(topic:TopicSuggestion)=>{const id=topicMenu(topic)?.id;return !id||(!recent.has(id)&&!picked.some(item=>topicMenu(item)?.id===id));};
   const pick=(wanted:(topic:TopicSuggestion)=>boolean)=>{
     for(const [strict,varied] of [[true,true],[true,false],[false,false]] as const){
-      const found=pool.find(topic=>wanted(topic)&&fits(picked,topic)&&(!varied||fresh(topic))&&!used.has(titleKey(topic.title))&&!excluded.has(titleKey(topic.title))&&(!strict||!avoided.has(titleKey(topic.title))));
+      const found=pool.find(topic=>wanted(topic)&&fits(picked,topic)&&(!varied||fresh(topic))&&!used.has(titleKey(topic.title))&&!onScreen(topic)&&(!strict||!recentlyShown(topic)));
       if(found)return take(found);
     }
     throw new Error("다른 추천 주제를 찾지 못했습니다.");
