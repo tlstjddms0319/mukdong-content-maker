@@ -198,7 +198,10 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   const recentKeys=new Set(options.avoidTitles.map(titleKey));
   // 글자가 똑같지 않아도 낱말 몇 개만 바꾼 제목("10월부터" → "11월")은 같은 주제로 본다(topicSimilarity).
   const near=(title:string,list:readonly string[])=>list.some(other=>topicSimilarity(title,other)>=SAME_TOPIC_SIMILARITY);
-  const onScreen=(topic:TopicSuggestion)=>current.has(titleKey(topic.title))||near(topic.title,options.excludeTitles);
+  // "다른 주제 보기"에서는 지금 화면 주제의 주인공 메뉴(홍어회·삼합은 가게 대표라 제외)를 다시 쓰지 않는다. 예전에는 제목만 피해서
+  // 과메기·애탕·홍어찜이 장면만 바꿔 누를 때마다 다시 나왔다(사장님 지적 2026-10-09). 사진으로 정하는 주제는 사진 속 메뉴를 써야 하므로 제외.
+  const screenMenus=new Set(options.hints?.photoMenus?.size?[]:options.excludeTitles.map(titleMenu).filter((menu):menu is StoreMenuItem=>Boolean(menu&&!isHongeoHoe(menu))).map(menu=>menu.id));
+  const onScreen=(topic:TopicSuggestion)=>current.has(titleKey(topic.title))||near(topic.title,options.excludeTitles)||screenMenus.has(topicMenu(topic)?.id??"");
   const recentlyShown=(topic:TopicSuggestion)=>recentKeys.has(titleKey(topic.title))||near(topic.title,options.avoidTitles);
   const used=new Set<string>();
   const take=(topic:TopicSuggestion)=>{used.add(titleKey(topic.title));return topic;};
