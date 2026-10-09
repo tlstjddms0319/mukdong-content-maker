@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildCarouselPlanPrompt, createFallbackCarouselPlan, type CarouselPlan } from "@/features/images/carousel";
 import { slideCopyIssues } from "@/features/images/planReview";
 import { buildCopyPrompt } from "@/features/copy/writing";
-import { PROMO_IN_CARD } from "@/features/copy/explain";
+import { PROMO_IN_CARD, VAGUE_REASON } from "@/features/copy/explain";
 
 vi.mock("server-only", () => ({}));
 
@@ -42,5 +42,17 @@ describe("explain reasons instead of promoting", () => {
     for(const text of ["수육 기름이 톡 쏘는 향을 감싸요","삭히면 요소가 암모니아로 바뀌어요","신맛이 짠맛을 덜 느끼게 해요"])expect(PROMO_IN_CARD.test(text),text).toBe(false);
     // 갈래가 없는 예전 구성안은 이 검사를 하지 않는다.
     expect(slideCopyIssues(promo).some(issue=>issue.message.includes("가게 이름·방문 권유"))).toBe(false);
+  });
+
+  // 사장님이 보낸 4번째 장: 표지는 "왜"를 묻는데 곁들임(쪽파)으로 새고, "조화롭게 잡아줘요"처럼 결과만 말했다.
+  it("flags a vague side-dish turn in the pairing slot", () => {
+    const base=createFallbackCarouselPlan({topic:"과메기는 왜 찬바람이 불면 찾을까?",slideCount:5,track:"text"});
+    const cover={...base.slides[0],headline:"과메기는 왜 찬바람이 불면 찾을까?"};
+    const drift:CarouselPlan={...base,slides:base.slides.map((slide,i)=>i===0?cover:i===3?{...slide,headline:"알싸한 쪽파가 맛을 조화롭게 잡아줘요",points:["기름진 맛을 깔끔하게 정돈해줘요"]}:slide)};
+    const messages=slideCopyIssues(drift,"text").filter(issue=>issue.slide===4).map(issue=>issue.message).join("\n");
+    expect(messages).toContain("표지에 없는 '쪽파' 이야기");
+    expect(messages).toContain("결과만 말하는 막연한 제목");
+    expect(messages).toContain("결과만 말하고 이유가 없어요");
+    for(const text of ["찬바람에 얼었다 녹으며 말라요","식초의 신맛이 기름진 느낌을 덜어 줘요","기름이 올라 고소한 맛이 진해져요"])expect(VAGUE_REASON.test(text),text).toBe(false);
   });
 });

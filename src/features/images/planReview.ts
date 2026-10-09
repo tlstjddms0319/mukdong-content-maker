@@ -3,7 +3,7 @@ import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
-import { EXPLAIN_REASONS_RULE, PROMO_IN_CARD } from "@/features/copy/explain";
+import { EXPLAIN_REASONS_RULE, PROMO_IN_CARD, VAGUE_REASON } from "@/features/copy/explain";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
 // 1) slideCopyIssues: 코드로 잡을 수 있는 문제를 장 번호와 함께 찾는다(광고 상투어, 반복, 끝맺음, 길이 등).
@@ -40,7 +40,7 @@ const ASKS_WHY=/왜|이유/;
 const HOW_TO=/(?:감싸|싸서|싸\s*먹|올려|얹어|찍어|집어|덜어|곁들여|드세요|드셔|드시|먹어\s*보|맛보세요)/;
 const GIVES_REASON=/때문|라서|해서|덕분|니까|으니|어서|아서|잡아|눌러|줄여|살려|채워|맞춰/;
 // 짧은 글이 그 장 제목·표지에 없는 새 음식을 꺼내는지 볼 낱말(가게 메뉴·곁들임).
-const SIDE_SUBJECTS=["묵은지","수육","초장","막걸리","미나리","과메기","애탕","무침","홍어찜","삼합"];
+const SIDE_SUBJECTS=["묵은지","수육","초장","막걸리","미나리","과메기","애탕","무침","홍어찜","삼합","쪽파","마늘","고추","미역","깻잎","상추","배추"];
 
 export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCopyIssue[] {
   const limits=copyLimitsOf(track);
@@ -69,6 +69,11 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     if(track&&slide.role!=="cover"){
       const cover=plan.slides[0]?.headline??"";
       if(ASKS_WHY.test(cover)&&HOW_TO.test(headline)&&!GIVES_REASON.test(headline))add(n,"headline",`표지가 "${cover.trim()}"라고 이유를 묻는데 이 장 제목은 먹는 법이에요. 제목만 이어 읽어도 흐름이 이어지게 표지 질문의 이유(근거) 하나를 답하는 제목으로 바꾸세요.`);
+      // 표지가 "왜"를 묻는데 본문 제목이 표지에 없는 곁들임을 꺼내면 흐름이 끊긴다(5장 구성의 4번째 장이 늘 pairing 자리라 잘 생긴다).
+      const sideTurn=ASKS_WHY.test(cover)?SIDE_SUBJECTS.find(word=>headline.includes(word)&&!cover.includes(word)):undefined;
+      if(sideTurn)add(n,"headline",`표지가 "${cover.trim()}"라고 묻는데 이 장 제목은 표지에 없는 '${sideTurn}' 이야기예요. 표지 질문의 이유 하나를 답하는 제목으로 바꾸세요.`);
+      if(VAGUE_REASON.test(headline))add(n,"headline","'조화롭게 잡아줘요'·'정돈해줘요'처럼 결과만 말하는 막연한 제목이에요. 무엇이 무엇을 어떻게 바꾸는지(이유) 쓰세요.");
+      for(const point of slide.points)if(VAGUE_REASON.test(point))add(n,"points",`요점 '${point.trim()}'이 결과만 말하고 이유가 없어요. 무엇이 어떻게 작용하는지 쓰세요.`);
       for(const point of slide.points){
         const fresh=SIDE_SUBJECTS.find(word=>point.includes(word)&&!headline.includes(word)&&!cover.includes(word));
         if(fresh)add(n,"points",`요점 '${point.trim()}'이 제목·표지에 없는 '${fresh}' 이야기를 꺼내요. 이 장 제목을 뒷받침하는 내용만 쓰세요.`);
