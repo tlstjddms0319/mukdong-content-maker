@@ -2,7 +2,7 @@
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { PhotoPicker } from "./PhotoPicker";
 import { AUTO_FAILED, autoProgress, setAiFill, type GenerationState } from "@/features/images/generationStore";
-import type { CarouselTrack } from "@/features/images/track";
+import { TRACK_SLIDE_RANGE, type CarouselTrack } from "@/features/images/track";
 
 // 2단계 "어떻게 만들까요?": 큰 카드 두 개 중 하나 + 사진 올리기(선택) + "만들기" 한 번.
 // 누른 뒤에는 자동으로 끝까지 간다(generationStore.createAutomatically). 이 화면은 진행 한 줄과 막대만 보여 준다.
@@ -14,10 +14,11 @@ const TRACKS:Array<{id:CarouselTrack;icon:string;title:string;help:string}>=[
 // 사진 유무·갈래에 따라 걸리는 시간을 쉬운 말로 한 줄.
 function timeNote(track:CarouselTrack,photos:number,aiFill:boolean):string {
   if(photos&&track==="text")return "올린 첫 사진이 표지가 되고, 나머지 장은 큰 글씨로 만들어요. 1분 안쪽이면 돼요.";
-  // 사진이 5장보다 적으면 모자란 장은 AI가 올린 사진(같은 음식)을 참고해 그 장 글에 맞는 새 장면을 그린다(내 사진만 쓰기면 그리지 않는다).
-  if(photos&&photos<5&&!aiFill)return "AI 그림 없이 올린 사진만 써요. 모자란 장은 같은 사진을 가까이 보여 주거나 큰 글씨 장으로 만들어요. 1~2분이면 돼요.";
-  if(photos)return photos>=5?"올린 사진으로 5장을 만들어요. 1~2분이면 돼요.":"사진이 모자란 장은 AI가 올린 사진을 참고해 글에 맞는 장면으로 새로 그려요. 3~5분쯤 걸려요.";
-  return track==="text"?"사진이 없으면 AI가 표지 한 장만 그려요. 3분쯤 걸려요.":"사진이 없으면 AI가 5장을 모두 그려요. 10분쯤 걸려요.";
+  // 장 수는 구성안 AI가 내용에 맞춰 4~9장으로 정한다. 사진이 장 수보다 적으면 모자란 장은 AI가 올린 사진(같은 음식)을 참고해
+  // 그 장 글에 맞는 새 장면을 그린다(내 사진만 쓰기면 그리지 않는다).
+  if(photos&&photos<TRACK_SLIDE_RANGE.max&&!aiFill)return "AI 그림 없이 올린 사진만 써요. 모자란 장은 같은 사진을 가까이 보여 주거나 큰 글씨 장으로 만들어요. 1~2분이면 돼요.";
+  if(photos)return "장 수는 내용에 맞춰 4~9장으로 정해요. 사진이 모자란 장은 AI가 올린 사진을 참고해 글에 맞는 장면으로 새로 그려요. 3~5분쯤 걸려요.";
+  return track==="text"?"사진이 없으면 AI가 표지 한 장만 그려요. 3분쯤 걸려요.":"사진이 없으면 AI가 모든 장(내용에 맞춰 4~9장)을 그려요. 10~15분쯤 걸려요.";
 }
 
 export function MakeStep({topic,track,onTrack,state,onMake,onBack}:{topic:string;track:CarouselTrack;onTrack:(track:CarouselTrack)=>void;state:GenerationState;onMake:()=>void;onBack:()=>void}) {

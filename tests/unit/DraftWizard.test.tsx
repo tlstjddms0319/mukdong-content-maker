@@ -105,7 +105,7 @@ describe("DraftWizard",()=>{
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);
     fireEvent.click(await screen.findByRole("button",{name:"다음"}));
     expect(screen.getByRole("heading",{name:"어떻게 만들까요?"})).toBeInTheDocument();
-    expect(screen.getByText(/AI가 5장을 모두 그려요. 10분쯤 걸려요/)).toBeInTheDocument();
+    expect(screen.getByText(/AI가 모든 장\(내용에 맞춰 4~9장\)을 그려요/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:/글 중심/}));
     expect(screen.getByText(/AI가 표지 한 장만 그려요/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:/사진 중심/}));

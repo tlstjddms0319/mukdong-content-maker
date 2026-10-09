@@ -52,7 +52,8 @@ function rememberRound(round:number){try{localStorage.setItem(TOPIC_ROUND_KEY,St
 function planLinkFrom(date:string|null|undefined):{date:string}|null {
   return date&&PLAN_DATE_PATTERN.test(date)?{date}:null;
 }
-// 장 수는 갈래가 정한다(두 갈래 모두 5장 + 맨 뒤 가게 홍보 카드). 설정의 장 수는 예전 화면에만 쓰였다.
+// 장 수는 구성안 AI가 내용에 맞춰 4~9장 중에서 정한다(+ 맨 뒤 가게 홍보 카드). 여기 5장은 구성안이 오기 전 진행 표시·기본 문안용이고,
+// 만들기 키에도 들어가 예전 초안과 같은 키를 쓴다. 설정의 장 수는 예전 화면에만 쓰였다.
 const SLIDES=TRACK_SLIDE_COUNT;
 // 이미 다 만든 게시물에서 "만들기"를 다시 누르면 그림을 새로 만든다(시간·돈이 든다). 멈춘 뒤 '다시 해 보기'는 묻지 않는다.
 const REMAKE_QUESTION="이미 만든 게시물이 있어요. 처음부터 다시 만들까요? 그림을 새로 만들어요.";

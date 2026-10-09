@@ -139,10 +139,12 @@ export function deckPhotoNotes(current:Pick<GenerationState,"mode"|"photoAssignm
   return notes.length?notes.slice(0,10):undefined;
 }
 
-// 내용 장 수. 장을 고친 캐러셀은 지금 장 수, 아니면 설정한 장 수. 카드에는 찍지 않고, 마지막 장·표지 예고 띠를 정하는 데 쓴다.
-export const deckTotal=(current:GenerationState)=>current.deckEdited?current.slides.length:current.input.slideCount;
+// 만들 장 수: 구성안이 있으면 구성안 장 수(갈래 게시물은 AI가 4~9장 중 정한다), 없으면 요청한 장 수.
+export const plannedCount=(current:Pick<GenerationState,"plan"|"input">)=>current.plan?.slides.length??current.input.slideCount;
+// 내용 장 수. 장을 고친 캐러셀은 지금 장 수, 아니면 만들 장 수. 카드에는 찍지 않고, 마지막 장·표지 예고 띠를 정하는 데 쓴다.
+export const deckTotal=(current:GenerationState)=>current.deckEdited?current.slides.length:plannedCount(current);
 // 캐러셀이 다 만들어졌는지(장 빼기·넣기 뒤에는 장 수가 설정값과 달라도 완성).
-export const deckComplete=(current:GenerationState)=>current.slides.length>0&&(current.deckEdited||current.slides.length===current.input.slideCount);
+export const deckComplete=(current:GenerationState)=>current.slides.length>0&&(current.deckEdited||current.slides.length===plannedCount(current));
 // 홍보 카드를 붙이는 캐러셀인지: 구성안으로 그린 캐러셀(실제 사진 카드·AI)만. 무료 카드·사진 그대로는 붙이지 않는다.
 // 인스타그램 캐러셀·초안 저장은 한 게시물에 10장까지라, 내용이 10장이면 홍보 카드를 붙이지 않는다(9장 이하일 때만).
 // 9↔10장을 오갈 때 다시 그릴 장은 positionKey가 알아서 고른다.
@@ -268,7 +270,7 @@ const missesAfterInsert=(misses:SceneMiss[],position:number)=>misses.map(miss=>m
 const SLIDE_CONCURRENCY=2;
 // 고른 표지 뒤의 남은 장을 만든다. 화면이 사라져도 이 루프는 계속 돌고 결과는 저장소에 쌓인다.
 async function finishSlides(){
-  const {plan,cover,slides,input}=state;
+  const {plan,cover,slides}=state;
   // 장을 빼거나 넣은 뒤에는 설정 장 수까지 다시 채우지 않는다(사용자가 고른 장 수를 지킨다).
   if(!plan||!cover||state.deckEdited)return;
   const token=++run;
@@ -280,7 +282,7 @@ async function finishSlides(){
     const ready=new Map<number,ApprovedImage>();
     let cursor=next.length,failure:unknown=null;
     const worker=async()=>{
-      while(cursor<input.slideCount&&failure===null){
+      while(cursor<plan.slides.length&&failure===null){
         const i=cursor++;
         try{
           const generated=await generateOnce(plan.slides[i],i+1);
@@ -894,7 +896,7 @@ function restoreStudio(base:GenerationState,studio:unknown):GenerationState {
     photos:snapshot.data.photos.map(photo=>({id:photo.id,preview:photo.preview,name:photo.name??"사진"})),
     photoAssignment:snapshot.data.slides.map(slide=>slide.assignment.filter(index=>index<snapshot.data.photos.length)),
     photoViews:snapshot.data.slides.map(slide=>slide.views),
-    slides,cover:slides[0],deckEdited:count!==base.input.slideCount,
+    slides,cover:slides[0],deckEdited:false,
     storeCard:{include:snapshot.data.storeCard},
   };
   // 붙였던 홍보 카드는 저장된 그림(마지막 장)을 그대로 쓴다(지금 디자인·장 수로 그린 것으로 본다).
@@ -946,9 +948,9 @@ export async function createAutomatically(meta:DraftMeta){
   }
 }
 
-// 진행 안내 한 줄과 진행 막대(0~1). 사진 5장 기준.
+// 진행 안내 한 줄과 진행 막대(0~1). 구성안이 오기 전에는 요청한 장 수 기준.
 export function autoProgress(current:GenerationState):{message:string;progress:number} {
-  const total=current.input.slideCount||5,done=current.slides.length;
+  const total=plannedCount(current)||5,done=current.slides.length;
   if(current.auto.stage==="saving")return {message:"만든 사진을 저장하고 있어요",progress:.88};
   if(current.auto.stage==="writing")return {message:"올릴 글을 쓰고 있어요",progress:.94};
   if(current.phase==="uploading")return {message:"사진을 올리고 있어요",progress:.02};
