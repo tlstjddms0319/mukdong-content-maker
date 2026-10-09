@@ -5,7 +5,8 @@ import type { StyleId } from "./styleCatalog";
 import { EXPLAIN_REASONS_RULE, NO_PROMO_IN_CARDS } from "@/features/copy/explain";
 
 // 갈래(계획서 SIMPLIFY_PLAN): 사장님은 "사진 중심 / 글 중심" 둘 중 하나만 고르고, 나머지는 갈래가 정한다.
-//   - 장 수: 두 갈래 모두 5장(맨 뒤 가게 홍보 카드는 생성 흐름이 따로 붙인다).
+//   - 장 수: 구성안 AI가 내용에 맞춰 4~9장 중에서 정한다(표지 + 이유 장 + 결론). 맨 뒤 가게 홍보 카드는 생성 흐름이 따로 붙여
+//     인스타그램 한 게시물 10장 안에 들어간다. AI 없이 만드는 기본 문안은 5장이다.
 //   - 디자인: 갈래 전용 계열(photo-focus·text-focus). 테마·계절 소품·글꼴은 기본값, 무작위 섞기(variety.ts)는 하지 않는다.
 //   - 장마다 사진 수(layout): 사진 중심은 모든 장이 사진 1장(표지 fullscreen, 본문 frame),
 //     글 중심은 표지만 사진 1장(fullscreen)이고 본문·마지막 장은 사진 없는 장(browser) → 이미지 AI를 표지 한 번만 부른다.
@@ -14,6 +15,9 @@ import { EXPLAIN_REASONS_RULE, NO_PROMO_IN_CARDS } from "@/features/copy/explain
 // 갈래가 없으면(예전 초안·예전 화면) 이 파일은 아무것도 바꾸지 않는다.
 export const CarouselTrackSchema=z.enum(["photo","text"]);
 export type CarouselTrack=z.infer<typeof CarouselTrackSchema>;
+// 장 수 고정 대신 범위(사장님 요청 2026-10-09: "모든 내용을 다 전달할 수 있는 장 수로, 만들 때마다 정하기").
+export const TRACK_SLIDE_RANGE={min:4,max:9} as const;
+// 구성안이 오기 전(진행 표시)과 AI 없이 만드는 기본 문안의 장 수.
 export const TRACK_SLIDE_COUNT=5 as const;
 export const TRACK_STYLES:Record<CarouselTrack,StyleId>={photo:"photo-focus",text:"text-focus"};
 export const TRACK_LABELS:Record<CarouselTrack,string>={photo:"사진 중심",text:"글 중심"};
@@ -189,7 +193,7 @@ export function fitTrackCopy(slide:CarouselSlidePlan,track:CarouselTrack):Pick<C
 }
 
 // 구성안 전체를 갈래에 맞춘다: 디자인(갈래 계열 + 기본 테마·계절·글꼴), 장마다 layout, 글꼴은 공통(auto), 모양 변형 0, 글 길이.
-// 장 수(5장)는 요청 단계에서 맞추므로(구성안 입력) 여기서는 바꾸지 않는다. 여러 번 불러도 결과가 같다.
+// 장 수는 구성안 AI가 정하고 검사 단계에서 맞추므로 여기서는 바꾸지 않는다. 여러 번 불러도 결과가 같다.
 // copy:false면 글은 건드리지 않는다: AI 구성안은 검수 AI가 원래 문장을 보고 고치게 하고, 글 맞추기는 마지막에 한 번만 한다(B-2).
 export function applyTrack(plan:CarouselPlan,track:CarouselTrack,options:{copy?:boolean}={}):CarouselPlan {
   const copy=options.copy??true;
@@ -206,7 +210,7 @@ export function trackPromptRules(track:CarouselTrack):{story:string;style:string
     // 인스타그램 독자는 큰 글씨(제목)만 훑고 넘긴다. 예전에는 "앞 장이 남긴 궁금증에 답하기" + 장 역할(먹는 법·곁들임·방문)대로
     // 써서, "홍어랑 삼합은 왜 같이 먹을까?" 표지 뒤에 "묵은지에 가볍게 감싸요"(먹는 법) 같은 제목이 끼어 흐름이 끊겼다(사장님 지적).
     // 이제는 표지 질문 하나에 본문 제목들이 차례로 답하고, 제목만 이어 읽어도 한 단락이 되게 쓴다.
-    story:`[이야기 구조 — 제목만 읽어도 하나의 답] 인스타그램 독자는 큰 글씨(headline)만 빠르게 훑고 넘깁니다. 표지 headline은 독자가 실제로 가질 법한 궁금증 하나를 질문으로 던지고, 본문 장의 headline은 모두 그 표지 질문 하나에 답하는 조각으로 쓰세요: 2~4번째 장은 표지 질문의 이유·근거를 하나씩(가장 핵심 이유부터) 해요체 한 문장으로, 마지막 장 headline은 표지 질문에 대한 한 줄 결론으로 쓰세요. 표지 headline부터 마지막 장 headline까지 제목만 이어 읽어도 표지 질문에 답하는 짧은 글 한 단락처럼 자연스럽게 읽혀야 합니다. role은 장의 위치 표시일 뿐 그 장에 쓸 내용이 아닙니다(detail·how-to·pairing·visit라는 이름과 상관없이 2~4번째 장은 이유 1·2·3입니다. 특히 pairing 자리에 표지 질문과 상관없는 곁들임 이야기를 끼워 넣지 마세요): 표지가 "왜"를 물으면 how-to 장에도 먹는 법 대신 이유를 쓰고, 먹는 법·메뉴 정의("삼합은 ~예요")·방문 안내는 표지 질문이 그것을 물을 때만 쓰세요. 질문은 표지에서만 던집니다(본문 headline은 "왜 ~일까요?" 금지). 짧은 글(points)은 그 장 headline을 뒷받침하는 근거나 눈·입으로 확인하는 방법 하나만 쓰고, 그 장 headline과 표지 질문에 없는 새 음식·새 이야기를 꺼내지 마세요. 제목의 결과를 말만 바꿔 되풀이하는 짧은 글(예: 제목 "물기 없이 말려요" + 짧은 글 "물기가 없어 맛이 유지돼요")은 금지입니다. 본문 장 제목은 겉모습 묘사가 아니라 이유를 말하는 문장으로 쓰세요(예: "수육 기름이 톡 쏘는 향을 감싸요", "삭히면 요소가 암모니아로 바뀌어요"). 아래 [이유 설명]을 따르세요. "다음 장에서 ~"처럼 다음 장을 예고하는 문장은 쓰지 마세요. ${NO_PROMO_IN_CARDS}
+    story:`[이야기 구조 — 제목만 읽어도 하나의 답] 인스타그램 독자는 큰 글씨(headline)만 빠르게 훑고 넘깁니다. 표지 headline은 독자가 실제로 가질 법한 궁금증 하나를 질문으로 던지고, 본문 장의 headline은 모두 그 표지 질문 하나에 답하는 조각으로 쓰세요: 표지와 마지막 장 사이의 장은 표지 질문의 이유·근거를 하나씩(가장 핵심 이유부터) 해요체 한 문장으로, 마지막 장 headline은 표지 질문에 대한 한 줄 결론으로 쓰세요. 표지 headline부터 마지막 장 headline까지 제목만 이어 읽어도 표지 질문에 답하는 짧은 글 한 단락처럼 자연스럽게 읽혀야 합니다. role은 장의 위치 표시일 뿐 그 장에 쓸 내용이 아닙니다(detail·how-to·pairing·visit 같은 이름과 상관없이 표지와 마지막 장 사이의 장은 모두 이유 하나씩입니다. 특히 pairing 자리에 표지 질문과 상관없는 곁들임 이야기를 끼워 넣지 마세요): 표지가 "왜"를 물으면 how-to 장에도 먹는 법 대신 이유를 쓰고, 먹는 법·메뉴 정의("삼합은 ~예요")·방문 안내는 표지 질문이 그것을 물을 때만 쓰세요. 질문은 표지에서만 던집니다(본문 headline은 "왜 ~일까요?" 금지). 짧은 글(points)은 그 장 headline을 뒷받침하는 근거나 눈·입으로 확인하는 방법 하나만 쓰고, 그 장 headline과 표지 질문에 없는 새 음식·새 이야기를 꺼내지 마세요. 제목의 결과를 말만 바꿔 되풀이하는 짧은 글(예: 제목 "물기 없이 말려요" + 짧은 글 "물기가 없어 맛이 유지돼요")은 금지입니다. 본문 장 제목은 겉모습 묘사가 아니라 이유를 말하는 문장으로 쓰세요(예: "수육 기름이 톡 쏘는 향을 감싸요", "삭히면 요소가 암모니아로 바뀌어요"). 아래 [이유 설명]을 따르세요. "다음 장에서 ~"처럼 다음 장을 예고하는 문장은 쓰지 마세요. ${NO_PROMO_IN_CARDS}
 ${EXPLAIN_REASONS_RULE}`,
     style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(${cover.subline}자 이내 해요체 한 줄)에 넣으세요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.`,
     design:`[디자인] 디자인과 장마다 layout은 앱이 정합니다. design은 {"palette":"warm","style":"${TRACK_STYLES[track]}","theme":"classic","titleFont":"pretendard","bodyFont":"pretendard","tone":"loud","season":"none"} 그대로 두고, 표지 layout은 fullscreen, 나머지 장은 ${track==="photo"?"frame":"browser"}로 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣고, figure는 빈 문자열로 두세요.`,

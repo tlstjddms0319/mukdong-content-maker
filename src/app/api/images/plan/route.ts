@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
-import { CarouselPlanInputSchema, buildCarouselPlanPrompt, carouselMenu, keepScenesOnMenu, planCarousel, withTrackCount } from "@/features/images/carousel";
-import { applyTrack } from "@/features/images/track";
+import { CarouselPlanInputSchema, buildCarouselPlanPrompt, carouselMenu, keepScenesOnMenu, planCarousel, slideCountFits, withTrackCount } from "@/features/images/carousel";
+import { TRACK_SLIDE_RANGE, applyTrack } from "@/features/images/track";
 import { guardSlidePoints } from "@/features/images/slidePoints";
 import { randomSeed } from "@/features/images/variety";
 import { reviewCarouselPlan } from "@/features/images/planReview";
@@ -12,13 +12,13 @@ import { PLAN_FALLBACK_MESSAGES, lenientPlanSchema, planFallbackReason, type Pla
 export async function POST(request:Request) { const denied=await ownerApiError(); if(denied)return denied;
   const parsed=CarouselPlanInputSchema.safeParse(await request.json());
   if(!parsed.success)return NextResponse.json({message:"만들기 설정을 확인해 주세요."},{status:400});
-  // 갈래(사진 중심·글 중심)가 오면 장 수는 5장으로 고정한다(track.ts). AI에 보내는 장 수·검사 기준도 같은 값을 쓴다.
+  // 갈래(사진 중심·글 중심)가 오면 장 수는 AI가 4~9장 중에서 정한다(track.ts). 기본 문안(AI 없음)만 5장이다.
   const input={data:withTrackCount(parsed.data)};
 
   let provider:"gemini"|"groq"|"cloudflare"|"fallback"="fallback";
   // AI 답은 검사 전에 고칠 수 있는 것(긴 요점·장 순서 이름·같은 장면 등)을 고쳐 쓴다(planRepair.ts). 고친 내용은 로그로 남긴다.
   const fixes:string[]=[];
-  const requestedPlanSchema=lenientPlanSchema(input.data.slideCount,fixes);
+  const requestedPlanSchema=lenientPlanSchema(input.data.track?TRACK_SLIDE_RANGE:input.data.slideCount,fixes);
   let fallbackReason:PlanFallbackReason|null=null;
   const settings=await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:",error instanceof Error?error.message:String(error));return null;});
   const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
@@ -27,7 +27,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
       const result=await client.generateJson(buildCarouselPlanPrompt(input.data),requestedPlanSchema);
       // 제공자 클라이언트가 이미 검사했어도 한 번 더 같은 "고쳐 쓰기" 스키마로 읽는다(고친 값에 다시 써도 그대로다).
       const candidate=requestedPlanSchema.parse(result);
-      if(candidate.slideCount!==input.data.slideCount)throw new Error("wrong slide count");
+      if(!slideCountFits(input.data,candidate.slideCount))throw new Error("wrong slide count");
       provider=client.provider??"gemini";
       return candidate;
     },

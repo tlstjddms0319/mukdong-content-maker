@@ -5,7 +5,7 @@ import { SlideBodyFontSchema, SlideTitleFontSchema } from "./typography";
 import { diversifyCarouselDesign } from "./variety";
 import { MENU_BY_ID, heroMenu, josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SKATE_TABLE, copyMentionsSkate, foodFreeAnchor, isOtherMenu } from "./sceneFoods";
-import { CarouselTrackSchema, TRACK_SLIDE_COUNT, applyTrack, ellipsize, trackPromptRules } from "./track";
+import { CarouselTrackSchema, TRACK_SLIDE_COUNT, TRACK_SLIDE_RANGE, applyTrack, ellipsize, trackPromptRules } from "./track";
 import { TRACK_STYLES } from "./styleCatalog";
 import { EXPLAIN_REASONS_RULE, NO_PROMO_IN_CARDS } from "@/features/copy/explain";
 
@@ -18,7 +18,7 @@ export const CarouselPlanInputSchema=z.object({
   // 실제 사진 캐러셀: 사장님이 올린 사진마다 보이는 것 한 줄(올린 순서, 첫 사진이 표지). 모르는 사진은 빈 문자열.
   // 문안 AI가 사진에 없는 음식을 주인공으로 한 장을 쓰지 않게 하고, 사진을 글이 맞는 장에 넣는 데 쓴다.
   photoNotes:z.array(z.string().trim().max(120)).max(10).optional(),
-  // 갈래(track.ts): "photo"(사진 중심)·"text"(글 중심). 주면 장 수(5장)·디자인·장마다 사진 수·글 길이를 갈래가 정한다.
+  // 갈래(track.ts): "photo"(사진 중심)·"text"(글 중심). 주면 장 수(AI가 4~9장 중 정함)·디자인·장마다 사진 수·글 길이를 갈래가 정한다.
   // 없으면 예전과 똑같이 만든다(예전 화면·저장된 초안).
   track:CarouselTrackSchema.optional(),
 });
@@ -52,7 +52,7 @@ export const CarouselSlidePlanSchema=z.object({
 
 export type CarouselPlanInput=z.input<typeof CarouselPlanInputSchema>;
 export type ParsedCarouselPlanInput=z.output<typeof CarouselPlanInputSchema>;
-// 갈래가 있으면 요청한 장 수와 상관없이 5장으로 맞춘다(검사된 입력에 쓴다. 구성안 라우트·기본 문안·프롬프트가 같은 장 수를 보게).
+// 갈래가 있으면 요청한 장 수 대신 기본 5장을 넣어 둔다(AI 없이 만드는 기본 문안용). AI 구성안은 4~9장 중 AI가 정한다(slideCountFits).
 export const withTrackCount=(input:ParsedCarouselPlanInput):ParsedCarouselPlanInput=>input.track?{...input,slideCount:TRACK_SLIDE_COUNT}:input;
 const parsePlanInput=(input:CarouselPlanInput)=>withTrackCount(CarouselPlanInputSchema.parse(input));
 export type CarouselRole=z.infer<typeof CarouselRoleSchema>;
@@ -60,19 +60,28 @@ export type CarouselRole=z.infer<typeof CarouselRoleSchema>;
 export type CarouselSlidePlan=z.input<typeof CarouselSlidePlanSchema>;
 export type CarouselSlideCount=z.output<typeof CarouselPlanInputSchema>["slideCount"];
 
-const ROLE_ORDERS:{[count in CarouselSlideCount]:readonly CarouselRole[]}={
+const ROLE_ORDERS:Partial<Record<number,readonly CarouselRole[]>>={
   3:["cover","how-to","visit"],
   5:["cover","detail","how-to","pairing","visit"],
   7:["cover","overview","detail","how-to","pairing","occasion","visit"],
   10:CarouselRoleSchema.options,
 };
 
-export function rolesForCount(count:CarouselSlideCount):readonly CarouselRole[] {
-  return ROLE_ORDERS[count];
+// 예전 화면이 고르는 3·5·7·10장은 위 순서 그대로, 갈래 게시물이 AI에게 맡기는 4·6·8·9장은 표지 + 본문 역할(아래 순서로 앞에서부터) + 마지막 visit.
+// 갈래 게시물에서 role은 장 위치 표시일 뿐(본문 장은 모두 이유 하나씩)이라 어느 역할이 붙어도 글은 같다.
+const BODY_ROLES:readonly CarouselRole[]=["detail","how-to","pairing","overview","occasion","process","mood"];
+export function rolesForCount(count:number):readonly CarouselRole[] {
+  const fixed=ROLE_ORDERS[count];
+  if(fixed)return fixed;
+  const body=BODY_ROLES.slice(0,Math.max(0,count-2));
+  const order=CarouselRoleSchema.options;
+  return ["cover",...[...body].sort((a,b)=>order.indexOf(a)-order.indexOf(b)),"visit"];
 }
+// 구성안 장 수가 요청에 맞는지. 갈래 게시물은 AI가 정한 장 수가 범위 안이면 된다.
+export const slideCountFits=(input:{slideCount:number;track?:unknown},count:number)=>input.track?count>=TRACK_SLIDE_RANGE.min&&count<=TRACK_SLIDE_RANGE.max:count===input.slideCount;
 
 export const CarouselPlanSchema=z.object({
-  slideCount:z.union([z.literal(3),z.literal(5),z.literal(7),z.literal(10)]),
+  slideCount:z.number().int().min(3).max(10),
   styleAnchor:z.string().trim().min(12).max(500),
   // 캐러셀 전체가 공유하는 디자인(색 조합). 장별 레이아웃은 각 slide.layout에 있다.
   design:DesignSpecSchema,
@@ -203,7 +212,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
   // 갈래가 있으면 이야기 구조·문체(글 길이)·디자인 안내를 갈래용으로 바꾸고 갈래 설명을 더한다(track.ts).
   const track=parsed.track?trackPromptRules(parsed.track):null;
   return [
-    `한국 음식점 Instagram 캐러셀 구성안을 JSON 객체로 작성하세요. 선택한 주제 "${parsed.topic}"를 바꾸지 말고 모든 장면에 일관되게 반영하세요. 기존 이미지 설명: ${parsed.imageBrief ?? "없음"}. 내용 메모: ${parsed.contentBrief ?? "없음"}. slideCount는 ${parsed.slideCount}, slides의 role 순서는 ${roles.join(" → ")}를 정확히 지키세요.`,
+    `한국 음식점 Instagram 캐러셀 구성안을 JSON 객체로 작성하세요. 선택한 주제 "${parsed.topic}"를 바꾸지 말고 모든 장면에 일관되게 반영하세요. 기존 이미지 설명: ${parsed.imageBrief ?? "없음"}. 내용 메모: ${parsed.contentBrief ?? "없음"}. ${track?trackCountRule():`slideCount는 ${parsed.slideCount}, slides의 role 순서는 ${roles.join(" → ")}를 정확히 지키세요.`}`,
     // 한 편의 이야기: 장마다 독립된 자랑을 나열하지 않고, 앞 장이 남긴 궁금증을 다음 장이 받는다.
     track?track.story:`[이야기 구조] ${parsed.slideCount}장은 한 사람이 친구에게 이 음식을 설명해 주는 한 편의 이야기입니다. 표지는 독자가 실제로 가질 법한 구체적인 궁금증 하나를 질문이나 한 문장으로 던지고, 각 본문 장은 앞 장이 남긴 궁금증에 답하면서 마지막 요점 한 줄로 다음 장의 내용을 예고하세요. 본문 장은 겉모습 묘사만 하지 말고 사람이 왜 그렇게 느끼는지 이유를 답하세요. 마지막 장은 첫 장의 궁금증이 어떻게 풀렸는지 한 줄 결론으로 닫으세요. ${NO_PROMO_IN_CARDS} 장마다 "우리 대단하죠" 식의 자랑이나 감탄으로 끝내지 말고, 정보가 한 방향으로 쌓이게 하세요.`,
     // 사람이 쓴 글처럼: 명사형 슬로건과 광고 상투어를 막고, 관찰 가능한 구체 정보로 쓴다.
@@ -221,6 +230,13 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     ...(track?[track.track]:[]),
     `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})만 쓰고 음식 이름은 쓰지 마세요(모든 장에 똑같이 붙으므로, 음식은 각 장 visualPrompt에만). 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone, season)를 두고${track?"(값은 위 [디자인] 그대로)":"(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud. season은 아래 계절 소품 중 주제에 꼭 맞을 때만, 애매하면 none)"}, 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
   ].join("\n");
+}
+
+// 갈래 게시물의 장 수: 고정하지 않고 전할 이유 수에 맞춰 AI가 정한다(사장님 요청 2026-10-09). role은 앱이 위치에 맞게 다시 붙인다(planRepair).
+function trackCountRule():string {
+  const {min,max}=TRACK_SLIDE_RANGE;
+  const examples=[min,6,max].map(count=>`${count}장이면 ${rolesForCount(count).join(" → ")}`).join(", ");
+  return `slideCount는 ${min}~${max} 중에서 이 주제를 빠짐없이 전하는 데 필요한 만큼 정하세요: 표지 1장 + 표지 질문에 답하는 이유 장(이유 하나에 한 장, ${min-2}~${max-2}장) + 결론 1장입니다. 먼저 표지 질문에 답할 서로 다른 이유가 몇 개인지 세고, 그 수에 맞추세요. 이유가 둘이면 ${min}장이면 충분하고, 장 수를 채우려고 한 이유를 쪼개거나 같은 말을 되풀이하지 마세요. slides 개수는 slideCount와 같아야 하고, role 순서는 장 수에 맞춰 쓰세요(${examples}).`;
 }
 
 // 실제 사진 캐러셀이면 사진에 보이는 것을 알려 주고, 사진으로 보여 줄 수 있는 글을 쓰게 한다. 사진 내용을 모르면 빈 문자열.
@@ -293,7 +309,7 @@ export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,op
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));
     // 갈래 없는 요청에 AI가 갈래 전용 계열(사진 중심·글 중심)을 적어 오면(안내문에는 없다) 기본 템플릿으로 보고 예전처럼 고른다.
     const chosen=!parsed.track&&TRACK_STYLES.has(plan.design.style)?{...plan,design:{...plan.design,style:"template" as const}}:plan;
-    if(plan.slideCount===parsed.slideCount){const menu=carouselMenu(parsed);return vary(keepScenesOnMenu(limitChopstickScenes(normalizeCarouselDesign(chosen),parsed.topic,menu),parsed.topic,menu),false);}
+    if(slideCountFits(parsed,plan.slideCount)){const menu=carouselMenu(parsed);return vary(keepScenesOnMenu(limitChopstickScenes(normalizeCarouselDesign(chosen),parsed.topic,menu),parsed.topic,menu),false);}
     options.onFallback?.(new Error("wrong slide count"));
     return vary(fallback,true);
   } catch(error) {

@@ -160,7 +160,9 @@ describe("track plans", () => {
 
   it("asks the AI for the track rules in the prompt and keeps the old prompt without a track", () => {
     const photo=buildCarouselPlanPrompt({topic:"비 오는 날 홍어",slideCount:7,track:"photo"});
-    expect(photo).toContain("slideCount는 5");
+    // 갈래 게시물은 장 수를 고정하지 않고 AI가 내용에 맞춰 4~9장 중에서 정한다.
+    expect(photo).toContain("slideCount는 4~9 중에서");
+    expect(photo).not.toContain("slideCount는 7");
     expect(photo).toContain("[갈래: 사진 중심]");
     expect(photo).toContain("headline 한 줄(18자 이내");
     expect(photo).toContain("짧은 글(points) 1개(24자 이내)");
@@ -192,8 +194,32 @@ describe("track plans", () => {
     expect(response.status).toBe(200);
     expect(body.provider).not.toBe("fallback");
     expectTrackRules(body.plan,"text");
-    // AI에 보낸 구성안 요청도 5장이다.
-    expect(String(generateJson.mock.calls[0][0])).toContain("slideCount는 5");
+    // AI에 보낸 구성안 요청은 장 수를 AI에게 맡긴다(요청의 3장은 쓰지 않는다).
+    expect(String(generateJson.mock.calls[0][0])).toContain("slideCount는 4~9 중에서");
+  });
+
+  it("keeps the slide count the AI chose for a track post, within 4 to 9", async () => {
+    const sized=(count:number):CarouselPlan=>{
+      const base=wordyPlan(),body=base.slides[1];
+      const slides=Array.from({length:count},(_,i)=>i===0?base.slides[0]:{...body,headline:`이유 ${i}번은 이렇게 설명해요`,visualPrompt:`${i}번째 장면, 따뜻한 조명 아래 홍어 한 점`});
+      return {...base,slideCount:count,slides};
+    };
+    const ask=async(count:number)=>{
+      generateJson.mockResolvedValueOnce(sized(count));
+      const response=await POST(new Request("http://localhost/api/images/plan",{method:"POST",body:JSON.stringify({topic:"비 오는 날 홍어 한 점",track:"photo"})}));
+      return response.json();
+    };
+    for(const count of [4,7,9]){
+      const body=await ask(count);
+      expect(body.provider).not.toBe("fallback");
+      expect(body.plan.slideCount).toBe(count);
+      expect(body.plan.slides).toHaveLength(count);
+      expect(body.plan.slides[0].role).toBe("cover");
+      expect(body.plan.slides.at(-1).role).toBe("visit");
+    }
+    // 10장 넘게 오면 9장까지만 쓴다(맨 뒤 홍보 카드까지 10장).
+    const long=await ask(12);
+    expect(long.plan.slides).toHaveLength(9);
   });
 
   it("rejects an unknown track and keeps the old behaviour without one", async () => {

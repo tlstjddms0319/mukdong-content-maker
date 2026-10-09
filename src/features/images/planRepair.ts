@@ -28,10 +28,15 @@ export function shorten(value:string,max:number):string {
   return (cut>=max*.6?head.slice(0,cut):head).replace(/[\s,·、]+$/,"");
 }
 
-// raw: AI가 돌려준 JSON(아직 검사 전). slideCount: 사장님이 요청한 장 수.
-export function repairPlanJson(raw:unknown,slideCount:number,fixes:string[]=[]):unknown {
+// raw: AI가 돌려준 JSON(아직 검사 전). count: 요청한 장 수, 또는 갈래 게시물처럼 AI가 정하는 장 수 범위.
+// 범위면 AI가 보낸 장 수를 쓰고(넘치면 최대까지 자른다), role은 그 장 수의 순서로 다시 붙인다.
+export type PlanSlideCount=number|{min:number;max:number};
+const countOf=(count:PlanSlideCount,sent:number)=>typeof count==="number"?count:Math.min(Math.max(sent,count.min),count.max);
+const countFits=(count:PlanSlideCount,value:number)=>typeof count==="number"?value===count:value>=count.min&&value<=count.max;
+export function repairPlanJson(raw:unknown,count:PlanSlideCount,fixes:string[]=[]):unknown {
   if(!isRecord(raw)||!Array.isArray(raw.slides))return raw;
-  const roles=rolesForCount(slideCount as Parameters<typeof rolesForCount>[0]);
+  const slideCount=countOf(count,raw.slides.length);
+  const roles=rolesForCount(slideCount);
   // 장이 모자라면 지어낼 수 없다(검사에서 떨어지게 둔다). 남으면 뒤를 버린다.
   if(raw.slides.length<roles.length)return raw;
   const plan:Record<string,unknown>={...raw};
@@ -97,8 +102,8 @@ export function repairPlanJson(raw:unknown,slideCount:number,fixes:string[]=[]):
 }
 
 // AI에 보내는 스키마. JSON 스키마(엄격 모드)는 CarouselPlanSchema와 똑같이 나가고, 받은 답만 검사 전에 고친다.
-export function lenientPlanSchema(slideCount:number,fixes:string[]=[]){
-  return z.preprocess(raw=>repairPlanJson(raw,slideCount,fixes),CarouselPlanSchema.refine(plan=>plan.slideCount===slideCount,{message:"요청한 슬라이드 수와 다릅니다."}));
+export function lenientPlanSchema(count:PlanSlideCount,fixes:string[]=[]){
+  return z.preprocess(raw=>repairPlanJson(raw,count,fixes),CarouselPlanSchema.refine(plan=>countFits(count,plan.slideCount),{message:"요청한 슬라이드 수와 다릅니다."}));
 }
 
 // 기본 문안으로 넘어간 이유. 화면에는 짧은 한국어로, 서버 로그에는 원문을 함께 남긴다.
