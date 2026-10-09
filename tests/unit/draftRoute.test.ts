@@ -96,6 +96,10 @@ it("saves a planned time and final-review status for a complete draft", async ()
 
   expect(response.status).toBe(200);
   expect(await repository.readDraft(id)).toMatchObject({planned_publish_at:"2030-05-15T09:00:00.000Z",final_review_complete:true,caption:"홍어 소개",selected_media_id:mediaId});
+  // 응답은 예약 상태만(사진 목록 없이): 예전에는 게시물 전체(사진 base64 수 MB)를 돌려줘 휴대폰이 "예약하는 중…"에 오래 머물렀다.
+  const answer=await response.json();
+  expect(answer).toMatchObject({id,planned_publish_at:"2030-05-15T09:00:00.000Z",final_review_complete:true});
+  expect(answer).not.toHaveProperty("media_candidates");
 });
 
 it("keeps the planned time but clears final review when selected images change", async () => {

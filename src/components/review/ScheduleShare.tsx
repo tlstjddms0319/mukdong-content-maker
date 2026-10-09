@@ -15,6 +15,8 @@ type Mode="closed"|"picking"|"saving";
 // refreshKey: 저장된 글·사진이 바뀔 때마다 바뀌는 값. 바뀌면 예약 상태를 다시 읽는다(서버는 글·사진이 바뀌면 예약을 끈다).
 //   그때 예약이 풀렸으면 "글이나 사진을 고쳐 예약이 풀렸어요"를 알린다(예전에는 풀린 뒤에도 "○시에 올라가요"가 그대로 보였다).
 // busy: 글을 다시 쓰는 중(끝나면 글이 바뀌어 예약이 풀리므로 그동안은 예약하지 못하게 한다).
+// 예약 저장 응답을 기다리는 최대 시간. 서버가 쉬다 깨어나는 데 30~60초 걸릴 수 있어 넉넉히 둔다.
+export const SAVE_TIMEOUT_MS=45_000;
 export function ScheduleShare({draftId,ready,busy=false,refreshKey="",onBeforeSchedule,onChange}:{draftId:string;ready:boolean;busy?:boolean;refreshKey?:string;onBeforeSchedule?:()=>Promise<boolean>;onChange?:()=>void}) {
   const [reservedAt,setReservedAt]=useState<string|null>(null);
   const [mode,setMode]=useState<Mode>("closed");
@@ -23,6 +25,8 @@ export function ScheduleShare({draftId,ready,busy=false,refreshKey="",onBeforeSc
   const [error,setError]=useState("");
   const [choices,setChoices]=useState(()=>quickScheduleChoices());
   const [released,setReleased]=useState(false);
+  // 지금 하는 저장이 예약 취소인지(예약 칸의 버튼 글자를 "취소하는 중…"으로 바꿀지).
+  const [canceling,setCanceling]=useState(false);
   // 마지막으로 서버에서 확인한 예약(있었는지). 다시 읽었을 때 없어졌으면 풀렸다고 알린다.
   const reservedRef=useRef<string|null>(null);
 
@@ -40,16 +44,41 @@ export function ScheduleShare({draftId,ready,busy=false,refreshKey="",onBeforeSc
     return()=>{active=false;};
   },[draftId,refreshKey]);
 
-  const save=async(plannedIso:string|null)=>{
-    setMode("saving");setError("");
+  // 서버에 지금 걸린 예약(최종 확인 완료 + 앞으로 올 시각). 못 읽으면 undefined.
+  const readReserved=async():Promise<string|null|undefined>=>{
     try{
-      if(plannedIso&&onBeforeSchedule&&!await onBeforeSchedule())throw new Error("고친 글을 저장하지 못해 예약하지 않았어요. 잠시 뒤 다시 눌러 주세요.");
-      const response=await fetch("/api/drafts",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:draftId,planned_publish_at:plannedIso,final_review_complete:Boolean(plannedIso)})});
+      const response=await fetch(`/api/drafts?id=${encodeURIComponent(draftId)}`,{cache:"no-store"});
+      if(!response.ok)return undefined;
+      const draft=await readJsonResponse(response);
+      const at=typeof draft.planned_publish_at==="string"?draft.planned_publish_at:null;
+      return draft.final_review_complete&&at&&Date.parse(at)>Date.now()?at:null;
+    }catch{return undefined;}
+  };
+  const done=(plannedIso:string|null)=>{
+    reservedRef.current=plannedIso;setReleased(false);
+    setReservedAt(plannedIso);setMode("closed");setCanceling(false);setPicked("");setCustom("");onChange?.();
+  };
+  const save=async(plannedIso:string|null)=>{
+    setMode("saving");setCanceling(plannedIso===null);setError("");
+    if(plannedIso&&onBeforeSchedule&&!await onBeforeSchedule()){
+      setError("고친 글을 저장하지 못해 예약하지 않았어요. 잠시 뒤 다시 눌러 주세요.");setMode("picking");setCanceling(false);return;
+    }
+    // 응답을 끝없이 기다리지 않는다(서버가 깨어나는 중이거나 연결이 끊긴 경우). 시간이 지나면 서버에 실제로 걸렸는지 다시 읽어
+    // 걸렸으면 끝난 것으로, 아니면 다시 눌러 달라고 알린다(예전에는 예약이 끝났어도 "예약하는 중…"에 머물 수 있었다).
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),SAVE_TIMEOUT_MS);
+    try{
+      const response=await fetch("/api/drafts",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:draftId,planned_publish_at:plannedIso,final_review_complete:Boolean(plannedIso)}),signal:controller.signal});
       const data=await readJsonResponse(response).catch(()=>({}));
       if(!response.ok)throw new Error(String((data as {error?:unknown}).error||"예약하지 못했어요. 잠시 뒤 다시 눌러 주세요."));
-      reservedRef.current=plannedIso;setReleased(false);
-      setReservedAt(plannedIso);setMode("closed");setPicked("");setCustom("");onChange?.();
-    }catch(cause){setError(cause instanceof Error?cause.message:"예약하지 못했어요.");setMode(plannedIso?"picking":"closed");}
+      done(plannedIso);
+    }catch(cause){
+      const current=await readReserved();
+      if(current!==undefined&&(plannedIso?current!==null&&Math.floor(Date.parse(current)/60_000)===Math.floor(Date.parse(plannedIso)/60_000):current===null)){done(current);return;}
+      const timedOut=controller.signal.aborted;
+      setError(timedOut?"서버 응답이 늦어요. 잠시 뒤 다시 눌러 주세요(내 게시물에서 예약됐는지 확인할 수 있어요).":cause instanceof Error?cause.message:"예약하지 못했어요.");
+      setMode(plannedIso?"picking":"closed");setCanceling(false);
+    }finally{clearTimeout(timer);}
   };
   // 고른 시각: 빠른 버튼 > 직접 고른 시각.
   const target=picked||(custom?localInputToIso(custom):"");
@@ -63,7 +92,7 @@ export function ScheduleShare({draftId,ready,busy=false,refreshKey="",onBeforeSc
 
   if(reservedAt)return <div className="share-action">
     <p role="status" className="share-done"><strong>{formatKstTime(reservedAt)}에 올라가요.</strong> 그때 인스타그램에 저절로 올라가요(서버가 쉬고 있으면 최대 1시간쯤 늦을 수 있어요). 글이나 사진을 고치면 예약이 풀려요.</p>
-    <button type="button" className="button secondary" disabled={mode==="saving"} onClick={cancel}>{mode==="saving"?"취소하는 중…":"예약 취소"}</button>
+    <button type="button" className="button secondary" disabled={mode==="saving"} onClick={cancel}>{mode==="saving"&&canceling?"취소하는 중…":"예약 취소"}</button>
     {error&&<p role="alert" className="field-help">{error}</p>}
   </div>;
 

@@ -76,9 +76,11 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,sav
     <div className="share-actions">
       <InstagramPublish draftId={draftId} caption={caption} imageUrls={urls.map(image=>image.url)} primary={instagramReady} onBeforePublish={onSaveCaption} onReady={setInstagramReady}/>
       {/* 사진이 바뀌면(장 다시 만들기 등) 서버가 예약 확인을 풀므로, 다시 읽도록 사진 목록을 key로 준다. */}
-      <ScheduleShare key={shareTick} draftId={draftId} ready={instagramReady&&urls.length>0} busy={writing} refreshKey={`${savedCaption}|${urls.map(image=>image.url.slice(-24)).join("|")}`} onBeforeSchedule={onSaveCaption} onChange={bumpShare}/>
+      {/* 예약·보관 칸은 key가 서로 달라야 한다: 같은 key(shareTick)를 함께 쓰면 key가 바뀔 때 React가 칸을 헷갈려
+          옛 예약 칸("예약하는 중…")이 지워지지 않고 새 칸과 함께 두 번 보였다. */}
+      <ScheduleShare key={`schedule-${shareTick}`} draftId={draftId} ready={instagramReady&&urls.length>0} busy={writing} refreshKey={`${savedCaption}|${urls.map(image=>image.url.slice(-24)).join("|")}`} onBeforeSchedule={onSaveCaption} onChange={bumpShare}/>
       <SaveToPhone images={urls} caption={caption} title={topic} primary={!instagramReady}/>
-      <ArchiveShare key={shareTick} draftId={draftId} onBeforeArchive={onSaveCaption} onChange={bumpShare}/>
+      <ArchiveShare key={`archive-${shareTick}`} draftId={draftId} onBeforeArchive={onSaveCaption} onChange={bumpShare}/>
     </div>
     <details className="more-tools">
       <summary>더보기</summary>
