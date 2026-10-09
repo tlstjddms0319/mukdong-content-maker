@@ -1,4 +1,4 @@
-import { TopicInputSchema, TopicSuggestionsSchema, type TopicInput, type TopicSuggestion, type TopicSuggestionInput } from "./schema";
+import { TopicInputSchema, TopicSuggestionSchema, TopicSuggestionsSchema, type TopicInput, type TopicSuggestion, type TopicSuggestionInput } from "./schema";
 import type { SeasonContext } from "./season";
 import { STORE_MENU, isHongeoHoe, mainMenuOf, menuOf, menusForDate, type StoreMenuItem } from "@/features/store/menu";
 import { trendMenu } from "./naverTrend";
@@ -277,9 +277,24 @@ export function normalizeTrendLabels(topics:TopicSuggestion[],trends:readonly st
     const keyword=topic.trend.trim();
     const menu=STORE_MENU.find(item=>item.id===trendMenu(keyword));
     const text=`${topic.title} ${topic.summary}`;
-    const used=trends.includes(keyword)&&(text.includes(keyword)||Boolean(menu&&menuOf(text).some(item=>item.id===menu.id)));
+    // 가게 메뉴로 이어지는 검색어는 그 메뉴를 다루는 주제에만 붙인다. 글자만 보면 "전"이 "작성 전"에도 걸려
+    // 홍어 주제에 "검색 흐름: 전"이 붙었다(검수 보고서 P3). 메뉴가 아닌 말(굴·회식)은 낱말 첫머리에 있을 때만("굴보쌈"은 되고 "얼굴"은 안 됨).
+    const atWordStart=(word:string)=>new RegExp(`(?:^|[^가-힣])${word.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}`).test(text);
+    const used=Boolean(keyword)&&trends.includes(keyword)&&(menu?menuOf(text).some(item=>item.id===menu.id):atWordStart(keyword));
     return {...topic,trend:used?keyword:""};
   });
+}
+
+// AI 주제를 하나씩 읽는다. 형식이 틀린 주제(너무 긴 제목 등)만 빼고 나머지는 살린다: 예전에는 하나만 틀려도 세 주제를
+// 통째로 버리고 준비된 주제로 바꿨다(검수 보고서 P9). 빠진 자리는 assembleTopics가 준비된 주제로 채운다.
+// 셋 다 틀렸으면 예전처럼 형식 오류로 본다(준비된 주제 + "형식이 맞지 않았어요" 안내).
+function readSuggestions(value:unknown):TopicSuggestion[] {
+  if(!Array.isArray(value))return TopicSuggestionsSchema.parse(value);
+  const read=value.map(item=>TopicSuggestionSchema.safeParse(item)).flatMap(result=>result.success?[result.data]:[]);
+  if(!read.length)return TopicSuggestionsSchema.parse(value);
+  // 같은 id가 겹치면 뒤 주제의 id를 바꾼다(id는 화면 카드 열쇠일 뿐이다).
+  const seen=new Set<string>();
+  return read.map((topic,i)=>{const id=seen.has(topic.id)?`${topic.id}-${i+1}`:topic.id;seen.add(id);return {...topic,id};});
 }
 
 // onFallback(reason, error): 준비된 주제로 바꾼 이유(로그용 글)와, AI 호출이 실패했으면 그 오류(화면에 보여 줄 이유를 고르는 데 쓴다).
@@ -288,7 +303,7 @@ export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallbac
   const fallback=(reason="no AI client",error?:unknown,rejected?:Partial<Record<TopicRejectReason,number>>)=>{onFallback?.(reason,error,rejected);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season,parsed.avoidTitles,hints);};
   if(!ai)return fallback();
   try{
-    const suggestions=normalizeTrendLabels(normalizeSeasonLabels(TopicSuggestionsSchema.parse(await ai.suggest(parsed)),season),hints.trends);
+    const suggestions=normalizeTrendLabels(normalizeSeasonLabels(readSuggestions(await ai.suggest(parsed)),season),hints.trends);
     const {topics,filled,rejected}=assembleTopics(suggestions,{storeName:parsed.storeName,round:parsed.recommendationRound,excludeTitles:parsed.excludeTitles,avoidTitles:parsed.avoidTitles,season,hints});
     if(filled>=3)return fallback(`suggestions broke the topic rules (${Object.entries(rejected).map(([reason,count])=>`${reason}×${count}`).join(", ")}): ${suggestions.map(topic=>topic.title).join(" / ").slice(0,200)}`,undefined,rejected);
     if(filled>0)onPartial?.(filled);
