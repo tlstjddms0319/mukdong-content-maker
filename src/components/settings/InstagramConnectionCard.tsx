@@ -86,7 +86,7 @@ export function InstagramConnectionCard({part="main"}:{part?:"main"|"server"}){
     return <section className="settings-section instagram-settings"><div><h2>Instagram 게시 서버</h2><p>Meta 앱·서버 설정 상태와 연결 실패 원인이에요.</p></div><div className="connection-panel">
       {callbackResult&&!callbackResult.ok&&<p role="alert">{callbackResult.message}</p>}
       {status&&<div className="connection-card"><span className={`status-dot${status.setup&&!missingSetup.length?" on":""}`}/><div><strong>게시 서버 설정</strong><p>{!status.setup?"설정 상태를 확인하지 못했어요.":missingSetup.length?"게시 서버 설정이 더 필요해요.":"필수 설정 항목이 모두 채워졌어요."}</p>{missingSetup.length>0&&<ul className="connection-missing">{missingSetup.map(item=><li key={item.key}>{item.label}</li>)}</ul>}{!canConnect&&<p className="connection-help">Meta 앱 ID·비밀키·연결 완료 주소를 서버 환경변수에 넣으면 연결할 수 있어요.</p>}<p className="connection-help">설정값 유무와 HTTPS 주소 형식만 확인해요. 실제 외부 접근과 게시 성공은 아직 검증하지 않았어요.</p></div></div>}
-      <p className="connection-help">연결한 뒤에는 두 가지 방법으로 게시돼요. 확인 화면의 ‘인스타그램에 바로 올리기’ 버튼으로 바로 게시하거나, 내 게시물에서 올릴 날짜를 정하고 ‘최종 확인 완료’를 켜 두면 그 시각에 자동으로 게시됩니다. 무료 서버는 잠들어 있는 동안 게시하지 못하므로 외부 깨우기(5분마다 /api/instagram/scheduler 호출)를 걸어 두세요. 6시간 넘게 늦어진 글은 게시하지 않고 ‘예약 놓침’으로 남겨요. 자동 게시를 멈추려면 서버 환경변수 INSTAGRAM_AUTOPUBLISH=off 로 두세요(토큰 갱신은 계속해요).</p>
+      <p className="connection-help">연결한 뒤에는 두 가지 방법으로 게시돼요. 확인 화면의 ‘인스타그램에 바로 올리기’ 버튼으로 바로 게시하거나, 내 게시물에서 올릴 날짜를 정하고 ‘최종 확인 완료’를 켜 두면 그 시각에 자동으로 게시됩니다. 무료 서버는 잠들어 있는 동안 게시하지 못해요. 저장소의 GitHub 예약 작업이 1시간마다 서버를 깨우므로(/api/instagram/scheduler) 예약 시각보다 최대 1시간쯤 늦게 올라갈 수 있어요. 6시간 넘게 늦어진 글은 게시하지 않고 ‘예약 놓침’으로 남겨요. 자동 게시를 멈추려면 서버 환경변수 INSTAGRAM_AUTOPUBLISH=off 로 두세요(토큰 갱신은 계속해요).</p>
     </div></section>;
   }
   const callbackResult=plainCallback(search);

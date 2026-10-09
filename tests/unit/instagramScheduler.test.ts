@@ -50,6 +50,22 @@ describe("Instagram publish scheduler",()=>{
     expect(deps.refreshToken).not.toHaveBeenCalled();
   });
 
+  it("re-reads the saved draft right before posting: skips a reservation cancelled/archived after the list was read, and posts the current caption",async()=>{
+    // 목록(요약)은 잠깐 옛 상태일 수 있다. 저장된 게시물은 이미 취소·보관·글 수정됨.
+    const cancelled=makeDraft(),archived=makeDraft(),edited=makeDraft({caption:"요약 속 옛 글"});
+    const saved:Record<string,Draft>={[cancelled.id]:{...cancelled,final_review_complete:false},[archived.id]:{...archived,archived:true,final_review_complete:true},[edited.id]:{...edited,caption:"사장님이 고친 새 글"}};
+    const {deps,meta}=setup([cancelled,archived,edited],makeConnection());
+    deps.readDraft.mockImplementation(async(id:string)=>saved[id]??null);
+    const run=await runPublishScheduler(deps);
+    expect(run.skipped.sort((a,b)=>a.draftId.localeCompare(b.draftId))).toEqual([{draftId:cancelled.id,reason:"changed"},{draftId:archived.id,reason:"changed"}].sort((a,b)=>a.draftId.localeCompare(b.draftId)));
+    expect(run.published.map(item=>item.draftId)).toEqual([edited.id]);
+    expect((meta.createImageContainer.mock.calls as unknown as Array<[{caption?:string}]>)[0][0]).toMatchObject({caption:"사장님이 고친 새 글"});
+  });
+
+  it("never treats an archived draft as due",()=>{
+    expect(isDueForPublishing(makeDraft({archived:true}),NOW)).toBe(false);
+  });
+
   it("refreshes a token that expires within a week and keeps going when refresh fails",async()=>{
     const soon=makeConnection({expiresAt:iso(3*DAY),updatedAt:iso(-2*DAY)});
     const refreshed=await refreshConnectionIfNeeded(soon,{saveConnection:async value=>value,refreshToken:async()=>({accessToken:"fresh",expiresIn:5184000})},NOW);

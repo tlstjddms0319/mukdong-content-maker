@@ -13,11 +13,29 @@ const SUMMARY_DIR="draft-summaries",THUMB_DIR="draft-thumbs";
 const SUMMARY_TTL_MS=10*60*1000;
 // Next는 화면(서버 컴포넌트)과 API 라우트를 따로 묶어, 이 파일이 서버 안에서 여러 번 불러와질 수 있다.
 // 그래도 한 프로세스에서 같은 목록을 보도록 globalThis에 둔다(예: API로 저장한 초안이 내 초안 화면에 바로 보이게).
-type SummaryCache={entries:Map<string,{loadedAt:number;items:Map<string,DraftSummary>}>;loads:Map<string,Promise<Map<string,DraftSummary>>>};
+// writes: 목록을 다시 읽는 도중에 저장·삭제된 요약(null=삭제). 다시 읽기는 저장소의 요약 파일을 저장 전에 읽었을 수 있어서,
+// 읽기가 끝나면 그 사이 저장된 것을 덮어 반영한다(예전에는 읽는 도중 예약을 취소하면 최대 10분 동안 취소 전 요약이 남아,
+// 예약 점검이 취소된 게시물을 올릴 수 있었다).
+type SummaryCache={entries:Map<string,{loadedAt:number;items:Map<string,DraftSummary>}>;loads:Map<string,Promise<Map<string,DraftSummary>>>;writes:Map<string,Map<string,DraftSummary|null>>;locks:Map<string,Promise<unknown>>};
 const shared=globalThis as typeof globalThis&{__mukdongDraftSummaries?:SummaryCache};
-shared.__mukdongDraftSummaries??={entries:new Map(),loads:new Map()};
+shared.__mukdongDraftSummaries??={entries:new Map(),loads:new Map(),writes:new Map(),locks:new Map()};
+shared.__mukdongDraftSummaries.writes??=new Map();
+shared.__mukdongDraftSummaries.locks??=new Map();
 const summaryCache=shared.__mukdongDraftSummaries.entries;
 const summaryLoads=shared.__mukdongDraftSummaries.loads;
+const loadWrites=shared.__mukdongDraftSummaries.writes;
+const draftLocks=shared.__mukdongDraftSummaries.locks;
+
+// 같은 게시물을 "읽고 → 고쳐 → 쓰는" 일을 한 번에 하나씩(이 서버 프로세스 안에서). 글 자동 저장과 예약 저장이 거의 동시에 오면
+// 늦게 끝난 쪽이 먼저 읽은 내용으로 게시물 전체를 덮어써 예약·보관이 사라지곤 했다. 게시물마다 앞 작업이 끝난 뒤 다음 작업을 한다.
+export async function withDraftLock<T>(id:string,work:()=>Promise<T>):Promise<T> {
+  const previous=draftLocks.get(id)??Promise.resolve();
+  const run=previous.catch(()=>{}).then(work);
+  const settled=run.catch(()=>{});
+  draftLocks.set(id,settled);
+  try{return await run;}
+  finally{if(draftLocks.get(id)===settled)draftLocks.delete(id);}
+}
 const THUMB_WIDTH=300,THUMB_HEIGHT=375;
 
 // 표지(첫 선택 이미지)로 300×375 JPEG 썸네일(data URL)을 만든다. 사진을 읽지 못하면 null.
@@ -76,6 +94,7 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
   async function writeSidecars(draft: Draft) {
     const summary = summarizeDraft(draft);
     summaryCache.get(cacheKey())?.items.set(draft.id, summary);
+    loadWrites.get(cacheKey())?.set(draft.id, summary);
     try {
       await side.write(SUMMARY_DIR, draft.id, JSON.stringify(summary), "application/json");
       const thumbnail = await thumbnailOf(draft);
@@ -114,6 +133,8 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
       if (cached && Date.now() - cached.loadedAt < SUMMARY_TTL_MS) return sortSummaries([...cached.items.values()]);
       let load = summaryLoads.get(key);
       if (!load) {
+        const writes = new Map<string, DraftSummary | null>();
+        loadWrites.set(key, writes);
         load = (async () => {
           let draftNames: string[];
           try {
@@ -137,9 +158,11 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
             }
             if (summary) items.set(id, summary);
           }));
+          // 읽는 동안 저장·삭제된 게시물은 그 최신 상태로 덮는다.
+          for (const [id, summary] of writes) { if (summary) items.set(id, summary); else items.delete(id); }
           summaryCache.set(key, { loadedAt: Date.now(), items });
           return items;
-        })().finally(() => summaryLoads.delete(key));
+        })().finally(() => { summaryLoads.delete(key); if (loadWrites.get(key) === writes) loadWrites.delete(key); });
         summaryLoads.set(key, load);
       }
       return sortSummaries([...(await load).values()]);
@@ -165,6 +188,7 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
       if (remote) await remote.remove(`drafts/${id}.json`);
       else await rm(path.join(draftsDirectory, `${id}.json`), { force: true });
       summaryCache.get(cacheKey())?.items.delete(id);
+      loadWrites.get(cacheKey())?.set(id, null);
       await Promise.all([side.remove(SUMMARY_DIR, `${id}.json`), side.remove(THUMB_DIR, `${id}.txt`)]).catch(() => {});
       return true;
     },
@@ -200,9 +224,11 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
     },
 
     async saveCaption(id: string, caption: string, updatedAt = new Date().toISOString()): Promise<Draft | null> {
-      const draft = await repo.readDraft(id);
-      if (!draft) return null;
-      return repo.saveDraft({ ...draft, caption, final_review_complete:draft.caption===caption?draft.final_review_complete:false, updated_at:updatedAt });
+      return withDraftLock(id, async () => {
+        const draft = await repo.readDraft(id);
+        if (!draft) return null;
+        return repo.saveDraft({ ...draft, caption, final_review_complete:draft.caption===caption?draft.final_review_complete:false, updated_at:updatedAt });
+      });
     },
   };
   return repo;
@@ -213,7 +239,7 @@ function sortSummaries(items: DraftSummary[]) {
 }
 
 // 테스트에서 저장소 폴더를 바꿀 때 메모리 요약을 비운다.
-export function resetDraftSummaryCache() { summaryCache.clear(); summaryLoads.clear(); }
+export function resetDraftSummaryCache() { summaryCache.clear(); summaryLoads.clear(); loadWrites.clear(); }
 
 function zUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
