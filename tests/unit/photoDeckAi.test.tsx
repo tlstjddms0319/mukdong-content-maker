@@ -3,7 +3,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
-import { addLibraryPhoto, buildPhotoCarousel, ensureGeneration, redoSlide, redoSlideKind, resetGenerationStore, resumePhotoCarousel, sceneNoticeOf, setActiveSlide, useGenerationState } from "@/features/images/generationStore";
+import { addLibraryPhoto, buildPhotoCarousel, ensureGeneration, redoSlide, redoSlideKind, resetGenerationStore, resumePhotoCarousel, sceneNoticeOf, setActiveSlide, setAiFill, useGenerationState } from "@/features/images/generationStore";
 import { buildImagePrompt } from "@/features/images/openaiRequest";
 import { ImageBriefSchema } from "@/features/images/schema";
 
@@ -125,6 +125,29 @@ describe("photo deck with too few photos", () => {
     await waitFor(()=>expect(hook.result.current.slides).toHaveLength(5));
     // 다시 해 보기에서 이미 그린 AI 장은 다시 그리지 않는다(이미지 AI 비용이 두 번 들지 않게). 본문 4장 = AI 호출 4번.
     expect(bodies.filter(body=>body.referenceImage)).toHaveLength(4);
+  });
+
+  // 손님 의견: AI 음식 그림은 거부감이 든다. "내 사진만 쓰기"를 고르면 AI를 부르지 않는다(고른 값은 기억한다).
+  it("uses only the owner's photo (close-ups, then text cards) when 'my photos only' is chosen, and remembers it", async () => {
+    localStorage.clear();
+    const bodies=stub(true);
+    const hook=renderHook(()=>useGenerationState());
+    act(()=>{ensureGeneration("only-photos|5",{topic:"홍어무침엔 왜 막걸리일까?",slideCount:5,track:"photo"});addLibraryPhoto({id:"p1",preview:photo,name:"홍어무침"});setAiFill(false);});
+    expect(localStorage.getItem("mukdong-ai-fill")).toBe("photos-only");
+    await act(async()=>{await buildPhotoCarousel();});
+    await waitFor(()=>expect(hook.result.current.slides).toHaveLength(5));
+    const state=hook.result.current;
+    expect(bodies.filter(body=>body.referenceImage)).toHaveLength(0);
+    expect(state.slides.every(slide=>slide.source!=="ai-edited")).toBe(true);
+    // 사진 한 장: 표지 + 가까이·결 확대 두 장, 나머지 두 장은 글자 카드.
+    expect(state.photoViews.flat().filter(view=>view!=="full")).toHaveLength(2);
+    expect(state.slides.filter(slide=>slide.source==="design")).toHaveLength(2);
+    expect(state.sceneMisses).toEqual([]);
+    // 새 게시물에서도 기억한다.
+    act(()=>{resetGenerationStore();ensureGeneration("next|5",{topic:"과메기",slideCount:5,track:"photo"});});
+    expect(hook.result.current.aiFill).toBe(false);
+    act(()=>setAiFill(true));
+    localStorage.clear();
   });
 
   it("tells the image AI to keep the dish but build the slide's own scene", () => {

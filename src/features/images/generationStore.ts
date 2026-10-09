@@ -60,6 +60,9 @@ export type GenerationState={
   // AI 장면을 못 그려 확대 사진·글자 카드로 대신한 장(검수 보고서 B-4). 화면이 안내하고, "장 고치기 → 그림"은 이 장을 AI로 다시 그린다.
   // photo: 참고한 사장님 사진, layout: AI로 그릴 때의 모양(글자 카드로 바뀌었으면 되돌린다), reason: 못 그린 이유(서버의 쉬운 말).
   sceneMisses:SceneMiss[];
+  // 사장님 사진이 모자란 장을 AI 그림으로 채울지(true, 기본) 내 사진만 쓸지(false: 같은 사진 가까이·결 확대, 그래도 모자라면 글자 카드).
+  // AI 음식 그림에 거부감을 느끼는 손님도 있어 고를 수 있게 했다(2026-10 의견). 고른 값은 이 기기에 기억한다(AI_FILL_KEY).
+  aiFill:boolean;
   // 맨 뒤 가게 홍보 카드(사장님 결정: 모든 묶음 끝에 "묵동홍어마을" 홍보 카드 한 장, 이미지 AI 비용 없음).
   // include: 붙일지(장 고치기에서 끌 수 있음). image: 그려 둔 카드. key: 그릴 때의 디자인·장 수(바뀌면 다시 그린다).
   storeCard:{include:boolean;image?:ApprovedImage;key?:string;pending?:boolean;failed?:boolean};
@@ -75,8 +78,18 @@ const AUTO_IDLE:AutoState={stage:"idle",error:""};
 
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
 
+// "사진이 모자란 장" 고르기를 이 기기에 기억한다. 못 읽으면(사생활 보호 창 등) 기본값 AI로 채우기.
+const AI_FILL_KEY="mukdong-ai-fill";
+function readAiFill():boolean {
+  try{return typeof localStorage==="undefined"||localStorage.getItem(AI_FILL_KEY)!=="photos-only";}catch{return true;}
+}
+export function setAiFill(aiFill:boolean){
+  try{localStorage.setItem(AI_FILL_KEY,aiFill?"ai":"photos-only");}catch{/* 기억만 못 한다 */}
+  patch({aiFill});
+}
+
 function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,photoStatus:"",plan:undefined,cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,photos:[],photoAssignment:[],photoViews:[],photoNotes:[],photoSceneOnly:[],sceneMisses:[],
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,photoStatus:"",plan:undefined,cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,photos:[],photoAssignment:[],photoViews:[],photoNotes:[],photoSceneOnly:[],sceneMisses:[],aiFill:readAiFill(),
     // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 묶음으로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
@@ -432,7 +445,8 @@ export async function buildPhotoCarousel(){
     // 2) 장마다 사진 칸 수는 그대로 두고, 사진 내용이 그 장의 글과 맞는 사진을 넣는다(표지는 첫 사진 그대로).
     const matched=photoNotes?{...fitted,...matchPhotosToSlides(fitted.plan,fitted.assignment,notes)}:fitted;
     // 3) 사진이 모자라 글자 카드로 남은 장에 넣을 사진 칸을 정한다(fillWithPhotoViews: 그 장 글과 맞는 사진·레이아웃).
-    const fit=fillWithPhotoViews(matched.plan,matched.assignment,photos.length,notes,track);
+    // 내 사진만 쓰기(aiFill=false)면 사진 중심도 사진마다 두 번(가까이·결 확대)까지만 다시 쓰고 나머지는 글자 카드다.
+    const fit=fillWithPhotoViews(matched.plan,matched.assignment,photos.length,notes,state.aiFill||track!=="photo"?track:undefined);
     // 4) 그 장들(같은 사진의 "가까이"·"결 확대" 자리)은 AI가 그 사진을 참고해 같은 음식으로 이 장 글에 맞는 새 장면을 그린다
     //    (예: "시원한 막걸리와 잘 어울려요" → 이 무침 옆에 막걸리 사발). 예전에는 같은 사진을 확대만 해서 글과 사진이 따로 놀았다.
     //    이미지 AI를 못 쓰면(키 없음·크레딧 부족·실패) 예전처럼 확대 사진으로 그린다.
@@ -474,7 +488,8 @@ export async function buildPhotoCarousel(){
 async function drawPhotoDeckSlide(i:number,assignment:number[][],views:PhotoView[][]):Promise<ApprovedImage>{
   const plan=state.plan!;
   const slots=assignment[i]??[],view=views[i]?.[0];
-  if(i>0&&slots.length&&view&&view!=="full"){
+  // 내 사진만 쓰기: AI를 부르지 않고 같은 사진을 가까이·결 확대로 그린다.
+  if(i>0&&slots.length&&view&&view!=="full"&&state.aiFill){
     try{
       const card=await generateOnce(plan.slides[i],i+1,{photo:slots[0]});
       assignment[i]=[];views[i]=[];

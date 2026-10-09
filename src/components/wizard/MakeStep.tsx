@@ -1,7 +1,7 @@
 "use client";
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { PhotoPicker } from "./PhotoPicker";
-import { AUTO_FAILED, autoProgress, type GenerationState } from "@/features/images/generationStore";
+import { AUTO_FAILED, autoProgress, setAiFill, type GenerationState } from "@/features/images/generationStore";
 import type { CarouselTrack } from "@/features/images/track";
 
 // 2단계 "어떻게 만들까요?": 큰 카드 두 개 중 하나 + 사진 올리기(선택) + "만들기" 한 번.
@@ -12,9 +12,10 @@ const TRACKS:Array<{id:CarouselTrack;icon:string;title:string;help:string}>=[
 ];
 
 // 사진 유무·갈래에 따라 걸리는 시간을 쉬운 말로 한 줄.
-function timeNote(track:CarouselTrack,photos:number):string {
+function timeNote(track:CarouselTrack,photos:number,aiFill:boolean):string {
   if(photos&&track==="text")return "올린 첫 사진이 표지가 되고, 나머지 장은 큰 글씨로 만들어요. 1분 안쪽이면 돼요.";
-  // 사진이 5장보다 적으면 모자란 장은 AI가 올린 사진(같은 음식)을 참고해 그 장 글에 맞는 새 장면을 그린다.
+  // 사진이 5장보다 적으면 모자란 장은 AI가 올린 사진(같은 음식)을 참고해 그 장 글에 맞는 새 장면을 그린다(내 사진만 쓰기면 그리지 않는다).
+  if(photos&&photos<5&&!aiFill)return "AI 그림 없이 올린 사진만 써요. 모자란 장은 같은 사진을 가까이 보여 주거나 큰 글씨 장으로 만들어요. 1~2분이면 돼요.";
   if(photos)return photos>=5?"올린 사진으로 5장을 만들어요. 1~2분이면 돼요.":"사진이 모자란 장은 AI가 올린 사진을 참고해 글에 맞는 장면으로 새로 그려요. 3~5분쯤 걸려요.";
   return track==="text"?"사진이 없으면 AI가 표지 한 장만 그려요. 3분쯤 걸려요.":"사진이 없으면 AI가 5장을 모두 그려요. 10분쯤 걸려요.";
 }
@@ -44,6 +45,12 @@ export function MakeStep({topic,track,onTrack,state,onMake,onBack}:{topic:string
       </button>)}
     </div>
     <PhotoPicker state={state}/>
+    {/* 사진이 모자랄 때 AI 그림으로 채울지, 내 사진만 쓸지. AI 음식 그림에 거부감을 느끼는 손님도 있어 고를 수 있게 했다. */}
+    {track==="photo"&&state.photos.length>0&&state.photos.length<5&&<div className="option-picker fill-choice" role="group" aria-label="사진이 모자란 장">
+      <span>사진이 모자란 장은</span>
+      <button type="button" className="button secondary" aria-pressed={state.aiFill} disabled={busy} onClick={()=>setAiFill(true)}>AI 그림으로 채우기</button>
+      <button type="button" className="button secondary" aria-pressed={!state.aiFill} disabled={busy} onClick={()=>setAiFill(false)}>내 사진만 쓰기</button>
+    </div>}
     {auto.stage==="error"&&<div className="make-error" role="alert">
       <p>{auto.error}</p>
       {/* AI 그림이 계속 멈추면(그림 AI 한도·연결 문제) 사장님이 할 수 있는 다른 길: 가게 사진으로 만들면 그림 AI가 필요 없다. */}
@@ -51,7 +58,7 @@ export function MakeStep({topic,track,onTrack,state,onMake,onBack}:{topic:string
       {auto.detail&&<details><summary>자세한 이유</summary><p>{auto.detail}</p></details>}
     </div>}
     {state.error&&auto.stage!=="error"&&<p role="alert">{state.error}</p>}
-    <p className="make-note">{timeNote(track,state.photos.length)}</p>
+    <p className="make-note">{timeNote(track,state.photos.length,state.aiFill)}</p>
     <div className="bottom-action">
       <button type="button" className="button secondary" onClick={onBack}>이전</button>
       <button type="button" className="button primary big" disabled={busy||!topic.trim()} onClick={onMake}>{auto.stage==="error"?"다시 해 보기":"만들기"}</button>
