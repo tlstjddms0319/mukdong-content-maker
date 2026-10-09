@@ -33,4 +33,17 @@ describe("other topics really differ", () => {
     expect(prompt).toContain("검색어 주제는 3개 중 최대 2개");
     expect(prompt).not.toContain("최근 주제를 피하라는 규칙보다 이 규칙이 먼저");
   });
+
+  it("does not bring back the menus on screen with a new scene", async () => {
+    const onScreen=["과메기는 왜 찬바람 불 때 가장 먼저 생각날까?","송년회 자리에서 홍어애탕은 어떤 깊은 국물 맛을 낼까?","홍어를 처음 먹는다면 한입에 얼마나 올릴까?"];
+    const again=[
+      topic("a","과메기는 왜 바다 바람에 말려야 할까?","과메기를 바람에 말리는 이유를 설명하고 과메기로 연결해요."),
+      topic("b","찬바람이 불어올 때 홍어애탕은 어떤 국물일까?","찬바람 부는 날 국물 이야기에서 홍어애탕으로 연결해요."),
+      topic("c","미나리전엔 왜 막걸리가 생각날까?","비 오는 날 미나리전과 배다리 막걸리가 어울리는 이유를 설명해요."),
+    ];
+    const result=await suggestTopics({storeName:"묵동홍어마을",intent:"",excludeTitles:onScreen},{suggest:async()=>again});
+    const text=result.map(item=>item.title).join("\n");
+    expect(text).toContain("미나리전엔 왜 막걸리가 생각날까?");
+    expect(text).not.toMatch(/과메기|애탕/);
+  });
 });

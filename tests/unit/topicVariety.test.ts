@@ -209,13 +209,13 @@ describe("topic variety", () => {
     expect(prompt).not.toContain('"directions"');
   });
 
-  it("asks for season and search topics first, general topics only when nothing fits", () => {
+  // 시기·검색만으로 세 자리를 채우면 "다른 주제 보기"마다 같은 메뉴가 돌아와(사장님 지적 2026-10-09) 1~2개로 줄이고 일반 궁금증을 최소 1개 둔다.
+  it("mixes season and search topics with at least one general question", () => {
     const prompt=buildTopicPrompt({storeName:"묵동홍어마을",recommendationRound:0},seasonContext(new Date("2026-10-08T12:00:00+09:00")),[],["방어 +40%","과메기 +20%"]);
-    expect(prompt).toContain("3개 모두 되도록 아래 둘 중 하나에서 출발하세요");
-    expect(prompt).toContain("정말 이어질 거리가 없을 때만");
+    expect(prompt).toContain("3개 중 1~2개는 아래 둘 중 하나에서 출발하세요");
+    expect(prompt).toContain("나머지(최소 1개)는 시기와 상관없는 일반 음식 궁금증");
+    expect(prompt).not.toContain("3개 모두 되도록");
     expect(prompt).toContain("검색어 주제는 3개 중 최대 2개");
-    // 예전 개수 상한(시기 1~2개, 검색 1개)은 없다.
-    expect(prompt).not.toContain("3개 중 1~2개");
     expect(prompt).not.toContain("3개 중 1개는 그 가운데");
   });
 
