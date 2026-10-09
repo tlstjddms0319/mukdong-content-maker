@@ -47,13 +47,17 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 지금 화면과 최근 추천에 자주 나온 메뉴는 이번에 빼서 메뉴를 고르게 돌린다(예: 가을마다 홍어애탕만 나오던 문제).
     const recentMenus = overusedMenus([...(body.recentTitles ?? []), ...recentDraftTopics], input.excludeTitles);
     // 검색이 늘어난 메뉴는 "최근에 자주 나온 메뉴"에서 뺀다. 둘 다에 있으면 프롬프트가 "꼭 쓰라"와 "쓰지 말라"를 함께 말하게 된다.
-    for (const { keyword } of trends) { const menu = trendMenu(keyword); if (menu) recentMenus.delete(menu); }
+    // "다른 주제 보기"(지금 화면 주제가 있음)에서는 지금 화면에 이미 쓴 검색어를 이번 추천에서 뺀다. 예전에는 검색어 3개(송년회·과메기·김장)를
+    // "되도록 모두, 최근 주제보다 먼저" 쓰게 해서 누를 때마다 같은 세 메뉴가 말만 바꿔 다시 나왔다(사장님 지적 2026-10-09).
+    const onScreen = (keyword: string) => { const menu = trendMenu(keyword); return input.excludeTitles.some((title) => title.includes(keyword) || Boolean(menu && menuOf(title).some((item) => item.id === menu))); };
+    const freshTrends = trends.filter(({ keyword }) => !onScreen(keyword));
+    for (const { keyword } of freshTrends) { const menu = trendMenu(keyword); if (menu) recentMenus.delete(menu); }
     // 사진으로 주제 정하기: 사진 속 가게 메뉴. 그 메뉴는 "최근에 자주 나온 메뉴"여도 이번에는 쓴다(사진이 먼저).
     const photoMenus = new Set(input.photoNotes.flatMap((note) => menuOf(note).map((item) => item.id)));
     for (const id of photoMenus) recentMenus.delete(id);
     // 사진에서 가게 메뉴를 하나도 못 찾았으면(사진을 못 읽음·메뉴에 없는 음식) "사진 모드"로 보지 않는다: 메뉴 고르게 규칙을 그대로 지킨다
     // (예전에는 사진 메모만 있으면 규칙이 꺼져 삼합 주제만 둘 나오기도 했다. 검수 보고서 B-7).
-    const hints = { recentMenus, trends: trends.map(({ keyword }) => keyword), ...(photoMenus.size ? { photoMenus } : {}) };
+    const hints = { recentMenus, trends: freshTrends.map(({ keyword }) => keyword), ...(photoMenus.size ? { photoMenus } : {}) };
     const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     // 무료 문안 AI의 분당 한도를 넘기지 않게 "다른 주제 보기" 간격을 지킨다(refreshPace.ts). 너무 빨리 다시 누르면 AI를 부르지 않고
@@ -70,7 +74,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // AI가 분당 한도(429)에 걸려 준비된 주제로 넘어갔으면 다음 추천까지 1분을 쉰다.
     let rateLimited = false;
     const topics = await suggestTopics(input, { suggest:async () => { if (paced) recordTopicRefresh(); return readTopicGeneration(await client.generateJson(
-      buildTopicPrompt(input, season, likedTitles, trends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name)),
+      buildTopicPrompt(input, season, likedTitles, freshTrends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name)),
       topicGenerationSchema(),
     )); } }, (reason, error, rejected) => { source = "fallback"; rateLimited = error !== undefined && planFallbackReason(error) === "quota"; fallbackMessage = topicFallbackMessage(error, rejected); console.warn("[topics] using prepared topics:", reason); }, season,
     (filled) => { filledSlots = filled; console.warn(`[topics] AI 추천 중 ${filled}개가 규칙에 맞지 않아 준비된 주제로 바꿨어요.`); }, hints);

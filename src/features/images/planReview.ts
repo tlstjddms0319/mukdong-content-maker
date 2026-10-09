@@ -3,7 +3,8 @@ import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
-import { EXPLAIN_REASONS_RULE, PROMO_IN_CARD, VAGUE_REASON } from "@/features/copy/explain";
+import { EXPLAIN_REASONS_RULE, PROMO_IN_CARD, STORY_ARC_RULE, VAGUE_REASON } from "@/features/copy/explain";
+import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
 // 1) slideCopyIssues: 코드로 잡을 수 있는 문제를 장 번호와 함께 찾는다(광고 상투어, 반복, 끝맺음, 길이 등).
@@ -65,6 +66,11 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     if(track){
       if(PROMO_IN_CARD.test(headline))add(n,"headline","카드 제목에 가게 이름·방문 권유가 있어요. 홍보는 맨 뒤 홍보 카드가 맡으니, 표지 질문의 이유를 말하는 제목으로 바꾸세요.");
       for(const point of slide.points)if(PROMO_IN_CARD.test(point))add(n,"points",`요점 '${point.trim()}'에 가게 이름·방문 권유가 있어요. 제목을 뒷받침하는 이유나 원리로 바꾸세요.`);
+    }
+    // 결론 장: 표지 질문의 핵심 말(음식 이름)을 다시 짚어야 질문 → 답이 한눈에 이어진다(맥락 잇기).
+    if(track&&i===plan.slides.length-1&&i>0){
+      const asked=menuOf(plan.slides[0]?.headline??"");
+      if(asked.length&&!menuOf(headline).some(item=>asked.some(other=>other.id===item.id)))add(n,"headline",`마지막 장은 결론이에요. 표지 질문의 '${asked[0].short}'을(를) 다시 써서 질문에 대한 답을 한 문장으로 분명하게 말하세요.`);
     }
     if(track&&slide.role!=="cover"){
       const cover=plan.slides[0]?.headline??"";
@@ -139,6 +145,7 @@ ${found}
 2. ${context.track?`본문 장 제목은 ${TRACK_COPY[context.track].headline}자 이내의 해요체 문장 하나(질문은 표지 제목만, ${TRACK_COPY.cover.headline}자 이내), 요점은 ${TRACK_COPY[context.track].point}자 이내의 해요체 완결 문장입니다. 글자 수를 늘리지 마세요.`:"제목은 12~30자의 해요체 문장이나 질문 하나, 요점은 12~28자의 해요체 완결 문장입니다."} 명사로 끝나는 슬로건, 광고 상투어, 느낌표 남발은 쓰지 마세요.
 3. ${heroLine(topic,context.menu??mainMenuOf(topic))}
 4. "입안의 리듬" 같은 추상적 비유 대신 구체적으로 쓰세요. ${context.track?`겉모습 묘사만 하지 말고 사람이 왜 그렇게 느끼는지 이유를 쓰고, 카드에는 가게 이름·방문 권유·예약 안내를 쓰지 마세요(맨 뒤 홍보 카드가 따로 붙어요).
+${STORY_ARC_RULE}
 ${EXPLAIN_REASONS_RULE}`:"눈이나 입으로 확인할 수 있는 관찰(색, 결, 식감, 먹는 순서)이나 널리 알려진 이유로 쓰세요."}
 5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.
 6. 문제가 없는 장은 그대로 두세요. 장 수, 장 순서, 장마다 요점 개수(표지는 빈 배열)는 바꾸지 마세요. 표지의 points는 빈 배열입니다.
