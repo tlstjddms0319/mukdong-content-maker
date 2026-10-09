@@ -123,6 +123,10 @@ export function DraftWizard() {
   const pendingPhotos=generationMine&&generation.photos.length>0&&generation.slides.length===0&&images.length===0;
   const unsavedWork=paidWork||pendingPhotos||(caption.trim()!==""&&caption!==savedCaption);
   const unsavedRef=useRef(unsavedWork);
+  // 이 게시물에 붙은 것(사진·글·한 달 계획 날짜)이 있는지. 없으면 주제를 바꿔도 새 게시물로 바꿀 필요가 없다.
+  const hasAttached=images.length>0||caption.trim()!==""||planLink!==null;
+  const attachedRef=useRef(hasAttached);
+  useEffect(()=>{attachedRef.current=hasAttached;},[hasAttached]);
   useEffect(()=>{unsavedRef.current=unsavedWork;},[unsavedWork]);
   const runningRef=useRef(running);
   useEffect(()=>{runningRef.current=running;},[running]);
@@ -137,6 +141,10 @@ export function DraftWizard() {
   const confirmDiscard=()=>runningRef.current?window.confirm(STOP_RUNNING_QUESTION):!unsavedRef.current||window.confirm("아직 저장하지 않은 사진·글이 있어요. 다른 주제로 바꾸면 사라져요. 바꿀까요?");
   // 지금 게시물이 어떤 주제에서 시작했는지(추천 카드·한 달 계획·저장된 게시물의 제목). 직접 고친 제목이 이것과 비슷하면 같은 게시물로 본다.
   const anchorTopicRef=useRef(topic);
+  // 주제 칸을 누가 채웠는지. 새 추천이 오면 첫 주제를 저절로 골라 주는데, 사장님이 직접 쓴 주제나 한 달 계획·주제 모음에서
+  // 가져온 주제("user")는 바꾸지 않는다(예전에는 "다른 주제 보기"·사진 넣기에 덮어써지고 한 달 계획 날짜 연결까지 끊겼다, 검수 보고서 B-6).
+  // "none": 비어 있음, "auto": 추천에서 고른 주제(카드를 누른 것 포함, 저장된 게시물을 다시 연 것도 여기에 든다).
+  const topicSourceRef=useRef<"none"|"auto"|"user">(topic?"user":"none");
   // 지금 게시물(만드는 중이면 그 만들기도)을 내려놓고 빈 새 게시물로 바꾼다. 주제 칸은 건드리지 않는다.
   const freshDraft=useCallback(()=>{
     cancelGeneration(`${draftIdRef.current}|${SLIDES}`);setPlanLink(null);const nextDraftId=crypto.randomUUID();draftIdRef.current=nextDraftId;createdAtRef.current=new Date().toISOString();setImages([]);setCaption("");setSavedCaption("");setSaveState("idle");setCopyError("");setDraftId(nextDraftId);forgetCurrentDraft();if(window.location.search)window.history.replaceState({},"","/");
@@ -155,6 +163,7 @@ export function DraftWizard() {
   //   단, 만드는 중이면 지우지 않는다(키를 누를 때마다 물을 수 없으므로 남겨 두고, 다시 만들 수 있게).
   // - 이 게시물에 붙은 것(사진·글·게시일·메모)이 하나도 없으면 지울 것도 없으니 그대로 이어 간다.
   const editTopicText=(value:string)=>{
+    topicSourceRef.current=value.trim()?"user":"none";
     const current=topicSelectionRef.current;
     const attached=images.length>0||caption.trim()!==""||planLink!==null||current.imageBrief!==""||current.contentBrief!=="";
     const same=topicSimilarity(value,anchorTopicRef.current)>=SAME_TOPIC_SIMILARITY;
@@ -187,7 +196,12 @@ export function DraftWizard() {
       if(requestId===topicRequestRef.current&&Array.isArray(data.topics)&&data.topics.length===3){
         setTopics(data.topics);setTopicsFallbackReason(data.source==="fallback"?(typeof data.fallbackMessage==="string"&&data.fallbackMessage?data.fallbackMessage:TOPIC_FALLBACK_NOTE):"");setTrendInfo(typeof data.trendStatus==="string"?{status:data.trendStatus as TrendStatus,keywords:Array.isArray(data.trends)?data.trends.map((trend:{keyword:string})=>trend.keyword).filter(Boolean):[]}:null);rememberTopics(data.topics.map((item:TopicSuggestion)=>item.title));rememberRound(round);
         // 1단계에 머물러 있고 그사이 주제를 직접 바꾸지 않았을 때만 첫 추천으로 자동 선택한다.
-        if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest&&!unsavedRef.current)changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",false,data.topics[0].summary ?? "");
+        // 직접 쓴 주제·한 달 계획 주제는 그대로 둔다(topicSourceRef). 붙은 것(사진·글·게시일)이 없으면 새 게시물로 바꾸지 않는다:
+        // 바꾸면 "만들던 게시물이 있어요" 기록까지 지워졌다(검수 보고서).
+        if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest&&!unsavedRef.current&&topicSourceRef.current!=="user"){
+          topicSourceRef.current="auto";
+          changeTopic(data.topics[0].title,data.topics[0].audience,data.topics[0].imageBrief ?? "",!attachedRef.current,data.topics[0].summary ?? "");
+        }
         setRecommendationRound(round);
       }else if(requestId===topicRequestRef.current)throw new Error("추천 모양이 맞지 않아요.");
     }catch{
@@ -195,7 +209,7 @@ export function DraftWizard() {
       setTopicsFallbackReason(TOPIC_OFFLINE_NOTE);
       // 처음 추천을 못 받았으면(빈 화면) 오늘 계절에 맞춘 준비된 주제를 대신 보이고, 그사이 주제를 직접 안 바꿨으면 첫 주제를 골라 둔다.
       setTopics(current=>current.length?current:DEFAULT_TOPICS);
-      if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest&&!topicAtRequest&&!unsavedRef.current)changeTopic(DEFAULT_TOPICS[0].title,DEFAULT_TOPICS[0].audience,DEFAULT_TOPICS[0].imageBrief ?? "",false,DEFAULT_TOPICS[0].summary ?? "");
+      if(stepRef.current==="topic"&&topicSelectionRef.current.topic===topicAtRequest&&!topicAtRequest&&!unsavedRef.current){topicSourceRef.current="auto";changeTopic(DEFAULT_TOPICS[0].title,DEFAULT_TOPICS[0].audience,DEFAULT_TOPICS[0].imageBrief ?? "",!attachedRef.current,DEFAULT_TOPICS[0].summary ?? "");}
     }finally{if(requestId===topicRequestRef.current)setTopicsLoading(false);}
   },[changeTopic]);
   // 이어서 만들던 게시물을 두고 완전히 새로 시작한다. 이전 게시물은 서버에 저장된 그대로 내 게시물에 남는다.
@@ -208,7 +222,7 @@ export function DraftWizard() {
     setTopicPhotos([]);photoNotesRef.current=[];setTopicPhotosRead(false);
     if(window.location.search)window.history.replaceState({},"","/");
     // 준비된 주제를 먼저 보이지 않고 곧장 새 추천을 받는다(오면 첫 주제를 골라 둔다).
-    setTopics([]);changeTopic("","C","",true,"");
+    setTopics([]);topicSourceRef.current="none";changeTopic("","C","",true,"");
     setStep("topic");
     void loadTopics();
   },[changeTopic,loadTopics]);
@@ -316,7 +330,7 @@ export function DraftWizard() {
           const auto=runningAuto();
           if(auto){
             const {meta}=auto;
-            changeTopic(meta.topic,meta.audience,meta.imageBrief,true,meta.contentBrief);setPlanLink(planLinkFrom(meta.planDate));
+            topicSourceRef.current="user";changeTopic(meta.topic,meta.audience,meta.imageBrief,true,meta.contentBrief);setPlanLink(planLinkFrom(meta.planDate));
             draftIdRef.current=meta.id;createdAtRef.current=meta.createdAt;setDraftId(meta.id);if(auto.track)setTrack(auto.track);
             setStep("image");
             return;
@@ -336,6 +350,8 @@ export function DraftWizard() {
       const requestedBrief=requestedBriefValue.length<=600?requestedBriefValue:"";
       if(!requestedId&&requestedTopic&&requestedTopic.length<=TOPIC_MAX){
         forgetCurrentDraft();
+        // 한 달 계획·주제 모음에서 가져온 주제는 사장님이 고른 것이다(새 추천이 와도 바꾸지 않는다).
+        topicSourceRef.current="user";
         changeTopic(requestedTopic,requestedAudience,requestedImageBrief,false,requestedBrief);
         setPlanLink(planLinkFrom(query.get("planDate")));
         setStep("topic");
@@ -360,7 +376,7 @@ export function DraftWizard() {
               // 아주 예전 게시물은 글이 caption이 아니라 copy(나눠 쓴 글)에만 있다. 그 글을 그대로 이어 보여 주고(곧 caption으로 저장된다),
               // 새로 써서 덮어쓰지 않는다.
               const savedText=draft.caption?.trim()?draft.caption as string:draft.copy?formatCopy(draft.copy):"";
-              changeTopic(draft.topic,draft.audience,draft.image_brief??"",true,draft.content_brief??"");setPlanLink(draft.plan_date?{date:draft.plan_date}:null);draftIdRef.current=draft.id;createdAtRef.current=draft.created_at??new Date().toISOString();setDraftId(draft.id);setImages(restored);setCaption(savedText);setSavedCaption(draft.caption??"");setCaptionStatus("saved");setSaveState("saved");rememberCurrentDraft(draft.id,draft.topic);
+              topicSourceRef.current="auto";changeTopic(draft.topic,draft.audience,draft.image_brief??"",true,draft.content_brief??"");setPlanLink(draft.plan_date?{date:draft.plan_date}:null);draftIdRef.current=draft.id;createdAtRef.current=draft.created_at??new Date().toISOString();setDraftId(draft.id);setImages(restored);setCaption(savedText);setSavedCaption(draft.caption??"");setCaptionStatus("saved");setSaveState("saved");rememberCurrentDraft(draft.id,draft.topic);
               const target:WizardStep=selected.length?"review":"image";
               setStep(!requestedId&&session&&session.draftId===draft.id&&(session.step!=="review"||selected.length)?session.step:target);
               // 사진은 있는데 글이 없는 게시물(예전 화면에서 사진만 저장)은 열면서 글을 써 준다.
@@ -375,7 +391,7 @@ export function DraftWizard() {
       if(!active)return;
       // 저장되지 않은 게시물이라도 이 탭에서 주제를 고르고 다음 단계로 넘어갔던 것이 있으면 같은 게시물·2단계로 돌아간다
       // (만드는 중이었으면 그 진행 상황이 그대로 보인다). 확인 단계는 서버에 저장된 게시물이 있어야 열린다.
-      if(session&&session.step!=="topic"){changeTopic(session.topic,session.audience,session.imageBrief,true,session.contentBrief);setPlanLink(planLinkFrom(session.planDate));draftIdRef.current=session.draftId;setDraftId(session.draftId);setStep("image");return;}
+      if(session&&session.step!=="topic"){topicSourceRef.current="user";changeTopic(session.topic,session.audience,session.imageBrief,true,session.contentBrief);setPlanLink(planLinkFrom(session.planDate));draftIdRef.current=session.draftId;setDraftId(session.draftId);setStep("image");return;}
       void loadTopics();
     };
     // 추천을 받지 않고 끝난 경우(한 달 계획 주제, 이어 만들던 게시물): 1단계로 돌아왔을 때 빈 화면이 아니게 준비된 주제를 둔다.
@@ -465,7 +481,7 @@ export function DraftWizard() {
     {trendInfo&&!topicsLoading&&<TrendLine info={trendInfo} used={topics.filter(item=>item.trend).map(item=>item.trend)} prepared={topicsFallback!==""}/>}
     {/* 추천을 기다리는 동안은 카드 자리만 보인다(글자 없는 빈 카드). */}
     {!topics.length&&<div className="topic-grid" aria-hidden="true">{[0,1,2].map(index=><div key={index} className="topic-card topic-card-placeholder"><span className="topic-card-label">{topicCardLabel(index)}</span><span className="placeholder-line"/><span className="placeholder-line short"/></div>)}</div>}
-    {topics.length>0&&<div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><TopicCardBody label={topicCardLabel(index)} title={item.title} season={item.season} trend={item.trend} selected={topic===item.title}/></button>)}</div>}
+    {topics.length>0&&<div className="topic-grid">{topics.map((item,index)=><button key={item.id} type="button" aria-pressed={topic===item.title} className={`topic-card ${topic===item.title?"selected":""}`} onClick={()=>{if(topic!==item.title&&!confirmDiscard())return;topicSourceRef.current="auto";changeTopic(item.title,item.audience,item.imageBrief ?? "",false,item.summary ?? "");}}><TopicCardBody label={topicCardLabel(index)} title={item.title} season={item.season} trend={item.trend} selected={topic===item.title}/></button>)}</div>}
     {/* 직접 쓰기: 넓은 두 줄 칸(TOPIC_MAX자까지). 줄바꿈은 주제에 넣지 않고 띄어쓰기로 바꾼다(Enter를 눌러도 한 줄 주제). */}
     <label className="custom-topic"><span>직접 쓰기 <small aria-hidden="true">({topic.length}/{TOPIC_MAX}자)</small></span><textarea aria-label="직접 쓰기" rows={2} maxLength={TOPIC_MAX} value={topic} placeholder="예: 비 오는 날 홍어전엔 왜 막걸리가 생각날까?" onChange={e=>editTopicText(e.target.value.replace(/\s*\n\s*/g," "))} /></label>
     <div className="bottom-action"><span/><button type="button" className="button primary big" disabled={!topic.trim()} onClick={goNext}>다음</button></div>

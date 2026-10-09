@@ -666,6 +666,49 @@ describe("DraftWizard",()=>{
     expect(screen.getByDisplayValue("직접 정한 주제")).toBeInTheDocument();
   });
 
+  // 검수 보고서 B-6: 직접 쓴 주제·한 달 계획 주제가 새 추천의 첫 주제로 덮어써졌다.
+  describe("protects a topic the owner chose",()=>{
+    const rounds=(prefix="R")=>{let n=0;const bodies:Array<Record<string,unknown>>=[];return {bodies,handler:(body:Record<string,unknown>)=>{bodies.push(body);n++;return {topics:[1,2,3].map(i=>({id:`${prefix}${n}-${i}`,title:`${prefix}${n} 주제 ${i}일까?`,summary:"홍어회로 이어지는 충분히 긴 설명 방향입니다. 확인 필요.",reason:"이유",audience:"A",imageBrief:"사진",season:"",trend:""})),source:"ai",cooldownSeconds:0};}};};
+    it("keeps a typed topic when '다른 주제 보기' brings new cards",async()=>{
+      const topics=rounds();
+      vi.stubGlobal("fetch",api({"/api/topics":topics.handler}));render(<DraftWizard/>);
+      await screen.findByDisplayValue("R1 주제 1일까?");
+      fireEvent.change(screen.getByLabelText("직접 쓰기"),{target:{value:"내가 직접 쓴 주제"}});
+      fireEvent.click(screen.getByRole("button",{name:"다른 주제 보기"}));
+      await screen.findByText("R2 주제 3일까?");
+      expect(screen.getByLabelText("직접 쓰기")).toHaveValue("내가 직접 쓴 주제");
+    });
+    it("keeps a typed topic when a photo is put in for topic ideas",async()=>{
+      const topics=rounds();
+      vi.stubGlobal("fetch",api({"/api/topics":topics.handler,"/api/images/assets":()=>({asset:{id:"photo-1",preview:"data:image/jpeg;base64,P1",name:"p1"}}),"/api/images/analyze":()=>({analyzed:true,photos:[{id:"photo-1",flags:[],labels:[],measured:false,food:"홍어찜",scene:"접시에 담긴 홍어찜",appetite:null}],ranking:[],recommended:null,scored:false,scoreAvailable:false})}));
+      render(<DraftWizard/>);
+      await screen.findByDisplayValue("R1 주제 1일까?");
+      fireEvent.change(screen.getByLabelText("직접 쓰기"),{target:{value:"내가 직접 쓴 주제"}});
+      fireEvent.change(screen.getByLabelText("주제용 사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"})]}});
+      await screen.findByText("R2 주제 3일까?",undefined,{timeout:5000});
+      expect(topics.bodies.at(-1)?.photoNotes).toEqual(["접시에 담긴 홍어찜"]);
+      expect(screen.getByLabelText("직접 쓰기")).toHaveValue("내가 직접 쓴 주제");
+    });
+    it("keeps a month-plan topic and its date when new cards arrive",async()=>{
+      window.history.replaceState({},"","/?topic="+encodeURIComponent("과메기는 왜 찬바람이 불면 찾을까?")+"&audience=A&planDate=2030-11-03");
+      const topics=rounds();
+      vi.stubGlobal("fetch",api({"/api/topics":topics.handler}));render(<DraftWizard/>);
+      await screen.findByDisplayValue("과메기는 왜 찬바람이 불면 찾을까?");
+      expect(screen.getByText(/한 달 계획 · 11\/3/)).toBeInTheDocument();
+      fireEvent.click(await screen.findByRole("button",{name:"다른 주제 보기"}));
+      await screen.findByText(/R\d 주제 3일까\?/);
+      expect(screen.getByLabelText("직접 쓰기")).toHaveValue("과메기는 왜 찬바람이 불면 찾을까?");
+      expect(screen.getByText(/한 달 계획 · 11\/3/)).toBeInTheDocument();
+    });
+    it("still picks the first card for an empty topic without erasing the 'resume last post' pointer",async()=>{
+      localStorage.setItem("mukdong-current-draft","44444444-4444-4444-8444-444444444444");localStorage.setItem("mukdong-current-draft-topic","지난번 주제");
+      const topics=rounds();
+      vi.stubGlobal("fetch",api({"/api/topics":topics.handler}));render(<DraftWizard/>);
+      await screen.findByDisplayValue("R1 주제 1일까?");
+      expect(localStorage.getItem("mukdong-current-draft")).toBe("44444444-4444-4444-8444-444444444444");
+    });
+  });
+
   it("starts a new post when a refresh picks a new recommendation for a restored one",async()=>{
     const draftId="11111111-1111-4111-8111-111111111111";
     const refreshed=[{id:"four",title:"새 첫 추천",summary:"",reason:"새 첫 이유",audience:"A",imageBrief:"새 이미지"},{id:"five",title:"새 둘째 추천",summary:"",reason:"새 둘째 이유",audience:"B",imageBrief:"새 이미지"},{id:"six",title:"새 셋째 추천",summary:"",reason:"새 셋째 이유",audience:"C",imageBrief:"새 이미지"}];

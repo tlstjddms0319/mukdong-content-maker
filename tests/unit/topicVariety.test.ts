@@ -299,3 +299,28 @@ describe("photo file names as topic hints", () => {
       expect(meaningfulPhotoName(name),name).toBe("");
   });
 });
+
+describe("topic answers from the AI that are partly wrong", () => {
+  // 검수 보고서 P9: 제목 하나가 120자를 넘으면 세 주제를 통째로 버리고 준비된 주제로 바꿨다.
+  it("keeps the good AI topics when one of them is malformed", async () => {
+    const good=[makeMenu("과메기는 왜 반쯤 말릴까?","g1"),{...make("막걸리는 왜 사발에 마실까?","g2"),summary:"배다리 막걸리를 사례로 사발에 따르는 이유를 설명하고 본문 작성 전 확인할 정보를 적습니다."}];
+    let fallback="";
+    const topics=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[{...make("홍어".repeat(61)+"?","bad")},...good]},reason=>{fallback=reason;});
+    expect(fallback).toBe("");
+    expect(topics.map(topic=>topic.title)).toEqual(expect.arrayContaining(good.map(topic=>topic.title)));
+    expect(topics).toHaveLength(3);
+  });
+  // 검수 보고서 P3: 검색어 "전"이 "작성 전"에 걸려 홍어 주제에 검색 흐름 표시가 붙었다.
+  it("does not attach a one-letter search word to a topic that only contains it inside another word", () => {
+    const topic={...make("홍어는 왜 삭힐까?"),summary:"홍어회를 사례로 설명합니다. 본문 작성 전 확인할 정보를 적습니다.",trend:"전"};
+    expect(normalizeTrendLabels([topic],["전"])[0].trend).toBe("");
+    const minari={...make("미나리전엔 왜 막걸리일까?"),summary:"미나리전 한 접시와 막걸리를 사례로 설명합니다. 본문 작성 전 확인할 정보를 적습니다.",trend:"전"};
+    // "전"이 가게 메뉴(미나리전)로 이어지는 말이면 그 메뉴 주제에는 붙는다.
+    expect(normalizeTrendLabels([minari],["전"])[0].trend).toBe("전");
+    // 메뉴가 아닌 말은 낱말 첫머리에서만: "굴보쌈"은 되고 "얼굴"은 안 된다.
+    const oyster={...make("굴보쌈 대신 홍어 삼합은 어떨까?"),summary:"굴보쌈을 찾는 분께 홍어 삼합을 사례로 소개하고 본문 작성 전 확인할 정보를 적습니다.",trend:"굴"};
+    expect(normalizeTrendLabels([oyster],["굴"])[0].trend).toBe("굴");
+    const face={...make("홍어를 처음 먹을 때 왜 얼굴을 찡그릴까?"),summary:"홍어회의 톡 쏘는 향을 사례로 설명하고 본문 작성 전 확인할 정보를 적습니다.",trend:"굴"};
+    expect(normalizeTrendLabels([face],["굴"])[0].trend).toBe("");
+  });
+});

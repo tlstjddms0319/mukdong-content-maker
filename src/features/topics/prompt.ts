@@ -102,13 +102,15 @@ export function buildTopicPrompt(input:TopicInput,season?:SeasonContext,likedTit
 // 길이 제한(시기·검색 흐름 30자, 이미지 설명)은 받은 뒤 잘라 맞춘다(readTopicGeneration).
 // 정해진 칸(일상 2 + 홍어 1)이 없어져 "추천 방향" 필드(direction)도 받지 않는다. 순서는 AI가 고른 그대로(첫 번째가 가장 추천).
 // 선택 필드(.optional())는 엄격 JSON 스키마 변환이 받지 않으므로 필드를 아예 두지 않는다.
-const GeneratedTopicSchema=TopicSuggestionSchema.extend({season:z.string(),trend:z.string(),imageBrief:z.string().min(1)});
+// 글자 수 상한(제목 120·설명 600·이유 300)도 여기서는 보지 않는다: 한 주제가 길다고 세 주제를 통째로 버리지 않게(검수 보고서 P9).
+// 받은 뒤 설명·이유는 잘라 맞추고, 너무 긴 제목의 주제만 빼서 그 자리를 준비된 주제로 채운다(suggestTopics).
+const GeneratedTopicSchema=TopicSuggestionSchema.extend({title:z.string().trim().min(1),summary:z.string().trim().min(1),reason:z.string().trim().min(1),season:z.string(),trend:z.string(),imageBrief:z.string().min(1)});
 export function topicGenerationSchema() {
   return z.object({topics:z.array(GeneratedTopicSchema).length(3)});
 }
 export const TOPIC_IMAGE_BRIEF_MAX=500;
 export function readTopicGeneration(value:{topics:Array<z.infer<typeof GeneratedTopicSchema>>}) {
   return value.topics.map(topic=>{
-    return {...topic,imageBrief:topic.imageBrief.slice(0,TOPIC_IMAGE_BRIEF_MAX),season:topic.season.trim().length<=30?topic.season.trim():"",trend:topic.trend.trim().length<=30?topic.trend.trim():""};
+    return {...topic,summary:topic.summary.slice(0,600),reason:topic.reason.slice(0,300),imageBrief:topic.imageBrief.slice(0,TOPIC_IMAGE_BRIEF_MAX),season:topic.season.trim().length<=30?topic.season.trim():"",trend:topic.trend.trim().length<=30?topic.trend.trim():""};
   });
 }
