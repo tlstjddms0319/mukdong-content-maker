@@ -7,13 +7,13 @@ import { ScheduleShare } from "@/components/review/ScheduleShare";
 import { ArchiveShare } from "@/components/review/ArchiveShare";
 import { ExportActions } from "@/components/review/ExportActions";
 import type { ReviewImage } from "@/components/review/exportFiles";
-import { SlideTextEditor } from "@/components/images/SlideTextEditor";
+import { SlideFixPanel } from "@/components/images/SlideFixPanel";
 import { DeckEditor } from "@/components/images/DeckEditor";
 import { FreeCardStudio } from "@/components/images/FreeCardStudio";
-import { canEditSlideText, redoSlide, redoSlideKind, sceneNoticeOf, setActiveSlide, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
+import { canEditSlideText, redoSlideKind, sceneNoticeOf, setActiveSlide, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
 // 3단계 "확인하고 올리기": 사진과 글을 한 화면에서 보고, 큰 버튼 네 개(바로 올리기·예약해서 올리기·휴대폰에 저장·보관함에 보관) 중 하나를 누른다.
-// 작은 버튼은 "이 장 다시 만들기"와 "글 다시 쓰기"뿐. 장 고치기·글자 고치기·글자 카드·파일 받기는 "더보기" 안에 접어 둔다.
+// 작은 것은 "N번 장 고치기"(그림·글을 요청대로 다시)와 "글 다시 쓰기"뿐. 장 넣기·빼기·글자 카드·파일 받기는 "더보기" 안에 접어 둔다.
 // generation: 이 게시물의 만들기 상태(장 다시 만들기·장 고치기에 쓴다). 예전 초안처럼 구성안이 없으면 다시 만들 것이 없어 버튼을 숨긴다.
 export type CaptionStatus="saved"|"saving"|"unsaved"|"error";
 type Props={
@@ -33,7 +33,7 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,sav
   const [shareTick,setShareTick]=useState(0);
   const bumpShare=()=>setShareTick(tick=>tick+1);
   const shown=Math.min(index,Math.max(urls.length-1,0)),active=urls[shown];
-  // 장을 넘기면 만들기 상태의 "지금 장"도 맞춘다(이 장 다시 만들기·글자 고치기·장 고치기가 그 장에 걸린다).
+  // 장을 넘기면 만들기 상태의 "지금 장"도 맞춘다(장 고치기(그림·글)·장 고치기가 그 장에 걸린다).
   const go=(next:number)=>{setIndex(next);if(generation&&next<generation.slides.length)setActiveSlide(next);};
   const atSlide=generation&&generation.slides.length>shown?{...generation,activeSlide:shown}:null;
   const redo=atSlide?redoSlideKind(atSlide):null;
@@ -52,7 +52,8 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,sav
           <button type="button" className="button secondary" aria-label="다음 장" disabled={shown>=urls.length-1} onClick={()=>go(shown+1)}>▶</button>
         </div>
         <div className="carousel-thumbnails" aria-label="모든 장">{urls.map((image,slide)=><button key={`${image.url.slice(-24)}-${slide}`} type="button" aria-label={`${slide+1}번째 장 보기`} aria-pressed={shown===slide} className="feed-thumb" style={{backgroundImage:`url(${image.url})`}} onClick={()=>go(slide)}/>)}</div>
-        {redo&&!busy&&<button type="button" className="button secondary" onClick={()=>{setActiveSlide(shown);void redoSlide();}}>이 장 다시 만들기</button>}
+        {/* 이 장 고치기: 그림/글 중 고를 것을 고르고, 요청 버튼·직접 적은 말대로 다시 만든다(예전 "이 장 다시 만들기"). */}
+        {generation&&slidePlan&&shown<generation.slides.length&&<SlideFixPanel key={shown} index={shown} pictureKind={redo} canEditText={canEditSlideText(generation,shown)} headline={slidePlan.headline} points={slidePlan.points??[]} busy={busy}/>}
         {busy&&generation&&<GenerationProgress stage={`redo-${generation.phase}`} message={generation.deckStatus||"이 장을 다시 만들고 있어요"} hint="AI가 그리는 장은 1~3분 걸려요."/>}
         {generation?.error&&!busy&&<div className="make-error" role="alert"><p>이 장을 바꾸지 못했어요. 잠시 뒤 다시 눌러 주세요.</p><details><summary>자세한 이유</summary><p>{generation.error}</p></details></div>}
         {imageNotice&&<p role="status" className="field-help">{imageNotice}</p>}
@@ -82,7 +83,6 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,sav
     <details className="more-tools">
       <summary>더보기</summary>
       <div className="more-tools-body">
-        {generation&&slidePlan&&shown<generation.slides.length&&<SlideTextEditor key={`${shown}|${slidePlan.headline}|${(slidePlan.points??[]).join("|")}`} index={shown} headline={slidePlan.headline} points={slidePlan.points??[]} busy={busy} canEdit={canEditSlideText(generation,shown)}/>}
         {generation&&generation.slides.length>0&&<DeckEditor state={generation}/>}
         {/* 글자 카드 화면은 펼칠 때만 그린다(열 때 사진 목록을 불러오므로, 안 쓰는 사람에게 요청을 보내지 않게). */}
         <details className="slide-text-editor" onToggle={event=>setFreeOpen((event.currentTarget as HTMLDetailsElement).open)}><summary>글자 카드로 직접 만들기</summary>{freeOpen&&<><p className="field-help">사진 대신 글자 카드로 새로 만들어요. 다 만들고 &apos;카드 사용&apos;을 누르면 지금 사진이 바뀌어요.</p><FreeCardStudio topic={topic} onApprove={onFreeCards}/></>}</details>

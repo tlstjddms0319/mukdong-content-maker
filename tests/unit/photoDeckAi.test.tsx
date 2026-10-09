@@ -56,7 +56,7 @@ describe("photo deck with too few photos", () => {
     for(const i of aiIndexes){expect(state.photoAssignment[i]).toEqual([]);expect(state.slides[i].refPhoto).toBe(0);}
     expect(state.photoViews.flat().filter(view=>view!=="full")).toEqual([]);
 
-    // "이 장 다시 만들기"도 같은 사진을 참고해 다시 그린다.
+    // "장 고치기 → 그림"도 같은 사진을 참고해 다시 그린다.
     act(()=>setActiveSlide(aiIndexes[0]));
     expect(redoSlideKind(hook.result.current)).toBe("ai");
     bodies.length=0;
@@ -98,7 +98,7 @@ describe("photo deck with too few photos", () => {
     expect(zoomed).toHaveLength(2);
     const text=[1,2,3,4].filter(i=>!zoomed.includes(i));
     for(const i of text){expect(state.photoAssignment[i]).toEqual([]);expect(state.plan!.slides[i].layout).toBe("browser");expect(state.slides[i].source).toBe("design");}
-    // 글자 카드로 바뀐 장에서 "이 장 다시 만들기" → 같은 사진을 참고해 원래 모양(사진 장)으로 AI가 다시 그린다.
+    // 글자 카드로 바뀐 장에서 "장 고치기 → 그림" → 같은 사진을 참고해 원래 모양(사진 장)으로 AI가 다시 그린다.
     mode.ai=true;
     act(()=>setActiveSlide(text[0]));
     expect(redoSlideKind(hook.result.current)).toBe("scene");

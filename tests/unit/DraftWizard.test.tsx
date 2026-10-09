@@ -373,22 +373,57 @@ describe("DraftWizard",()=>{
     expect(textarea().value).toBe("또 고친 글");
   });
 
-  it("remakes the shown AI slide with '이 장 다시 만들기' and saves the new set by itself",async()=>{
+  it("fixes the shown AI slide's picture with chosen and typed requests and saves the new set by itself",async()=>{
     let round=0;
     const base=makingRoutes("text");
     const request=api({...base,"/api/images/generate":body=>Number(body.slideIndex)===1&&body.count===1?{images:[`cover-again-${++round}`],source:"ai-generated"}:base["/api/images/generate"](body)});
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);
     await goMake("text");
     await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
-    // 글만 있는 장(글 중심 본문)은 다시 만들 것이 없다.
+    // 글만 있는 장(글 중심 본문)은 그림을 고칠 것이 없다: 글만 고칠 수 있다.
     fireEvent.click(screen.getByRole("button",{name:"2번째 장 보기"}));
-    expect(screen.queryByRole("button",{name:"이 장 다시 만들기"})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("2번 장 고치기"));
+    expect(screen.queryByRole("button",{name:"그림"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button",{name:/그림 (새로|다시) 그리기/})).not.toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"이대로 글 고치기 (무료)"})).toBeDisabled();
     fireEvent.click(screen.getByRole("button",{name:"1번째 장 보기"}));
-    fireEvent.click(screen.getByRole("button",{name:"이 장 다시 만들기"}));
+    fireEvent.click(screen.getByText("1번 장 고치기"));
+    // 무엇을 고칠지 고르고(요청 버튼 + 직접 적기), 그대로 그림 AI에 넘긴다.
+    fireEvent.click(screen.getByRole("button",{name:"더 밝고 먹음직스럽게"}));
+    fireEvent.change(screen.getByLabelText(/직접 적기/),{target:{value:"접시를 위에서 내려다본 모습으로"}});
+    fireEvent.click(screen.getByRole("button",{name:"이대로 그림 다시 그리기"}));
     await waitFor(()=>expect(calls(request,"/api/drafts","POST")).toHaveLength(2),{timeout:5000});
+    const redraw=calls(request,"/api/images/generate").find(body=>body.refinement);
+    expect(redraw?.refinement).toContain("더 밝고 따뜻한 빛으로");
+    expect(redraw?.refinement).toContain("접시를 위에서 내려다본 모습으로");
     expect(calls(request,"/api/drafts","POST")[1].media_candidates[0].file_id).toBe("cover-again-1");
     await waitFor(()=>expect(screen.getByRole("button",{name:"1번째 장 보기"})).toHaveStyle({backgroundImage:'url("cover-again-1")'}));
   });
+
+  it("rewrites the shown slide's text with the text AI and redraws only the letters",async()=>{
+    const base=makingRoutes("text");
+    const request=api({...base,"/api/images/slide/revise":()=>({headline:"결을 따라 썰어 쫄깃해요",points:["결 방향을 보면 알 수 있어요"],warnings:[]})});
+    vi.stubGlobal("fetch",request);render(<DraftWizard/>);
+    await goMake("text");
+    await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
+    fireEvent.click(screen.getByRole("button",{name:"2번째 장 보기"}));
+    fireEvent.click(screen.getByText("2번 장 고치기"));
+    fireEvent.click(screen.getByRole("button",{name:"이유를 더 구체적으로"}));
+    fireEvent.change(screen.getByLabelText(/직접 적기/),{target:{value:"결 이야기를 넣어 줘"}});
+    const drawsBefore=calls(request,"/api/images/generate").length;
+    fireEvent.click(screen.getByRole("button",{name:"이대로 글 고치기 (무료)"}));
+    expect(await screen.findByText("글을 고쳐 다시 그렸어요.")).toBeInTheDocument();
+    const asked=calls(request,"/api/images/slide/revise")[0];
+    expect(asked).toMatchObject({headline:"결이 보여요",points:["짧은 글"],cover:false,track:"text"});
+    expect(asked.request).toContain("이유나 확인하는 방법을 구체적으로");
+    expect(asked.request).toContain("결 이야기를 넣어 줘");
+    // 글자만 다시 그린다: 이미지 AI(참고 그림·새 장면) 없이 밑바탕으로 그 장 한 번.
+    const redraws=calls(request,"/api/images/generate").slice(drawsBefore);
+    expect(redraws).toHaveLength(1);
+    expect(redraws[0].slide).toMatchObject({headline:"결을 따라 썰어 쫄깃해요",points:["결 방향을 보면 알 수 있어요"]});
+    await waitFor(()=>expect(calls(request,"/api/drafts","POST")).toHaveLength(2),{timeout:5000});
+  });
+
 
   it("opens an old saved draft with its images and text without redrawing (old designs keep working)",async()=>{
     const id="11111111-1111-4111-8111-111111111111";
@@ -400,7 +435,7 @@ describe("DraftWizard",()=>{
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
     expect(screen.getByRole("button",{name:"2번째 장 보기"})).toHaveStyle({backgroundImage:'url("saved-2")'});
     // 구성안이 없는 예전 게시물은 다시 만들 것이 없어 버튼을 숨긴다(잘못 눌러 비용이 들지 않게).
-    expect(screen.queryByRole("button",{name:"이 장 다시 만들기"})).not.toBeInTheDocument();
+    expect(screen.queryByText(/번 장 고치기/)).not.toBeInTheDocument();
     expect(request.mock.calls.some(([url])=>url==="/api/images/generate"||url==="/api/copy")).toBe(false);
     expect(screen.getByRole("button",{name:"2 만들기"})).toBeEnabled();
   });

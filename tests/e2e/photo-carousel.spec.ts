@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { loginAsOwner } from "./helpers";
 
-// 사장님 사진 여러 장 → 사진 중심으로 만들기 → 확인 화면에서 이 장 다시 만들기(다른 사진으로) → 더보기의 글자 고치기까지
+// 사장님 사진 여러 장 → 사진 중심으로 만들기 → 확인 화면의 장 고치기: 그림(다른 사진으로) → 글(글자 직접 고치기)까지
 // 실제 서버로 확인한다(AI 키 없이 기본 구성안으로 동작). 고친 장은 저절로 다시 저장된다.
 test("builds a photo-focus post from several owner photos and fixes one slide", async ({ page }) => {
   test.setTimeout(240_000);
@@ -19,14 +19,16 @@ test("builds a photo-focus post from several owner photos and fixes one slide", 
   await page.getByRole("button", { name: "2번째 장 보기" }).click();
   const thumb=page.getByRole("button", { name: "2번째 장 보기" });
   const before=await thumb.getAttribute("style");
-  await page.getByRole("button", { name: "이 장 다시 만들기" }).click();
+  await page.getByText("2번 장 고치기").click();
+  // 사장님 사진 장은 그림을 고르면 다른 사진으로 바꾼다.
+  await page.getByRole("button", { name: "다른 사진으로 바꾸기" }).click();
   await expect.poll(async () => thumb.getAttribute("style"), { timeout: 60_000 }).not.toBe(before);
   await expect(page.getByText("바뀐 사진을 저장했어요.")).toBeVisible({ timeout: 60_000 });
 
-  // 더보기 → 이 장 글자 고치기: 제목만 바꿔 그 장을 다시 그린다(이미지 AI 없음).
-  await page.getByText("더보기", { exact: true }).last().click();
+  // 장 고치기 → 글 → 글자 직접 고치기: 제목만 바꿔 그 장을 다시 그린다(이미지 AI 없음).
   const drawn=await thumb.getAttribute("style");
-  await page.getByText("2번 장 글자 고치기 (무료)").click();
+  await page.getByRole("button", { name: "글", exact: true }).click();
+  await page.getByText("글자 직접 고치기 (무료)").click();
   await page.getByLabel(/^카드 제목/).fill("직접 고친 두 번째 장");
   await page.getByRole("button", { name: "글자만 다시 그리기" }).click();
   await expect.poll(async () => thumb.getAttribute("style"), { timeout: 60_000 }).not.toBe(drawn);

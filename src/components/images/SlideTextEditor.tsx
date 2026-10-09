@@ -17,9 +17,9 @@ export function SlideTextEditor({index,headline,points,busy,canEdit}:Props){
   // 과장·단정 표현(예: "누구나 좋아해요")은 막지 않고 알려만 준다. 게시 전 검사에서도 다시 걸린다.
   const claims=checkTextClaims([title,...edit.points].join("\n")).blocked;
   const changed=title.trim()!==headline||edit.points.map(point=>point.trim()).filter(Boolean).join("\n")!==points.join("\n");
-  if(!canEdit)return <p className="field-help">이 장은 글자만 따로 고칠 수 없어요. 바꾸려면 ‘이 장 다시 만들기’를 눌러 주세요.</p>;
+  if(!canEdit)return <p className="field-help">이 장은 글자만 따로 고칠 수 없어요. 바꾸려면 ‘이 장 고치기’에서 그림을 다시 그려 주세요.</p>;
   return <details className="slide-text-editor">
-    <summary>{index+1}번 장 글자 고치기 (무료)</summary>
+    <summary>글자 직접 고치기 (무료)</summary>
     <label htmlFor={`${id}-title`}>카드 제목 <small>{title.trim().length}/42</small></label>
     <input id={`${id}-title`} maxLength={60} value={title} disabled={busy} onChange={event=>setTitle(event.target.value)}/>
     {index>0||points.length>0?<>
