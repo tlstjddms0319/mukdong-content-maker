@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CarouselPlanSchema, createFallbackCarouselPlan, rolesForCount, slideCountFits } from "@/features/images/carousel";
 import { plannedCount, deckComplete, type GenerationState } from "@/features/images/generationStore";
 import { repairPlanJson } from "@/features/images/planRepair";
+import { ImageBriefSchema } from "@/features/images/schema";
 
 // 사장님 요청(2026-10-09): 장 수를 5장으로 고정하지 않고, 만들 때마다 내용을 다 전할 수 있는 장 수(4~9장)를 AI가 정한다.
 describe("slide count chosen per post", () => {
@@ -39,5 +40,23 @@ describe("slide count chosen per post", () => {
     const state=(slides:number)=>({plan,input,deckEdited:false,slides:Array(slides).fill({id:"a"})}) as unknown as GenerationState;
     expect(deckComplete(state(5))).toBe(false);
     expect(deckComplete(state(7))).toBe(true);
+  });
+
+  // 그림 요청 검사도 4·6·8·9장을 받아야 한다(예전에는 3·5·7·10장만 받아 2번째 장부터 "이미지 설정을 확인해 주세요"로 멈췄다).
+  it("accepts image requests for every slide of a 4, 6, 8 or 9 slide post, with or without the store card", () => {
+    for(const count of [4,6,8,9]){
+      const roles=rolesForCount(count);
+      const base=createFallbackCarouselPlan({topic:"홍어",slideCount:10});
+      roles.forEach((role,i)=>{
+        const slide={...base.slides.find(item=>item.role===role)!,role};
+        for(const storeCard of [false,true]){
+          const brief={topic:"홍어",count:1,slide,slideIndex:i+1,slideTotal:count+(storeCard?1:0),storeCard,styleAnchor:base.styleAnchor};
+          expect(ImageBriefSchema.safeParse(brief).success,`${count}장 ${i+1}번째 ${storeCard?"+홍보":""}`).toBe(true);
+        }
+      });
+    }
+    // 역할 순서가 틀리면 여전히 막는다.
+    const base=createFallbackCarouselPlan({topic:"홍어",slideCount:10});
+    expect(ImageBriefSchema.safeParse({topic:"홍어",count:1,slide:{...base.slides[1],role:"visit"},slideIndex:2,slideTotal:6,styleAnchor:base.styleAnchor}).success).toBe(false);
   });
 });
