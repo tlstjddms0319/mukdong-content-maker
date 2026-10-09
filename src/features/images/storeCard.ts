@@ -470,8 +470,12 @@ export async function renderStoreCard(design:DesignSpecInput|undefined,index:num
 // ── 사장님이 만든 홍보 포스터 ────────────────────────────────────────────────────────────
 // assets/store/promo-card.webp가 있으면 맨 뒤 홍보 카드는 그 포스터를 그대로 쓴다(가게 이름·메뉴·주소·전화가 다 들어 있다).
 // 포스터를 바꾸려면 같은 이름으로 파일만 바꿔 넣으면 된다. 없으면 위의 코드 디자인(계열별)으로 그린다.
-// 4:5(1080×1350)와 비율이 다를 수 있어 잘라 내지 않고 통째로 넣는다: 높이(또는 폭)에 맞추고, 남는 가장자리는
-// 같은 포스터를 크게 흐려 깐다(위아래를 자르면 아래쪽 상차림·오른쪽 접시가 잘린다).
+// 4:5(1080×1350)와 비율이 조금만 다르면(꽉 채울 때 잘리는 몫이 12% 이하, 예: 3:4·A4) 꽉 채우고 넘치는 가장자리만
+// 똑같이 조금 잘라 낸다. 예전에는 늘 통째로 넣어 3:4 포스터도 좌우에 흐린 띠가 생겨 인스타에서 여백처럼 보였다.
+// 비율이 많이 다르면(9:16 휴대폰 화면 크기 등) 잘리는 몫이 커서 글이 잘리므로 예전처럼 통째로 넣고 남는 곳은 같은 포스터를 흐려 깐다.
+export const POSTER_FILL_MAX_LOSS=.12;
+// 4:5 카드에 꽉 채울 때 잘려 나가는 몫(0~1). 4:5면 0.
+export const posterCropLoss=(width:number,height:number)=>{const ratio=width/height,target=1080/1350;return 1-Math.min(ratio,target)/Math.max(ratio,target);};
 export const STORE_POSTER_FILE=path.join(process.cwd(),"assets/store/promo-card.webp");
 // 포스터를 4:5 카드로 맞춘다(같은 원본이면 다시 굽지 않게 key로 기억. 기본 포스터·올린 포스터 두 개면 충분).
 const fitted=new Map<string,Promise<Buffer>>();
@@ -479,6 +483,9 @@ export function fitPoster(source:Buffer,key:string):Promise<Buffer> {
   const cached=fitted.get(key);
   if(cached)return cached;
   const job=(async()=>{
+    const meta=await sharp(source).metadata();
+    if(meta.width&&meta.height&&posterCropLoss(meta.width,meta.height)<=POSTER_FILL_MAX_LOSS)
+      return sharp(source).resize(1080,1350,{fit:"cover",position:"centre"}).sharpen({sigma:.6,m1:.3,m2:.8}).jpeg({quality:92}).toBuffer();
     const back=await sharp(source).resize(1080,1350,{fit:"cover"}).blur(40).modulate({brightness:.9}).toBuffer();
     const front=await sharp(source).resize(1080,1350,{fit:"inside"}).sharpen({sigma:.6,m1:.3,m2:.8}).toBuffer({resolveWithObject:true});
     return sharp(back).composite([{input:front.data,left:Math.round((1080-front.info.width)/2),top:Math.round((1350-front.info.height)/2)}]).jpeg({quality:92}).toBuffer();

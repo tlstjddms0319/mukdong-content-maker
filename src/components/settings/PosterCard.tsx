@@ -56,7 +56,7 @@ export function PosterCard(){
       <div>
         {state&&<p><strong>{SOURCE_LABEL[state.source]}</strong>{state.source==="custom"&&state.updatedAt?` · ${dateText(state.updatedAt)}에 올림`:""}</p>}
         {state?.source==="design"&&<p className="field-help">포스터 그림이 없어서 앱이 가게 정보로 그린 카드를 써요.</p>}
-        <p className="field-help">세로 4:5(예: 1080×1350) 그림이 가장 잘 맞아요. 비율이 다르면 그림을 자르지 않고 남는 곳을 흐린 배경으로 채워요. 주소·전화번호·메뉴 이름에 오타가 없는지 꼭 확인하고 올려 주세요. 바꾼 포스터는 새로 만드는 카드뉴스부터 들어가요.</p>
+        <p className="field-help">세로 4:5(예: 1080×1350) 그림이 가장 잘 맞아요. 3:4처럼 조금 다르면 카드에 꽉 차게 위아래(또는 좌우) 가장자리를 조금 잘라요. 휴대폰 화면 크기(9:16)처럼 많이 다르면 자르지 않고 남는 곳을 흐린 배경으로 채워서 여백이 보여요. 주소·전화번호·메뉴 이름에 오타가 없는지 꼭 확인하고 올려 주세요. 바꾼 포스터는 새로 만드는 카드뉴스부터 들어가요.</p>
         <div className="connection-actions">
           <label className={`button primary${busy?" disabled":""}`} aria-disabled={busy}>
             {busy?"처리 중…":"새 포스터 올리기"}

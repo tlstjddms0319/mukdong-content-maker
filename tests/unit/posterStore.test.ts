@@ -20,6 +20,34 @@ afterEach(()=>setPosterStoreForTests(null));
 let store=memoryPosterStore();
 beforeEach(()=>{store=memoryPosterStore();});
 
+// 빨간 테두리(30px)를 두른 흰 포스터. 카드 왼쪽 끝이 포스터 테두리(순 빨강)인지, 흐린 띠(빨강+흰색이 섞인 분홍)인지 가린다.
+async function framed(width:number,height:number){
+  const inner=await sharp({create:{width:width-60,height:height-60,channels:3,background:"#ffffff"}}).png().toBuffer();
+  return sharp({create:{width,height,channels:3,background:"#ff0000"}}).composite([{input:inner,left:30,top:30}]).png().toBuffer();
+}
+async function pixel(card:Buffer,left:number){const {data}=await sharp(card).extract({left,top:675,width:1,height:1}).raw().toBuffer({resolveWithObject:true});return [...data.subarray(0,3)];}
+
+// 인스타에서 홍보 카드 좌우에 여백이 보이던 문제: 3:4 포스터를 통째로 넣어 좌우에 흐린 띠가 생겼다.
+describe("fitting the promo poster into 4:5", () => {
+  it("measures how much a poster loses when it fills the card", async () => {
+    const { posterCropLoss }=await import("@/features/images/storeCard");
+    expect(posterCropLoss(1080,1350)).toBe(0);
+    expect(posterCropLoss(1008,1350)).toBeLessThan(.12);
+    expect(posterCropLoss(1080,1920)).toBeGreaterThan(.12);
+  });
+  it("fills the card edge to edge when the poster is close to 4:5 (3:4), and keeps a 9:16 poster whole", async () => {
+    const { fitPoster }=await import("@/features/images/storeCard");
+    // 3:4: 카드 왼쪽 끝이 바로 포스터의 빨간 테두리(흐린 띠가 아님).
+    const [r34,g34]=await pixel(await fitPoster(await framed(1008,1350),"t-34"),2);
+    expect(r34).toBeGreaterThan(200);expect(g34).toBeLessThan(40);
+    // 9:16: 꽉 채우면 30%가 잘려 글이 잘리므로 통째로 넣는다: 포스터는 x=160부터, 그 바깥(x=100)은 흐린 배경(빨강·흰색이 섞인 분홍).
+    const card916=await fitPoster(await framed(760,1350),"t-916");
+    expect((await pixel(card916,100))[1]).toBeGreaterThan(60);
+    const [r,g]=await pixel(card916,175);
+    expect(r).toBeGreaterThan(200);expect(g).toBeLessThan(40);
+  });
+});
+
 describe("custom promo poster store", () => {
   it("saves, reads back and removes an uploaded poster", async () => {
     expect(await readCustomPoster()).toBeNull();
