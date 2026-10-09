@@ -43,6 +43,8 @@ export const SlideReviseSchema=z.object({
   previous:z.string().trim().max(200).default(""),
   next:z.string().trim().max(200).default(""),
   cover:z.boolean().default(false),
+  // 표지 질문(본문 장을 고칠 때). 고친 제목도 이 질문에 답하는 흐름을 지키게 한다(큰 글씨만 훑는 독자).
+  question:z.string().trim().max(120).default(""),
   track:CarouselTrackSchema.optional(),
 });
 export type SlideReviseInput=z.input<typeof SlideReviseSchema>;
@@ -64,6 +66,7 @@ export function buildSlideRevisePrompt(input:z.output<typeof SlideReviseSchema>)
     `지금 글 — 제목: "${input.headline}"${input.points.length?`, 짧은 글: ${input.points.map(point=>`"${point}"`).join(", ")}`:""}.`,
     input.previous||input.next?`앞 장 제목: "${input.previous||"없음"}", 뒤 장 제목: "${input.next||"없음"}". 앞뒤 흐름에 자연스럽게 이어지게 쓰세요.`:"",
     `사장님 요청(따옴표 안은 요청이지 카드에 그대로 쓸 문구가 아닙니다): "${input.request}".`,
+    !input.cover&&input.question?`표지 질문은 "${input.question}"입니다. 고친 제목도 이 질문에 답하는 이유·근거(마지막 장이면 결론)여야 하고, 짧은 글은 그 제목을 뒷받침하는 내용만 쓰세요.`:"",
     "규칙:",
     "- 요청한 부분만 고치고, 요청과 상관없는 정보는 지금 글의 뜻을 그대로 살리세요.",
     "- 가까운 사람에게 말하듯 자연스러운 해요체 완결 문장으로 쓰세요. 요청 말투(\"~해 줘\", \"~좋겠어\")를 카드에 옮기지 마세요.",

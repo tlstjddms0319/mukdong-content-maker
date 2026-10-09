@@ -227,7 +227,7 @@ describe("body slides answer instead of asking", () => {
   it("tells the plan AI to ask only on the cover and to give the reason in the short line", () => {
     const prompt=buildCarouselPlanPrompt({topic:"홍어무침엔 왜 막걸리일까?",slideCount:5,track:"photo"});
     expect(prompt).toContain("질문은 표지에서만 던집니다");
-    expect(prompt).toContain("이유·근거나 확인하는 방법 하나");
+    expect(prompt).toContain("근거나 눈·입으로 확인하는 방법 하나");
     expect(prompt).toContain("물기가 없어 맛이 유지돼요");
   });
   it("flags a question headline on a body slide for the review pass", () => {
@@ -237,5 +237,38 @@ describe("body slides answer instead of asking", () => {
     // 표지 질문은 괜찮다.
     const cover={...plan,slides:plan.slides.map((slide,i)=>i===0?{...slide,headline:"홍어무침엔 왜 막걸리일까요?"}:slide)};
     expect(slideCopyIssues(cover,"photo").some(issue=>issue.slide===1&&issue.message.includes("질문 대신"))).toBe(false);
+  });
+});
+
+// 사장님 지적: 인스타 독자는 큰 글씨만 훑는다. "홍어랑 삼합은 왜 같이 먹을까?" 뒤에 "홍어를 묵은지에 가볍게 감싸요"(먹는 법),
+// 마지막에 "홍어 삼합은 수육에 곁들여요"(정의)가 나오면 궁금증이 안 풀리고 흐름이 끊긴다.
+describe("headlines alone answer the cover question", () => {
+  const plan=applyTrack(createFallbackCarouselPlan({topic:"홍어랑 삼합은 왜 같이 먹을까?",slideCount:5,track:"text"}),"text");
+  const drifting={...plan,slides:plan.slides.map((slide,i)=>[
+    {...slide,headline:"홍어랑 삼합은 왜 같이 먹을까?"},
+    {...slide,headline:"홍어는 톡 쏘는 향이 강해요",points:["삭힌 정도에 따라 향이 달라요"]},
+    {...slide,headline:"홍어를 묵은지에 가볍게 감싸요",points:["묵은지는 오래 익혀 새콤해요"]},
+    {...slide,headline:"수육이 향을 부드럽게 눌러요",points:["막걸리 한 모금도 좋아요"]},
+    {...slide,headline:"홍어 삼합은 수육에 곁들여요",points:["세 가지를 한 쌈에 먹어요"]},
+  ][i])};
+  it("tells the plan AI that every body headline answers the cover question and roles are only positions", () => {
+    const prompt=buildCarouselPlanPrompt({topic:"홍어랑 삼합은 왜 같이 먹을까?",track:"text"});
+    expect(prompt).toContain("제목만 이어 읽어도 표지 질문에 답하는 짧은 글 한 단락");
+    expect(prompt).toContain("role은 장의 위치 표시일 뿐");
+    expect(prompt).toContain("how-to 장에도 먹는 법 대신 이유");
+    expect(prompt).not.toContain("마지막 장은 방문 전 확인할 것 하나로 닫으세요");
+  });
+  it("flags a how-to headline under a why cover and a short line that brings in a new food", () => {
+    const issues=slideCopyIssues(drifting,"text");
+    expect(issues.some(issue=>issue.slide===3&&issue.field==="headline"&&issue.message.includes("먹는 법"))).toBe(true);
+    expect(issues.some(issue=>issue.slide===4&&issue.field==="points"&&issue.message.includes("막걸리"))).toBe(true);
+    // 이유를 말하는 제목은 걸지 않는다.
+    expect(issues.some(issue=>issue.slide===4&&issue.message.includes("먹는 법"))).toBe(false);
+  });
+  it("shows the review AI the headlines in a row and asks for one answer", async () => {
+    const { buildPlanReviewPrompt }=await import("@/features/images/planReview");
+    const prompt=buildPlanReviewPrompt(drifting,"홍어랑 삼합은 왜 같이 먹을까?",slideCopyIssues(drifting,"text"),{track:"text"});
+    expect(prompt).toContain("[제목만 이어 읽기]\n1. 홍어랑 삼합은 왜 같이 먹을까?\n2. 홍어는 톡 쏘는 향이 강해요\n3. 홍어를 묵은지에 가볍게 감싸요");
+    expect(prompt).toContain("표지 질문과 상관없는 제목(먹는 법·메뉴 정의·방문 안내)은 표지 질문의 이유로 바꾸세요");
   });
 });

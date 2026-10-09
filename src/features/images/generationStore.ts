@@ -622,7 +622,7 @@ export async function reviseSlideText(index:number,request:string):Promise<{ok:t
   try{
     const response=await fetch("/api/images/slide/revise",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
       topic:state.input.topic,headline:slide.headline,points:slide.points,request:ask,
-      previous:plan.slides[index-1]?.headline??"",next:plan.slides[index+1]?.headline??"",cover:index===0,...(state.input.track?{track:state.input.track}:{}),
+      previous:plan.slides[index-1]?.headline??"",next:plan.slides[index+1]?.headline??"",cover:index===0,...(index>0?{question:plan.slides[0]?.headline.slice(0,120)??""}:{}),...(state.input.track?{track:state.input.track}:{}),
     })});
     const data=await readJsonResponse(response);
     if(!response.ok||typeof data.headline!=="string"||!Array.isArray(data.points))throw new Error(data.message||"글을 고치지 못했어요.");
