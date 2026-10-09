@@ -5,7 +5,7 @@ import { SlideBodyFontSchema, SlideTitleFontSchema } from "./typography";
 import { diversifyCarouselDesign } from "./variety";
 import { MENU_BY_ID, heroMenu, josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SKATE_TABLE, copyMentionsSkate, foodFreeAnchor, isOtherMenu } from "./sceneFoods";
-import { CarouselTrackSchema, TRACK_SLIDE_COUNT, applyTrack, trackPromptRules } from "./track";
+import { CarouselTrackSchema, TRACK_SLIDE_COUNT, applyTrack, ellipsize, trackPromptRules } from "./track";
 import { TRACK_STYLES } from "./styleCatalog";
 
 export const CarouselPlanInputSchema=z.object({
@@ -95,26 +95,26 @@ type FallbackSlide=Omit<CarouselSlidePlan,"role"|"layout"|"keywords"|"figure"|"t
 type MenuWords={dish:string;keyword:string;detail:FallbackSlide;howTo:FallbackSlide;pairWith:string};
 const MENU_WORDS:Record<string,MenuWords>={
   "hongeo-hoe":{dish:"홍어",keyword:"홍어",pairWith:"막걸리 사발",
-    detail:{headline:"가까이 보면 결이 이렇게 살아 있어요",points:["얇게 썰려 빛에 비치면 결이 보여요","씹을수록 탄력이 느껴지는 부분이에요","이걸 어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시 위에 겹쳐 놓인 홍어 살의 단면과 결을 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
-    howTo:{headline:"한 점은 이렇게 먹어요",points:["홍어 한 점을 먼저 집어요","첫 점은 양념을 적게 해서 맛을 확인해요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 홍어 한 점을 집어 든 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
+    detail:{headline:"결이 이렇게 살아 있어요",points:["얇게 썰면 결이 비쳐 보여요","씹을수록 탄력이 느껴져요","이걸 어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시 위에 겹쳐 놓인 홍어 살의 단면과 결을 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    howTo:{headline:"한 점은 이렇게 먹어요",points:["홍어 한 점을 먼저 집어요","첫 점은 양념을 적게 찍어요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 홍어 한 점을 집어 든 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
   "hongeo-muchim":{dish:"홍어무침",keyword:"홍어무침",pairWith:"막걸리 사발",
-    detail:{headline:"가까이 보면 양념이 고루 묻어 있어요",points:["붉은 양념 사이로 홍어 조각이 보여요","한입 크기라 나눠 먹기 편해요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"얕은 그릇에 담긴 홍어무침의 양념 윤기와 조각을 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
-    howTo:{headline:"한입은 이렇게 집어 먹어요",points:["양념이 묻은 조각을 하나 집어요","처음엔 작은 조각으로 맛을 확인해요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 홍어무침 한 조각을 집어 든 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
+    detail:{headline:"양념이 고루 묻어 있어요",points:["양념 사이로 홍어가 보여요","한입 크기라 나눠 먹기 편해요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"얕은 그릇에 담긴 홍어무침의 양념 윤기와 조각을 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    howTo:{headline:"한입은 이렇게 집어 먹어요",points:["양념이 묻은 조각을 하나 집어요","작은 조각부터 맛을 봐요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 홍어무침 한 조각을 집어 든 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
   "hongeo-jjim":{dish:"홍어찜",keyword:"홍어찜",pairWith:"막걸리 사발",
-    detail:{headline:"가까이 보면 익은 결이 이렇게 보여요",points:["쪄서 익힌 살은 불투명한 빛을 띠어요","결 사이로 촉촉한 윤기가 돌아요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시에 담긴 홍어찜 살 조각의 익은 결과 윤기를 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
-    howTo:{headline:"한 점은 이렇게 덜어 먹어요",points:["뜨거울 때 한 조각을 덜어요","결 방향으로 살을 나눠 맛을 봐요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"김이 오르는 홍어찜 접시에서 한 조각을 앞접시로 덜어 놓은 모습을 45도에서 담은 사진. 얼굴 없음",textPosition:"top"}},
+    detail:{headline:"익은 결이 이렇게 보여요",points:["익힌 살은 불투명한 빛이에요","결 사이로 촉촉한 윤기가 돌아요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시에 담긴 홍어찜 살 조각의 익은 결과 윤기를 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    howTo:{headline:"한 점씩 덜어 먹어요",points:["뜨거울 때 한 조각을 덜어요","결 방향으로 살을 나눠 맛을 봐요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"김이 오르는 홍어찜 접시에서 한 조각을 앞접시로 덜어 놓은 모습을 45도에서 담은 사진. 얼굴 없음",textPosition:"top"}},
   "hongeo-aetang":{dish:"홍어애탕",keyword:"홍어애탕",pairWith:"막걸리 사발",
-    detail:{headline:"가까이 보면 김이 이렇게 올라와요",points:["뚝배기 위로 김이 올라와요","국물과 건더기를 함께 떠서 맛봐요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"뚝배기에 담긴 홍어애탕 국물과 피어오르는 김을 낮은 각도에서 가까이 담은 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
-    howTo:{headline:"한 숟갈은 이렇게 떠 먹어요",points:["국물부터 한 숟갈 떠서 맛을 봐요","뜨거우니 조금 식혀서 먹어요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"숟가락으로 홍어애탕 국물을 떠 올리는 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
+    detail:{headline:"김이 이렇게 올라와요",points:["뚝배기 위로 김이 올라와요","국물과 건더기를 함께 떠서 맛봐요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"뚝배기에 담긴 홍어애탕 국물과 피어오르는 김을 낮은 각도에서 가까이 담은 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    howTo:{headline:"한 숟갈씩 떠 먹어요",points:["국물부터 한 숟갈 떠서 맛을 봐요","뜨거우니 조금 식혀서 먹어요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"숟가락으로 홍어애탕 국물을 떠 올리는 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
   gwamegi:{dish:"과메기",keyword:"과메기",pairWith:"막걸리 사발",
-    detail:{headline:"가까이 보면 윤기가 이렇게 돌아요",points:["길게 썬 살에 윤기가 돌아요","겉과 속의 빛깔이 조금 달라요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시에 가지런히 놓인 과메기 살의 윤기와 결을 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    detail:{headline:"윤기가 이렇게 돌아요",points:["길게 썬 살에 윤기가 돌아요","겉과 속의 빛깔이 조금 달라요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시에 가지런히 놓인 과메기 살의 윤기와 결을 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
     howTo:{headline:"한 점은 이렇게 먹어요",points:["과메기 한 점을 먼저 집어요","곁들임은 취향대로 조금씩 더해요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 과메기 한 점을 집어 든 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
   "minari-jeon":{dish:"미나리전",keyword:"미나리전",pairWith:"막걸리 사발",
-    detail:{headline:"가까이 보면 미나리가 이렇게 보여요",points:["노릇한 반죽 사이로 미나리가 보여요","가장자리가 노릇하게 익어 있어요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시 위 미나리전의 노릇한 겉면과 초록 줄기를 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    detail:{headline:"미나리가 이렇게 보여요",points:["반죽 사이로 미나리가 보여요","가장자리가 노릇하게 익어 있어요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시 위 미나리전의 노릇한 겉면과 초록 줄기를 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
     howTo:{headline:"한 조각은 이렇게 먹어요",points:["미나리전을 한입 크기로 나눠요","양념장은 조금만 찍어 맛을 봐요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 미나리전 한 조각을 집어 든 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
   "baedari-makgeolli":{dish:"막걸리",keyword:"막걸리",pairWith:"미나리전 접시",
-    detail:{headline:"사발에 따르면 이런 빛이에요",points:["사발에 따르면 뽀얀 빛이 보여요","표면에 작은 거품이 올라와요","어떻게 마시면 좋은지 다음 장에요"],visualPrompt:"사발에 담긴 뽀얀 막걸리 표면을 낮은 각도에서 가까이 담은 매크로 사진. 병이 보여도 글자 없이, 손과 얼굴 없음",textPosition:"bottom"},
-    howTo:{headline:"한 잔은 이렇게 따라 마셔요",points:["가라앉은 것을 살살 섞어 줘요","첫 잔은 조금만 따라 맛을 봐요","같이 먹으면 좋은 안주를 이어서 볼게요"],visualPrompt:"사발에 막걸리를 따르는 손을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
+    detail:{headline:"따르면 이런 빛이에요",points:["사발에 따르면 뽀얀 빛이 보여요","표면에 작은 거품이 올라와요","어떻게 마시면 좋은지 다음 장에요"],visualPrompt:"사발에 담긴 뽀얀 막걸리 표면을 낮은 각도에서 가까이 담은 매크로 사진. 병이 보여도 글자 없이, 손과 얼굴 없음",textPosition:"bottom"},
+    howTo:{headline:"한 잔은 이렇게 따라요",points:["가라앉은 것을 살살 섞어 줘요","첫 잔은 조금만 따라 맛을 봐요","같이 먹으면 좋은 안주를 이어서 볼게요"],visualPrompt:"사발에 막걸리를 따르는 손을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
 };
 
 // 주제(와 내용 메모·이미지 설명)에서 이 캐러셀의 주인공 메뉴를 고른다. 못 찾으면 undefined(홍어회 문안을 쓴다).
@@ -130,15 +130,15 @@ function fallbackSlides(menu:StoreMenuItem|undefined):Record<CarouselRole,Fallba
   const look=(menu??MENU_BY_ID["hongeo-hoe"]).lookKo;
   return {
     cover:{headline:"",points:[],visualPrompt:`완성된 ${dish} 한 접시를 45도 위에서 담은 히어로 음식 사진. ${look}, 손·젓가락·얼굴 없음`,textPosition:"top"},
-    overview:{headline:"상에 뭐가 올라오는지 먼저 볼게요",points:["가운데 메인 접시, 둘레에 곁들임이 놓여요","처음이라면 조금씩 차례로 맛보세요","다음 장에서 가까이 볼게요"],visualPrompt:`그릇과 곁들임의 전체 구성이 보이도록 바로 위에서 넓게 내려다본 상차림. 가운데 ${dish}, 둘레에 작은 반찬 그릇, 손과 얼굴 없음`,textPosition:"top"},
+    overview:{headline:"한 상 구성부터 볼게요",points:["둘레에 곁들임이 놓여요","조금씩 차례로 맛보세요","다음 장에서 가까이 볼게요"],visualPrompt:`그릇과 곁들임의 전체 구성이 보이도록 바로 위에서 넓게 내려다본 상차림. 가운데 ${dish}, 둘레에 작은 반찬 그릇, 손과 얼굴 없음`,textPosition:"top"},
     detail:words.detail,
     "how-to":words.howTo,
-    pairing:{headline:"같이 놓으면 더 잘 어울려요",points:["곁들임이 맛의 균형을 잡아 줘요","취향에 맞는 조합을 골라 보세요","이제 가기 전에 확인할 것만 남았어요"],visualPrompt:`${dish} 옆에 ${josa(words.pairWith,"이","가")} 대각선으로 놓인 식탁을 옆에서 담은 사진. 손과 얼굴 없음`,textPosition:"bottom"},
-    process:{headline:"손질부터 담음새까지 이렇게 준비해요",points:["재료를 손질해 그릇에 가지런히 담아요","한 그릇씩 순서대로 준비해요","이렇게 나온 한 상을 다음 장에서 볼게요"],visualPrompt:`깨끗한 손이 ${josa(dish,"을","를")} 그릇에 가지런히 담는 준비 과정을 옆 각도에서 담은 사진. 얼굴 없음`,textPosition:"top"},
-    occasion:{headline:"여럿이 나눠 먹을 때 더 좋은 자리예요",points:["가운데 한 상을 두고 각자 조금씩 덜어요","이야기하면서 천천히 먹기 좋은 구성이에요","분위기가 어떤지 이어서 볼게요"],visualPrompt:`여럿이 둘러앉은 식탁 가운데 놓인 ${josa(dish,"을","를")} 옆에서 담은 사진. 한 상을 향해 뻗은 여러 손과 잔이 보이고, 사람은 뒷모습이나 어깨까지만 나오고 얼굴 없음`,textPosition:"bottom"},
-    mood:{headline:"서두르지 않아도 되는 저녁이에요",points:["부드러운 조명 아래 한 상 앞에서 쉬어 가요","천천히 먹어도 괜찮은 자리예요","마지막으로 방문 전에 볼 것만 정리해요"],visualPrompt:`부드러운 저녁 조명 아래 ${josa(dish,"이","가")} 놓인 식탁을 넓은 여백과 함께 담은 사진. 테이블 끝에 잔을 든 손이 보이고 얼굴 없음`,textPosition:"top"},
-    visit:{headline:"가기 전에 이것만 확인하면 돼요",points:["메뉴 구성은 프로필의 플레이스에서 확인해요","처음이라면 직원에게 편하게 물어봐도 돼요","저장해 두면 다음에 찾기 편해요"],visualPrompt:`${josa(dish,"이","가")} 놓인 편안한 완성 상차림을 눈높이에서 담은 사진. 마주 앉은 사람의 손이 젓가락을 들고 있고 얼굴 없음, 매장 외관 없음`,textPosition:"bottom"},
-    cta:{headline:"다음엔 직접 맛보고 확인해 보세요",points:["저장해 두면 다음 방문 때 편해요","궁금한 점은 댓글로 남겨 주세요"],visualPrompt:`비어 가는 그릇 가장자리와 마지막 남은 ${josa(dish,"을","를")} 대비해 담은 사진. 반쯤 빈 잔과 접힌 냅킨만 보이고 얼굴 없음`,textPosition:"bottom"},
+    pairing:{headline:"같이 놓으면 잘 어울려요",points:["곁들임이 맛의 균형을 잡아 줘요","취향에 맞는 조합을 골라 보세요","이제 가기 전에 확인할 것만 남았어요"],visualPrompt:`${dish} 옆에 ${josa(words.pairWith,"이","가")} 대각선으로 놓인 식탁을 옆에서 담은 사진. 손과 얼굴 없음`,textPosition:"bottom"},
+    process:{headline:"이렇게 준비해서 내요",points:["손질해서 가지런히 담아요","한 그릇씩 순서대로 준비해요","이렇게 나온 한 상을 다음 장에서 볼게요"],visualPrompt:`깨끗한 손이 ${josa(dish,"을","를")} 그릇에 가지런히 담는 준비 과정을 옆 각도에서 담은 사진. 얼굴 없음`,textPosition:"top"},
+    occasion:{headline:"여럿이 나눠 먹기 좋아요",points:["한 상을 두고 조금씩 덜어요","이야기하며 천천히 먹어요","분위기가 어떤지 이어서 볼게요"],visualPrompt:`여럿이 둘러앉은 식탁 가운데 놓인 ${josa(dish,"을","를")} 옆에서 담은 사진. 한 상을 향해 뻗은 여러 손과 잔이 보이고, 사람은 뒷모습이나 어깨까지만 나오고 얼굴 없음`,textPosition:"bottom"},
+    mood:{headline:"서두르지 않는 저녁이에요",points:["부드러운 조명 아래 쉬어 가요","천천히 먹어도 괜찮은 자리예요","마지막으로 방문 전에 볼 것만 정리해요"],visualPrompt:`부드러운 저녁 조명 아래 ${josa(dish,"이","가")} 놓인 식탁을 넓은 여백과 함께 담은 사진. 테이블 끝에 잔을 든 손이 보이고 얼굴 없음`,textPosition:"top"},
+    visit:{headline:"가기 전에 이것만 봐요",points:["메뉴 구성은 플레이스에서 확인해요","처음이라면 직원에게 물어봐요","저장해 두면 다음에 찾기 편해요"],visualPrompt:`${josa(dish,"이","가")} 놓인 편안한 완성 상차림을 눈높이에서 담은 사진. 마주 앉은 사람의 손이 젓가락을 들고 있고 얼굴 없음, 매장 외관 없음`,textPosition:"bottom"},
+    cta:{headline:"다음엔 직접 맛보세요",points:["저장해 두면 다음 방문 때 편해요","궁금한 점은 댓글로 남겨 주세요"],visualPrompt:`비어 가는 그릇 가장자리와 마지막 남은 ${josa(dish,"을","를")} 대비해 담은 사진. 반쯤 빈 잔과 접힌 냅킨만 보이고 얼굴 없음`,textPosition:"bottom"},
   };
 }
 
@@ -168,7 +168,8 @@ export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan
       layout:defaultCardLayout(role),
       keywords:keywords[role],
       figure:"",
-      headline:role==="cover" ? parsed.topic.slice(0,42) : slides[role].headline,
+      // 긴 주제는 낱말 가운데를 자르지 않고 "…"으로 줄인다.
+      headline:role==="cover" ? ellipsize(parsed.topic,42) : slides[role].headline,
       // 준비된 표지 부제는 사실을 단정하지 않는 안내 한 줄만 쓴다.
       subline:role==="cover" ? "한 장씩 넘기며 알아봐요" : "",
       // 준비된 장면 설명은 사진 기준으로 쓰여 있어, 그림 화풍이면 "사진"을 "그림"으로 바꿔 모델이 실사로 가지 않게 한다.
@@ -205,7 +206,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     // 한 편의 이야기: 장마다 독립된 자랑을 나열하지 않고, 앞 장이 남긴 궁금증을 다음 장이 받는다.
     track?track.story:`[이야기 구조] ${parsed.slideCount}장은 한 사람이 친구에게 이 음식을 설명해 주는 한 편의 이야기입니다. 표지는 독자가 실제로 가질 법한 구체적인 궁금증 하나를 질문이나 한 문장으로 던지고, 각 본문 장은 앞 장이 남긴 궁금증에 답하면서 마지막 요점 한 줄로 다음 장의 내용을 예고하세요. 마지막 장은 첫 장의 궁금증이 어떻게 풀렸는지 한 줄로 돌아본 뒤 방문 전 확인할 것으로 닫으세요. 장마다 "우리 대단하죠" 식의 자랑이나 감탄으로 끝내지 말고, 정보가 한 방향으로 쌓이게 하세요.`,
     // 사람이 쓴 글처럼: 명사형 슬로건과 광고 상투어를 막고, 관찰 가능한 구체 정보로 쓴다.
-    track?track.style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰려 빛에 비치면 결이 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요. 표지 headline은 넘기고 싶게 만드는 짧은 훅(8~18자, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(30자 이내 해요체 한 줄)에 넣으세요. 표지가 아닌 장의 subline은 빈 문자열로 두세요.`,
+    track?track.style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰면 결이 비쳐 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요. 표지 headline은 넘기고 싶게 만드는 짧은 훅(8~18자, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(30자 이내 해요체 한 줄)에 넣으세요. 표지가 아닌 장의 subline은 빈 문자열로 두세요.`,
     `[사실 기준] 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어무침·홍어애탕(그리고 홍어전·찜)의 조리법을 구분하세요. 선택 주제나 내용 메모에 삼합이 없으면 삼합 구성(홍어·수육·묵은지)을 쓰지 마세요. 삼합은 이 가게의 기본값이 아니라 여러 메뉴 가운데 하나입니다. 메뉴에 들어가는 재료와 곁들임 구성, 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요.`,
     // 글도 주제의 메뉴가 주인공: 곁들임이 문장을 이끌면 그림보다 글에서 먼저 주인공이 바뀐다. 과메기 주제면 과메기, 홍어 주제일 때만 홍어.
     heroRule(menu,[parsed.topic,parsed.contentBrief].filter(Boolean).join(" ")),
@@ -279,11 +280,13 @@ export function keepScenesOnMenu(plan:CarouselPlan,topic:string,menu:StoreMenuIt
 }
 
 // onFallback: AI 구성안을 못 써서 기본 문안으로 넘어갈 때 그 이유(오류)를 받는다. 예전에는 이유를 버려 로그에도 남지 않았다.
-// 갈래가 있으면 무작위 섞기 대신 갈래 규칙(applyTrack)으로 디자인·장마다 사진 수·글 길이를 정한다.
+// 갈래가 있으면 무작위 섞기 대신 갈래 규칙(applyTrack)으로 디자인·장마다 사진 수를 정한다.
+// AI 구성안의 글 길이는 여기서 줄이지 않는다: 검수 AI가 원래 문장을 보고 고치고, 글 맞추기는 plan 경로 마지막에 한 번만 한다
+// (예전에는 여기서 먼저 잘라서 검수가 잘린 문장만 봤다 — 검수 보고서 B-2). 기본 문안은 검수를 거치지 않으므로 바로 맞춘다.
 export async function planCarousel(input:CarouselPlanInput,ai?:CarouselPlanAi,options:{seed?:number;onFallback?:(error:unknown)=>void}={}):Promise<CarouselPlan> {
   const parsed=parsePlanInput(input);
   const fallback=createFallbackCarouselPlan(parsed);
-  const vary=(plan:CarouselPlan,isFallback:boolean)=>parsed.track?applyTrack(plan,parsed.track):options.seed===undefined?plan:diversifyCarouselDesign(plan,options.seed,{fallback:isFallback});
+  const vary=(plan:CarouselPlan,isFallback:boolean)=>parsed.track?applyTrack(plan,parsed.track,{copy:isFallback}):options.seed===undefined?plan:diversifyCarouselDesign(plan,options.seed,{fallback:isFallback});
   if(!ai)return vary(fallback,true);
   try {
     const plan=CarouselPlanSchema.parse(await ai.generate(parsed));

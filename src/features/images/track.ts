@@ -115,37 +115,85 @@ export function splitHeadline(value:string,max:number,tailMax:number):[string,st
 
 const same=(a:string,b:string)=>a.replace(/\s+/g,"")===b.replace(/\s+/g,"");
 
-// 장 하나의 글을 갈래 규칙에 맞춘다.
+// ── 카드에 실제로 들어가는 길이 ──────────────────────────────────────────────────────────
+// TRACK_COPY는 AI에게 "이만큼 짧게 써 달라"고 부탁하는 목표 길이다. 카드는 글자 크기를 줄이고 줄을 늘려 그보다 긴 글도
+// 넘치지 않고 그린다(렌더러로 직접 재 본 값, 2026-10-09). 예전에는 목표 길이를 1자만 넘어도 문장 앞뒤를 잘라
+// "홍어는 삭힌 정도에 따라 향의 세기가 달라요" → "따라 향의 세기가 달라요"처럼 주어·이유가 날아갔다(검수 보고서 B-1).
+// 이제는 카드에 들어가는 길이(아래 값) 안이면 문장을 그대로 두고, 넘칠 때만 줄인다.
+//   표지: 제목 40자·부제 32자(42·36자까지 넘침 없음).  사진 중심 본문: 제목 34자·짧은 글 46자.
+//   글 중심 본문은 큰 글자 세 줄이 전부다: 제목 한 줄(14자 이하)이면 짧은 글 두 개(각 18자) 또는 하나(34자, 두 줄),
+//   제목이 두 줄(15~28자)이면 짧은 글 하나(18자)만 들어간다(넘으면 카드가 짧은 글을 빼고 그린다).
+export const TRACK_FIT={
+  cover:{headline:40,subline:32},
+  photo:{headline:34},
+  text:{headline:28,oneLineHeadline:14},
+} as const;
+// 짧은 글 자리: 몇 개까지(count), 하나에 몇 자까지(room). 글 중심은 제목 줄 수와 짧은 글 개수에 따라 자리가 다르다.
+export function trackPointRoom(track:CarouselTrack,headline:string,count:number):number {
+  if(track==="photo")return 46;
+  if(headline.length>TRACK_FIT.text.oneLineHeadline)return 18;
+  return count>=2?18:34;
+}
+export const trackPointCount=(track:CarouselTrack,headline:string):number=>
+  track==="text"&&headline.length>TRACK_FIT.text.oneLineHeadline?1:TRACK_COPY[track].points;
+
+// 뜻을 바꾸지 않고 줄이는 방법만 쓴다(fitLine의 1·2단계): 쉼표 앞 첫 마디, 빼도 뜻이 남는 꾸밈말 빼기. 안 되면 null.
+// 앞 낱말을 덜어 내는 3단계는 주어·조건이 사라져 뜻이 바뀌므로("미나리전은 바삭할 때" → 이유가 빠짐) 쓰지 않는다.
+export function cleanCut(value:string,max:number):string|null {
+  let text=tidy(value);
+  if(text.length<=max)return text;
+  const clause=trimEnd(text.split(/[,，·…]/)[0]??"");
+  if(clause.length<=max&&clause.length>=Math.ceil(max*.4))return clause;
+  for(const filler of text.split(" ").filter(word=>FILLERS.has(word))){
+    const words=text.split(" "),at=words.indexOf(filler);
+    if(at<0||words.length<=2)break;
+    text=[...words.slice(0,at),...words.slice(at+1)].join(" ");
+    if(text.length<=max)return text;
+  }
+  return null;
+}
+// 제목은 빼 버릴 수 없으므로, 깔끔하게 줄일 수 없으면 낱말 경계에서 앞부분을 남기고 "…"을 붙인다.
+// 반쪽 문장이 온전한 문장처럼 보이는 것보다 "더 있다"는 표시가 정직하다(앞부분이 주어라 뜻도 덜 바뀐다).
+export function ellipsize(value:string,max:number):string {
+  const text=tidy(value);
+  if(text.length<=max)return text;
+  const words=text.split(" ");
+  for(let i=words.length-1;i>0;i--){
+    const head=trimEnd(words.slice(0,i).join(" "));
+    if(head.length&&head.length+1<=max)return `${head}…`;
+  }
+  return `${text.slice(0,max-1)}…`;
+}
+const fitHeadline=(value:string,max:number)=>cleanCut(value,max)??ellipsize(value,max);
+
+// 장 하나의 글을 갈래 규칙에 맞춘다. 카드에 들어가는 길이면 문장을 그대로 둔다.
+//   제목: 넘치면 깔끔하게 줄이고(cleanCut), 안 되면 "…"로 줄인다.
+//   짧은 글: 넘치면 깔끔하게 줄이고, 안 되면 그 짧은 글을 뺀다(반쪽 문장을 찍지 않는다). 개수는 갈래 개수까지.
+// 여러 번 불러도 결과가 같다(이미 맞는 글은 그대로).
 export function fitTrackCopy(slide:CarouselSlidePlan,track:CarouselTrack):Pick<CarouselSlidePlan,"headline"|"subline"|"points"> {
   if(slide.role==="cover"){
-    const rule=TRACK_COPY.cover;
-    let headline=tidy(slide.headline),subline=fitLine(slide.subline??"",rule.subline);
-    if(headline.length>rule.headline){
-      // 부제가 비어 있으면 긴 제목의 뒷부분을 부제로 내린다. 아니면 제목만 줄인다.
-      const split=!subline?splitHeadline(headline,rule.headline,rule.subline):null;
-      if(split)[headline,subline]=split;else headline=fitLine(headline,rule.headline);
-    }
-    return {headline,subline,points:[]};
+    const rule=TRACK_FIT.cover;
+    const subline=tidy(slide.subline??"");
+    return {headline:fitHeadline(slide.headline,rule.headline),subline:cleanCut(subline,rule.subline)??"",points:[]};
   }
-  const rule=TRACK_COPY[track];
-  let headline=tidy(slide.headline);
-  let points=(slide.points??[]).map(tidy).filter(Boolean);
-  if(headline.length>rule.headline){
-    // 짧은 글 자리가 남으면 제목 뒷부분을 첫 짧은 글로 내린다(뜻이 이어진다). 자리가 없으면 제목만 줄인다.
-    const split=points.length<rule.points?splitHeadline(headline,rule.headline,rule.point):null;
-    if(split){headline=split[0];points=[split[1],...points];}
-    else headline=fitLine(headline,rule.headline);
-  }
-  points=points.map(point=>fitLine(point,rule.point)).filter(point=>point.length>=2&&!same(point,headline))
-    .filter((point,i,list)=>list.findIndex(other=>same(other,point))===i).slice(0,rule.points);
+  const headline=fitHeadline(slide.headline,TRACK_FIT[track].headline);
+  const candidates=(slide.points??[]).map(tidy).filter(point=>point.length>=2&&!same(point,headline))
+    .filter((point,i,list)=>list.findIndex(other=>same(other,point))===i);
+  // 두 개를 넣을 자리로 먼저 맞춰 보고, 하나만 남으면 하나일 때의 자리로 다시 맞춘다(글 중심 한 줄 제목은 하나면 더 길게 들어간다).
+  const most=trackPointCount(track,headline);
+  const fitAll=(count:number)=>candidates.map(point=>cleanCut(point,trackPointRoom(track,headline,count))).filter((point):point is string=>!!point).slice(0,count);
+  let points=fitAll(most);
+  if(points.length<2)points=fitAll(1);
   return {headline,subline:"",points};
 }
 
 // 구성안 전체를 갈래에 맞춘다: 디자인(갈래 계열 + 기본 테마·계절·글꼴), 장마다 layout, 글꼴은 공통(auto), 모양 변형 0, 글 길이.
 // 장 수(5장)는 요청 단계에서 맞추므로(구성안 입력) 여기서는 바꾸지 않는다. 여러 번 불러도 결과가 같다.
-export function applyTrack(plan:CarouselPlan,track:CarouselTrack):CarouselPlan {
+// copy:false면 글은 건드리지 않는다: AI 구성안은 검수 AI가 원래 문장을 보고 고치게 하고, 글 맞추기는 마지막에 한 번만 한다(B-2).
+export function applyTrack(plan:CarouselPlan,track:CarouselTrack,options:{copy?:boolean}={}):CarouselPlan {
+  const copy=options.copy??true;
   return {...plan,design:trackDesign(track),slides:plan.slides.map(slide=>({
-    ...slide,...fitTrackCopy(slide,track),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
+    ...slide,...(copy?fitTrackCopy(slide,track):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
   }))};
 }
 

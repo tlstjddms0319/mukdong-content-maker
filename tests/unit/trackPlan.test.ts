@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildCarouselPlanPrompt, createFallbackCarouselPlan, planCarousel, type CarouselPlan } from "@/features/images/carousel";
 import { photosNeeded, normalizeCardLayout } from "@/features/images/design";
 import { PICKABLE_STYLES, STYLE_OPTIONS, TRACK_STYLES as TRACK_ONLY, styleCatalogText } from "@/features/images/styleCatalog";
-import { TRACK_COPY, applyTrack, fitLine, splitHeadline, type CarouselTrack } from "@/features/images/track";
+import { TRACK_COPY, TRACK_FIT, applyTrack, fitLine, splitHeadline, trackPointCount, trackPointRoom, type CarouselTrack } from "@/features/images/track";
 import { pickFittingStyle } from "@/features/images/variety";
 import { rotateStyles } from "@/features/topics/monthPlan";
 import { slideCopyIssues } from "@/features/images/planReview";
@@ -38,14 +38,15 @@ function expectTrackRules(plan:CarouselPlan,track:CarouselTrack){
   expect(photos).toEqual(track==="photo"?[1,1,1,1,1]:[1,0,0,0,0]);
   expect(plan.slides[0].layout).toBe("fullscreen");
   const [cover,...rest]=plan.slides;
-  expect(cover.headline.length).toBeLessThanOrEqual(TRACK_COPY.cover.headline);
-  expect((cover.subline??"").length).toBeLessThanOrEqual(TRACK_COPY.cover.subline);
+  // 글 길이는 카드에 실제로 들어가는 길이(TRACK_FIT)로 본다. AI에게 부탁하는 목표 길이(TRACK_COPY)는 그보다 짧다.
+  expect(cover.headline.length).toBeLessThanOrEqual(TRACK_FIT.cover.headline);
+  expect((cover.subline??"").length).toBeLessThanOrEqual(TRACK_FIT.cover.subline);
   expect(cover.points).toEqual([]);
   const rule=TRACK_COPY[track];
   for(const slide of rest){
-    expect(slide.headline.length,slide.headline).toBeLessThanOrEqual(rule.headline);
-    expect(slide.points.length).toBeLessThanOrEqual(rule.points);
-    for(const point of slide.points)expect(point.length,point).toBeLessThanOrEqual(rule.point);
+    expect(slide.headline.length,slide.headline).toBeLessThanOrEqual(TRACK_FIT[track].headline);
+    expect(slide.points.length).toBeLessThanOrEqual(trackPointCount(track,slide.headline));
+    for(const point of slide.points)expect(point.length,point).toBeLessThanOrEqual(trackPointRoom(track,slide.headline,slide.points.length));
     expect(slide.titleFont).toBe("auto");
     expect(slide.variant).toBe(0);
   }
@@ -54,9 +55,11 @@ function expectTrackRules(plan:CarouselPlan,track:CarouselTrack){
 describe("track plans", () => {
   beforeEach(()=>{generateJson.mockReset();readSettings.mockReset().mockResolvedValue({textAiProvider:"automatic"});});
 
-  it.each(["photo","text"] as const)("forces count, design, layouts and copy length for the %s track after the AI answers", async track => {
+  it.each(["photo","text"] as const)("forces count, design and layouts for the %s track but leaves the AI copy for the review step", async track => {
     const plan=await planCarousel({topic:"비 오는 날 홍어 한 점",slideCount:7,track},{generate:async()=>wordyPlan()},{seed:3});
-    expectTrackRules(plan,track);
+    // 글은 검수 AI가 원래 문장을 보고 고치도록 그대로 둔다(검수 보고서 B-2). 글 맞추기는 plan 경로 마지막에 한다.
+    expect(plan.slides.map(slide=>[slide.headline,slide.points])).toEqual(wordyPlan().slides.map(slide=>[slide.headline,slide.points]));
+    expectTrackRules(applyTrack(plan,track),track);
     // 길이를 맞출 때 낱말 가운데를 자르지 않는다.
     const original=wordyPlan();
     for(const [i,slide] of plan.slides.entries()){
@@ -73,14 +76,53 @@ describe("track plans", () => {
     expectTrackRules(await planCarousel({topic,track},{generate:async()=>{throw new Error("offline");}},{seed:5}),track);
   });
 
-  it("splits a long headline into a headline and a short line when there is room", () => {
-    expect(splitHeadline("홍어 한 점은 씹을수록 진한 감칠맛이 올라와요",18,20)).toEqual(["홍어 한 점은 씹을수록","진한 감칠맛이 올라와요"]);
+  it("keeps a sentence whole when it fits on the card", () => {
     const plan=createFallbackCarouselPlan({topic:"홍어",slideCount:5});
     const fitted=applyTrack({...plan,slides:plan.slides.map((slide,i)=>i===2?{...slide,headline:"홍어 한 점은 씹을수록 진한 감칠맛이 올라와요",points:[]}:slide)},"photo");
-    expect(fitted.slides[2].headline).toBe("홍어 한 점은 씹을수록");
-    expect(fitted.slides[2].points).toEqual(["진한 감칠맛이 올라와요"]);
+    expect(fitted.slides[2].headline).toBe("홍어 한 점은 씹을수록 진한 감칠맛이 올라와요");
     // 이미 맞는 구성안은 그대로(여러 번 맞춰도 같다).
     expect(applyTrack(fitted,"photo")).toEqual(fitted);
+  });
+
+  // 검수 보고서 B-1에서 직접 재현한 반쪽 문장들. 예전에는 앞 낱말을 덜어 내 주어·이유가 사라졌다.
+  it("never cuts a sentence into a half that reads like a whole one", () => {
+    const plan=createFallbackCarouselPlan({topic:"홍어",slideCount:5});
+    const body=(track:CarouselTrack,headline:string,points:string[])=>applyTrack({...plan,slides:plan.slides.map((slide,i)=>i===2?{...slide,headline,points}:slide)},track).slides[2];
+    expect(body("photo","홍어는 향이 달라요",["홍어는 삭힌 정도에 따라 향의 세기가 달라요"]).points).toEqual(["홍어는 삭힌 정도에 따라 향의 세기가 달라요"]);
+    expect(body("text","왜 홍어는 막걸리와 함께 먹으면 더 맛있을까요?",[]).headline).toBe("왜 홍어는 막걸리와 함께 먹으면 더 맛있을까요?");
+    // 글 중심에서 제목이 두 줄이면 짧은 글 하나(18자)만 들어간다: 넘치는 짧은 글은 반쪽("미나리전은 바삭할 때")으로 남기지 않고 뺀다.
+    const text=body("text","바삭할 때가 제일 맛있어요 정말로",["미나리전은 바삭할 때 먹어야 향이 살아 있어요","식기 전에 드세요","뜨거울 때 드세요"]);
+    expect(text.points).toEqual(["식기 전에 드세요"]);
+    // 제목이 한 줄이면 두 개(각 18자)까지.
+    expect(body("text","미나리전은 이래요",["식기 전에 드세요","뜨거울 때 드세요","세 번째는 빠져요"]).points).toEqual(["식기 전에 드세요","뜨거울 때 드세요"]);
+    // 제목이 한 줄이면 짧은 글 하나는 34자까지 그대로.
+    expect(body("text","미나리전은 이래요",["미나리전은 바삭할 때 먹어야 향이 살아 있어요"]).points).toEqual(["미나리전은 바삭할 때 먹어야 향이 살아 있어요"]);
+    const cover=applyTrack({...plan,slides:plan.slides.map((slide,i)=>i===0?{...slide,headline:"홍어 처음 드시는 분께 알려 드리는 한 점 먹는 순서"}:slide)},"photo").slides[0];
+    expect(cover.headline).toBe("홍어 처음 드시는 분께 알려 드리는 한 점 먹는 순서");
+  });
+
+  it("shortens a headline that does not fit with a visible ellipsis instead of dropping its start", () => {
+    const plan=createFallbackCarouselPlan({topic:"홍어",slideCount:5});
+    const long="홍어는 삭힌 정도에 따라 향의 세기가 달라서 처음 드시는 분은 덜 삭힌 것부터 드시면 좋아요";
+    const slide=applyTrack({...plan,slides:plan.slides.map((item,i)=>i===2?{...item,headline:long}:item)},"photo").slides[2];
+    expect(slide.headline.length).toBeLessThanOrEqual(TRACK_FIT.photo.headline);
+    expect(slide.headline).toMatch(/^홍어는 삭힌 정도에 따라 .*…$/);
+    // 쉼표 앞 첫 마디가 넉넉하면 "…" 없이 그 마디만 남긴다.
+    const clause=applyTrack({...plan,slides:plan.slides.map((item,i)=>i===2?{...item,headline:"비 오는 날엔 홍어 한 점이 생각나요, 막걸리 한 잔도 곁들이면 더 좋고요"}:item)},"text").slides[2];
+    expect(clause.headline).toBe("비 오는 날엔 홍어 한 점이 생각나요");
+  });
+
+  it.each(["photo","text"] as const)("ships the prepared copy of every menu on the %s track without cutting it", track => {
+    for(const topic of ["홍어회","홍어무침","홍어찜","홍어애탕","과메기","미나리전","막걸리"]){
+      const plain=createFallbackCarouselPlan({topic,slideCount:5});
+      const tracked=createFallbackCarouselPlan({topic,slideCount:5,track});
+      for(const [i,slide] of tracked.slides.entries()){
+        if(slide.role==="cover")continue;
+        const raw=plain.slides.find(item=>item.role===slide.role)!;
+        expect(slide.headline,topic).toBe(raw.headline);
+        expect(slide.points,`${topic} ${i}`).toEqual(raw.points.slice(0,TRACK_COPY[track].points));
+      }
+    }
   });
 
   it("shortens lines at word boundaries and keeps the sentence ending", () => {
