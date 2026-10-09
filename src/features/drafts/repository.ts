@@ -6,6 +6,8 @@ import { DraftSchema, type Draft } from "./schema";
 import { selectedDraftMedia } from "./selection";
 import { summarizeDraft, type DraftSummary } from "./summary";
 
+export type SaveOptions = { thumbnail?: boolean };
+
 // 목록용 요약(draft-summaries/)과 작은 썸네일(draft-thumbs/)을 초안과 함께 저장한다(summary.ts 설명 참고).
 // 요약 목록은 이 서버 프로세스 메모리에도 10분 동안 들고 있는다. 초안을 쓰는 곳은 이 프로세스뿐이라(저장·삭제 때 함께 고친다)
 // 1분마다 도는 예약 점검이 저장소를 매번 읽지 않아도 된다. 다른 곳에서 바뀌었을 때를 대비해 10분마다 다시 읽는다.
@@ -91,15 +93,18 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
   };
 
   // 요약·썸네일을 쓴다. 실패해도 초안 저장은 성공으로 둔다(다음 목록에서 초안을 읽어 다시 만든다).
-  async function writeSidecars(draft: Draft) {
+  // thumbnail:false — 사진이 그대로인 저장(예약·보관·성과·글)은 목록용 작은 사진을 다시 만들지 않는다(사진 줄이기·올리기가 저장을 늦췄다).
+  async function writeSidecars(draft: Draft, options: SaveOptions = {}) {
     const summary = summarizeDraft(draft);
     summaryCache.get(cacheKey())?.items.set(draft.id, summary);
     loadWrites.get(cacheKey())?.set(draft.id, summary);
     try {
       await side.write(SUMMARY_DIR, draft.id, JSON.stringify(summary), "application/json");
-      const thumbnail = await thumbnailOf(draft);
-      if (thumbnail) await side.write(THUMB_DIR, draft.id, thumbnail, "text/plain");
-      else await side.remove(THUMB_DIR, `${draft.id}.txt`);
+      if (options.thumbnail !== false) {
+        const thumbnail = await thumbnailOf(draft);
+        if (thumbnail) await side.write(THUMB_DIR, draft.id, thumbnail, "text/plain");
+        else await side.remove(THUMB_DIR, `${draft.id}.txt`);
+      }
     } catch (error) {
       console.warn("[drafts] 초안 요약을 저장하지 못했어요(다음 목록에서 다시 만들어요):", error instanceof Error ? error.message : String(error));
       await side.remove(SUMMARY_DIR, `${draft.id}.json`).catch(() => {});
@@ -109,12 +114,12 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
 
   // 메서드를 떼어 넘겨도(예: listDrafts: drafts.listDrafts) 동작하도록 this 대신 repo를 쓴다.
   const repo = {
-    async saveDraft(value: Draft): Promise<Draft> {
+    async saveDraft(value: Draft, options: SaveOptions = {}): Promise<Draft> {
       const draft = DraftSchema.parse(value);
       const remote = remoteStore();
       if (remote) {
         await remote.write(`drafts/${draft.id}.json`, JSON.stringify(draft), "application/json");
-        await writeSidecars(draft);
+        await writeSidecars(draft, options);
         return draft;
       }
       await mkdir(draftsDirectory, { recursive: true });
@@ -122,7 +127,7 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
       const temporary = `${target}.tmp`;
       await writeFile(temporary, JSON.stringify(draft, null, 2), "utf8");
       await rename(temporary, target);
-      await writeSidecars(draft);
+      await writeSidecars(draft, options);
       return draft;
     },
 
@@ -227,7 +232,7 @@ export function createDraftRepository(dataDirectory = process.env.DATA_DIR ?? pa
       return withDraftLock(id, async () => {
         const draft = await repo.readDraft(id);
         if (!draft) return null;
-        return repo.saveDraft({ ...draft, caption, final_review_complete:draft.caption===caption?draft.final_review_complete:false, updated_at:updatedAt });
+        return repo.saveDraft({ ...draft, caption, final_review_complete:draft.caption===caption?draft.final_review_complete:false, updated_at:updatedAt }, { thumbnail:false });
       });
     },
   };

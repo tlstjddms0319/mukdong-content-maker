@@ -106,3 +106,40 @@ describe("ArchiveShare", () => {
     expect(bodies).toEqual([{id:ID,archived:true},{id:ID,archived:false}]);
   });
 });
+
+// 사장님 화면에서 예약이 서버에는 걸렸는데 "예약하는 중…"이 오래 남던 문제.
+describe("ScheduleShare when the save answer is slow or lost", () => {
+  // GET은 reserved(서버에 실제로 걸린 예약)를 돌려준다. PATCH는 patch()가 정한다.
+  function stub(patch:(init:RequestInit)=>Promise<unknown>,reserved:()=>string|null){
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>init?.method==="PATCH"?patch(init):{ok:true,json:async()=>({id:ID,final_review_complete:Boolean(reserved()),planned_publish_at:reserved()})}));
+    vi.stubGlobal("confirm",vi.fn(()=>true));
+  }
+  // 첫 빠른 시각을 고르고 예약한다. onPicked: 예약을 누르기 전에 고른 시각을 알려 준다(서버 흉내가 그 시각을 저장하게).
+  const pickAndReserve=(onPicked:(iso:string)=>void=()=>{})=>{
+    fireEvent.click(screen.getByRole("button",{name:"예약해서 올리기"}));
+    const first=screen.getAllByRole("button",{pressed:false}).find(button=>/시$/.test(button.textContent??""))!;
+    fireEvent.click(first);
+    onPicked(quickScheduleChoices().find(choice=>choice.label===first.textContent)!.iso);
+    fireEvent.click(screen.getByRole("button",{name:/에 예약하기$/}));
+  };
+  it("shows the reservation when the answer is lost but the server did save it", async () => {
+    let saved:string|null=null,iso="";
+    stub(async()=>{saved=iso;throw new TypeError("Failed to fetch");},()=>saved);
+    render(<ScheduleShare draftId={ID} ready/>);
+    pickAndReserve(picked=>{iso=picked;});
+    expect(await screen.findByText(/에 올라가요\./)).toBeInTheDocument();
+    expect(screen.queryByText("예약하는 중…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"예약 취소"})).toBeEnabled();
+  });
+  it("stops waiting after the time limit and asks to press again when nothing was saved", async () => {
+    vi.useFakeTimers({shouldAdvanceTime:true});
+    const { SAVE_TIMEOUT_MS }=await import("@/components/review/ScheduleShare");
+    stub(init=>new Promise((_,reject)=>init.signal?.addEventListener("abort",()=>reject(new DOMException("aborted","AbortError")))),()=>null);
+    render(<ScheduleShare draftId={ID} ready/>);
+    pickAndReserve();
+    expect(await screen.findByText("예약하는 중…")).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(SAVE_TIMEOUT_MS+10);
+    expect(await screen.findByText(/서버 응답이 늦어요/)).toBeInTheDocument();
+    expect(screen.queryByText("예약하는 중…")).not.toBeInTheDocument();
+  });
+});
