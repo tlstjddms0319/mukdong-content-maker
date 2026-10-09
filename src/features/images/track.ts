@@ -215,7 +215,20 @@ export function applyTrack(plan:CarouselPlan,track:CarouselTrack,options:{copy?:
     ...slide,...(copy?fitTrackCopy(slide,track):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
   }));
   const cover=plan.slides[0];
-  return {...plan,design:trackDesign(track,paletteForTopic(`${cover?.headline??""} ${cover?.subline??""}`)),slides:copy?withClosingInvite(slides,track):slides};
+  return {...plan,design:trackDesign(track,paletteForTopic(`${cover?.headline??""} ${cover?.subline??""}`)),slides:copy?withReasonCount(withClosingInvite(slides,track)):slides};
+}
+
+// 표지 부제에 "이유 N가지"를 덧붙인다(일반 사용자 비판 C2: 끝이 보이는 글을 더 넘긴다). N = 표지·결론 장을 뺀 이유 장 수.
+// 이미 "N가지"가 있으면 새 장 수로 바꾸고, 자리(TRACK_FIT.cover.subline)가 모자라면 붙이지 않는다. 여러 번 불러도 결과가 같다.
+const REASON_COUNT=/\s*·?\s*이유 \d+가지$/;
+function withReasonCount<T extends CarouselSlidePlan>(slides:T[]):T[] {
+  const reasons=slides.length-2;
+  if(reasons<2)return slides;
+  const base=(slides[0].subline??"").replace(REASON_COUNT,"").trim();
+  const tag=`이유 ${reasons}가지`;
+  const subline=base?`${base} · ${tag}`:tag;
+  if(subline.length>TRACK_FIT.cover.subline)return slides;
+  return slides.map((slide,i)=>i===0?{...slide,subline}:slide);
 }
 
 // 마지막(결론) 장의 짧은 글 맨 끝을 "미나리전과 막걸리를 묵동홍어마을에서 즐겨 보세요"로 맺는다(사장님 요청 2026-10-09).
@@ -245,7 +258,7 @@ export function trackPromptRules(track:CarouselTrack):{story:string;style:string
     story:`[이야기 구조 — 제목만 읽어도 하나의 답] 인스타그램 독자는 큰 글씨(headline)만 빠르게 훑고 넘깁니다. 표지 headline은 독자가 실제로 가질 법한 궁금증 하나를 질문으로 던지고, 본문 장의 headline은 모두 그 표지 질문 하나에 답하는 조각으로 쓰세요: 표지와 마지막 장 사이의 장은 표지 질문의 이유·근거를 하나씩(가장 핵심 이유부터) 해요체 한 문장으로, 마지막 장 headline은 표지 질문에 대한 한 줄 결론으로 쓰세요. 표지 headline부터 마지막 장 headline까지 제목만 이어 읽어도 표지 질문에 답하는 짧은 글 한 단락처럼 자연스럽게 읽혀야 합니다. role은 장의 위치 표시일 뿐 그 장에 쓸 내용이 아닙니다(detail·how-to·pairing·visit 같은 이름과 상관없이 표지와 마지막 장 사이의 장은 모두 이유 하나씩입니다. 특히 pairing 자리에 표지 질문과 상관없는 곁들임 이야기를 끼워 넣지 마세요): 표지가 "왜"를 물으면 how-to 장에도 먹는 법 대신 이유를 쓰고, 먹는 법·메뉴 정의("삼합은 ~예요")·방문 안내는 표지 질문이 그것을 물을 때만 쓰세요. 질문은 표지에서만 던집니다(본문 headline은 "왜 ~일까요?" 금지). 짧은 글(points)은 그 장 headline을 뒷받침하는 근거나 눈·입으로 확인하는 방법 하나만 쓰고, 그 장 headline과 표지 질문에 없는 새 음식·새 이야기를 꺼내지 마세요. 제목의 결과를 말만 바꿔 되풀이하는 짧은 글(예: 제목 "물기 없이 말려요" + 짧은 글 "물기가 없어 맛이 유지돼요")은 금지입니다. 본문 장 제목은 겉모습 묘사가 아니라 이유를 말하는 문장으로 쓰세요(예: "수육 기름이 톡 쏘는 향을 감싸요", "삭히면 요소가 암모니아로 바뀌어요"). 아래 [이유 설명]을 따르세요. "다음 장에서 ~"처럼 다음 장을 예고하는 문장은 쓰지 마세요. ${NO_PROMO_IN_CARDS}
 ${STORY_ARC_RULE}
 ${EXPLAIN_REASONS_RULE}`,
-    style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(${cover.subline}자 이내 해요체 한 줄)에 넣으세요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.`,
+    style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내, 질문이나 한 문장)으로 쓰고, subline(${cover.subline}자 이내 해요체 한 줄)에는 답의 실마리를 구체적으로 예고하세요(예: "답은 빗소리에 있어요"). "유혹", "매력", "풍미", "향연", "특별한" 같은 광고 말은 쓰지 마세요(이유 개수는 앱이 덧붙여요). 이유 장의 짧은 글 가운데 한 줄은 읽고 바로 써먹을 정보(먹는 순서, 고르는 법, 함께 먹는 조합)로 쓰세요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.`,
     design:`[디자인] 디자인과 장마다 layout은 앱이 정합니다. design은 {"palette":"warm","style":"${TRACK_STYLES[track]}","theme":"classic","titleFont":"pretendard","bodyFont":"pretendard","tone":"loud","season":"none"} 그대로 두고, 표지 layout은 fullscreen, 나머지 장은 ${track==="photo"?"frame":"browser"}로 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣고, figure는 빈 문자열로 두세요.`,
     track:track==="photo"
       ?`[갈래: ${TRACK_LABELS.photo}] 모든 장이 사진 한 장으로 꽉 차는 게시물입니다. 사진이 주인공이므로 글은 사진을 보며 바로 읽히는 한 줄이면 충분합니다. 각 장의 visualPrompt는 그 장의 글이 말하는 장면을 먹음직스럽게, 장마다 서로 다른 구도로 쓰세요.`

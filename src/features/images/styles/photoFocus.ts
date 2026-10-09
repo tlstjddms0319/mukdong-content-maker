@@ -42,7 +42,7 @@ function photoShade(from:number,options:{top?:boolean}={}):string {
 // 제목: 함렛 명조. 본문은 한 줄이 원칙(68→52px 중 한 줄에 드는 가장 큰 크기), 정 안 되면 두 줄.
 const bodyTitle=(content:StyleContent,color:string,accent:string,width=1080-MARGIN*2)=>fitLines(content.headline,{sizes:[68,64,60,56,52],width,font:TITLE_SERIF,color,maxLines:2,prefer:"lines",spacing:size=>Math.round(size*.06),letterSpacing:size=>-size*.01,emphasis:emphasisOf(content,accent)});
 // 짧은 글 한 줄: 프리텐다드 40px(두 줄까지 허용, 넘치면 검수가 잡는다).
-const sublineOf=(text:string,color:string,shadow=false)=>textLayer(text,{size:40,color,width:1080-MARGIN*2,height:4000,font:SANS,spacing:10,shadow});
+const sublineOf=(text:string,color:string,shadow=false,size=40)=>textLayer(text,{size,color,width:1080-MARGIN*2,height:4000,font:SANS,spacing:10,shadow});
 
 // ── 표지 ──────────────────────────────────────────────────────────────────────────────
 async function cover(photo:Buffer,content:StyleContent):Promise<Buffer> {
@@ -52,7 +52,8 @@ async function cover(photo:Buffer,content:StyleContent):Promise<Buffer> {
   // 표지 제목: 두 줄까지 가장 큰 크기(104→76px). 아주 긴 제목은 76px로 세 줄이 될 수 있다(구성안이 24자 이내로 막는다).
   // 줄 간격은 좁게(크기의 4%): 함렛은 글꼴 자체의 줄 높이가 커서 기본 간격이면 두 줄이 떨어져 보인다.
   const title=await fitLines(content.headline,{sizes:[104,96,88,82,76],width:1080-MARGIN*2,font:TITLE_SERIF,color:ON_PHOTO.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.04),letterSpacing:size=>-size*.015,emphasis:emphasisOf(content,ON_PHOTO.accent)});
-  const sub=content.subline?await sublineOf(content.subline,ON_PHOTO.dim):null;
+  // 표지 부제는 피드에서도 읽히게 본문 짧은 글(40px)보다 크게(일반 사용자 비판 C1).
+  const sub=content.subline?await sublineOf(content.subline,ON_PHOTO.dim,false,46):null;
   const SUB_GAP=26,FOOT_GAP=64,RULE=36;
   const subTop=footTop-FOOT_GAP-(sub?.info.height??0);
   const titleTop=(sub?subTop-SUB_GAP:footTop-FOOT_GAP)-title.layer.info.height;

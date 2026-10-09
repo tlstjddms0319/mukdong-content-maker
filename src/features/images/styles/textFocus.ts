@@ -50,7 +50,7 @@ async function textBlock(content:StyleContent,surface:TrackSurface,options:{alig
 async function body(content:StyleContent,index:number,look:TrackLook):Promise<Buffer> {
   const surface=textSurfaceOf(index,look);
   const block=await textBlock(content,surface,{align:"left",sizes:[112,108,104,100,96,92,88,84]});
-  const numeral=await textLayer(String(index).padStart(2,"0"),{size:300,color:surface.accent,width:600,height:400,font:TITLE_SERIF,features:"tnum",letterSpacing:-6,spacing:0});
+  const numeral=await textLayer(String(index).padStart(2,"0"),{size:220,color:surface.accent,width:600,height:400,font:TITLE_SERIF,features:"tnum",letterSpacing:-6,spacing:0});
   const foot=await footerRow({color:surface.dim,cueColor:surface.ink,ring:surface.name==="brown"?surface.ring:undefined,cue:!content.last,left:X,right:X});
   const footTop=1350-80-foot.height;
   const NUM_GAP=52,RULE_GAP=76;
@@ -96,7 +96,7 @@ async function last(content:StyleContent,index:number,look:TrackLook):Promise<Bu
 async function cover(photo:Buffer|undefined,content:StyleContent,look:TrackLook):Promise<Buffer> {
   const panel=look.dark;
   const title=await fitLines(content.headline,{sizes:[100,92,86,80,74],width:W,font:SANS_BOLD,color:panel.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.06),letterSpacing:size=>-size*.02,emphasis:emphasisOf(content,panel.accent)});
-  const sub=content.subline?await textLayer(content.subline,{size:40,color:panel.accent,width:W,height:4000,font:SANS_SEMI,spacing:10}):null;
+  const sub=content.subline?await textLayer(content.subline,{size:48,color:panel.accent,width:W,height:4000,font:SANS_SEMI,spacing:10}):null;
   const foot=await footerRow({color:panel.dim,cueColor:panel.ink,ring:panel.ring,cue:!content.last,left:X,right:X});
   const footTop=1350-72-foot.height;
   const SUB_GAP=22,FOOT_GAP=64,PAD=76,INSET=44,R=32;
