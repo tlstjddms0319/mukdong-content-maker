@@ -57,7 +57,7 @@ export type GenerationState={
   deckStatus:string;             // 장을 빼고 넣은 뒤 장 번호를 다시 그리는 동안의 진행 안내.
   // 맨 뒤 가게 홍보 카드(사장님 결정: 모든 묶음 끝에 "묵동홍어마을" 홍보 카드 한 장, 이미지 AI 비용 없음).
   // include: 붙일지(장 고치기에서 끌 수 있음). image: 그려 둔 카드. key: 그릴 때의 디자인·장 수(바뀌면 다시 그린다).
-  storeCard:{include:boolean;image?:ApprovedImage;key?:string;pending?:boolean};
+  storeCard:{include:boolean;image?:ApprovedImage;key?:string;pending?:boolean;failed?:boolean};
   // 자동 만들기(2단계 화면의 "만들기" 한 번): 사진 → 저장 → 글까지 이어서 하는 진행 상황. 화면이 사라져도 여기 남는다.
   auto:AutoState;
 };
@@ -157,30 +157,43 @@ let storeRun=0;
 // 마지막으로 시작한 홍보 카드 그리기. 자동 만들기가 저장하기 전에 기다린다(홍보 카드가 빠진 채 저장되지 않게).
 let storeCardTask:Promise<void>=Promise.resolve();
 async function storeCardSettled(){for(let i=0;i<5&&state.storeCard.pending;i++)await storeCardTask;}
-// 홍보 카드를 (다시) 그린다. 디자인·장 수가 그대로면 그려 둔 것을 쓴다. 실패해도 캐러셀은 그대로 쓸 수 있게 조용히 넘어간다.
+// 홍보 카드를 (다시) 그린다. 디자인·장 수가 그대로면 그려 둔 것을 쓴다.
+// 못 그리면(두 번 시도) 홍보 카드를 빼고 마지막 내용 장을 진짜 마지막 장(가게 명함·작별 마스코트)으로 다시 그린다.
+// 예전에는 조용히 빠진 채 저장돼, 마지막 장에 "넘겨 보기"가 있는데 넘길 장이 없었다(검수 보고서 A-4).
 function ensureStoreCard():Promise<void>{storeCardTask=drawStoreCard();return storeCardTask;}
+async function requestStoreCard(design:CarouselPlan["design"],total:number):Promise<string|undefined>{
+  for(let attempt=0;attempt<2;attempt++){
+    try{
+      const response=await fetch("/api/images/store-card",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({design,index:total,total})});
+      const data=await readJsonResponse(response);
+      if(response.ok&&typeof data.image==="string")return data.image;
+    }catch{/* 한 번 더 시도하고, 그래도 안 되면 홍보 카드를 뺀다. */}
+  }
+  return undefined;
+}
 async function drawStoreCard(){
   if(!storeCardOn(state)||!deckComplete(state)||!state.plan)return;
   const design=state.plan.design,total=postTotal(state);
   const key=storeCardKey(state);
   if(state.storeCard.image&&state.storeCard.key===key)return;
   const mine=++storeRun;
-  patch({storeCard:{...state.storeCard,pending:true}});
-  let image:string|undefined;
-  try{
-    const response=await fetch("/api/images/store-card",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({design,index:total,total})});
-    const data=await readJsonResponse(response);
-    if(response.ok&&typeof data.image==="string")image=data.image;
-  }catch{/* 아래에서 안내한다. */}
+  patch({storeCard:{...state.storeCard,pending:true,failed:false}});
+  const image=await requestStoreCard(design,total);
   if(mine!==storeRun)return;
-  if(image)patch({storeCard:{...state.storeCard,pending:false,image:{id:crypto.randomUUID(),preview:image,source:"design"},key}});
-  // 홍보 카드는 덤이라 못 그려도 묶음은 쓸 수 있게 둔다(빠진 채로 저장된다. 장 고치기에서 껐다 켜면 다시 그린다).
-  else patch({storeCard:{...state.storeCard,pending:false}});
+  if(image){patch({storeCard:{...state.storeCard,pending:false,image:{id:crypto.randomUUID(),preview:image,source:"design"},key}});return;}
+  // pending은 마지막 장을 다시 그릴 때까지 켜 둔다: 자동 만들기가 그동안 저장하지 않고 기다린다(storeCardSettled).
+  patch({storeCard:{include:false,pending:true,failed:true}});
+  if(state.phase==="idle"&&deckComplete(state)){
+    const token=++run;
+    patch({phase:"slides",deckStatus:"홍보 카드 없이 마지막 장을 맞추는 중"});
+    try{await redrawDeck(token);}finally{if(token===run)patch({phase:"idle",deckStatus:""});}
+  }
+  if(mine===storeRun)patch({storeCard:{...state.storeCard,pending:false}});
 }
 // 장 고치기의 "맨 뒤 가게 홍보 카드" 켜고 끄기. 전체 장 수가 바뀌므로 내용 장의 장 번호를 다시 그린다.
 export async function setStoreCardIncluded(include:boolean){
   if(state.storeCard.include===include||state.phase!=="idle")return;
-  patch({storeCard:{...state.storeCard,include},approved:false});
+  patch({storeCard:{...state.storeCard,include,failed:false},approved:false});
   if(!state.plan||!deckComplete(state))return;
   const token=++run;
   patch({phase:"slides",deckStatus:"장 번호를 맞추는 중"});

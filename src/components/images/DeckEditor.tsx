@@ -65,7 +65,9 @@ export function DeckEditor({state}:{state:GenerationState}){
       <label className="deck-store-toggle"><input type="checkbox" checked={state.storeCard.include} disabled={busy} onChange={event=>void setStoreCardIncluded(event.target.checked)}/><span>맨 뒤에 가게 홍보 카드 붙이기 (무료)</span></label>
       {storeCardOn(state)&&(state.storeCard.image?.preview
         ?<Image src={state.storeCard.image.preview} alt="맨 뒤 가게 홍보 카드 미리보기" width={108} height={135} unoptimized/>
-        :<span className="field-help">홍보 카드를 그리는 중…</span>)}
+        :state.storeCard.pending?<span className="field-help">홍보 카드를 그리는 중…</span>:null)}
+      {/* 못 그리면 홍보 카드를 빼고 마지막 장을 다시 맞춘다(generationStore drawStoreCard). 다시 켜면 다시 그린다. */}
+      {state.storeCard.failed&&!state.storeCard.include&&<span className="field-help" role="status">홍보 카드를 그리지 못해 빼 두었어요. 다시 켜면 다시 그려요.</span>}
       {state.storeCard.include&&deckTotal(state)>STORE_CARD_MAX_CONTENT&&<span className="field-help">인스타그램은 한 게시물에 10장까지라, 10장짜리 게시물에는 홍보 카드를 붙이지 않아요.</span>}
     </div>}
     {open&&!full&&<div className="deck-new-slide">

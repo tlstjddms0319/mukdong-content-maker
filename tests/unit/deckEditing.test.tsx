@@ -163,6 +163,33 @@ describe("store promo card", () => {
     expect(bodies.length).toBeGreaterThan(0);
     expect(bodies.every(body=>body.slideTotal===5&&!body.storeCard)).toBe(true);
   });
+  // 검수 보고서 A-4: 홍보 카드를 못 그리면 조용히 빠진 채 저장돼, 마지막 장에 "넘겨 보기"가 남았다.
+  it("drops the store card when it cannot be drawn and redraws the last content card as the real last card", async () => {
+    const plan=createFallbackCarouselPlan({topic:"홍어 한 점",slideCount:5});
+    const bodies:Array<Record<string,unknown>>=[];
+    let n=0,storeCalls=0;
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
+      if(url==="/api/images/store-card"){storeCalls++;return {ok:false,json:async()=>({message:"그리기 실패"})};}
+      if(JSON.parse(String(init?.body)).referenceImage)return {ok:false,json:async()=>({message:"이미지 AI 없음"})};
+      bodies.push(JSON.parse(String(init?.body)));
+      return {ok:true,json:async()=>({images:[card(++n)],source:"photo"})};
+    }));
+    const hook=renderHook(()=>useGenerationState());
+    act(()=>{ensureGeneration("fail|5",{topic:"홍어 한 점",slideCount:5});[1,2,3].forEach(i=>addLibraryPhoto({id:`p${i}`,preview:photo(i),name:`사진${i}`}));});
+    await act(async()=>{await buildPhotoCarousel();});
+    await waitFor(()=>expect(hook.result.current.storeCard.failed).toBe(true));
+    await waitFor(()=>expect(hook.result.current.storeCard.pending).toBe(false));
+    const state=hook.result.current;
+    // 한 번 더 시도한 뒤 뺐다.
+    expect(storeCalls).toBe(2);
+    expect(state.storeCard.include).toBe(false);
+    expect(state.phase).toBe("idle");
+    expect(approvedDeck(state)).toHaveLength(5);
+    // 처음엔 6장짜리(홍보 카드 포함)로 그렸고, 실패 뒤 5장짜리로 다시 그렸다: 5번 장이 이제 마지막 장이다.
+    const redrawn=bodies.filter(body=>body.slideTotal===5&&!body.storeCard);
+    expect(redrawn.map(body=>body.slideIndex)).toContain(5);
+  });
 });
 
 describe("review fixes in the deck", () => {
