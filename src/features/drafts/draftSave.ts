@@ -29,9 +29,9 @@ export async function saveDraftCaption(id:string,caption:string):Promise<void> {
 }
 
 // 게시물 글(본문·# 태그) 쓰기. 카드 순서(slideOutline)와 사진에 보이는 것(photoNotes)을 함께 넘겨 사진과 맞는 글이 되게 한다.
-export type PostTextInput={topic:string;audience:"A"|"B"|"C";contentBrief?:string;imageBrief?:string;hasAiImages:boolean;slideOutline?:string[];photoNotes?:string[]};
+export type PostTextInput={topic:string;audience:"A"|"B"|"C";contentBrief?:string;imageBrief?:string;hasAiImages:boolean;slideOutline?:string[];slideNotes?:string[];photoNotes?:string[]};
 export async function writePostText(input:PostTextInput):Promise<string> {
-  const response=await fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic:input.topic,audience:input.audience,contentBrief:input.contentBrief,imageBrief:input.imageBrief,hasAiImages:input.hasAiImages,...(input.slideOutline?.length?{slideOutline:input.slideOutline}:{}),...(input.photoNotes?.length?{photoNotes:input.photoNotes}:{})})});
+  const response=await fetch("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic:input.topic,audience:input.audience,contentBrief:input.contentBrief,imageBrief:input.imageBrief,hasAiImages:input.hasAiImages,...(input.slideOutline?.length?{slideOutline:input.slideOutline}:{}),...(input.slideNotes?.some(Boolean)?{slideNotes:input.slideNotes}:{}),...(input.photoNotes?.length?{photoNotes:input.photoNotes}:{})})});
   const copy=await readJsonResponse(response);
   if(!response.ok)throw new Error("글을 쓰지 못했어요. '글 다시 쓰기'를 눌러 주세요.");
   const text=formatCopy(copy);

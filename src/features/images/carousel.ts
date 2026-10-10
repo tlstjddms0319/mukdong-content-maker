@@ -7,7 +7,7 @@ import { MENU_BY_ID, heroMenu, josa, mainMenuOf, type StoreMenuItem } from "@/fe
 import { SKATE_TABLE, copyMentionsSkate, foodFreeAnchor, isOtherMenu } from "./sceneFoods";
 import { CarouselTrackSchema, TRACK_SLIDE_COUNT, TRACK_SLIDE_RANGE, applyTrack, ellipsize, trackPromptRules } from "./track";
 import { TRACK_STYLES } from "./styleCatalog";
-import { EXPLAIN_REASONS_RULE, NO_PROMO_IN_CARDS, STORY_ARC_RULE } from "@/features/copy/explain";
+import { EXPLAIN_REASONS_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, STORY_ARC_RULE } from "@/features/copy/explain";
 
 export const CarouselPlanInputSchema=z.object({
   topic:z.string().trim().min(1).max(200),
@@ -30,6 +30,10 @@ export const SLIDE_POINT_MAX_COUNT=4;
 
 export const CarouselSlidePlanSchema=z.object({
   role:CarouselRoleSchema,
+  // 속 글(카드에 보이지 않음): 이 장이 말할 이유의 원리·근거·예시·써먹을 정보를 자세히(사장님 요청 2026-10-10: "뽑아내는 글은
+  // 길어져도 되고, 인스타에는 빠르게 넘기니 중요한 포인트만 보이면 된다"). headline·points보다 먼저 두어 AI가 먼저 생각하고
+  // 그 가운데 핵심만 카드 글로 줄이게 한다. 올릴 글(캡션)·장 고치기에도 넘긴다. 예전 구성안에는 없으므로 기본값 "".
+  notes:z.string().trim().max(900).default(""),
   headline:z.string().trim().min(1).max(42),
   // 표지 부제: 큰 훅 제목 아래 작은 한 줄(30자 이내). 표지가 아니면 빈 문자열. 예전 구성안에는 없으므로 기본값 "".
   subline:z.string().trim().max(30).default(""),
@@ -217,7 +221,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     track?track.story:`[이야기 구조] ${parsed.slideCount}장은 한 사람이 친구에게 이 음식을 설명해 주는 한 편의 이야기입니다. 표지는 독자가 실제로 가질 법한 구체적인 궁금증 하나를 질문이나 한 문장으로 던지고, 각 본문 장은 앞 장이 남긴 궁금증에 답하면서 마지막 요점 한 줄로 다음 장의 내용을 예고하세요. 본문 장은 겉모습 묘사만 하지 말고 사람이 왜 그렇게 느끼는지 이유를 답하세요. 마지막 장은 첫 장의 궁금증이 어떻게 풀렸는지 한 줄 결론으로 닫으세요. ${NO_PROMO_IN_CARDS} 장마다 "우리 대단하죠" 식의 자랑이나 감탄으로 끝내지 말고, 정보가 한 방향으로 쌓이게 하세요.`,
     // 사람이 쓴 글처럼: 명사형 슬로건과 광고 상투어를 막고, 관찰 가능한 구체 정보로 쓴다.
     track?track.style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰면 결이 비쳐 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요. 표지 headline은 넘기고 싶게 만드는 짧은 훅(8~18자, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(30자 이내 해요체 한 줄)에 넣으세요. 표지가 아닌 장의 subline은 빈 문자열로 두세요.`,
-    `[사실 기준] 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어무침·홍어애탕(그리고 홍어전·찜)의 조리법을 구분하세요. 선택 주제나 내용 메모에 삼합이 없으면 삼합 구성(홍어·수육·묵은지)을 쓰지 마세요. 삼합은 이 가게의 기본값이 아니라 여러 메뉴 가운데 하나입니다. 메뉴에 들어가는 재료와 곁들임 구성, 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요.${track?"":`\n${STORY_ARC_RULE}\n${EXPLAIN_REASONS_RULE}`}`,
+    `[사실 기준] 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어무침·홍어애탕(그리고 홍어전·찜)의 조리법을 구분하세요. 선택 주제나 내용 메모에 삼합이 없으면 삼합 구성(홍어·수육·묵은지)을 쓰지 마세요. 삼합은 이 가게의 기본값이 아니라 여러 메뉴 가운데 하나입니다. 메뉴에 들어가는 재료와 곁들임 구성, 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요.${track?"":`\n${STORY_ARC_RULE}\n${EXPLAIN_REASONS_RULE}\n${NOTES_FIRST_RULE}`}`,
     // 글도 주제의 메뉴가 주인공: 곁들임이 문장을 이끌면 그림보다 글에서 먼저 주인공이 바뀐다. 과메기 주제면 과메기, 홍어 주제일 때만 홍어.
     heroRule(menu,[parsed.topic,parsed.contentBrief].filter(Boolean).join(" ")),
     // A vs B 장은 글로 말한 차이가 두 사진에서 보여야 한다. 코 모양처럼 썬 회 사진에 안 나오는 차이는 쓰지 않는다.
@@ -228,7 +232,7 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     photoRule(parsed.photoNotes),
     track?track.design:`[디자인] ${designCatalogText()}`,
     ...(track?[track.track]:[]),
-    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})만 쓰고 음식 이름은 쓰지 마세요(모든 장에 똑같이 붙으므로, 음식은 각 장 visualPrompt에만). 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone, season)를 두고${track?"(값은 위 [디자인] 그대로)":"(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud. season은 아래 계절 소품 중 주제에 꼭 맞을 때만, 애매하면 none)"}, 각 slide는 role, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
+    `styleAnchor에는 전 장이 공유할 색감, 조명, 그릇, 테이블 기준과 화풍(${style.anchor})만 쓰고 음식 이름은 쓰지 마세요(모든 장에 똑같이 붙으므로, 음식은 각 장 visualPrompt에만). 최상위에 design 객체(style, palette, theme, titleFont, bodyFont, tone, season)를 두고${track?"(값은 위 [디자인] 그대로)":"(tone은 잔칫상·제사·명절·기념일처럼 격식 있는 글이면 calm, 그 밖에는 loud. season은 아래 계절 소품 중 주제에 꼭 맞을 때만, 애매하면 none)"}, 각 slide는 role, notes, headline, subline, points, visualPrompt, textPosition(top 또는 bottom), layout, keywords, figure, titleFont, bodyFont, variant(0)를 포함해야 합니다.`,
   ].join("\n");
 }
 

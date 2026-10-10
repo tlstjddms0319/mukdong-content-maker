@@ -43,3 +43,6 @@ export function closingInvite(dishes:readonly string[],room:number):string {
 const hasFinal=(word:string)=>{const code=word.charCodeAt(word.length-1)-0xac00;return code>=0&&code<=11171&&code%28!==0;};
 const withAnd=(word:string)=>word+(hasFinal(word)?"과":"와");
 const objectJosa=(word:string)=>word+(hasFinal(word)?"을":"를");
+
+// 속 글 규칙(구성안 지시문). 카드에는 짧게 보여 주되, AI는 먼저 자세히 생각하고 쓰게 한다.
+export const NOTES_FIRST_RULE=`[속 글 먼저] 각 slide의 notes에는 카드에 보이지 않는 자세한 설명을 먼저 쓰세요(3~5문장, 150~400자). 표지 notes에는 ① 표지 질문 ② 한 문장 결론 ③ 이유 목록을, 본문 장 notes에는 그 장 이유의 원리(무엇이 무엇을 어떻게 바꾸는지), 사람이 왜 그렇게 느끼는지, 확실하지 않으면 "~로 알려져 있어요", 읽고 바로 써먹을 정보(먹는 순서·고르는 법·조합)를, 마지막 장 notes에는 결론과 그 근거 요약을 쓰세요. headline과 points는 notes에서 가장 중요한 한 가지만 골라 짧게 줄인 것입니다(인스타그램은 빠르게 넘기므로 카드에는 핵심만). notes에도 가격·원산지·숙성 기간 같은 가게만의 사실, 지어낸 수치·효능은 쓰지 마세요.`;

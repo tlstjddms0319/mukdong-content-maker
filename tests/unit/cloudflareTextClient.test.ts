@@ -19,7 +19,7 @@ describe("Cloudflare text client", () => {
     const body = JSON.parse(init.body);
     expect(body.messages.at(-1)).toEqual({ role:"user", content:"추천해 줘" });
     expect(body.response_format).toMatchObject({ type:"json_schema", json_schema:{ type:"object", additionalProperties:false } });
-    expect(body.max_tokens).toBe(4096);
+    expect(body.max_tokens).toBe(8192);
     expect(client.provider).toBe("cloudflare");
   });
 

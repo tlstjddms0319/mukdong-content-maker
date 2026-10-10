@@ -65,6 +65,10 @@ export function repairPlanJson(raw:unknown,count:PlanSlideCount,fixes:string[]=[
     const headline=text(slide.headline);
     slide.headline=shorten(headline,HEADLINE_MAX);
     if(slide.headline!==headline)note("headline");
+    // 속 글은 길어도 되지만(카드에 안 나온다) 저장 크기를 위해 900자에서 자른다.
+    const notes=text(slide.notes);
+    slide.notes=shorten(notes,900);
+    if(slide.notes!==notes)note("notes");
     const subline=text(slide.subline);
     slide.subline=shorten(subline,SUBLINE_MAX);
     if(slide.subline!==subline)note("subline");
