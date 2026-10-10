@@ -9,11 +9,11 @@ const failingGroq={provider:"groq" as const,generateJson:async()=>{throw new Err
 
 describe("AI connection check", () => {
   it("reports the Higgsfield image model in use when its route answers (input error means the route exists)", async () => {
-    const fetcher=vi.fn(async(url:string)=>new Response("{}",{status:url.endsWith("/nano-banana-pro")?422:404}));
+    const fetcher=vi.fn(async(url:string)=>new Response("{}",{status:url.endsWith("/xai/grok-imagine-image-2.0")?422:404}));
     const items=await runAiChecks({env:{HF_API_KEY_ID:"id",HF_API_KEY_SECRET:"secret"},fetch:fetcher as unknown as typeof fetch,textClients:{}});
     const higgsfield=items.find(item=>item.id==="higgsfield")!;
     expect(higgsfield.status).toBe("ok");
-    expect(higgsfield.message).toContain("이미지 모델 Nano Banana Pro 사용");
+    expect(higgsfield.message).toContain("이미지 모델 Grok Image 2.0 사용");
   });
 
   it("checks each text provider separately, the cover check and image key auth, without leaking keys", async () => {
@@ -32,8 +32,8 @@ describe("AI connection check", () => {
     expect(byId["text-cloudflare"]).toMatchObject({status:"skip"});
     expect(byId["cover-vision"]).toMatchObject({status:"ok",message:"견본 사진 점수 8/10 · 홍어로 보임"});
     expect(byId.higgsfield).toMatchObject({status:"ok"});
-    // 이미지 모델 경로가 열려 있지 않으면(404) 예전 모델로 만든다고 알려 준다.
-    expect(byId.higgsfield.message).toContain("Nano Banana Pro 경로를 찾지 못해 Grok Image 2.0(으)로 만들어요");
+    // 이미지 모델 경로가 열려 있지 않으면(404) 예비 모델로 만든다고 알려 준다.
+    expect(byId.higgsfield.message).toContain("Grok Image 2.0 경로를 찾지 못해 Nano Banana Pro(으)로 만들어요");
     expect(byId.openai).toMatchObject({status:"ok"});
     expect(JSON.stringify(items)).not.toContain("gsk_SECRETVALUE123");
   });
