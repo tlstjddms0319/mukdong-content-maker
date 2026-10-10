@@ -477,6 +477,8 @@ describe("appetizing photo direction (A9)", () => {
     expect(prompt).toContain("3200-4000K side light");
     expect(prompt).toContain("visible parallel fiber texture");
     expect(prompt).toContain("translucent pink edges backlit");
+    // 하얗게만 나오던 홍어를 참고 사진처럼 선홍빛 분홍으로(2026-10-10).
+    expect(prompt).toContain("never white, ivory or pale beige");
     expect(prompt).toContain("plate fills about 60%");
     expect(prompt).toContain("brass yugi bowls");
     expect(prompt).toContain("No Japanese props");
