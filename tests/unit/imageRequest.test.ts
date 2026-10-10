@@ -18,6 +18,8 @@ vi.mock("@/lib/ai/openaiClient",()=>({
   getOpenAIClient:()=>({images:{generate:generateImage,edit:editImage}}),
 }));
 vi.mock("@/features/settings/repository",()=>({readSettings}));
+const listAssets=vi.hoisted(()=>vi.fn());
+vi.mock("@/features/images/assetLibrary",()=>({createAssetLibrary:()=>({list:listAssets})}));
 
 const visitSlide={
   subline:"",
@@ -39,7 +41,7 @@ describe("OpenAI image request", () => {
   it("uses the cooked preparation instead of a raw-slice directive for hongeo jeon",()=>{
     const request=buildImageRequest(ImageBriefSchema.parse({topic:"홍어전의 고소한 한입",imageBrief:"홍어회 접시를 표현한다는 잘못된 기획",count:1,refinement:"접시를 더 작게, 자연광은 부드럽게"}));
     expect(request.prompt).toContain("노릇");
-    expect(request.prompt).not.toContain("직사각형 띠로 썬 회");
+    expect(request.prompt).not.toContain("납작한 사각형 조각으로 썬 삭힌 홍어");
     expect(request.prompt).toContain("접시를 더 작게, 자연광은 부드럽게");
     expect(buildImageRequest(ImageBriefSchema.parse({topic:"홍어 전문점"})).prompt).not.toContain("노릇");
   });
@@ -56,11 +58,12 @@ describe("OpenAI image request", () => {
       if(role==="detail")expect(prompt).not.toContain("entire main dish");
     }
   });
-  it("requests explicit high quality and describes the restaurant's strip cut with a beaded cartilage band",()=>{
+  it("requests explicit high quality and describes the store's square mauve slices crossed by diagonal cartilage lines",()=>{
     const request=buildImageRequest({topic:"홍어삼합",count:1,aspectRatio:"4:5"},"high");
     expect(request.quality).toBe("high");
-    expect(request.prompt).toContain("직사각형 띠");
-    expect(request.prompt).toContain("white beaded cartilage band");
+    expect(request.prompt).toContain("납작한 사각형 조각");
+    expect(request.prompt).toContain("herringbone or chevron");
+    expect(request.prompt).toContain("dusty mauve");
     expect(request.prompt).toContain("정육면체");
   });
   it("returns an uncaptioned cover reference alongside the captioned image",async()=>{
@@ -82,6 +85,8 @@ describe("OpenAI image request", () => {
     editImage.mockReset();
     readSettings.mockReset();
     readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"automatic"});
+    listAssets.mockReset();
+    listAssets.mockResolvedValue([]);
     // 이 파일은 Higgsfield 키가 없는 기존 순서(Cloudflare → OpenAI)를 검증한다.
     vi.stubEnv("HF_API_KEY_ID","");
     vi.stubEnv("HF_API_KEY_SECRET","");
@@ -382,6 +387,25 @@ describe("OpenAI image request", () => {
     expect(actual.equals(expected)).toBe(true);
   }, 15_000);
 
+  it("draws a raw skate scene from the owner's own hongeo photo in the library", async () => {
+    const photo=await sharp({create:{width:40,height:40,channels:3,background:"#b493a8"}}).jpeg().toBuffer();
+    const preview=`data:image/jpeg;base64,${photo.toString("base64")}`;
+    listAssets.mockResolvedValue([{id:"00000000-0000-4000-8000-000000000001",name:"매장 홍어회",tags:["홍어회"],kind:"photo",credit:"묵동홍어마을 직접 촬영",preview,createdAt:"2026-10-11T00:00:00.000Z",lastUsedAt:null,useCount:0,quality:null}]);
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
+    editImage.mockResolvedValue({data:[{b64_json:photo.toString("base64")}]});
+    const response=await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어회",count:1,aspectRatio:"4:5"})}));
+    expect(response.status).toBe(200);
+    expect(generateImage).not.toHaveBeenCalled();
+    expect(editImage.mock.calls[0][0].prompt).toContain("첨부 사진은 이 가게가 실제로 내는 음식이다");
+    // 매장 사진을 참고했어도 새로 그린 그림이므로 "AI 생성"으로 표시한다.
+    expect(await response.json()).toMatchObject({source:"ai-generated"});
+  });
+  it("does not read the photo library for a scene without raw skate", async () => {
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
+    generateImage.mockResolvedValue({data:[{b64_json:"aW1hZ2U="}]});
+    await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"과메기는 왜 겨울에 먹을까?",count:1,aspectRatio:"4:5"})}));
+    expect(listAssets).not.toHaveBeenCalled();
+  });
   it("keeps automatic routing when settings cannot be read", async () => {
     readSettings.mockRejectedValueOnce(new Error("broken settings"));
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","account-123");
@@ -452,7 +476,7 @@ describe("the topic's menu is the hero", () => {
     expect(prompt).toContain("홍어애탕 장면은 뚝배기");
     expect(prompt).toContain("주인공은 홍어애탕이다");
     expect(prompt).not.toContain("Show the skate only as sliced pieces");
-    expect(prompt).not.toContain("직사각형 띠로 썬 회");
+    expect(prompt).not.toContain("납작한 사각형 조각으로 썬 삭힌 홍어");
     expect(prompt).not.toContain("Skate texture:");
   });
   it("keeps the skate combinations out of a gwamegi slide's must-show line", () => {
@@ -476,8 +500,8 @@ describe("appetizing photo direction (A9)", () => {
     const prompt=buildImagePrompt(brief);
     expect(prompt).toContain("glossy moist highlights");
     expect(prompt).toContain("3200-4000K side light");
-    expect(prompt).toContain("visible parallel fiber texture");
-    expect(prompt).toContain("translucent pink edges backlit");
+    expect(prompt).toContain("diagonal rows of fine translucent white cartilage lines");
+    expect(prompt).toContain("translucent edges backlit");
     // 하얗게만 나오던 홍어(2026-10-10)를 산호빛으로 고쳤더니 참치·연어회처럼 나왔다(2026-10-11).
     // 사장님 사진처럼 반투명한 연분홍·흰 살에 가장자리만 붉은 기, 바랜 흰색은 아니게.
     expect(prompt).toContain("not bleached chalk-white");
