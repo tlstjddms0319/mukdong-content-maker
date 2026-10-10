@@ -12,15 +12,19 @@ import { remoteStore } from "@/lib/files/remoteStore";
 export const USAGE_PROVIDERS=["gemini","groq","cloudflare","gemini-vision","higgsfield","cloudflare-image","openai-image"] as const;
 export type UsageProvider=typeof USAGE_PROVIDERS[number];
 export type UsageCounter={calls:number;failures:number;quota:number;units:number};
+import type { FailureReason } from "./failureReasons";
+export type { FailureReason } from "./failureReasons";
 export type GroqLimits={remainingRequests?:number;limitRequests?:number;remainingTokens?:number;limitTokens?:number;at:string};
 export type UsageMonth={
   month:string;
   days:Record<string,Partial<Record<UsageProvider,UsageCounter>>>;
   lastQuota:Partial<Record<UsageProvider,string>>;      // 마지막으로 한도 초과(429·크레딧 부족)를 받은 때
-  lastError:Partial<Record<UsageProvider,{at:string;status:number}>>;
+  lastError:Partial<Record<UsageProvider,{at:string;status:number;reason?:FailureReason}>>;
+  // 이번 달 실패 이유별 횟수(이유를 아는 실패만).
+  failureReasons?:Partial<Record<UsageProvider,Partial<Record<FailureReason,number>>>>;
   groq?:GroqLimits;
 };
-export type UsageEvent={provider:UsageProvider;ok:boolean;status?:number;quota?:boolean;units?:number};
+export type UsageEvent={provider:UsageProvider;ok:boolean;status?:number;quota?:boolean;units?:number;reason?:FailureReason};
 
 // 한국 시간 날짜(YYYY-MM-DD). 무료 한도가 대개 하루 단위라 날짜별로 센다.
 export const kstDay=(now:Date)=>new Date(now.getTime()+9*3_600_000).toISOString().slice(0,10);
@@ -50,7 +54,8 @@ export function applyEvent(month:UsageMonth,event:UsageEvent,now:Date):UsageMont
     ...month,
     days:{...month.days,[day]:counters},
     lastQuota:quota?{...month.lastQuota,[event.provider]:at}:month.lastQuota,
-    lastError:!event.ok?{...month.lastError,[event.provider]:{at,status:event.status??0}}:month.lastError,
+    lastError:!event.ok?{...month.lastError,[event.provider]:{at,status:event.status??0,...(event.reason?{reason:event.reason}:{})}}:month.lastError,
+    failureReasons:!event.ok&&event.reason?{...month.failureReasons,[event.provider]:{...month.failureReasons?.[event.provider],[event.reason]:(month.failureReasons?.[event.provider]?.[event.reason]??0)+1}}:month.failureReasons,
   };
 }
 
@@ -116,7 +121,7 @@ export function recordGroqLimits(headers:{get(name:string):string|null}|null|und
 // 설정 화면용 요약: 오늘·이번 달 합계, 마지막 한도 초과·오류, Groq 남은 양.
 export type UsageSummary={
   month:string;today:string;
-  providers:Array<{id:UsageProvider;today:UsageCounter;month:UsageCounter;lastQuota:string|null;lastError:{at:string;status:number}|null}>;
+  providers:Array<{id:UsageProvider;today:UsageCounter;month:UsageCounter;lastQuota:string|null;lastError:{at:string;status:number;reason?:FailureReason}|null;reasons:Partial<Record<FailureReason,number>>}>;
   groq:GroqLimits|null;
 };
 const zero=():UsageCounter=>({calls:0,failures:0,quota:0,units:0});
@@ -131,6 +136,7 @@ export function summarize(month:UsageMonth,now:Date=new Date()):UsageSummary {
       month:Object.values(month.days).reduce((sum,day)=>add(sum,day[id]),zero()),
       lastQuota:month.lastQuota[id]??null,
       lastError:month.lastError[id]??null,
+      reasons:month.failureReasons?.[id]??{},
     })),
     groq:month.groq??null,
   };

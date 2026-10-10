@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { UsageProvider, UsageSummary } from "@/lib/usage/ledger";
+import { FAILURE_REASON_LABELS, type FailureReason } from "@/lib/usage/failureReasons";
 import { readJsonResponse } from "@/lib/http/readJson";
 
 // 설정 화면 "AI 사용량". 각 AI가 남은 무료 한도를 API로 알려 주지 않아서(Groq만 예외),
@@ -58,11 +59,15 @@ export function AiUsageCard({connections}:{connections:Connections}){
     {data&&<ul className="ai-check-list">{rows.map(row=>{
       const stat=row.stat;
       const quota=stat?.lastQuota?` · 마지막 한도 초과 ${when(stat.lastQuota)}`:"";
+      // 실패 이유별 횟수(많은 순)와 마지막 실패. 이유를 남기기 전 기록은 횟수만 보인다.
+      const reasons=Object.entries(stat?.reasons??{}).filter(([,count])=>(count??0)>0).sort((a,b)=>(b[1]??0)-(a[1]??0)).map(([reason,count])=>`${FAILURE_REASON_LABELS[reason as FailureReason]} ${count}`).join(", ");
+      const lastFailure=stat?.month.failures&&stat.lastError?`마지막 실패 ${when(stat.lastError.at)}${stat.lastError.reason?` · ${FAILURE_REASON_LABELS[stat.lastError.reason]}`:""}${stat.lastError.status?` (코드 ${stat.lastError.status})`:""}`:"";
       const remaining=row.id==="groq"&&groq?.remainingRequests!==undefined?` · 남은 요청 ${groq.remainingRequests.toLocaleString("ko-KR")}${groq.limitRequests?` / ${groq.limitRequests.toLocaleString("ko-KR")}`:""}(${when(groq.at)} 기준)`:"";
       return <li key={row.id} className="connection-card">
         <span className={`status-dot${stat?.lastQuota&&when(stat.lastQuota).startsWith("오늘")?"":" on"}`}/>
         <div><strong>{row.label}</strong>
           <p>오늘 {stat?.today.units??0}{row.unit} · 이번 달 {stat?.month.units??0}{row.unit}{stat?.month.failures?` · 실패 ${stat.month.failures}번`:""}{quota}{remaining}</p>
+          {(reasons||lastFailure)&&<p className="field-help">{reasons?`실패 이유: ${reasons}. `:""}{lastFailure}</p>}
           <p><a href={row.dashboard} target="_blank" rel="noreferrer">{row.dashboardLabel} 열기 ↗</a></p>
         </div>
       </li>;

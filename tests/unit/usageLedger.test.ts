@@ -61,4 +61,20 @@ describe("usage ledger", () => {
     expect(()=>recordUsage({provider:"openai-image",ok:true})).not.toThrow();
     return expect(flushUsage()).resolves.toBeUndefined();
   });
+
+  // 사장님 지적(2026-10-10): Higgsfield "실패 88번"만 보이고 이유를 알 수 없었다. 이유별로 센다.
+  it("counts failure reasons and keeps the last one", () => {
+    const at=new Date("2026-10-10T03:00:00Z");
+    let month={month:"2026-10",days:{},lastQuota:{},lastError:{}};
+    month=applyEvent(month,{provider:"higgsfield",ok:false,status:504,reason:"timeout"},at);
+    month=applyEvent(month,{provider:"higgsfield",ok:false,status:504,reason:"timeout"},at);
+    month=applyEvent(month,{provider:"higgsfield",ok:false,status:422,reason:"rejected",units:1},at);
+    month=applyEvent(month,{provider:"higgsfield",ok:true,units:3},at);
+    const higgsfield=summarize(month,at).providers.find(item=>item.id==="higgsfield")!;
+    expect(higgsfield.month.failures).toBe(3);
+    expect(higgsfield.reasons).toEqual({timeout:2,rejected:1});
+    expect(higgsfield.lastError).toMatchObject({status:422,reason:"rejected"});
+    // 예전 장부(이유 없음)도 읽힌다.
+    expect(summarize({month:"2026-10",days:{},lastQuota:{},lastError:{}},at).providers[0].reasons).toEqual({});
+  });
 });

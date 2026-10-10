@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { recordUsage, type UsageProvider } from "@/lib/usage/ledger";
+import { recordUsage, type FailureReason, type UsageProvider } from "@/lib/usage/ledger";
 import { ownerApiError } from "@/features/auth/guard";
 import { ImageBriefSchema, type ImageBrief } from "@/features/images/schema";
 import { normalizeCardLayout, photosNeeded } from "@/features/images/design";
@@ -11,7 +11,7 @@ import { CloudflareConfigurationError, CloudflareImageError, CloudflarePartialIm
 import { readSettings } from "@/features/settings/repository";
 import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
 import { AppSettingsSchema, type AppSettings } from "@/features/settings/schema";
-import { HiggsfieldConfigurationError, HiggsfieldImageError, HiggsfieldPartialImageError, generateHiggsfieldImages, isHiggsfieldConfigured } from "@/features/images/higgsfieldRequest";
+import { HiggsfieldConfigurationError, HiggsfieldImageError, HiggsfieldPartialImageError, UNSUPPORTED_STATUSES, generateHiggsfieldImages, isHiggsfieldConfigured } from "@/features/images/higgsfieldRequest";
 import sharp from "sharp";
 import { prepareRemoteCutouts } from "@/features/images/remoteCutout";
 import { viewOf } from "@/features/images/render/photoView";
@@ -23,6 +23,19 @@ const PROVIDER_LABELS:Record<ImageProvider,string>={higgsfield:"Higgsfield",clou
 const USAGE_IDS:Record<ImageProvider,UsageProvider>={higgsfield:"higgsfield",cloudflare:"cloudflare-image",openai:"openai-image"};
 // 실패의 HTTP 상태(알 수 있을 때만). 429면 사용량 장부가 "한도 초과"로 센다.
 const imageErrorStatus=(error:unknown)=>{const status=(error as {status?:unknown})?.status;return typeof status==="number"?status:0;};
+// 실패 이유(설정 "AI 사용량"·서버 로그). Higgsfield는 오류에 이유가 붙어 있고, 그 밖에는 상태 코드로 나눈다.
+function imageFailureReason(error:unknown):FailureReason {
+  const status=imageErrorStatus(error);
+  if(error instanceof HiggsfieldImageError){
+    if(error.reason==="failed"&&UNSUPPORTED_STATUSES.has(error.status))return "rejected";
+    return error.reason;
+  }
+  if(error instanceof AiConfigurationError||error instanceof CloudflareConfigurationError||error instanceof HiggsfieldConfigurationError||status===401)return "auth";
+  if(status===402||status===429)return "credits";
+  if(status===504||status===408)return "timeout";
+  if(UNSUPPORTED_STATUSES.has(status))return "rejected";
+  return status>=500?"failed":"other";
+}
 const HIGGSFIELD_MESSAGES:Record<HiggsfieldImageError["reason"],string>={
   auth:"Higgsfield 키를 확인해 주세요.",
   credits:"Higgsfield 크레딧이 부족해요. 충전하거나 설정에서 다른 이미지 AI를 골라 주세요.",
@@ -125,7 +138,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
         const completed=error instanceof CloudflarePartialImageError||error instanceof HiggsfieldPartialImageError?error.images:[];
         // 사용량 장부: 크레딧 부족·429는 "한도 초과"로 적는다(설정 화면 "AI 사용량").
         // 일부만 만든 실패도 한 번의 요청으로 센다(만든 장수는 units로).
-        recordUsage({provider:USAGE_IDS[name],ok:false,units:completed.length,status:imageErrorStatus(error),quota:error instanceof HiggsfieldImageError&&error.reason==="credits"});
+        const reason=imageFailureReason(error);
+        recordUsage({provider:USAGE_IDS[name],ok:false,units:completed.length,status:imageErrorStatus(error),quota:error instanceof HiggsfieldImageError&&error.reason==="credits",reason});
+        // 예전에는 오류 이름("Error")만 남겨 Render 로그로 원인을 알 수 없었다. 상태 코드와 이유를 함께 남긴다.
+        console.warn(`[images] ${name} 실패: 이유 ${reason}, 상태 ${imageErrorStatus(error)||"-"}${completed.length?`, 일부 ${completed.length}장은 만들어짐`:""}${error instanceof Error&&!(error instanceof HiggsfieldImageError)?`, ${error.message.slice(0,200)}`:""}`);
         if(completed.length){images=[...images,...completed];used.push(name);}
         failures.push(error);
         if(index===chain.length-1){
