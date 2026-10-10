@@ -166,4 +166,36 @@ describe("Higgsfield image generation",()=>{
     }));
     await expect(generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"})).rejects.toMatchObject({reason:"credits"});
   });
+
+  // 사장님 화면(2026-10-10): "작업 실패 (코드 503)"이 이어졌다. 예전에는 503이면 Grok으로 넘어가지 않고 바로 실패했다.
+  it("tries Grok Image 2.0 when Nano Banana Pro answers 503 busy",async()=>{
+    vi.stubEnv("HF_IMAGE_MODEL","");
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const { generateHiggsfieldImages,resetHiggsfieldModelSkips }=await import("@/features/images/higgsfieldRequest");
+    resetHiggsfieldModelSkips();
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>{
+      if(url.endsWith("/nano-banana-pro"))return json({detail:"Service Unavailable"},503);
+      if(url.endsWith("/xai/grok-imagine-image-2.0"))return json({status:"completed",request_id:"g2",images:[{url:"https://cdn.example.com/g2.png"}]});
+      if(url==="https://cdn.example.com/g2.png")return new Response(new Uint8Array(png));
+      throw new Error(`unexpected ${url}`);
+    }));
+    const [image]=await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"});
+    expect(image.startsWith("data:image/jpeg")).toBe(true);
+    warn.mockRestore();
+  });
+
+  it("keeps polling when the status check answers 503 once",async()=>{
+    let polls=0;
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>{
+      if(url.endsWith("/xai/grok-imagine-image-2.0"))return json({status:"queued",request_id:"r3",status_url:"https://api.higgsfield.ai/requests/r3/status"});
+      if(url.endsWith("/requests/r3/status"))return ++polls===1?json({detail:"busy"},503):json({status:"completed",images:[{url:"https://cdn.example.com/r3.png"}]});
+      if(url==="https://cdn.example.com/r3.png")return new Response(new Uint8Array(png));
+      throw new Error(`unexpected ${url}`);
+    }));
+    const { generateHiggsfieldImages,resetHiggsfieldModelSkips }=await import("@/features/images/higgsfieldRequest");
+    resetHiggsfieldModelSkips();
+    const [image]=await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"});
+    expect(image.startsWith("data:image/jpeg")).toBe(true);
+    expect(polls).toBe(2);
+  },15_000);
 });
