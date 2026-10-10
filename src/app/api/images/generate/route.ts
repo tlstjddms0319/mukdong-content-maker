@@ -13,6 +13,8 @@ import { DEFAULT_SETTINGS } from "@/features/settings/defaults";
 import { AppSettingsSchema, type AppSettings } from "@/features/settings/schema";
 import { HiggsfieldConfigurationError, HiggsfieldImageError, HiggsfieldPartialImageError, UNSUPPORTED_STATUSES, generateHiggsfieldImages, isHiggsfieldConfigured } from "@/features/images/higgsfieldRequest";
 import sharp from "sharp";
+import { createAssetLibrary } from "@/features/images/assetLibrary";
+import { pickSkateReference, wantsSkateReference } from "@/features/images/skateReference";
 import { prepareRemoteCutouts } from "@/features/images/remoteCutout";
 import { viewOf } from "@/features/images/render/photoView";
 import { photoWindowRatio } from "@/features/images/photoWindow";
@@ -123,7 +125,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 장 사이의 통일감은 프롬프트의 공통 스타일(styleAnchor)로 잇는다. 사장님 사진을 살리는 source·style 모드는 그대로 쓴다.
     const {referenceImage,referenceMode,...rest}=parsed.data;
     const keepReference=referenceImage&&referenceMode!=="continuity";
-    const brief:ImageBrief={...rest,...(keepReference?{referenceImage,referenceMode}:{}),...(windowRatio?{windowRatio}:{})};
+    const draft:ImageBrief={...rest,...(keepReference?{referenceImage,referenceMode}:{}),...(windowRatio?{windowRatio}:{})};
+    // 홍어회 장면이면 사진 보관함의 매장 홍어회 사진을 참고 사진으로 붙인다(skateReference.ts). 보관함을 못 읽어도 생성은 계속한다.
+    const storePhoto=wantsSkateReference(draft)?pickSkateReference(await createAssetLibrary().list().catch(()=>[]),draft):undefined;
+    const brief:ImageBrief=storePhoto?{...draft,referenceImage:storePhoto.preview,referenceMode:"dish"}:draft;
     let images:string[]=[];
     const used:ImageProvider[]=[];
     // 모든 제공자가 실패하면 마지막 오류가 아니라 가장 도움이 되는 이유(크레딧 부족·안전 필터·한도 초과)를 보여 준다.

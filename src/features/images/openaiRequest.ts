@@ -164,7 +164,7 @@ function referenceDirection(input:ImageBrief):string {
 }
 
 // 썬 홍어회가 주인공인 장면인지(홍어 질감 지시용).
-function showsRawSkate(input:ImageBrief):boolean {
+export function showsRawSkate(input:ImageBrief):boolean {
   const hero=sceneHero(input);
   return showsSkate(input,hero)&&(!hero||hero.id==="hongeo-hoe");
 }

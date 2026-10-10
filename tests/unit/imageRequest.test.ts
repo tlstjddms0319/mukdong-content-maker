@@ -18,6 +18,8 @@ vi.mock("@/lib/ai/openaiClient",()=>({
   getOpenAIClient:()=>({images:{generate:generateImage,edit:editImage}}),
 }));
 vi.mock("@/features/settings/repository",()=>({readSettings}));
+const listAssets=vi.hoisted(()=>vi.fn());
+vi.mock("@/features/images/assetLibrary",()=>({createAssetLibrary:()=>({list:listAssets})}));
 
 const visitSlide={
   subline:"",
@@ -83,6 +85,8 @@ describe("OpenAI image request", () => {
     editImage.mockReset();
     readSettings.mockReset();
     readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"automatic"});
+    listAssets.mockReset();
+    listAssets.mockResolvedValue([]);
     // 이 파일은 Higgsfield 키가 없는 기존 순서(Cloudflare → OpenAI)를 검증한다.
     vi.stubEnv("HF_API_KEY_ID","");
     vi.stubEnv("HF_API_KEY_SECRET","");
@@ -383,6 +387,25 @@ describe("OpenAI image request", () => {
     expect(actual.equals(expected)).toBe(true);
   }, 15_000);
 
+  it("draws a raw skate scene from the owner's own hongeo photo in the library", async () => {
+    const photo=await sharp({create:{width:40,height:40,channels:3,background:"#b493a8"}}).jpeg().toBuffer();
+    const preview=`data:image/jpeg;base64,${photo.toString("base64")}`;
+    listAssets.mockResolvedValue([{id:"00000000-0000-4000-8000-000000000001",name:"매장 홍어회",tags:["홍어회"],kind:"photo",credit:"묵동홍어마을 직접 촬영",preview,createdAt:"2026-10-11T00:00:00.000Z",lastUsedAt:null,useCount:0,quality:null}]);
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
+    editImage.mockResolvedValue({data:[{b64_json:photo.toString("base64")}]});
+    const response=await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어회",count:1,aspectRatio:"4:5"})}));
+    expect(response.status).toBe(200);
+    expect(generateImage).not.toHaveBeenCalled();
+    expect(editImage.mock.calls[0][0].prompt).toContain("첨부 사진은 이 가게가 실제로 내는 음식이다");
+    // 매장 사진을 참고했어도 새로 그린 그림이므로 "AI 생성"으로 표시한다.
+    expect(await response.json()).toMatchObject({source:"ai-generated"});
+  });
+  it("does not read the photo library for a scene without raw skate", async () => {
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
+    generateImage.mockResolvedValue({data:[{b64_json:"aW1hZ2U="}]});
+    await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"과메기는 왜 겨울에 먹을까?",count:1,aspectRatio:"4:5"})}));
+    expect(listAssets).not.toHaveBeenCalled();
+  });
   it("keeps automatic routing when settings cannot be read", async () => {
     readSettings.mockRejectedValueOnce(new Error("broken settings"));
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","account-123");
