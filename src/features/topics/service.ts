@@ -71,6 +71,24 @@ export function topicAnglesForRound(round:number):string[] {
   return Array.from({length:4},(_,i)=>TOPIC_ANGLES[(round*3+i)%TOPIC_ANGLES.length]);
 }
 
+// 주제 갈래. 예전에는 모든 주제가 "가게 메뉴 하나 + 그 메뉴의 뻔한 질문"(과메기=찬바람, 미나리전=비·막걸리, 애탕=국물)이라
+// 메뉴 8개를 돌려 쓰는 구조였고, 두세 번 누르면 같은 주제가 돌아오는 것처럼 느껴졌다(사장님 지적 2026-10-10:
+// "사람들의 궁금증을 끌 수 있다면 묵동홍어마을과 관련된 것은 뭐든 괜찮다"). 이제 세 주제를 서로 다른 갈래에서 고르고,
+// 회차마다 권하는 갈래 3개를 돌려 "다른 주제 보기"마다 결이 다른 질문이 나오게 한다. 이번 시기·요즘 검색은 따로 다룬다.
+export const TOPIC_FAMILIES=[
+  {id:"myth",name:"홍어 상식·오해 풀기",example:"홍어는 왜 삭혀도 상하지 않을까?"},
+  {id:"science",name:"맛·향의 과학",example:"톡 쏘는 향은 왜 코로 먼저 올라올까?"},
+  {id:"culture",name:"식문화·유래·지역",example:"전라도 잔칫상엔 왜 홍어가 빠지지 않을까?"},
+  {id:"compare",name:"비교·차이",example:"홍어와 가오리는 어떻게 구별할까?"},
+  {id:"first",name:"처음 먹는 사람·먹는 법",example:"홍어 처음이면 어느 부위부터 먹을까?"},
+  {id:"pairing",name:"술·곁들임 짝꿍",example:"막걸리 말고 홍어엔 어떤 술이 맞을까?"},
+  {id:"scene",name:"모임·상황(회식·부모님·데이트)",example:"부모님 모시고 갈 땐 어떤 메뉴가 편할까?"},
+  {id:"store",name:"가게·동네·사람 이야기",example:"홍어집은 왜 같은 홍어도 썰 때 두께를 달리할까?"},
+] as const;
+export function topicFamiliesForRound(round:number):string[] {
+  return Array.from({length:3},(_,i)=>TOPIC_FAMILIES[(round*3+i)%TOPIC_FAMILIES.length]).map(family=>`${family.name}(예: ${family.example})`);
+}
+
 // 주제가 주로 다루는 가게 메뉴(제목에서 먼저, 없으면 설명에서 먼저 나온 메뉴). 메뉴를 못 찾으면 undefined.
 export function topicMenu(topic:Pick<TopicSuggestion,"title"|"summary">):StoreMenuItem|undefined {
   return mainMenuOf(topic.title,topic.summary);
@@ -101,9 +119,11 @@ export function overusedMenus(recentTitles:readonly string[],current:readonly st
 const isSamhapTopic=(topic:Pick<TopicSuggestion,"title"|"summary">)=>/삼합|수육/.test(`${topic.title} ${topic.summary}`);
 // 이미 고른 주제들 옆에 둘 수 있는지: 주인공 메뉴가 겹치지 않고(홍어회 주인공도 하나만), 삼합 주제는 하나만.
 // 정해진 칸은 없지만 이 두 가지는 AI 주제·준비된 주제 모두 코드로 지킨다(같은 메뉴 이야기가 겹치면 좋은 주제 3개가 아니다).
-const fitsWith=(picked:readonly TopicSuggestion[],topic:TopicSuggestion)=>{
-  const id=topicMenu(topic)?.id;
-  return !picked.some(item=>topicMenu(item)?.id===id)&&!(isSamhapTopic(topic)&&picked.some(isSamhapTopic));
+// 홍어회(홍어 자체)는 가게의 대표라 상식·과학·문화처럼 다른 갈래로 두 번까지 다룰 수 있다(예전에는 한 번만이라 홍어 상식 주제가 버려졌다).
+// 준비된 주제(메뉴마다 하나씩 만든 목록)는 예전처럼 메뉴가 모두 다르게(hongeoMax 1) 고른다.
+const fitsWith=(picked:readonly TopicSuggestion[],topic:TopicSuggestion,hongeoMax=2)=>{
+  const menu=topicMenu(topic),same=picked.filter(item=>topicMenu(item)?.id===menu?.id).length;
+  return same<(menu&&isHongeoHoe(menu)?hongeoMax:1)&&!(isSamhapTopic(topic)&&picked.some(isSamhapTopic));
 };
 
 // 준비된 주제 3개(AI 실패 시, AI 주제가 모자랄 때 채울 후보). 정해진 칸 없이 후보를 점수 순으로 줄 세워 고른다.
@@ -156,7 +176,7 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
       if(varied&&recent.has(menuId(topic)))continue;
       if(!anySeason&&offSeason(topic)==="closed")continue;
       // 사진 속 메뉴 주제는 같은 메뉴끼리 겹쳐도 된다(사진 한 접시로 세 질문을 만든다).
-      if(!fitsWith(picked,topic)&&!photoMenus.has(menuId(topic)))continue;
+      if(!fitsWith(picked,topic,1)&&!photoMenus.has(menuId(topic)))continue;
       picked.push(topic);
     }
   }
@@ -171,10 +191,10 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
 // 주제 한 개가 기본 조건을 못 지키는 이유(지키면 undefined).
 // - 제목 끝 물음표 뒤의 따옴표·괄호·공백은 봐준다(AI가 "…일까?" 처럼 따옴표로 감싸 보내곤 한다).
 // - 가게 메뉴는 제목과 설명을 함께 본다(제목에만 메뉴 이름을 쓴 주제를 버리지 않게).
-export type TopicRejectReason="question"|"store"|"summary"|"menu"|"current"|"duplicate"|"same-menu"|"photo";
+export type TopicRejectReason="question"|"store"|"summary"|"menu"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
 export const TOPIC_REJECT_LABELS:Record<TopicRejectReason,string>={
   question:"물음표 질문이 아니어서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
-  current:"지금 화면 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",photo:"넣은 사진 속 메뉴가 아니어서",
+  current:"지금 화면 주제와 같아서",recent:"최근에 보여 준 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",photo:"넣은 사진 속 메뉴가 아니어서",
 };
 function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason|undefined {
   if(!/[?？]["'”’」』)\]\s]*$/.test(topic.title.trim()))return "question";
@@ -185,7 +205,8 @@ function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason
 }
 const meetsTopicBasics=(topic:TopicSuggestion,storeName:string)=>!basicsProblem(topic,storeName);
 // 세 주제가 메뉴를 고르게 다루는지: 하나 이상은 홍어회·삼합이 아닌 메뉴, 셋 다 같은 메뉴는 아님(순서와 상관없음).
-const isVariedSet=(topics:TopicSuggestion[])=>topics.some(isOtherMenuTopic)&&new Set(topics.map(topic=>topicMenu(topic)?.id)).size>1;
+// 셋 다 같은 메뉴만 아니면 된다(사장님: 묵동홍어마을과 관련된 궁금증이면 뭐든 괜찮다). 예전에는 "홍어회·삼합이 아닌 메뉴 하나"를 꼭 넣게 해서 메뉴를 돌려 쓰는 쏠림이 더 심했다.
+const isVariedSet=(topics:TopicSuggestion[])=>new Set(topics.map(topic=>topicMenu(topic)?.id)).size>1;
 
 // AI가 준 주제 3개를 순서 그대로 살린다(첫 번째가 AI가 가장 추천하는 주제). 기본 조건에 안 맞거나 지금 화면 제목,
 // 겹치는 제목, 앞 주제와 주인공 메뉴가 겹치거나 두 번째 삼합 주제만 빼고, 모자란 만큼만 준비된 주제(이번 시기·최근에 안 보인 것 우선)로 채운다.
@@ -214,14 +235,14 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   const aboutPhoto=(topic:TopicSuggestion)=>!photoMode||menuOf(`${topic.title} ${topic.summary}`).some(item=>options.hints!.photoMenus!.has(item.id));
   const problem=(topic:TopicSuggestion):TopicRejectReason|undefined=>basicsProblem(topic,options.storeName)
     ??(!aboutPhoto(topic)?"photo":onScreen(topic)?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
-  // 1) 최근에 안 보인 제목 → 2) 최근에 보인 제목(준비된 주제보다는 낫다).
-  for(const allowRecent of [false,true])for(const topic of suggestions){
-    if(picked.length>=3||picked.includes(topic))continue;
-    if(!allowRecent&&recentlyShown(topic))continue;
-    if(!problem(topic))picked.push(take(topic));
+  // 최근에 보여 준 주제(말만 바꾼 것 포함)는 다시 쓰지 않는다. 예전에는 자리가 남으면 "준비된 주제보다 낫다"며 다시 써서
+  // "다른 주제 보기"를 눌러도 같은 주제가 돌아왔다(사장님 지적 2026-10-10). 빈자리는 최근에 안 보인 준비된 주제로 채운다.
+  for(const topic of suggestions){
+    if(picked.length>=3)break;
+    if(!recentlyShown(topic)&&!problem(topic))picked.push(take(topic));
   }
   const rejected:Partial<Record<TopicRejectReason,number>>={};
-  for(const topic of suggestions)if(!picked.includes(topic)){const reason=problem(topic)??"same-menu";rejected[reason]=(rejected[reason]??0)+1;}
+  for(const topic of suggestions)if(!picked.includes(topic)){const reason=problem(topic)??(recentlyShown(topic)?"recent":"same-menu");rejected[reason]=(rejected[reason]??0)+1;}
   // 채울 후보: 이번 회차 준비된 주제부터 차례로 돌며, 최근에 안 보인 것 → 제외 목록만 피한 것 순서.
   const pool=Array.from({length:PREPARED_ROUNDS},(_,offset)=>fallbackTopics((options.round+offset)%PREPARED_ROUNDS,[],options.season,options.avoidTitles,options.hints)).flat();
   // 최근에 자주 나온 메뉴와 이미 고른 주제의 메뉴는 되도록 피한다(메뉴를 고르게 돌리기).
