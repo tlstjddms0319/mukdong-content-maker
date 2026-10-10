@@ -4,6 +4,9 @@
 // 외부 크론이 POST /api/instagram/scheduler 를 주기적으로 호출하도록 안내한다(docs/INSTAGRAM_AUTOPUBLISH.ko.md).
 export async function register() {
   if(process.env.NEXT_RUNTIME!=="nodejs")return;
+  // 휴대폰 알림(올리는 날·쉰 날짜 알림)은 인스타그램 연결과 상관없이 5분마다 점검한다.
+  const { startNotificationLoop }=await import("@/features/notifications/runtime");
+  startNotificationLoop();
   if(!process.env.INSTAGRAM_APP_ID)return;
   const { startPublishSchedulerLoop }=await import("@/features/instagram/schedulerRuntime");
   startPublishSchedulerLoop();
