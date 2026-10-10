@@ -32,6 +32,9 @@ export function higgsfieldModels(env:Record<string,string|undefined>=process.env
 const unavailable=new Map<string,number>();
 const SKIP_MS=6*3_600_000;
 export const UNSUPPORTED_STATUSES=new Set([400,404,405,422]);
+// 서버가 잠깐 바쁘거나 문제가 있을 때의 답. 다른 모델로 넘어가거나(요청) 다시 묻는다(상태 확인).
+export const BUSY_STATUSES=new Set([500,502,503]);
+const BUSY_SKIP_MS=10*60_000;
 export function resetHiggsfieldModelSkips(){unavailable.clear();}
 const POLL_INTERVAL_MS=3_000;
 const JOB_TIMEOUT_MS=5*60_000;
@@ -117,7 +120,9 @@ export async function waitForCompletion(job:Job,auth:string,timeoutMs=JOB_TIMEOU
     if(current.status==="failed"||current.status==="canceled")throw new HiggsfieldImageError(502);
     if(Date.now()>deadline)throw new HiggsfieldImageError(504,"timeout");
     await new Promise(resolve=>setTimeout(resolve,POLL_INTERVAL_MS));
-    current=await api<Job>(statusUrl,{method:"GET"},auth);
+    // 상태 확인 중 서버가 잠깐 바쁘다고(5xx) 답하면 작업은 살아 있으니 다시 묻는다. 예전에는 한 번의 503으로 만든 그림을 버렸다.
+    try{current=await api<Job>(statusUrl,{method:"GET"},auth);}
+    catch(error){if(error instanceof HiggsfieldImageError&&BUSY_STATUSES.has(error.status))continue;throw error;}
   }
   return current;
 }
@@ -160,9 +165,13 @@ async function generateOne(input:ImageBrief,auth:string,referenceUrl?:string,now
     try{return await submit(model,input,auth,referenceUrl);}
     catch(error){
       lastError=error;
-      if(!(error instanceof HiggsfieldImageError)||!UNSUPPORTED_STATUSES.has(error.status)||index===models.length-1)throw error;
-      unavailable.set(model.id,now()+SKIP_MS);
-      console.warn(`[higgsfield] ${model.label} 요청이 받아들여지지 않아(${error.status}) 다음 모델로 만듭니다.`);
+      const unsupported=error instanceof HiggsfieldImageError&&UNSUPPORTED_STATUSES.has(error.status);
+      // 서버가 바쁘다(500·502·503)고 답한 모델도 다음 모델로 넘어간다(사장님 화면 2026-10-10: 코드 503 "작업 실패"가 이어졌는데,
+      // 예전에는 Grok으로 넘어가지 않고 바로 실패했다). 바쁜 모델은 잠깐(10분)만 건너뛴다.
+      const busy=error instanceof HiggsfieldImageError&&BUSY_STATUSES.has(error.status);
+      if((!unsupported&&!busy)||index===models.length-1)throw error;
+      unavailable.set(model.id,now()+(busy?BUSY_SKIP_MS:SKIP_MS));
+      console.warn(`[higgsfield] ${model.label} 요청이 ${busy?"서버가 바빠 실패해":"받아들여지지 않아"}(${(error as HiggsfieldImageError).status}) 다음 모델로 만듭니다.`);
     }
   }
   throw lastError??new HiggsfieldImageError(502);
