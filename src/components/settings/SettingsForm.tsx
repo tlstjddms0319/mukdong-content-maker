@@ -31,8 +31,8 @@ export function SettingsForm({ onSave = saveSettings, connections = { gemini:fal
     <p className="field-help">가게를 도와주는 분이 쓰는 기술 설정이에요. 평소에는 열지 않아도 돼요.</p>
     {adminCards}
   <form className="settings-form" aria-label="관리자용 설정" onSubmit={submit("admin")}>
-    <section className="settings-section"><div><h2>기본 설정</h2><p>처음에는 권장값 그대로 사용해도 돼요. 장 수는 예전 방식 화면에만 쓰여요(지금 만들기는 갈래가 5장으로 정해요).</p></div><div className="field-grid">
-      <label>캐러셀 장수<select aria-label="캐러셀 장수" value={settings.carouselSlideCount} onChange={e=>update("carouselSlideCount",Number(e.target.value) as AppSettings["carouselSlideCount"])}><option value="3">3</option><option value="5">5 (권장)</option><option value="7">7</option><option value="10">10</option></select></label>
+    <section className="settings-section"><div><h2>기본 설정</h2><p>처음에는 권장값 그대로 사용해도 돼요. 게시물 장 수는 만들 때마다 AI가 내용에 맞춰 4~9장으로 정해요(맨 뒤 홍보 카드 1장 별도).</p></div><div className="field-grid">
+      {/* "캐러셀 장수"는 뺐다: 지금 만들기 화면은 이 값을 읽지 않고 AI가 장 수를 정한다(사장님 지적 2026-10-10: 설정에 5장이 남아 있어 헷갈림). 저장된 값은 예전 초안 호환으로 그대로 둔다. */}
       <label>문안 길이<select aria-label="문안 길이" value={settings.copyLength} onChange={e=>update("copyLength",e.target.value as AppSettings["copyLength"])}><option value="short">짧게 (200~350자)</option><option value="medium">기본 (500~800자)</option><option value="detailed">자세히 (900~1,200자)</option></select></label>
       <label>OpenAI 이미지 품질<select aria-label="OpenAI 이미지 품질" value={settings.imageQuality??"medium"} onChange={e=>update("imageQuality",e.target.value as AppSettings["imageQuality"])}><option value="medium">표준</option><option value="high">고품질 (시간·비용 증가)</option></select></label>
       <label>이미지 AI<select aria-label="이미지 AI" value={settings.imageAiProvider} onChange={e=>update("imageAiProvider",e.target.value as AppSettings["imageAiProvider"])}><option value="automatic">자동 (Higgsfield → Cloudflare → OpenAI)</option><option value="higgsfield">Higgsfield만 (크레딧 사용)</option><option value="cloudflare">Cloudflare만 (초과 과금 가능)</option><option value="openai">OpenAI만 (유료 가능)</option></select></label>
