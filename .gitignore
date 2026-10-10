@@ -7,7 +7,10 @@ playwright-report/
 !.env.example
 .superpowers/
 graphify-out/
-.claude/
+.claude/*
+# 세션 시작 훅·공용 설정은 커밋한다(settings.local.json 같은 개인 설정은 계속 제외).
+!.claude/settings.json
+!.claude/hooks/
 ponytail/
 output/
 tsconfig.tsbuildinfo
