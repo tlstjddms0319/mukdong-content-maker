@@ -22,12 +22,13 @@ describe("topic variety", () => {
     expect(topics.map(topic=>topic.title)).toEqual(["홍어는 왜 겨울에 더 찾을까?","과메기는 왜 겨울에 찾을까?","국밥엔 왜 깍두기가 어울릴까?"]);
   });
 
-  it("replaces later topics that repeat a hero menu, so hongeo/samhap cannot fill the whole set", () => {
+  // 홍어 자체를 다루는 주제는 갈래가 다르면 두 개까지(홍어 상식·과학 주제가 버려지지 않게), 세 개는 안 된다.
+  it("allows two hongeo topics but not a whole set of them", () => {
     const {topics,filled}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),make("굴은 왜 겨울에 맛있을까?"),make("국밥엔 왜 깍두기가 어울릴까?")],base);
-    expect(filled).toBe(2);
-    expect(topics[0].title).toBe("홍어는 왜 겨울에 더 찾을까?");
-    expect(topics.slice(1).every(topic=>topic.id.startsWith("fallback-"))).toBe(true);
-    expect(new Set(topics.map(topic=>topicMenu(topic)?.id)).size).toBe(3);
+    expect(filled).toBe(1);
+    expect(topics.slice(0,2).map(topic=>topic.title)).toEqual(["홍어는 왜 겨울에 더 찾을까?","굴은 왜 겨울에 맛있을까?"]);
+    expect(topics[2].id.startsWith("fallback-")).toBe(true);
+    expect(new Set(topics.map(topic=>topicMenu(topic)?.id)).size).toBe(2);
     expect(topics.some(isOtherMenuTopic)).toBe(true);
   });
 
@@ -70,13 +71,15 @@ describe("topic variety", () => {
     expect(topics[2].id).toMatch(/^fallback-/);
   });
 
-  it("prefers fresh AI topics over recent ones, but uses recent ones before prepared topics", () => {
+  // 최근에 보여 준 주제는 다시 쓰지 않는다(사장님 지적 2026-10-10: 다른 주제 보기를 눌러도 같은 주제가 돌아왔다).
+  it("does not bring back recently shown topics, even reworded", () => {
     const recent=["과메기는 왜 찬바람이 불면 찾을까?","미나리전엔 왜 막걸리가 생각날까?","홍어애탕은 어떤 국물일까?"];
     const aetang={...make(recent[2]),summary:"찬바람 부는 날 홍어애탕 한 그릇을 소개하고 재료와 맛은 사장님께 확인한 뒤 씁니다."};
-    // 셋 다 최근에 보여 준 제목이어도(예전에는 전부 준비된 주제로 바뀜) AI 추천을 그대로 쓴다.
     const all=assembleTopics([makeMenu(recent[0]),makeJeon(recent[1]),aetang],{...base,avoidTitles:recent});
-    expect(all.filled).toBe(0);
-    // 새 제목이 있으면 새 제목이 먼저 들어간다.
+    expect(all.filled).toBe(3);
+    expect(all.rejected).toEqual({recent:3});
+    for(const title of recent)expect(all.topics.map(topic=>topic.title)).not.toContain(title);
+    // 새 제목은 그대로 쓴다.
     const mixed=assembleTopics([makeMenu(recent[0]),makeJeon("전은 왜 비 오는 날 생각날까?"),aetang],{...base,avoidTitles:recent});
     expect(mixed.topics[0].title).toBe("전은 왜 비 오는 날 생각날까?");
     // 지금 화면의 제목(excludeTitles)은 여전히 쓰지 않고, 그 이유를 센다.
