@@ -3,7 +3,7 @@ import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
-import { CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, STORY_ARC_RULE, VAGUE_REASON } from "@/features/copy/explain";
+import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
@@ -56,6 +56,12 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     const missed=QUESTION_CONDITIONS.find(condition=>condition.asked.test(cover)&&!condition.answered.test(body));
     if(missed)issues.push({slide:2,field:"headline",message:`표지가 '${missed.label}'에 왜 이 음식이 생각나는지 묻는데, 본문 어느 장도 ${missed.label}과(와) 음식의 연결을 설명하지 않아요. 첫 이유 장은 그 상황과 음식이 왜 이어지는지로 쓰세요.`});
   }
+  // 비교 질문("치즈는 익숙한데 다른 발효 음식은 왜 낯설까?")인데 본문이 비교 대상(치즈)을 다시 꺼내지 않으면, 무엇과 무엇이 다른지 답하지 못한다.
+  const pair=track&&plan.slides.length>2?comparedPair(plan.slides[0].headline):undefined;
+  if(pair){
+    const body=plan.slides.slice(1).map(slide=>[slide.headline,...slide.points].join(" ")).join(" ");
+    if(!body.includes(pair.first))issues.push({slide:2,field:"headline",message:`표지가 '${pair.first}'와(과) '${pair.second}'를 견주는데, 본문 어느 장도 '${pair.first}'를 다시 꺼내지 않아요. 이유 장마다 두 대상을 나란히 놓고 무엇이 다른지 쓰세요.`});
+  }
   plan.slides.forEach((slide,i)=>{
     const n=i+1,headline=slide.headline.trim();
     const length=headline.replace(/\s/g,"").length;
@@ -92,6 +98,8 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
       // 표지가 "왜"를 묻는데 본문 제목이 표지에 없는 곁들임을 꺼내면 흐름이 끊긴다(5장 구성의 4번째 장이 늘 pairing 자리라 잘 생긴다).
       const sideTurn=ASKS_WHY.test(cover)?SIDE_SUBJECTS.find(word=>headline.includes(word)&&!cover.includes(word)):undefined;
       if(sideTurn)add(n,"headline",`표지가 "${cover.trim()}"라고 묻는데 이 장 제목은 표지에 없는 '${sideTurn}' 이야기예요. 표지 질문의 이유 하나를 답하는 제목으로 바꾸세요.`);
+      // "왜 낯설까?"를 묻는데 맛있는 이유(감칠맛·고소함·곁들임이 덜어 줌)를 말하면 질문의 술어를 놓친 것이다(결론 장은 해결을 말해도 된다).
+      if(ASKS_UNFAMILIAR.test(cover)&&i<plan.slides.length-1&&praisesInsteadOfExplaining(headline))add(n,"headline",`표지는 왜 낯선지(어려운지)를 묻는데 이 장 제목은 음식의 장점을 말해요. 왜 낯설게 느껴지는지(향을 느끼는 경로, 접해 본 경험, 익숙한 맛과의 차이) 하나를 답하는 제목으로 바꾸세요.`);
       if(VAGUE_REASON.test(headline))add(n,"headline","'조화롭게 잡아줘요'·'정돈해줘요'처럼 결과만 말하는 막연한 제목이에요. 무엇이 무엇을 어떻게 바꾸는지(이유) 쓰세요.");
       for(const point of slide.points)if(VAGUE_REASON.test(point))add(n,"points",`요점 '${point.trim()}'이 결과만 말하고 이유가 없어요. 무엇이 어떻게 작용하는지 쓰세요.`);
       // 표지가 "왜"를 묻는데 요점이 먹는 법이면 제목과 따로 논다(사장님 지적 2026-10-10: 제목 "지방층이 묵은지의 산미를 감싸요" 아래
@@ -163,6 +171,7 @@ ${found}
 3. ${heroLine(topic,context.menu??mainMenuOf(topic))}
 4. "입안의 리듬" 같은 추상적 비유 대신 구체적으로 쓰세요. ${context.track?`겉모습 묘사만 하지 말고 사람이 왜 그렇게 느끼는지 이유를 쓰고, 카드에는 가게 이름·방문 권유·예약 안내를 쓰지 마세요(맨 뒤 홍보 카드가 따로 붙어요).
 ${STORY_ARC_RULE}
+${QUESTION_FOCUS_RULE}
 ${EXPLAIN_REASONS_RULE}`:"눈이나 입으로 확인할 수 있는 관찰(색, 결, 식감, 먹는 순서)이나 널리 알려진 이유로 쓰세요."}
 5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.
 6. 문제가 없는 장은 그대로 두세요. 장 수, 장 순서, 장마다 요점 개수(표지는 빈 배열)는 바꾸지 마세요. 표지의 points는 빈 배열입니다.
@@ -178,24 +187,45 @@ ${JSON.stringify(slides)}
 
 export type ReviewResult={plan:CarouselPlan;applied:boolean;before:number;after:number};
 
-// AI 검수를 적용한다. 형식이 다르거나(장 수·요점 수), 문제 수가 늘거나, 금지 표현이 새로 생기면 원래 구성안을 쓴다.
+// AI 검수를 적용한다. 형식이 다르거나(장 수·요점 수) 금지 표현이 새로 생기면 그 답을 버린다.
+// 예전에는 검수 결과 전체가 원래보다 문제가 많으면 통째로 버려서, 한 장만 나빠져도 잘 고친 다른 장(예: 갑자기 나온 막걸리 장)까지
+// 원래대로 남았다(사장님 지적 2026-10-10). 이제는 장마다 비교해 문제가 줄어든 장만 받고, 남은 문제가 있으면 한 번 더 검수한다.
 // 자동 검사에서 문제가 하나도 없으면 AI를 다시 부르지 않는다(무료 한도를 아끼고, 멀쩡한 문안을 괜히 바꾸지 않게).
+const REVIEW_ROUNDS=2;
+const issuesOn=(plan:CarouselPlan,track:CarouselTrack|undefined,slide:number)=>slideCopyIssues(plan,track).filter(issue=>issue.slide===slide).length;
 export async function reviewCarouselPlan(plan:CarouselPlan,topic:string,ai:{review:(prompt:string,schema:ReturnType<typeof reviewSchema>)=>Promise<PlanReview>},context:ReviewContext={}):Promise<ReviewResult> {
-  const issues=slideCopyIssues(plan,context.track);
-  const before=issues.length;
+  const before=slideCopyIssues(plan,context.track).length;
   if(!before)return {plan,applied:false,before:0,after:0};
+  let current=plan,count=before;
+  for(let round=0;round<REVIEW_ROUNDS&&count>0;round++){
+    const next=await reviewRound(current,topic,ai,context);
+    if(!next)break;
+    const after=slideCopyIssues(next,context.track).length;
+    if(after>=count)break;
+    current=next;count=after;
+  }
+  return current===plan?{plan,applied:false,before,after:before}:{plan:current,applied:true,before,after:count};
+}
+
+// 검수 한 번: AI 답을 받아, 장마다 문제가 줄어든 장만 바꾼 구성안을 돌려준다. 받을 장이 없거나 답이 잘못됐으면 undefined.
+async function reviewRound(plan:CarouselPlan,topic:string,ai:{review:(prompt:string,schema:ReturnType<typeof reviewSchema>)=>Promise<PlanReview>},context:ReviewContext):Promise<CarouselPlan|undefined> {
+  const issues=slideCopyIssues(plan,context.track);
   try{
     const schema=reviewSchema(plan.slides.length);
     const reviewed=schema.parse(await ai.review(buildPlanReviewPrompt(plan,topic,issues,context),schema));
     const minPoints=copyLimitsOf(context.track).minPoints;
     const sameShape=reviewed.slides.every((slide,i)=>slide.points.length===plan.slides[i].points.length||(plan.slides[i].role!=="cover"&&slide.points.length>=minPoints));
-    if(!sameShape)return {plan,applied:false,before,after:before};
-    const next:CarouselPlan={...plan,slides:plan.slides.map((slide,i)=>({...slide,headline:reviewed.slides[i].headline,points:slide.role==="cover"?[]:reviewed.slides[i].points}))};
-    const after=slideCopyIssues(next,context.track).length;
-    const blocked=next.slides.some(slide=>[slide.headline,...slide.points].some(text=>checkTextClaims(text).blocked.length>0));
-    if(blocked||after>before)return {plan,applied:false,before,after:before};
-    return {plan:next,applied:true,before,after};
+    if(!sameShape)return undefined;
+    const candidate:CarouselPlan={...plan,slides:plan.slides.map((slide,i)=>({...slide,headline:reviewed.slides[i].headline,points:slide.role==="cover"?[]:reviewed.slides[i].points}))};
+    const blocked=(slide:CarouselPlan["slides"][number])=>[slide.headline,...slide.points].some(text=>checkTextClaims(text).blocked.length>0);
+    // 장마다: 검수한 장의 문제 수가 원래 장보다 적으면 받는다. 장끼리 겹침 검사가 있어 받은 뒤 전체를 다시 센다(호출한 쪽).
+    const slides=plan.slides.map((slide,i)=>{
+      const fixed=candidate.slides[i];
+      if(blocked(fixed))return slide;
+      return issuesOn(candidate,context.track,i+1)<issuesOn(plan,context.track,i+1)?fixed:slide;
+    });
+    return slides.some((slide,i)=>slide!==plan.slides[i])?{...plan,slides}:undefined;
   }catch{
-    return {plan,applied:false,before,after:before};
+    return undefined;
   }
 }

@@ -46,3 +46,29 @@ const objectJosa=(word:string)=>word+(hasFinal(word)?"을":"를");
 
 // 속 글 규칙(구성안 지시문). 카드에는 짧게 보여 주되, AI는 먼저 자세히 생각하고 쓰게 한다.
 export const NOTES_FIRST_RULE=`[속 글 먼저] 각 slide의 notes에는 카드에 보이지 않는 자세한 설명을 먼저 쓰세요(3~5문장, 150~400자). 표지 notes에는 ① 표지 질문 ② 한 문장 결론 ③ 이유 목록을, 본문 장 notes에는 그 장 이유의 원리(무엇이 무엇을 어떻게 바꾸는지), 사람이 왜 그렇게 느끼는지, 확실하지 않으면 "~로 알려져 있어요", 읽고 바로 써먹을 정보(먹는 순서·고르는 법·조합)를, 마지막 장 notes에는 결론과 그 근거 요약을 쓰세요. headline과 points는 notes에서 가장 중요한 한 가지만 골라 짧게 줄인 것입니다(인스타그램은 빠르게 넘기므로 카드에는 핵심만). notes에도 가격·원산지·숙성 기간 같은 가게만의 사실, 지어낸 수치·효능은 쓰지 마세요.`;
+
+// 질문의 술어에 답하기 + 비교 질문(사장님 지적 2026-10-10: "치즈는 익숙한데 다른 발효 음식은 왜 낯설까?"에
+// 표지 사진은 홍어뿐, 본문은 "씹을수록 감칠맛"(낯선 이유가 아니라 장점), "막걸리의 산미"(갑자기 나온 곁들임)로 흘렀다).
+// 이유 규칙은 "왜"에 답하라고만 해서, AI가 질문의 술어(낯설다)를 놓치고 음식 자랑으로 채웠다. 비교 대상(치즈)도 다시 나오지 않았다.
+export const QUESTION_FOCUS_RULE=`[질문의 술어에 답하기] 표지 질문의 서술어가 묻는 것에만 답하세요. "왜 낯설까?", "왜 호불호가 갈릴까?", "왜 처음엔 어려울까?"를 물으면 모든 이유 장은 그 음식이 왜 낯설거나 어렵게 느껴지는지(향을 느끼는 경로, 접해 본 경험, 익숙한 맛과의 차이)를 말하고, 맛있는 이유·장점·곁들임 자랑("씹을수록 감칠맛이 퍼져요", "막걸리가 자극을 덜어 줘요")은 이유가 아닙니다. 그런 해결 방법은 질문이 "어떻게 하면 덜 낯설까?"를 물을 때만, 또는 마지막 결론 장에서 한 번만 쓰세요. [비교 질문] 표지가 "A는 ~한데 B는 왜 ~?"처럼 두 대상을 견주면, 이유 장마다 A와 B를 나란히 놓고 차이를 설명하세요(예: "치즈 향은 어릴 때부터 맡아 익숙하지만 홍어의 암모니아 향은 코를 먼저 찔러요"). 표지 visualPrompt에는 A와 B를 같은 크기로 나란히 놓은 장면을 쓰세요. B가 "다른 발효 음식"처럼 넓은 말이면 이 가게의 홍어를 대표로 삼아 표지 질문이나 첫 이유 장에서 그렇게 밝히세요.`;
+
+// 표지 질문이 두 대상을 견주는지: "치즈는 익숙한데 다른 발효 음식은 왜 낯설까?" → {first:"치즈", second:"다른 발효 음식"}.
+// 카드 검수(비교 대상이 본문에 다시 나오는지)와 표지 그림(두 음식을 나란히)이 쓴다.
+const COMPARISON=/^\s*(.{1,12}?)[은는]\s+[^?？]*?(?:한데|인데|는데|은데|지만|면서)\s*,?\s*(.{1,14}?)[은는이가]\s+(?:왜|어째서)/;
+export function comparedPair(question:string):{first:string;second:string}|undefined {
+  const match=question.match(COMPARISON);
+  if(!match)return undefined;
+  const [first,second]=[match[1].trim(),match[2].trim()];
+  return first&&second&&first!==second?{first,second}:undefined;
+}
+
+// 질문이 "낯설다·어렵다·꺼린다"를 물을 때, 본문 제목이 음식의 장점(맛있는 이유)만 말하는지 보는 낱말.
+export const ASKS_UNFAMILIAR=/낯설|어렵|어려울|꺼리|꺼려|호불호|못\s*먹|부담|거부감|익숙하지/;
+const PRAISE=/감칠맛|고소|달콤|부드러|맛있|풍미|깊은\s*맛|감싸|덜어|개운|시원/;
+const EXPLAINS_GAP=/낯설|익숙|처음|경험|어릴|자주|드물|접해|코|향|냄새|자극|암모니아|차이|다르|달라|낯선/;
+// 장점만 말하는 제목: 장점 낱말이 있고, 낯섦을 설명하는 낱말(경험·향의 경로·차이)이 장점 낱말 앞에 없으면.
+export function praisesInsteadOfExplaining(headline:string):boolean {
+  const praise=headline.match(PRAISE);
+  if(!praise||praise.index===undefined)return false;
+  return !EXPLAINS_GAP.test(headline.slice(0,praise.index));
+}
