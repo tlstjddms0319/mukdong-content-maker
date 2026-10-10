@@ -15,8 +15,8 @@ beforeEach(async()=>{
   png=await sharp({create:{width:300,height:400,channels:3,background:"#bb8877"}}).png().toBuffer();
   vi.stubEnv("HF_API_KEY_ID","key-id");
   vi.stubEnv("HF_API_KEY_SECRET","key-secret");
-  // 아래 예전 테스트는 Grok Image 2.0 요청 모양을 본다(기본 모델 Nano Banana Pro는 맨 아래 테스트에서 따로 본다).
-  vi.stubEnv("HF_IMAGE_MODEL","grok-image-2");
+  // 기본 모델은 Grok Image 2.0. Nano Banana Pro를 먼저 쓰는 경우는 아래 테스트에서 HF_IMAGE_MODEL로 따로 본다.
+  vi.stubEnv("HF_IMAGE_MODEL","");
   readSettings.mockReset();
   readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"automatic"});
 });
@@ -117,8 +117,14 @@ describe("Higgsfield image generation",()=>{
     expect((await response.json()).message).toContain("크레딧이 부족");
   });
 
-  it("uses Nano Banana Pro first, at the card's photo window ratio",async()=>{
-    vi.stubEnv("HF_IMAGE_MODEL","");
+  it("uses Grok Image 2.0 first by default (the only model this API account has actually processed)",async()=>{
+    const { higgsfieldModels }=await import("@/features/images/higgsfieldRequest");
+    expect(higgsfieldModels({}).map(model=>model.id)).toEqual(["grok-image-2","nano-banana-pro"]);
+    expect(higgsfieldModels({HF_IMAGE_MODEL:"nano-banana-pro"})[0].id).toBe("nano-banana-pro");
+  });
+
+  it("uses Nano Banana Pro first when chosen, at the card's photo window ratio",async()=>{
+    vi.stubEnv("HF_IMAGE_MODEL","nano-banana-pro");
     const { generateHiggsfieldImages,resetHiggsfieldModelSkips }=await import("@/features/images/higgsfieldRequest");
     resetHiggsfieldModelSkips();
     const calls:{url:string;init?:RequestInit}[]=[];
@@ -134,7 +140,7 @@ describe("Higgsfield image generation",()=>{
   });
 
   it("falls back to Grok Image 2.0 when the Nano Banana Pro route is not open for the account, and remembers it",async()=>{
-    vi.stubEnv("HF_IMAGE_MODEL","");
+    vi.stubEnv("HF_IMAGE_MODEL","nano-banana-pro");
     const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
     const { generateHiggsfieldImages,resetHiggsfieldModelSkips }=await import("@/features/images/higgsfieldRequest");
     resetHiggsfieldModelSkips();
@@ -157,7 +163,7 @@ describe("Higgsfield image generation",()=>{
   });
 
   it("does not hide credit or safety failures behind the fallback",async()=>{
-    vi.stubEnv("HF_IMAGE_MODEL","");
+    vi.stubEnv("HF_IMAGE_MODEL","nano-banana-pro");
     const { generateHiggsfieldImages,resetHiggsfieldModelSkips }=await import("@/features/images/higgsfieldRequest");
     resetHiggsfieldModelSkips();
     vi.stubGlobal("fetch",vi.fn(async(url:string)=>{
@@ -170,7 +176,7 @@ describe("Higgsfield image generation",()=>{
   // 사장님 화면(2026-10-10): "작업 실패 (코드 503)"이 이어졌다. 예전에는 503이면 Grok으로 넘어가지 않고 바로 실패했다.
   // 이제는 같은 모델로 한 번 더 시도하고, 그래도 바쁘면 Grok으로 넘어간다.
   it("retries Nano Banana Pro once on 503, then tries Grok Image 2.0",async()=>{
-    vi.stubEnv("HF_IMAGE_MODEL","");
+    vi.stubEnv("HF_IMAGE_MODEL","nano-banana-pro");
     const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
     const { generateHiggsfieldImages,resetHiggsfieldModelSkips,setHiggsfieldBusyRetryForTests }=await import("@/features/images/higgsfieldRequest");
     resetHiggsfieldModelSkips();setHiggsfieldBusyRetryForTests(0);
@@ -188,7 +194,7 @@ describe("Higgsfield image generation",()=>{
   });
 
   it("keeps the Higgsfield answer and the model in the error so the cause can be seen",async()=>{
-    vi.stubEnv("HF_IMAGE_MODEL","");
+    vi.stubEnv("HF_IMAGE_MODEL","nano-banana-pro");
     const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
     const { generateHiggsfieldImages,resetHiggsfieldModelSkips,setHiggsfieldBusyRetryForTests }=await import("@/features/images/higgsfieldRequest");
     resetHiggsfieldModelSkips();setHiggsfieldBusyRetryForTests(0);

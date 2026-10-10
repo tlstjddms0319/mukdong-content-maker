@@ -8,19 +8,21 @@ const BASE_URL="https://api.higgsfield.ai";
 
 // Higgsfield 이미지 모델. 앞에서부터 쓰고, 모델 경로가 이 계정에서 열리지 않거나 입력값이 맞지 않으면(400·404·405·422)
 // 다음 모델로 넘어간다(그 모델은 6시간 동안 건너뜀). Higgsfield는 실패한 요청에 요금을 매기지 않는다.
-// - Nano Banana Pro(Google): 사실적인 음식 사진·글 지시 따르기가 가장 좋고 4:5·2k를 받는다. 경로는 Higgsfield API가 따르는
-//   공급자/모델 이름 규칙(예: /xai/grok-imagine-image-2.0, /bytedance/seedream/v4/text-to-image)에 맞춘 것이라,
-//   설정 → AI 연결 점검에서 경로가 열렸는지 확인한다. 참고 이미지가 있으면 /edit 경로를 쓴다.
-// - Grok Image 2.0(xAI): 예전부터 쓰던 모델. 품질은 medium이 최고값.
-// HF_IMAGE_MODEL 환경변수로 먼저 쓸 모델을 고를 수 있다("nano-banana-pro" 또는 "grok-image-2"). HF_IMAGE_MODEL_PATH로
+// - Grok Image 2.0(xAI): 기본(첫 번째) 모델. 품질은 medium이 최고값.
+//   2026-10-10 Higgsfield API 대시보드: 이번 달 처리·청구된 요청 109건이 전부 Grok Image 2.0이었고 Nano Banana Pro는
+//   한 건도 없었다. 즉 이 계정의 API에서는 Nano Banana Pro가 처리되지 않고(앱 기록은 503), 매 장마다 실패하는 Nano를
+//   먼저 두드리느라 시간이 걸리고 실패가 쌓였다. 그래서 실제로 되는 Grok을 먼저 쓴다.
+// - Nano Banana Pro(Google): 예비 모델. 사실적인 음식 사진·4:5·2k를 받지만 이 계정 API에서는 아직 처리된 적이 없다.
+//   참고 이미지가 있으면 /edit 경로를 쓴다.
+// HF_IMAGE_MODEL 환경변수로 먼저 쓸 모델을 고를 수 있다("grok-image-2" 또는 "nano-banana-pro"). HF_IMAGE_MODEL_PATH로
 // 첫 모델의 경로를 바꿀 수도 있다(Higgsfield가 경로를 바꾸면 코드 수정 없이 맞추기).
 export type HiggsfieldModel={id:string;label:string;path:string;editPath:string;aspects:ReadonlyArray<AspectOption>;defaultRatio:number;body:(prompt:string,aspect:string,referenceUrl?:string)=>Record<string,unknown>};
 export const HIGGSFIELD_MODELS:readonly HiggsfieldModel[]=[
-  {id:"nano-banana-pro",label:"Nano Banana Pro",path:"/nano-banana-pro",editPath:"/nano-banana-pro/edit",aspects:NANO_BANANA_ASPECTS,defaultRatio:POST_RATIO,
-    body:(prompt,aspect,referenceUrl)=>({prompt,aspect_ratio:aspect,resolution:"2k",num_images:1,...(referenceUrl?{image_urls:[referenceUrl]}:{})})},
   {id:"grok-image-2",label:"Grok Image 2.0",path:"/xai/grok-imagine-image-2.0",editPath:"/xai/grok-imagine-image-2.0",aspects:HIGGSFIELD_ASPECTS,defaultRatio:3/4,
     // 품질 값이 low·medium뿐이라 표지도 medium(가장 높은 값)으로 둔다.
     body:(prompt,aspect,referenceUrl)=>({prompt,aspect_ratio:aspect,resolution:"2k",quality:"medium",...(referenceUrl?{image_urls:[referenceUrl]}:{})})},
+  {id:"nano-banana-pro",label:"Nano Banana Pro",path:"/nano-banana-pro",editPath:"/nano-banana-pro/edit",aspects:NANO_BANANA_ASPECTS,defaultRatio:POST_RATIO,
+    body:(prompt,aspect,referenceUrl)=>({prompt,aspect_ratio:aspect,resolution:"2k",num_images:1,...(referenceUrl?{image_urls:[referenceUrl]}:{})})},
 ];
 export function higgsfieldModels(env:Record<string,string|undefined>=process.env):HiggsfieldModel[] {
   const preferred=env.HF_IMAGE_MODEL?.trim();
