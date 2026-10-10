@@ -39,7 +39,7 @@ describe("OpenAI image request", () => {
   it("uses the cooked preparation instead of a raw-slice directive for hongeo jeon",()=>{
     const request=buildImageRequest(ImageBriefSchema.parse({topic:"홍어전의 고소한 한입",imageBrief:"홍어회 접시를 표현한다는 잘못된 기획",count:1,refinement:"접시를 더 작게, 자연광은 부드럽게"}));
     expect(request.prompt).toContain("노릇");
-    expect(request.prompt).not.toContain("숙성 홍어 날개 살을 얇고 불규칙하게");
+    expect(request.prompt).not.toContain("직사각형 띠로 썬 회");
     expect(request.prompt).toContain("접시를 더 작게, 자연광은 부드럽게");
     expect(buildImageRequest(ImageBriefSchema.parse({topic:"홍어 전문점"})).prompt).not.toContain("노릇");
   });
@@ -56,10 +56,11 @@ describe("OpenAI image request", () => {
       if(role==="detail")expect(prompt).not.toContain("entire main dish");
     }
   });
-  it("requests explicit high quality and describes realistic thin slices",()=>{
+  it("requests explicit high quality and describes the restaurant's strip cut with a beaded cartilage band",()=>{
     const request=buildImageRequest({topic:"홍어삼합",count:1,aspectRatio:"4:5"},"high");
     expect(request.quality).toBe("high");
-    expect(request.prompt).toContain("얇고 불규칙하게");
+    expect(request.prompt).toContain("직사각형 띠");
+    expect(request.prompt).toContain("white beaded cartilage band");
     expect(request.prompt).toContain("정육면체");
   });
   it("returns an uncaptioned cover reference alongside the captioned image",async()=>{
@@ -451,7 +452,7 @@ describe("the topic's menu is the hero", () => {
     expect(prompt).toContain("홍어애탕 장면은 뚝배기");
     expect(prompt).toContain("주인공은 홍어애탕이다");
     expect(prompt).not.toContain("Show the skate only as sliced pieces");
-    expect(prompt).not.toContain("숙성 홍어 날개 살을 얇고 불규칙하게");
+    expect(prompt).not.toContain("직사각형 띠로 썬 회");
     expect(prompt).not.toContain("Skate texture:");
   });
   it("keeps the skate combinations out of a gwamegi slide's must-show line", () => {
@@ -477,8 +478,10 @@ describe("appetizing photo direction (A9)", () => {
     expect(prompt).toContain("3200-4000K side light");
     expect(prompt).toContain("visible parallel fiber texture");
     expect(prompt).toContain("translucent pink edges backlit");
-    // 하얗게만 나오던 홍어를 참고 사진처럼 선홍빛 분홍으로(2026-10-10).
-    expect(prompt).toContain("never white, ivory or pale beige");
+    // 하얗게만 나오던 홍어(2026-10-10)를 산호빛으로 고쳤더니 참치·연어회처럼 나왔다(2026-10-11).
+    // 사장님 사진처럼 반투명한 연분홍·흰 살에 가장자리만 붉은 기, 바랜 흰색은 아니게.
+    expect(prompt).toContain("not bleached chalk-white");
+    expect(prompt).not.toMatch(/coral|선홍/);
     expect(prompt).toContain("plate fills about 60%");
     expect(prompt).toContain("brass yugi bowls");
     expect(prompt).toContain("No Japanese props");
