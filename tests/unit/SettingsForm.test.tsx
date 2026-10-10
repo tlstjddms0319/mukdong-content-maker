@@ -11,7 +11,7 @@ describe("SettingsForm", () => {
     expect(screen.getByLabelText("문안 AI")).toHaveValue("automatic");
     expect(screen.getByRole("option", { name:"자동 (Gemini → Groq → Cloudflare)" })).toBeInTheDocument();
     expect(screen.getByLabelText("이미지 AI")).toHaveValue("automatic");
-    expect(screen.getByRole("option", { name:"자동 (Higgsfield → Cloudflare → OpenAI)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name:"자동 (Higgsfield → Cloudflare, 유료 OpenAI는 안 씀)" })).toBeInTheDocument();
     expect(screen.getByText(/제공자 요금제에 따라 비용이 들 수 있어요/)).toBeInTheDocument();
     // 장 수는 AI가 정하므로 설정에 장 수 고르기가 없다.
     expect(screen.queryByLabelText("캐러셀 장수")).not.toBeInTheDocument();
