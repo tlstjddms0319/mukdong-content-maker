@@ -13,12 +13,15 @@ describe("SettingsForm", () => {
     expect(screen.getByLabelText("이미지 AI")).toHaveValue("automatic");
     expect(screen.getByRole("option", { name:"자동 (Higgsfield → Cloudflare → OpenAI)" })).toBeInTheDocument();
     expect(screen.getByText(/제공자 요금제에 따라 비용이 들 수 있어요/)).toBeInTheDocument();
-    expect(screen.getByLabelText("캐러셀 장수")).toHaveValue("5");
-    expect(screen.getByRole("option", { name:"5 (권장)" })).toBeInTheDocument();
+    // 장 수는 AI가 정하므로 설정에 장 수 고르기가 없다.
+    expect(screen.queryByLabelText("캐러셀 장수")).not.toBeInTheDocument();
+    expect(screen.getByText(/AI가 내용에 맞춰 4~9장으로 정해요/)).toBeInTheDocument();
     expect(screen.queryByDisplayValue(/sk-/)).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("캐러셀 장수"), { target:{ value:"3" } });
+    const length=screen.getByLabelText("문안 길이") as HTMLSelectElement;
+    const recommended=length.value;
+    fireEvent.change(length, { target:{ value:[...length.options].find(option=>option.value!==recommended)!.value } });
     fireEvent.click(screen.getByRole("button", { name:"권장값으로 되돌리기" }));
-    expect(screen.getByLabelText("캐러셀 장수")).toHaveValue("5");
+    expect(screen.getByLabelText("문안 길이")).toHaveValue(recommended);
   });
 
   it("shows only the brand kit and keeps technical settings inside a closed 관리자용 설정", () => {
@@ -26,7 +29,7 @@ describe("SettingsForm", () => {
     render(<SettingsForm onSave={onSave} adminCards={<p>저장소 점검 카드</p>}/>);
     const admin=screen.getByText("관리자용 설정").closest("details")!;
     expect(admin).not.toHaveAttribute("open");
-    for(const label of ["문안 AI","이미지 AI","OpenAI 이미지 품질","문안 길이","캐러셀 장수","원격 누끼 사용"])expect(admin).toContainElement(screen.getByLabelText(label));
+    for(const label of ["문안 AI","이미지 AI","OpenAI 이미지 품질","문안 길이","원격 누끼 사용"])expect(admin).toContainElement(screen.getByLabelText(label));
     expect(admin).toContainElement(screen.getByText("저장소 점검 카드"));
     expect(admin).toContainElement(screen.getByText(/Gemini (키 설정됨|키 필요)/));
     // 브랜드 키트(계정·로고)는 접지 않고 보인다. 계정만 고쳐 저장해도 다른 설정은 그대로 간다.
