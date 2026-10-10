@@ -239,8 +239,10 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
 // 갈래 게시물의 장 수: 고정하지 않고 전할 이유 수에 맞춰 AI가 정한다(사장님 요청 2026-10-09). role은 앱이 위치에 맞게 다시 붙인다(planRepair).
 function trackCountRule():string {
   const {min,max}=TRACK_SLIDE_RANGE;
-  const examples=[min,6,max].map(count=>`${count}장이면 ${rolesForCount(count).join(" → ")}`).join(", ");
-  return `slideCount는 ${min}~${max} 중에서 이 주제를 빠짐없이 전하는 데 필요한 만큼 정하세요: 표지 1장 + 표지 질문에 답하는 이유 장(이유 하나에 한 장, ${min-2}~${max-2}장) + 결론 1장입니다. 먼저 표지 질문에 답할 서로 다른 이유가 몇 개인지 세고, 그 수에 맞추세요. 이유가 둘이면 ${min}장이면 충분하고, 장 수를 채우려고 한 이유를 쪼개거나 같은 말을 되풀이하지 마세요. slides 개수는 slideCount와 같아야 하고, role 순서는 장 수에 맞춰 쓰세요(${examples}).`;
+  // 예시는 흔한 장 수(5~7장)만 보여 준다. 예전에는 가장 적은 장 수(4장)를 맨 앞에 두고 "이유가 둘이면 4장이면 충분"을 강조해서
+  // AI가 늘 4장(+홍보 카드 = 5장)만 골랐다(사장님 지적 2026-10-10).
+  const examples=[5,6,7].map(count=>`${count}장이면 ${rolesForCount(count).join(" → ")}`).join(", ");
+  return `slideCount는 ${min}~${max} 중에서 이 주제를 빠짐없이 전하는 데 필요한 만큼 정하세요: 표지 1장 + 이유 장(이유 하나에 한 장) + 결론 1장입니다. 먼저 표지 notes에 표지 질문에 답할 이유를 서로 다른 관점(원리·과학, 감각·느끼는 이유, 식문화·유래, 비슷한 것과의 차이, 바로 써먹을 정보·먹는 법)에서 모두 찾아 적고, 그 수에 맞춰 장을 만드세요. 이런 질문의 이유는 보통 3~5개이고 둘뿐인 경우는 드뭅니다. 관점마다 이유가 하나씩 나오는지 꼼꼼히 찾아보고, 찾은 이유를 장 수가 늘어난다고 빼지 마세요. 다만 한 이유를 쪼개거나 같은 말을 되풀이해서 장을 늘리지는 마세요. slides 개수는 slideCount와 같아야 하고, role 순서는 장 수에 맞춰 쓰세요(${examples}; 4·8·9장도 같은 방식으로 표지 → 본문 → visit).`;
 }
 
 // 실제 사진 캐러셀이면 사진에 보이는 것을 알려 주고, 사진으로 보여 줄 수 있는 글을 쓰게 한다. 사진 내용을 모르면 빈 문자열.

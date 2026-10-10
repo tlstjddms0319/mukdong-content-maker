@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { CarouselPlanSchema, createFallbackCarouselPlan, rolesForCount, slideCountFits } from "@/features/images/carousel";
+import { CarouselPlanSchema, buildCarouselPlanPrompt, createFallbackCarouselPlan, rolesForCount, slideCountFits } from "@/features/images/carousel";
 import { plannedCount, deckComplete, type GenerationState } from "@/features/images/generationStore";
 import { repairPlanJson } from "@/features/images/planRepair";
 import { ImageBriefSchema } from "@/features/images/schema";
@@ -58,5 +58,14 @@ describe("slide count chosen per post", () => {
     // 역할 순서가 틀리면 여전히 막는다.
     const base=createFallbackCarouselPlan({topic:"홍어",slideCount:10});
     expect(ImageBriefSchema.safeParse({topic:"홍어",count:1,slide:{...base.slides[1],role:"visit"},slideIndex:2,slideTotal:6,styleAnchor:base.styleAnchor}).success).toBe(false);
+  });
+
+  // 예전 지시문은 가장 적은 장 수(4장)를 앞세워 AI가 늘 4장(+홍보 카드 = 5장)만 골랐다(사장님 지적 2026-10-10).
+  it("does not steer the AI to the smallest deck", () => {
+    const prompt=buildCarouselPlanPrompt({topic:"홍어는 왜 삭혀도 상하지 않을까?",track:"text"});
+    expect(prompt).toContain("slideCount는 4~9 중에서");
+    expect(prompt).toContain("보통 3~5개");
+    expect(prompt).not.toContain("이유가 둘이면");
+    expect(prompt).toContain("5장이면 cover");
   });
 });
