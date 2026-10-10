@@ -111,4 +111,13 @@ describe("explain reasons instead of promoting", () => {
     expect(applyTrack(plan,"text").slides[0].subline).toBe(plan.slides[0].subline);
     expect(slideCopyIssues(plan,"text").some(issue=>issue.slide===1&&issue.message.includes("'유혹'"))).toBe(true);
   });
+
+  // 사장님 지적(2026-10-10): 제목 "지방층이 묵은지의 산미를 부드럽게 감싸요" 아래 "홍어 한 점을 묵은지에 살짝 감싸요"(먹는 법).
+  it("flags a how-to point under a reason headline when the cover asks why", () => {
+    const base=createFallbackCarouselPlan({topic:"홍어는 왜 수육이랑 먹을까?",slideCount:5,track:"text"});
+    const plan:CarouselPlan={...base,slides:base.slides.map((slide,i)=>i===0?{...slide,headline:"홍어는 왜 수육이랑 먹을까?"}:i===2?{...slide,headline:"지방층이 묵은지 산미를 감싸요",points:["홍어 한 점을 묵은지에 살짝 감싸요"]}:slide)};
+    expect(slideCopyIssues(plan,"text").some(issue=>issue.slide===3&&issue.field==="points"&&issue.message.includes("먹는 법"))).toBe(true);
+    const reason:CarouselPlan={...plan,slides:plan.slides.map((slide,i)=>i===2?{...slide,points:["기름이 신맛을 부드럽게 해 줘요"]}:slide)};
+    expect(slideCopyIssues(reason,"text").some(issue=>issue.slide===3&&issue.field==="points"&&issue.message.includes("먹는 법"))).toBe(false);
+  });
 });

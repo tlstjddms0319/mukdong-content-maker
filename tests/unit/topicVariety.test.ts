@@ -17,16 +17,16 @@ const base={storeName:"묵동홍어마을",round:0,excludeTitles:[],avoidTitles:
 describe("topic variety", () => {
   // 정해진 구성(일상 질문 2개 + 홍어 질문 1개)은 없다. AI가 고른 순서(첫 번째가 가장 추천)를 그대로 살린다.
   it("keeps valid AI topics in the AI's order", () => {
-    const {topics,filled}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),makeMenu("과메기는 왜 겨울에 찾을까?"),makeJeon("국밥엔 왜 깍두기가 어울릴까?")],base);
+    const {topics,filled}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),makeMenu("과메기는 왜 겨울에 찾을까?"),makeJeon("미나리전엔 왜 초간장이 어울릴까?")],base);
     expect(filled).toBe(0);
-    expect(topics.map(topic=>topic.title)).toEqual(["홍어는 왜 겨울에 더 찾을까?","과메기는 왜 겨울에 찾을까?","국밥엔 왜 깍두기가 어울릴까?"]);
+    expect(topics.map(topic=>topic.title)).toEqual(["홍어는 왜 겨울에 더 찾을까?","과메기는 왜 겨울에 찾을까?","미나리전엔 왜 초간장이 어울릴까?"]);
   });
 
   // 홍어 자체를 다루는 주제는 갈래가 다르면 두 개까지(홍어 상식·과학 주제가 버려지지 않게), 세 개는 안 된다.
   it("allows two hongeo topics but not a whole set of them", () => {
-    const {topics,filled}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),make("굴은 왜 겨울에 맛있을까?"),make("국밥엔 왜 깍두기가 어울릴까?")],base);
+    const {topics,filled}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),make("홍어는 왜 찬 바다에서 맛이 들까?"),make("홍어엔 왜 깍두기도 어울릴까?")],base);
     expect(filled).toBe(1);
-    expect(topics.slice(0,2).map(topic=>topic.title)).toEqual(["홍어는 왜 겨울에 더 찾을까?","굴은 왜 겨울에 맛있을까?"]);
+    expect(topics.slice(0,2).map(topic=>topic.title)).toEqual(["홍어는 왜 겨울에 더 찾을까?","홍어는 왜 찬 바다에서 맛이 들까?"]);
     expect(topics[2].id.startsWith("fallback-")).toBe(true);
     expect(new Set(topics.map(topic=>topicMenu(topic)?.id)).size).toBe(2);
     expect(topics.some(isOtherMenuTopic)).toBe(true);
@@ -43,7 +43,8 @@ describe("topic variety", () => {
 
   it("keeps three valid topics even when none names hongeo", () => {
     // 예전에는 홍어 질문 칸을 채우려고 하나를 준비된 홍어 주제로 바꿨다.
-    const input=[makeMenu("굴은 왜 겨울에 맛있을까?"),make("국밥엔 왜 깍두기가 어울릴까?"),makeJeon("전은 왜 비 오는 날 생각날까?")];
+    const soup={...make("홍어애탕은 어떤 국물일까?"),summary:"회로만 알던 홍어를 뜨끈한 국물로 먹는 홍어애탕을 소개하고 재료는 사장님께 확인한 뒤 씁니다."};
+    const input=[makeMenu("과메기는 왜 겨울에 맛있을까?"),soup,makeJeon("미나리전은 왜 비 오는 날 생각날까?")];
     const {topics,filled}=assembleTopics(input,base);
     expect(filled).toBe(0);
     expect(topics.map(topic=>topic.title)).toEqual(input.map(topic=>topic.title));
@@ -65,9 +66,9 @@ describe("topic variety", () => {
   });
 
   it("fills only the topic that broke a rule instead of discarding all three", () => {
-    const {topics,filled}=assembleTopics([makeMenu("굴은 왜 겨울에 맛있을까?"),make("묵동홍어마을 국밥은 왜 맛있을까?"),make("전은 왜 비 오는 날 생각날까?")],base);
+    const {topics,filled}=assembleTopics([makeMenu("과메기는 왜 겨울에 맛있을까?"),make("묵동홍어마을 국밥은 왜 맛있을까?"),make("미나리전은 왜 비 오는 날 생각날까?")],base);
     expect(filled).toBe(1);
-    expect(topics.slice(0,2).map(topic=>topic.title)).toEqual(["굴은 왜 겨울에 맛있을까?","전은 왜 비 오는 날 생각날까?"]);
+    expect(topics.slice(0,2).map(topic=>topic.title)).toEqual(["과메기는 왜 겨울에 맛있을까?","미나리전은 왜 비 오는 날 생각날까?"]);
     expect(topics[2].id).toMatch(/^fallback-/);
   });
 
@@ -80,23 +81,23 @@ describe("topic variety", () => {
     expect(all.rejected).toEqual({recent:3});
     for(const title of recent)expect(all.topics.map(topic=>topic.title)).not.toContain(title);
     // 새 제목은 그대로 쓴다.
-    const mixed=assembleTopics([makeMenu(recent[0]),makeJeon("전은 왜 비 오는 날 생각날까?"),aetang],{...base,avoidTitles:recent});
-    expect(mixed.topics[0].title).toBe("전은 왜 비 오는 날 생각날까?");
+    const mixed=assembleTopics([makeMenu(recent[0]),makeJeon("미나리전은 왜 비 오는 날 생각날까?"),aetang],{...base,avoidTitles:recent});
+    expect(mixed.topics[0].title).toBe("미나리전은 왜 비 오는 날 생각날까?");
     // 지금 화면의 제목(excludeTitles)은 여전히 쓰지 않고, 그 이유를 센다.
-    const now=assembleTopics([makeMenu(recent[0]),makeJeon("전은 왜 비 오는 날 생각날까?"),{...aetang,title:"홍어애탕은 어떤 국물일까"}],{...base,excludeTitles:[recent[0]]});
+    const now=assembleTopics([makeMenu(recent[0]),makeJeon("미나리전은 왜 비 오는 날 생각날까?"),{...aetang,title:"홍어애탕은 어떤 국물일까"}],{...base,excludeTitles:[recent[0]]});
     expect(now.topics.map(topic=>topic.title)).not.toContain(recent[0]);
     expect(now.rejected).toEqual({current:1,question:1});
   });
 
   it("accepts a quoted question title and a menu named only in the title", () => {
-    const {filled}=assembleTopics([{...makeMenu("“과메기는 왜 겨울에 찾을까?”"),summary:"찬바람 부는 계절에 사람들이 찾는 이유를 출처를 확인해 설명하는 방향입니다."},makeJeon("전은 왜 비 오는 날 생각날까?"),make("홍어는 왜 삭혀 먹을까?")],base);
+    const {filled}=assembleTopics([{...makeMenu("“과메기는 왜 겨울에 찾을까?”"),summary:"찬바람 부는 계절에 사람들이 찾는 이유를 출처를 확인해 설명하는 방향입니다."},makeJeon("미나리전은 왜 비 오는 날 생각날까?"),make("홍어는 왜 삭혀 먹을까?")],base);
     expect(filled).toBe(0);
   });
 
   it("replaces a topic shown recently or already drafted", () => {
-    const {topics,filled}=assembleTopics([make("수육에는 왜 김치를 곁들일까?"),make("굴은 왜 겨울에 맛있을까?"),makeMenu("과메기는 왜 겨울에 찾을까?")],{...base,avoidTitles:["수육에는 왜 김치를 곁들일까?"]});
+    const {topics,filled}=assembleTopics([make("홍어에는 왜 김치를 곁들일까?"),make("홍어는 왜 찬 바다에서 맛이 들까?"),makeMenu("과메기는 왜 겨울에 찾을까?")],{...base,avoidTitles:["홍어에는 왜 김치를 곁들일까?"]});
     expect(filled).toBe(1);
-    expect(topics.map(topic=>topic.title)).not.toContain("수육에는 왜 김치를 곁들일까?");
+    expect(topics.map(topic=>topic.title)).not.toContain("홍어에는 왜 김치를 곁들일까?");
   });
 
   it("rotates the prepared topics away from the ones shown recently", () => {
@@ -108,10 +109,10 @@ describe("topic variety", () => {
 
   it("reports a partial fill and only falls back fully when nothing usable came back", async () => {
     const onFallback=vi.fn(),onPartial=vi.fn();
-    const whole=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("굴은 왜 겨울에 맛있을까?","1"),make("국밥엔 왜 깍두기가 어울릴까?","2"),makeJeon("전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
+    const whole=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("과메기는 왜 겨울에 맛있을까?","1"),make("홍어엔 왜 깍두기도 어울릴까?","2"),makeJeon("미나리전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
     expect(onPartial).not.toHaveBeenCalled();
     expect(whole.map(topic=>topic.id)).toEqual(["1","2","3"]);
-    const partial=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("굴은 왜 겨울에 맛있을까?","1"),{...make("국밥엔 왜 깍두기가 어울릴까?","2"),summary:"짧음"},make("전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
+    const partial=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("과메기는 왜 겨울에 맛있을까?","1"),{...make("홍어엔 왜 깍두기도 어울릴까?","2"),summary:"짧음"},make("미나리전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
     expect(onFallback).not.toHaveBeenCalled();
     expect(onPartial).toHaveBeenCalledWith(1);
     expect(partial.slice(0,2).map(topic=>topic.id)).toEqual(["1","3"]);
@@ -121,8 +122,8 @@ describe("topic variety", () => {
   });
 
   it("tells the AI which topics were recently shown", () => {
-    const prompt=buildTopicPrompt({storeName:"묵동홍어마을",avoidTitles:["수육에는 왜 김치를 곁들일까?"]});
-    expect(prompt).toContain('"recentTitles":["수육에는 왜 김치를 곁들일까?"]');
+    const prompt=buildTopicPrompt({storeName:"묵동홍어마을",avoidTitles:["홍어에는 왜 김치를 곁들일까?"]});
+    expect(prompt).toContain('"recentTitles":["홍어에는 왜 김치를 곁들일까?"]');
     expect(buildTopicPrompt({storeName:"묵동홍어마을"})).not.toContain('"recentTitles"');
   });
 
@@ -169,13 +170,13 @@ describe("topic variety", () => {
     const season=seasonContext(new Date("2026-10-07T12:00:00+09:00"));
     const topics=fallbackTopics(0,[],season,[],{trends:["과메기"]});
     expect(topics.filter(topic=>topic.trend==="과메기").length).toBe(1);
-    const labeled=normalizeTrendLabels([{...makeMenu("과메기는 왜 겨울에 찾을까?"),trend:"과메기"},{...make("국밥엔 왜 깍두기가 어울릴까?"),trend:"과메기"},{...make("굴은 언제 맛있을까?"),trend:"굴"}],["과메기"]);
+    const labeled=normalizeTrendLabels([{...makeMenu("과메기는 왜 겨울에 찾을까?"),trend:"과메기"},{...make("홍어엔 왜 깍두기도 어울릴까?"),trend:"과메기"},{...make("굴은 언제 맛있을까?"),trend:"굴"}],["과메기"]);
     expect(labeled.map(topic=>topic.trend)).toEqual(["과메기","",""]);
   });
 
   it("moves season and search topics to the front, keeping the AI order otherwise", () => {
-    const {topics}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),makeJeon("국밥엔 왜 깍두기가 어울릴까?"),{...makeMenu("과메기는 왜 겨울에 찾을까?"),trend:"과메기"}],base);
-    expect(topics.map(topic=>topic.title)).toEqual(["과메기는 왜 겨울에 찾을까?","홍어는 왜 겨울에 더 찾을까?","국밥엔 왜 깍두기가 어울릴까?"]);
+    const {topics}=assembleTopics([make("홍어는 왜 겨울에 더 찾을까?"),makeJeon("미나리전엔 왜 초간장이 어울릴까?"),{...makeMenu("과메기는 왜 겨울에 찾을까?"),trend:"과메기"}],base);
+    expect(topics.map(topic=>topic.title)).toEqual(["과메기는 왜 겨울에 찾을까?","홍어는 왜 겨울에 더 찾을까?","미나리전엔 왜 초간장이 어울릴까?"]);
   });
 
   it("uses every rising search word that leads to a menu in prepared topics (no one-topic cap)", () => {
@@ -325,5 +326,13 @@ describe("topic answers from the AI that are partly wrong", () => {
     expect(normalizeTrendLabels([oyster],["굴"])[0].trend).toBe("굴");
     const face={...make("홍어를 처음 먹을 때 왜 얼굴을 찡그릴까?"),summary:"홍어회의 톡 쏘는 향을 사례로 설명하고 본문 작성 전 확인할 정보를 적습니다.",trend:"굴"};
     expect(normalizeTrendLabels([face],["굴"])[0].trend).toBe("");
+  });
+
+  // 사장님 지적(2026-10-10): 제목은 "김장철 수육은 왜 김치와 짝꿍일까?"처럼 홍어와 상관없는데 설명에 삼합을 붙인 주제가 통과했다.
+  it("rejects a topic whose title names neither hongeo nor a store menu", () => {
+    const forced={...make("김장철 수육은 왜 김치와 떨어질 수 없는 짝꿍일까?"),summary:"김장철 수육과 김치의 조합에서 출발해 홍어를 더한 삼합으로 이어지는 방향입니다."};
+    const {topics,rejected}=assembleTopics([forced,makeMenu("과메기는 왜 겨울에 찾을까?"),makeJeon("미나리전은 왜 비 오는 날 생각날까?")],base);
+    expect(topics.map(topic=>topic.title)).not.toContain(forced.title);
+    expect(rejected).toEqual({menu:1});
   });
 });
