@@ -168,19 +168,35 @@ describe("Higgsfield image generation",()=>{
   });
 
   // 사장님 화면(2026-10-10): "작업 실패 (코드 503)"이 이어졌다. 예전에는 503이면 Grok으로 넘어가지 않고 바로 실패했다.
-  it("tries Grok Image 2.0 when Nano Banana Pro answers 503 busy",async()=>{
+  // 이제는 같은 모델로 한 번 더 시도하고, 그래도 바쁘면 Grok으로 넘어간다.
+  it("retries Nano Banana Pro once on 503, then tries Grok Image 2.0",async()=>{
     vi.stubEnv("HF_IMAGE_MODEL","");
     const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
-    const { generateHiggsfieldImages,resetHiggsfieldModelSkips }=await import("@/features/images/higgsfieldRequest");
-    resetHiggsfieldModelSkips();
+    const { generateHiggsfieldImages,resetHiggsfieldModelSkips,setHiggsfieldBusyRetryForTests }=await import("@/features/images/higgsfieldRequest");
+    resetHiggsfieldModelSkips();setHiggsfieldBusyRetryForTests(0);
+    let nano=0;
     vi.stubGlobal("fetch",vi.fn(async(url:string)=>{
-      if(url.endsWith("/nano-banana-pro"))return json({detail:"Service Unavailable"},503);
+      if(url.endsWith("/nano-banana-pro")){nano++;return json({detail:"Service Unavailable"},503);}
       if(url.endsWith("/xai/grok-imagine-image-2.0"))return json({status:"completed",request_id:"g2",images:[{url:"https://cdn.example.com/g2.png"}]});
       if(url==="https://cdn.example.com/g2.png")return new Response(new Uint8Array(png));
       throw new Error(`unexpected ${url}`);
     }));
     const [image]=await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"});
     expect(image.startsWith("data:image/jpeg")).toBe(true);
+    expect(nano).toBe(2);
+    warn.mockRestore();
+  });
+
+  it("keeps the Higgsfield answer and the model in the error so the cause can be seen",async()=>{
+    vi.stubEnv("HF_IMAGE_MODEL","");
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const { generateHiggsfieldImages,resetHiggsfieldModelSkips,setHiggsfieldBusyRetryForTests }=await import("@/features/images/higgsfieldRequest");
+    resetHiggsfieldModelSkips();setHiggsfieldBusyRetryForTests(0);
+    vi.stubGlobal("fetch",vi.fn(async()=>json({detail:"The model is overloaded. Please try again later."},503)));
+    const failure=await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"}).catch(error=>error);
+    expect(failure).toMatchObject({status:503});
+    expect(failure.detail).toContain("Grok Image 2.0 503");
+    expect(failure.detail).toContain("overloaded");
     warn.mockRestore();
   });
 

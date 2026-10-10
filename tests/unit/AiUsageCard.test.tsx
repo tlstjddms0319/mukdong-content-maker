@@ -28,10 +28,10 @@ describe("AI usage card", () => {
   it("shows why image generation failed", async () => {
     const now=new Date().toISOString();
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({usage:{month:"2026-10",today:"2026-10-10",groq:null,providers:[
-      stat("higgsfield",0,14,{month:counter(14,{failures:88}),lastError:{at:now,status:504,reason:"timeout"},reasons:{rejected:20,timeout:60,failed:8}}),
+      stat("higgsfield",0,14,{month:counter(14,{failures:88}),lastError:{at:now,status:503,reason:"failed",detail:"Grok Image 2.0 503 POST /xai/grok-imagine-image-2.0: overloaded"},reasons:{rejected:20,timeout:60,failed:8}}),
     ]},cutout:null})})));
     render(<AiUsageCard connections={{gemini:false,groq:false,cloudflare:false,openai:false,higgsfield:true}}/>);
     expect(await screen.findByText(/실패 이유: 시간 초과 60, 모델이 요청 거절 20, 작업 실패 8\. 마지막 실패 오늘/)).toBeInTheDocument();
-    expect(screen.getByText(/코드 504/)).toBeInTheDocument();
+    expect(screen.getByText(/코드 503\) — Grok Image 2.0 503 POST/)).toBeInTheDocument();
   });
 });
