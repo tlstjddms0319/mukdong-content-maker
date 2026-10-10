@@ -10,6 +10,7 @@ vi.mock("@/features/instagram/schedulerRuntime",()=>({
   SchedulerConfigurationError:class SchedulerConfigurationError extends Error{},
 }));
 vi.mock("server-only",()=>({}));
+vi.mock("@/features/notifications/runtime",()=>({runNotificationCheck:vi.fn(async()=>({sent:[]}))}));
 
 import { POST } from "@/app/api/instagram/scheduler/route";
 
