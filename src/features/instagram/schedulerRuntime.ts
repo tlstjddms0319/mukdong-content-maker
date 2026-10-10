@@ -2,6 +2,7 @@ import { createDraftRepository } from "@/features/drafts/repository";
 import { createInstagramRepository } from "./repository";
 import { instagramPublishingClient, refreshInstagramToken } from "./metaClient";
 import { runPublishScheduler, type SchedulerRun } from "./scheduler";
+import { runNotificationCheck } from "@/features/notifications/runtime";
 
 // 실제 저장소·Meta 클라이언트·환경변수를 묶어 스케줄러를 한 번 돌린다. 라우트와 서버 내부 타이머가 함께 쓴다.
 export class SchedulerConfigurationError extends Error {}
@@ -33,6 +34,8 @@ export function startPublishSchedulerLoop(intervalSeconds=Number(process.env.INS
     try{
       const run=await runScheduledPublishing();
       if(run.due.length)console.info(`[instagram] 예약 게시 점검: 대상 ${run.due.length}, 게시 ${run.published.length}, 건너뜀 ${run.skipped.length}, 실패 ${run.failed.length}`);
+      // 게시됨·실패는 바로 휴대폰으로 알린다(알림을 켠 기기가 있을 때만 보낸다).
+      if(run.published.length||run.failed.length)await runNotificationCheck({run}).catch(error=>console.warn("[notifications] 게시 결과 알림 실패:",error instanceof Error?error.message:String(error)));
     }catch(error){
       if(!(error instanceof SchedulerConfigurationError))console.warn("[instagram] 예약 게시 점검 실패:",error instanceof Error?error.message:String(error));
     }finally{running=false;}
