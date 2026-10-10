@@ -185,17 +185,34 @@ export function ellipsize(value:string,max:number):string {
 }
 const fitHeadline=(value:string,max:number)=>cleanCut(value,max)??ellipsize(value,max);
 
+// 결론 장 제목이 넘칠 때: "이유 마디 + 결론"으로 쓴 문장이면 이유 마디를 덜고 결론(뒷부분)만 남긴다.
+// 사장님 화면(2026-10-10): "산미와 탄산이 전 요리의 느끼함을 잡아주어 배다리 막걸리가 잘 어울려요"가 앞에서 잘려
+// "…잡아주어 배다리 막걸리가…"로 끝나 답이 사라졌다. 이유는 앞 장들이 이미 말했으므로 결론 장은 답만 남겨도 뜻이 선다.
+// 마디를 잇는 어미(~주어·~어서·~니까·~므로·~고·~면 …) 바로 뒤에서 시작하는 뒷부분 가운데 가장 긴 것(8자 이상). 없으면 null.
+const CONNECTIVE=/(?:[,，]|주어|줘서|아서|어서|해서|라서|니까|므로|으니|기에|고|면|며|는데|지만)$/;
+export function conclusionTail(value:string,max:number):string|null {
+  const words=tidy(value).split(" ");
+  for(let i=1;i<words.length;i++){
+    if(!CONNECTIVE.test(words[i-1])||startsBadly(words[i-1],words[i]))continue;
+    const tail=words.slice(i).join(" ");
+    if(tail.length<=max&&tail.length>=8)return tail;
+  }
+  return null;
+}
+
 // 장 하나의 글을 갈래 규칙에 맞춘다. 카드에 들어가는 길이면 문장을 그대로 둔다.
 //   제목: 넘치면 깔끔하게 줄이고(cleanCut), 안 되면 "…"로 줄인다.
 //   짧은 글: 넘치면 깔끔하게 줄이고, 안 되면 그 짧은 글을 뺀다(반쪽 문장을 찍지 않는다). 개수는 갈래 개수까지.
 // 여러 번 불러도 결과가 같다(이미 맞는 글은 그대로).
-export function fitTrackCopy(slide:CarouselSlidePlan,track:CarouselTrack):Pick<CarouselSlidePlan,"headline"|"subline"|"points"> {
+export function fitTrackCopy(slide:CarouselSlidePlan,track:CarouselTrack,options:{conclusion?:boolean}={}):Pick<CarouselSlidePlan,"headline"|"subline"|"points"> {
   if(slide.role==="cover"){
     const rule=TRACK_FIT.cover;
     const subline=tidy(slide.subline??"");
     return {headline:fitHeadline(slide.headline,rule.headline),subline:cleanCut(subline,rule.subline)??"",points:[]};
   }
-  const headline=fitHeadline(slide.headline,TRACK_FIT[track].headline);
+  const max=TRACK_FIT[track].headline;
+  // 결론 장은 "…"로 답을 자르기 전에 이유 마디를 덜어 답만 남겨 본다.
+  const headline=options.conclusion?cleanCut(slide.headline,max)??conclusionTail(slide.headline,max)??ellipsize(slide.headline,max):fitHeadline(slide.headline,max);
   const candidates=(slide.points??[]).map(tidy).filter(point=>point.length>=2&&!same(point,headline))
     .filter((point,i,list)=>list.findIndex(other=>same(other,point))===i);
   // 두 개를 넣을 자리로 먼저 맞춰 보고, 하나만 남으면 하나일 때의 자리로 다시 맞춘다(글 중심 한 줄 제목은 하나면 더 길게 들어간다).
@@ -211,8 +228,9 @@ export function fitTrackCopy(slide:CarouselSlidePlan,track:CarouselTrack):Pick<C
 // copy:false면 글은 건드리지 않는다: AI 구성안은 검수 AI가 원래 문장을 보고 고치게 하고, 글 맞추기는 마지막에 한 번만 한다(B-2).
 export function applyTrack(plan:CarouselPlan,track:CarouselTrack,options:{copy?:boolean}={}):CarouselPlan {
   const copy=options.copy??true;
-  const slides:CarouselPlan["slides"]=plan.slides.map(slide=>({
-    ...slide,...(copy?fitTrackCopy(slide,track):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
+  const last=plan.slides.length-1;
+  const slides:CarouselPlan["slides"]=plan.slides.map((slide,i)=>({
+    ...slide,...(copy?fitTrackCopy(slide,track,{conclusion:i===last&&i>0}):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
   }));
   const cover=plan.slides[0];
   return {...plan,design:trackDesign(track,paletteForTopic(`${cover?.headline??""} ${cover?.subline??""}`)),slides:copy?withReasonCount(withClosingInvite(slides,track)):slides};
