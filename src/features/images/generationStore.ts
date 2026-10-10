@@ -639,7 +639,7 @@ export async function reviseSlideText(index:number,request:string):Promise<{ok:t
   try{
     const response=await fetch("/api/images/slide/revise",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
       topic:state.input.topic,headline:slide.headline,points:slide.points,request:ask,
-      previous:plan.slides[index-1]?.headline??"",next:plan.slides[index+1]?.headline??"",cover:index===0,...(index>0?{question:plan.slides[0]?.headline.slice(0,120)??""}:{}),...(state.input.track?{track:state.input.track}:{}),
+      previous:plan.slides[index-1]?.headline??"",next:plan.slides[index+1]?.headline??"",cover:index===0,...(index>0?{question:plan.slides[0]?.headline.slice(0,120)??""}:{}),...(slide.notes?{notes:slide.notes}:{}),...(state.input.track?{track:state.input.track}:{}),
     })});
     const data=await readJsonResponse(response);
     if(!response.ok||typeof data.headline!=="string"||!Array.isArray(data.points))throw new Error(data.message||"글을 고치지 못했어요.");
@@ -714,7 +714,7 @@ function newSlidePlan(input:NewSlide&{visualPrompt?:string;keywords?:string[]},a
   const headline=input.headline.trim();
   const layout:CarouselPlan["slides"][number]["layout"]=input.source==="text"?"checklist":"frame";
   return {
-    role:"detail",headline,subline:"",points:input.points.map(point=>point.trim()).filter(Boolean),
+    role:"detail",notes:"",headline,subline:"",points:input.points.map(point=>point.trim()).filter(Boolean),
     // 이미지 AI로 만들 때 쓰는 장면 설명. 제목과 주제로 짓는다(12자 이상).
     visualPrompt:(input.visualPrompt??`${headline} — ${state.input.topic} 장면, 묵동홍어마을의 한 상. 얼굴 없음`).slice(0,600),
     textPosition:"bottom",layout,keywords:input.keywords??[],figure:"",
@@ -936,7 +936,7 @@ export async function createAutomatically(meta:DraftMeta){
     patchAuto({stage:"writing"});
     let caption="",captionSaved=false,copyError="";
     try{
-      caption=await writePostText({topic:meta.topic,audience:meta.audience,contentBrief:meta.contentBrief||undefined,imageBrief:meta.imageBrief||undefined,hasAiImages:hasAi(images),slideOutline:state.plan?.slides.map(slide=>slide.headline),photoNotes:deckPhotoNotes(state)});
+      caption=await writePostText({topic:meta.topic,audience:meta.audience,contentBrief:meta.contentBrief||undefined,imageBrief:meta.imageBrief||undefined,hasAiImages:hasAi(images),slideOutline:state.plan?.slides.map(slide=>slide.headline),slideNotes:state.plan?.slides.map(slide=>slide.notes??""),photoNotes:deckPhotoNotes(state)});
       await saveDraftCaption(meta.id,caption);captionSaved=true;
     }catch(error){copyError=error instanceof Error?error.message:"글을 쓰지 못했어요. '글 다시 쓰기'를 눌러 주세요.";}
     if(!alive())return;

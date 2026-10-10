@@ -12,7 +12,8 @@ export const ImageBriefSchema = z.object({
   imageStyle:ImageStyleSchema.optional(),
   slideLayout:SlideLayoutSchema.optional(),
   refinement:z.string().trim().min(1).max(300).optional(),
-  slide:CarouselSlidePlanSchema.optional(),
+  // 그림 요청에는 속 글(notes)이 필요 없다(카드에 안 나오고 요청만 커진다).
+  slide:CarouselSlidePlanSchema.omit({notes:true}).optional(),
   slideIndex:z.number().int().min(1).max(10).optional(),
   // 전체 장 수. AI 구성안은 3~10장(갈래 게시물은 AI가 4~9장 중 정함)이고, 초안을 고치며 장을 빼거나 넣으면 1~10장 아무 수나 된다(deckEdited).
   slideTotal:z.number().int().min(1).max(10).optional(),

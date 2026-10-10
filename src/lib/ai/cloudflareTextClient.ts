@@ -39,7 +39,8 @@ export function createCloudflareTextClient(options: { accountId?:string; token?:
         body:JSON.stringify({
           messages:[{ role:"system", content:"요청한 JSON 스키마에 맞는 JSON만 출력하세요. 설명이나 마크다운을 붙이지 마세요." }, { role:"user", content:prompt }],
           response_format:{ type:"json_schema", json_schema:toStrictJsonSchema(schema) },
-          max_tokens:4096,
+          // 구성안에 장마다 속 글(notes)이 들어가 답이 길어졌다(최대 9장). 4096이면 끝이 잘려 JSON이 깨질 수 있다.
+          max_tokens:8192,
         }),
       }));
       if (!response.ok) throw new TextAiHttpError("Cloudflare", response.status);

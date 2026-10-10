@@ -259,7 +259,7 @@ export function DraftWizard() {
     setWriting(true);setCopyError("");
     try{
       const current=generation.key===`${writingDraftId}|${SLIDES}`?generation:null;
-      const text=await writePostText({topic:input.topic,audience:input.audience,contentBrief:input.contentBrief||undefined,imageBrief:input.imageBrief||undefined,hasAiImages:hasAiImages(withImages),slideOutline:current?.plan?.slides.map(slide=>slide.headline),photoNotes:current?deckPhotoNotes(current):undefined});
+      const text=await writePostText({topic:input.topic,audience:input.audience,contentBrief:input.contentBrief||undefined,imageBrief:input.imageBrief||undefined,hasAiImages:hasAiImages(withImages),slideOutline:current?.plan?.slides.map(slide=>slide.headline),slideNotes:current?.plan?.slides.map(slide=>slide.notes??""),photoNotes:current?deckPhotoNotes(current):undefined});
       if(draftIdRef.current!==writingDraftId)return;
       setCaption(text);
       await saveCaption(text);
