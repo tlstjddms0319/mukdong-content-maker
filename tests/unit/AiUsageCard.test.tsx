@@ -24,4 +24,14 @@ describe("AI usage card", () => {
     expect(screen.queryByText("OpenAI 이미지")).not.toBeInTheDocument();
     expect(screen.getAllByRole("link",{name:/AI Studio 사용량 열기/})[0]).toHaveAttribute("href","https://aistudio.google.com/usage");
   });
+
+  it("shows why image generation failed", async () => {
+    const now=new Date().toISOString();
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({usage:{month:"2026-10",today:"2026-10-10",groq:null,providers:[
+      stat("higgsfield",0,14,{month:counter(14,{failures:88}),lastError:{at:now,status:504,reason:"timeout"},reasons:{rejected:20,timeout:60,failed:8}}),
+    ]},cutout:null})})));
+    render(<AiUsageCard connections={{gemini:false,groq:false,cloudflare:false,openai:false,higgsfield:true}}/>);
+    expect(await screen.findByText(/실패 이유: 시간 초과 60, 모델이 요청 거절 20, 작업 실패 8\. 마지막 실패 오늘/)).toBeInTheDocument();
+    expect(screen.getByText(/코드 504/)).toBeInTheDocument();
+  });
 });

@@ -94,6 +94,9 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
       if(sideTurn)add(n,"headline",`표지가 "${cover.trim()}"라고 묻는데 이 장 제목은 표지에 없는 '${sideTurn}' 이야기예요. 표지 질문의 이유 하나를 답하는 제목으로 바꾸세요.`);
       if(VAGUE_REASON.test(headline))add(n,"headline","'조화롭게 잡아줘요'·'정돈해줘요'처럼 결과만 말하는 막연한 제목이에요. 무엇이 무엇을 어떻게 바꾸는지(이유) 쓰세요.");
       for(const point of slide.points)if(VAGUE_REASON.test(point))add(n,"points",`요점 '${point.trim()}'이 결과만 말하고 이유가 없어요. 무엇이 어떻게 작용하는지 쓰세요.`);
+      // 표지가 "왜"를 묻는데 요점이 먹는 법이면 제목과 따로 논다(사장님 지적 2026-10-10: 제목 "지방층이 묵은지의 산미를 감싸요" 아래
+      // "홍어 한 점을 묵은지에 살짝 감싸요"). 먹는 법은 속 글(notes)·올릴 글로 보내고, 요점은 제목의 이유·근거로 쓴다.
+      for(const point of slide.points)if(ASKS_WHY.test(cover)&&HOW_TO.test(point)&&!GIVES_REASON.test(point)&&i<plan.slides.length-1)add(n,"points",`요점 '${point.trim()}'은 먹는 법이라 제목과 따로 놀아요. 제목을 뒷받침하는 이유·근거로 바꾸세요.`);
       for(const point of slide.points){
         const fresh=SIDE_SUBJECTS.find(word=>point.includes(word)&&!headline.includes(word)&&!cover.includes(word));
         if(fresh)add(n,"points",`요점 '${point.trim()}'이 제목·표지에 없는 '${fresh}' 이야기를 꺼내요. 이 장 제목을 뒷받침하는 내용만 쓰세요.`);

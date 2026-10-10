@@ -77,12 +77,12 @@ export function topicAnglesForRound(round:number):string[] {
 // 회차마다 권하는 갈래 3개를 돌려 "다른 주제 보기"마다 결이 다른 질문이 나오게 한다. 이번 시기·요즘 검색은 따로 다룬다.
 export const TOPIC_FAMILIES=[
   {id:"myth",name:"홍어 상식·오해 풀기",example:"홍어는 왜 삭혀도 상하지 않을까?"},
-  {id:"science",name:"맛·향의 과학",example:"톡 쏘는 향은 왜 코로 먼저 올라올까?"},
+  {id:"science",name:"맛·향의 과학",example:"홍어의 톡 쏘는 향은 왜 코로 먼저 올라올까?"},
   {id:"culture",name:"식문화·유래·지역",example:"전라도 잔칫상엔 왜 홍어가 빠지지 않을까?"},
   {id:"compare",name:"비교·차이",example:"홍어와 가오리는 어떻게 구별할까?"},
   {id:"first",name:"처음 먹는 사람·먹는 법",example:"홍어 처음이면 어느 부위부터 먹을까?"},
   {id:"pairing",name:"술·곁들임 짝꿍",example:"막걸리 말고 홍어엔 어떤 술이 맞을까?"},
-  {id:"scene",name:"모임·상황(회식·부모님·데이트)",example:"부모님 모시고 갈 땐 어떤 메뉴가 편할까?"},
+  {id:"scene",name:"모임·상황(회식·부모님·데이트)",example:"부모님과 홍어집에 가면 어떤 메뉴가 편할까?"},
   {id:"store",name:"가게·동네·사람 이야기",example:"홍어집은 왜 같은 홍어도 썰 때 두께를 달리할까?"},
 ] as const;
 export function topicFamiliesForRound(round:number):string[] {
@@ -233,8 +233,12 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   const fits=(list:readonly TopicSuggestion[],topic:TopicSuggestion)=>photoMode||fitsWith(list,topic);
   // 사진으로 주제 정하기에서는 사진 속 메뉴를 다루지 않는 AI 주제를 받지 않는다(사진과 상관없는 주제가 "사진을 보고 고른 주제"로 나오지 않게).
   const aboutPhoto=(topic:TopicSuggestion)=>!photoMode||menuOf(`${topic.title} ${topic.summary}`).some(item=>options.hints!.photoMenus!.has(item.id));
+  // 제목에 홍어나 가게 메뉴가 직접 나와야 한다. 예전에는 제목+설명을 함께 봐서, 제목은 "김장철 수육은 왜 김치와 짝꿍일까?"처럼
+  // 홍어와 상관없는데 설명에 "삼합으로 이어진다"를 붙인 주제가 통과했고, 구성안이 홍어를 억지로 끼워 넣었다(사장님 지적 2026-10-10).
+  // 사진으로 정하는 주제는 사진 속 메뉴 검사(aboutPhoto)가 따로 있다.
+  const titled=(topic:TopicSuggestion)=>photoMode||menuOf(topic.title).length>0;
   const problem=(topic:TopicSuggestion):TopicRejectReason|undefined=>basicsProblem(topic,options.storeName)
-    ??(!aboutPhoto(topic)?"photo":onScreen(topic)?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
+    ??(!titled(topic)?"menu":!aboutPhoto(topic)?"photo":onScreen(topic)?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
   // 최근에 보여 준 주제(말만 바꾼 것 포함)는 다시 쓰지 않는다. 예전에는 자리가 남으면 "준비된 주제보다 낫다"며 다시 써서
   // "다른 주제 보기"를 눌러도 같은 주제가 돌아왔다(사장님 지적 2026-10-10). 빈자리는 최근에 안 보인 준비된 주제로 채운다.
   for(const topic of suggestions){

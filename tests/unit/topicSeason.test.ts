@@ -48,9 +48,9 @@ describe("seasonal topics", () => {
   });
 
   it("keeps only season labels that match this period", async () => {
-    const make=(season:string,index:number)=>({id:`ai-${index}`,title:["김장날엔 왜 수육을 삶을까?","같은 회인데 왜 식감은 다를까?","홍어는 왜 수육이랑 먹을까?"][index],summary:"익숙한 장면에서 시작해 홍어를 구체적인 사례로 연결하는 설명 방향입니다.",reason:"이유",audience:"A" as const,imageBrief:"사진",season});
+    const make=(season:string,index:number)=>({id:`ai-${index}`,title:["김장날엔 왜 홍어를 곁들일까?","같은 회인데 왜 식감은 다를까?","홍어는 왜 수육이랑 먹을까?"][index],summary:"익숙한 장면에서 시작해 홍어를 구체적인 사례로 연결하는 설명 방향입니다.",reason:"이유",audience:"A" as const,imageBrief:"사진",season});
     const result=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[make("김장철",0),make("크리스마스",1),make("",2)]},undefined,seasonContext(kst("2026-11-20")));
-    // 같은 메뉴(홍어회)라 2·3번째는 준비된 주제로 바뀌고, 그 주제에는 제철 메뉴면 이번 계절("가을")이 붙는다.
+    // 2번째는 제목에 홍어·가게 메뉴가 없어(주제 제목 규칙) 준비된 주제로 바뀌고, 그 주제에는 제철 메뉴면 이번 계절("가을")이 붙는다.
     expect(result[0].season).toBe("김장철");
     expect(result.every(topic=>["김장철","가을",""].includes(topic.season))).toBe(true);
   });

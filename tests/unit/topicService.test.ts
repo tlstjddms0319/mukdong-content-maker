@@ -12,7 +12,7 @@ describe("topic service", () => {
   });
   it("uses valid Gemini suggestions when connected", async () => {
     const topics = Array.from({ length:3 }, (_, index) => ({
-      id:`gemini-${index}`, title:["미나리전엔 왜 막걸리가 생각날까?","같은 회인데 왜 식감은 다를까?","홍어애탕은 어떤 국물일까?"][index], summary:index===0?"비 오는 날 미나리전과 배다리 막걸리를 곁들이는 장면에서 시작해 어울리는 이유를 단정하지 않고 소개한다.":"익숙한 음식의 맛과 식감에 대한 질문에 답하고 홍어를 구체적인 사례로 연결한다.", reason:"이유", audience:(['A','B','C'] as const)[index], imageBrief:"음식 사진",
+      id:`gemini-${index}`, title:["미나리전엔 왜 막걸리가 생각날까?","같은 홍어회인데 왜 식감은 다를까?","홍어애탕은 어떤 국물일까?"][index], summary:index===0?"비 오는 날 미나리전과 배다리 막걸리를 곁들이는 장면에서 시작해 어울리는 이유를 단정하지 않고 소개한다.":"익숙한 음식의 맛과 식감에 대한 질문에 답하고 홍어를 구체적인 사례로 연결한다.", reason:"이유", audience:(['A','B','C'] as const)[index], imageBrief:"음식 사진",
     }));
     await expect(suggestTopics(input, { suggest:async () => topics })).resolves.toEqual(topics.map(topic=>({...topic,season:"",trend:""})));
   });
