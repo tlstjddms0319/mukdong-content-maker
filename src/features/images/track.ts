@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CarouselPlan, CarouselRole, CarouselSlidePlan } from "./carousel";
 import { DEFAULT_DESIGN, type CardLayout, type DesignSpec, type PaletteId } from "./design";
 import type { StyleId } from "./styleCatalog";
-import { CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, STORY_ARC_RULE, closingInvite } from "@/features/copy/explain";
+import { CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, QUESTION_FOCUS_RULE, STORY_ARC_RULE, closingInvite } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 갈래(계획서 SIMPLIFY_PLAN): 사장님은 "사진 중심 / 글 중심" 둘 중 하나만 고르고, 나머지는 갈래가 정한다.
@@ -257,6 +257,7 @@ export function trackPromptRules(track:CarouselTrack):{story:string;style:string
     // 이제는 표지 질문 하나에 본문 제목들이 차례로 답하고, 제목만 이어 읽어도 한 단락이 되게 쓴다.
     story:`[이야기 구조 — 제목만 읽어도 하나의 답] 인스타그램 독자는 큰 글씨(headline)만 빠르게 훑고 넘깁니다. 표지 headline은 독자가 실제로 가질 법한 궁금증 하나를 질문으로 던지고, 본문 장의 headline은 모두 그 표지 질문 하나에 답하는 조각으로 쓰세요: 표지와 마지막 장 사이의 장은 표지 질문의 이유·근거를 하나씩(가장 핵심 이유부터) 해요체 한 문장으로, 마지막 장 headline은 표지 질문에 대한 한 줄 결론으로 쓰세요. 표지 headline부터 마지막 장 headline까지 제목만 이어 읽어도 표지 질문에 답하는 짧은 글 한 단락처럼 자연스럽게 읽혀야 합니다. role은 장의 위치 표시일 뿐 그 장에 쓸 내용이 아닙니다(detail·how-to·pairing·visit 같은 이름과 상관없이 표지와 마지막 장 사이의 장은 모두 이유 하나씩입니다. 특히 pairing 자리에 표지 질문과 상관없는 곁들임 이야기를 끼워 넣지 마세요): 표지가 "왜"를 물으면 how-to 장에도 먹는 법 대신 이유를 쓰고, 먹는 법·메뉴 정의("삼합은 ~예요")·방문 안내는 표지 질문이 그것을 물을 때만 쓰세요. 질문은 표지에서만 던집니다(본문 headline은 "왜 ~일까요?" 금지). 짧은 글(points)은 그 장 headline을 뒷받침하는 근거나 눈·입으로 확인하는 방법 하나만 쓰고, 그 장 headline과 표지 질문에 없는 새 음식·새 이야기를 꺼내지 마세요. 제목의 결과를 말만 바꿔 되풀이하는 짧은 글(예: 제목 "물기 없이 말려요" + 짧은 글 "물기가 없어 맛이 유지돼요")은 금지입니다. 본문 장 제목은 겉모습 묘사가 아니라 이유를 말하는 문장으로 쓰세요(예: "수육 기름이 톡 쏘는 향을 감싸요", "삭히면 요소가 암모니아로 바뀌어요"). 아래 [이유 설명]을 따르세요. "다음 장에서 ~"처럼 다음 장을 예고하는 문장은 쓰지 마세요. ${NO_PROMO_IN_CARDS}
 ${STORY_ARC_RULE}
+${QUESTION_FOCUS_RULE}
 ${EXPLAIN_REASONS_RULE}
 ${NOTES_FIRST_RULE}`,
     style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내, 질문이나 한 문장)으로 쓰고, subline(${cover.subline}자 이내 해요체 한 줄)에는 답의 실마리를 구체적으로 예고하세요(예: "답은 빗소리에 있어요"). "유혹", "매력", "풍미", "향연", "특별한" 같은 광고 말은 쓰지 마세요(이유 개수는 앱이 덧붙여요). 짧은 글은 그 장 제목을 뒷받침하는 이유·근거만 쓰세요. 먹는 법·고르는 법 같은 써먹을 정보는 notes에 쓰면 올릴 글(캡션)에 들어가요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.`,

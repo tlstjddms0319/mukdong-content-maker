@@ -6,6 +6,7 @@ import { STYLES } from "./styleCatalog";
 import { CHOPSTICK_SCENE } from "./carousel";
 import { heroMenu, josa, menuOf, type StoreMenuItem } from "@/features/store/menu";
 import { copyMentionsSkate, foodFreeAnchor } from "./sceneFoods";
+import { comparedPair } from "@/features/copy/explain";
 import { toFile } from "openai";
 
 // 이번 장의 글(제목·요점·장면 설명)과 주제 글. 주인공 메뉴를 고를 때 쓴다.
@@ -173,6 +174,17 @@ const PROPS_DIRECTIVE="Props, if any, are Korean: brass yugi bowls, onggi or ttu
 
 const NO_TEXT_DIRECTIVE="Absolutely no text in the image: no letters, words, Korean or English characters, numbers, captions, speech bubbles, question marks, signs or logos. Food and background only.";
 
+// 표지가 두 음식을 견주면("치즈는 익숙한데 다른 발효 음식은 왜 낯설까?") 표지 그림에 두 음식을 나란히 둔다.
+// 예전에는 모든 장면의 주인공을 주제 메뉴(홍어)로 못 박아, 표지 질문의 '치즈'가 그림에 없었다(사장님 지적 2026-10-10).
+// 둘째 대상이 가게 메뉴가 아니면("다른 발효 음식") 이 가게의 홍어회를 대표로 그린다. 모든 이미지 공급자가 이 문장을 같이 받는다.
+export function comparisonCoverDirection(input:Pick<ImageBrief,"slide"|"topic">):string {
+  if(input.slide&&input.slide.role!=="cover")return "";
+  const pair=comparedPair(input.slide?.headline||input.topic)??comparedPair(input.topic);
+  if(!pair)return "";
+  const second=menuOf(pair.second)[0]?.short??"홍어회";
+  return `표지 비교 장면(위의 '주인공' 지시보다 우선): 질문이 '${pair.first}'와(과) '${pair.second}'를 견주므로, ${pair.first} 한 접시와 ${second} 한 접시를 같은 크기로 나란히(왼쪽 ${pair.first}, 오른쪽 ${second}) 같은 식탁·같은 조명에 놓는다. 두 음식이 한눈에 구분되어야 한다. This cover compares two foods: place a plate of ${pair.first} (left) and a plate of ${second} (right) side by side at the same size, both clearly recognizable.`;
+}
+
 export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
   const styleId=resolveImageStyle(input);
   const style=IMAGE_STYLE_DIRECTIONS[styleId];
@@ -198,6 +210,7 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 사람이 먹고 있는 느낌은 장면 설명이 요구할 때만, 얼굴이 식별되지 않는 범위에서 넣는다.
     "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
     foodDirection(input),
+    comparisonCoverDirection(input),
     // 실사 홍어회 장면의 질감·빛. 결과 비침이 홍어다움을 만든다. 무침·애탕이나 다른 메뉴가 주인공이면 붙이지 않는다. 클로즈업(detail)은 접시 비율을 주지 않는다.
     styleId==="photo"&&showsRawSkate(input)
       ? `Skate texture: visible parallel fiber texture, translucent pink edges backlit by the side light.${input.slide?.role==="detail"?"":" The plate fills about 60% of the frame."}` : "",
