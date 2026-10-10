@@ -55,7 +55,7 @@ function foodDirection(input:ImageBrief):string {
   const soup=/애\s*탕|홍어\s*탕/.test(menuText);
   // 삼합(수육·묵은지)은 장면이 말할 때만 꺼낸다. 홍어회 장면마다 "삼합"을 적으면 삼합 사진으로 끌려간다.
   const samhap=/삼합|수육|묵은지/.test(menuText);
-  if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push(`홍어회 장면의 홍어는 숙성 홍어 날개 살을 얇고 불규칙하게 썬 연한 분홍빛 또는 아이보리색 회로 표현한다.${samhap?" 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.":""}`);
+  if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push(`홍어회 장면의 홍어는 숙성 홍어 날개 살을 얇고 불규칙하게 썬 회로, 살은 장밋빛·선홍빛 분홍(가장자리와 연골 마디 사이는 더 붉은 빛)에 촉촉한 윤기가 돌고, 반투명한 흰 연골 마디가 사다리처럼 가로로 줄지어 보이게 표현한다. 하얗거나 아이보리·베이지색으로 바래 보이게 하지 않는다. Raw skate flesh is rosy pink to coral red, glossy and translucent, never white, ivory or pale beige.${samhap?" 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.":""}`);
   // 작은 이미지 모델은 '홍어'를 몰라 베이컨·햄처럼 그리기 쉬워서 영어로 무엇인지 한 번 설명한다.
   preparations.push("Hongeo is Korean fermented skate, a flat ray fish: its flesh has fine parallel fibers and thin translucent cartilage lines, never marbled fat stripes. The skate must not look like bacon, ham, sausage or pork belly.");
   // 이미지 모델은 '홍어 한 점'을 꼬리·지느러미 달린 작은 생선 한 마리(가자미·박대 모양)로 그리기 쉽다.
@@ -211,9 +211,9 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
     foodDirection(input),
     comparisonCoverDirection(input),
-    // 실사 홍어회 장면의 질감·빛. 결과 비침이 홍어다움을 만든다. 무침·애탕이나 다른 메뉴가 주인공이면 붙이지 않는다. 클로즈업(detail)은 접시 비율을 주지 않는다.
+    // 실사 홍어회 장면의 질감·빛. 결과 비침이 홍어다움을 만든다. 색은 참고 사진(2026-10-10: 홍어가 하얗게만 나온다는 지적)처럼 선홍빛 분홍. 무침·애탕이나 다른 메뉴가 주인공이면 붙이지 않는다. 클로즈업(detail)은 접시 비율을 주지 않는다.
     styleId==="photo"&&showsRawSkate(input)
-      ? `Skate texture: visible parallel fiber texture, translucent pink edges backlit by the side light.${input.slide?.role==="detail"?"":" The plate fills about 60% of the frame."}` : "",
+      ? `Skate texture: visible parallel fiber texture, rosy pink to coral-red flesh with rows of translucent-white cartilage ridges, translucent pink edges backlit by the side light; keep the white balance neutral so the pink-red stays vivid, not washed out to white.${input.slide?.role==="detail"?"":" The plate fills about 60% of the frame."}` : "",
     PROPS_DIRECTIVE,
     // 레이아웃마다 사진이 쓰이는 방식이 달라서, 그 레이아웃의 사진 분위기와 여백 요청을 붙인다.
     input.slide ? CARD_LAYOUTS[input.slideLayout==="overlay"?"fullscreen":input.slide.layout].photoHint : "",

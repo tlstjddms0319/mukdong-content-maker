@@ -33,8 +33,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     // "홍어" 하나만 써도 홍어회로 본다. 홍어무침·홍어애탕·홍어전·홍어찜과 가게 이름(묵동홍어마을)은 빼고 본다.
     // "홍어 애호가"처럼 애탕·애국이 아닌 "애"는 홍어회로 본다.
     match:/홍어\s*회|삼합|홍어(?!\s*(?:무침|애\s*(?:탕|국)|탕|전(?!문|통|체|날)|찜|마을))/,
-    look:"Korean hongeo-hoe: thin, irregular slices of fermented skate wing meat, pale pink to ivory, with fine parallel cartilage lines.",
-    lookKo:"얇고 불규칙하게 썬 연분홍·아이보리빛 홍어 날개 살 회",
+    look:"Korean hongeo-hoe: thin slices of fermented skate wing meat with rosy pink to coral-red, glossy translucent flesh (deeper red near the edges and between the ridges), crossed by rows of small translucent-white cartilage ridges like a ladder.",
+    lookKo:"얇게 썬 홍어 날개 살 회(장밋빛·선홍빛 분홍 살에 윤기가 돌고 가장자리가 더 붉으며, 반투명한 흰 연골 마디가 사다리처럼 가로로 줄지어 있음)",
     seasons:[],moments:"모임·잔칫상·김장철 수육과 함께",
   },
   {
