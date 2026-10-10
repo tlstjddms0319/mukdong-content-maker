@@ -61,7 +61,7 @@ export function AiUsageCard({connections}:{connections:Connections}){
       const quota=stat?.lastQuota?` · 마지막 한도 초과 ${when(stat.lastQuota)}`:"";
       // 실패 이유별 횟수(많은 순)와 마지막 실패. 이유를 남기기 전 기록은 횟수만 보인다.
       const reasons=Object.entries(stat?.reasons??{}).filter(([,count])=>(count??0)>0).sort((a,b)=>(b[1]??0)-(a[1]??0)).map(([reason,count])=>`${FAILURE_REASON_LABELS[reason as FailureReason]} ${count}`).join(", ");
-      const lastFailure=stat?.month.failures&&stat.lastError?`마지막 실패 ${when(stat.lastError.at)}${stat.lastError.reason?` · ${FAILURE_REASON_LABELS[stat.lastError.reason]}`:""}${stat.lastError.status?` (코드 ${stat.lastError.status})`:""}`:"";
+      const lastFailure=stat?.month.failures&&stat.lastError?`마지막 실패 ${when(stat.lastError.at)}${stat.lastError.reason?` · ${FAILURE_REASON_LABELS[stat.lastError.reason]}`:""}${stat.lastError.status?` (코드 ${stat.lastError.status})`:""}${stat.lastError.detail?` — ${stat.lastError.detail}`:""}`:"";
       const remaining=row.id==="groq"&&groq?.remainingRequests!==undefined?` · 남은 요청 ${groq.remainingRequests.toLocaleString("ko-KR")}${groq.limitRequests?` / ${groq.limitRequests.toLocaleString("ko-KR")}`:""}(${when(groq.at)} 기준)`:"";
       return <li key={row.id} className="connection-card">
         <span className={`status-dot${stat?.lastQuota&&when(stat.lastQuota).startsWith("오늘")?"":" on"}`}/>

@@ -19,12 +19,12 @@ export type UsageMonth={
   month:string;
   days:Record<string,Partial<Record<UsageProvider,UsageCounter>>>;
   lastQuota:Partial<Record<UsageProvider,string>>;      // 마지막으로 한도 초과(429·크레딧 부족)를 받은 때
-  lastError:Partial<Record<UsageProvider,{at:string;status:number;reason?:FailureReason}>>;
+  lastError:Partial<Record<UsageProvider,{at:string;status:number;reason?:FailureReason;detail?:string}>>;
   // 이번 달 실패 이유별 횟수(이유를 아는 실패만).
   failureReasons?:Partial<Record<UsageProvider,Partial<Record<FailureReason,number>>>>;
   groq?:GroqLimits;
 };
-export type UsageEvent={provider:UsageProvider;ok:boolean;status?:number;quota?:boolean;units?:number;reason?:FailureReason};
+export type UsageEvent={provider:UsageProvider;ok:boolean;status?:number;quota?:boolean;units?:number;reason?:FailureReason;detail?:string};
 
 // 한국 시간 날짜(YYYY-MM-DD). 무료 한도가 대개 하루 단위라 날짜별로 센다.
 export const kstDay=(now:Date)=>new Date(now.getTime()+9*3_600_000).toISOString().slice(0,10);
@@ -54,7 +54,7 @@ export function applyEvent(month:UsageMonth,event:UsageEvent,now:Date):UsageMont
     ...month,
     days:{...month.days,[day]:counters},
     lastQuota:quota?{...month.lastQuota,[event.provider]:at}:month.lastQuota,
-    lastError:!event.ok?{...month.lastError,[event.provider]:{at,status:event.status??0,...(event.reason?{reason:event.reason}:{})}}:month.lastError,
+    lastError:!event.ok?{...month.lastError,[event.provider]:{at,status:event.status??0,...(event.reason?{reason:event.reason}:{}),...(event.detail?{detail:event.detail.slice(0,300)}:{})}}:month.lastError,
     failureReasons:!event.ok&&event.reason?{...month.failureReasons,[event.provider]:{...month.failureReasons?.[event.provider],[event.reason]:(month.failureReasons?.[event.provider]?.[event.reason]??0)+1}}:month.failureReasons,
   };
 }
@@ -121,7 +121,7 @@ export function recordGroqLimits(headers:{get(name:string):string|null}|null|und
 // 설정 화면용 요약: 오늘·이번 달 합계, 마지막 한도 초과·오류, Groq 남은 양.
 export type UsageSummary={
   month:string;today:string;
-  providers:Array<{id:UsageProvider;today:UsageCounter;month:UsageCounter;lastQuota:string|null;lastError:{at:string;status:number;reason?:FailureReason}|null;reasons:Partial<Record<FailureReason,number>>}>;
+  providers:Array<{id:UsageProvider;today:UsageCounter;month:UsageCounter;lastQuota:string|null;lastError:{at:string;status:number;reason?:FailureReason;detail?:string}|null;reasons:Partial<Record<FailureReason,number>>}>;
   groq:GroqLimits|null;
 };
 const zero=():UsageCounter=>({calls:0,failures:0,quota:0,units:0});

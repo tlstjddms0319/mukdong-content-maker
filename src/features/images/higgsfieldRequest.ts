@@ -35,6 +35,8 @@ export const UNSUPPORTED_STATUSES=new Set([400,404,405,422]);
 // 서버가 잠깐 바쁘거나 문제가 있을 때의 답. 다른 모델로 넘어가거나(요청) 다시 묻는다(상태 확인).
 export const BUSY_STATUSES=new Set([500,502,503]);
 const BUSY_SKIP_MS=10*60_000;
+let BUSY_RETRY_MS=5_000;
+export function setHiggsfieldBusyRetryForTests(ms:number){BUSY_RETRY_MS=ms;}
 export function resetHiggsfieldModelSkips(){unavailable.clear();}
 const POLL_INTERVAL_MS=3_000;
 const JOB_TIMEOUT_MS=5*60_000;
@@ -48,10 +50,14 @@ export class HiggsfieldConfigurationError extends Error {
   }
 }
 
+// detail: Higgsfield가 보낸 응답 본문(앞부분)과 어느 모델·단계에서 났는지. 예전에는 상태 코드만 남아 "작업 실패 (코드 503)"이
+// 왜인지(모델 과부하·잔액·주소) 알 수 없었다(사장님 지적 2026-10-10). 설정 카드와 서버 로그에 그대로 보여 준다.
 export class HiggsfieldImageError extends Error {
-  constructor(public readonly status:number,public readonly reason:"auth"|"credits"|"nsfw"|"failed"|"timeout"="failed") {
+  public detail="";
+  constructor(public readonly status:number,public readonly reason:"auth"|"credits"|"nsfw"|"failed"|"timeout"="failed",detail="") {
     super("Higgsfield image generation failed");
     this.name="HiggsfieldImageError";
+    this.detail=detail;
   }
 }
 
@@ -73,9 +79,13 @@ export function authorization():string {
   return `Key ${id}:${secret}`;
 }
 
-function errorFor(status:number):HiggsfieldImageError {
-  return new HiggsfieldImageError(status,status===401?"auth":status===402||status===403?"credits":"failed");
+function errorFor(status:number,detail=""):HiggsfieldImageError {
+  return new HiggsfieldImageError(status,status===401?"auth":status===402||status===403?"credits":"failed",detail);
 }
+// 응답 본문을 한 줄로(최대 240자). 키·토큰 같은 값은 본문에 오지 않지만 혹시 몰라 Key/Bearer 뒤는 가린다.
+const bodyText=async(response:Response)=>{
+  try{return (await response.text()).replace(/\s+/g," ").replace(/(Key|Bearer)\s+\S+/gi,"$1 ***").trim().slice(0,240);}catch{return "";}
+};
 
 export async function api<T>(path:string,init:{method:"GET"|"POST";body?:unknown},auth:string):Promise<T> {
   let response:Response;
@@ -87,7 +97,7 @@ export async function api<T>(path:string,init:{method:"GET"|"POST";body?:unknown
       signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch { throw new HiggsfieldImageError(504,"timeout"); }
-  if(!response.ok)throw errorFor(response.status);
+  if(!response.ok)throw errorFor(response.status,`${init.method} ${path.replace(BASE_URL,"")}: ${await bodyText(response)}`);
   return await response.json() as T;
 }
 
@@ -117,7 +127,7 @@ export async function waitForCompletion(job:Job,auth:string,timeoutMs=JOB_TIMEOU
   let current=job;
   while(current.status!=="completed"){
     if(current.status==="nsfw")throw new HiggsfieldImageError(422,"nsfw");
-    if(current.status==="failed"||current.status==="canceled")throw new HiggsfieldImageError(502);
+    if(current.status==="failed"||current.status==="canceled")throw new HiggsfieldImageError(502,"failed",`작업 상태 ${current.status}`);
     if(Date.now()>deadline)throw new HiggsfieldImageError(504,"timeout");
     await new Promise(resolve=>setTimeout(resolve,POLL_INTERVAL_MS));
     // 상태 확인 중 서버가 잠깐 바쁘다고(5xx) 답하면 작업은 살아 있으니 다시 묻는다. 예전에는 한 번의 503으로 만든 그림을 버렸다.
@@ -162,8 +172,19 @@ async function generateOne(input:ImageBrief,auth:string,referenceUrl?:string,now
   for(const [index,model] of models.entries()){
     const until=unavailable.get(model.id);
     if(until&&until>now()&&index<models.length-1)continue;
-    try{return await submit(model,input,auth,referenceUrl);}
+    // 서버가 바쁘다(503 등)고 하면 같은 모델로 한 번 더(잠깐 쉬고) 시도한다. 과부하는 대개 금방 풀린다.
+    const attempt=async()=>{
+      try{return await submit(model,input,auth,referenceUrl);}
+      catch(error){
+        if(!(error instanceof HiggsfieldImageError)||!BUSY_STATUSES.has(error.status))throw error;
+        console.warn(`[higgsfield] ${model.label} 서버가 바빠요(${error.status}). ${BUSY_RETRY_MS/1000}초 뒤 한 번 더 시도합니다. ${error.detail}`);
+        await new Promise(resolve=>setTimeout(resolve,BUSY_RETRY_MS));
+        return await submit(model,input,auth,referenceUrl);
+      }
+    };
+    try{return await attempt();}
     catch(error){
+      if(error instanceof HiggsfieldImageError)error.detail=`${model.label} ${error.status} ${error.detail}`.trim().slice(0,300);
       lastError=error;
       const unsupported=error instanceof HiggsfieldImageError&&UNSUPPORTED_STATUSES.has(error.status);
       // 서버가 바쁘다(500·502·503)고 답한 모델도 다음 모델로 넘어간다(사장님 화면 2026-10-10: 코드 503 "작업 실패"가 이어졌는데,
@@ -190,6 +211,6 @@ export async function generateHiggsfieldImages(input:ImageBrief):Promise<string[
   const failure=results.find((result):result is PromiseRejectedResult=>result.status==="rejected")?.reason;
   if(!failure)return images;
   const error=failure instanceof HiggsfieldImageError?failure:new HiggsfieldImageError(502);
-  if(images.length)throw new HiggsfieldPartialImageError(error.status,error.reason,images);
+  if(images.length){const partial=new HiggsfieldPartialImageError(error.status,error.reason,images);partial.detail=error.detail;throw partial;}
   throw error;
 }

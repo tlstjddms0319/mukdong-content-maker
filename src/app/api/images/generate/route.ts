@@ -141,9 +141,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
         // 사용량 장부: 크레딧 부족·429는 "한도 초과"로 적는다(설정 화면 "AI 사용량").
         // 일부만 만든 실패도 한 번의 요청으로 센다(만든 장수는 units로).
         const reason=imageFailureReason(error);
-        recordUsage({provider:USAGE_IDS[name],ok:false,units:completed.length,status:imageErrorStatus(error),quota:error instanceof HiggsfieldImageError&&error.reason==="credits",reason});
+        const detail=error instanceof HiggsfieldImageError?error.detail:error instanceof Error?error.message.slice(0,200):"";
+        recordUsage({provider:USAGE_IDS[name],ok:false,units:completed.length,status:imageErrorStatus(error),quota:error instanceof HiggsfieldImageError&&error.reason==="credits",reason,...(detail?{detail}:{})});
         // 예전에는 오류 이름("Error")만 남겨 Render 로그로 원인을 알 수 없었다. 상태 코드와 이유를 함께 남긴다.
-        console.warn(`[images] ${name} 실패: 이유 ${reason}, 상태 ${imageErrorStatus(error)||"-"}${completed.length?`, 일부 ${completed.length}장은 만들어짐`:""}${error instanceof Error&&!(error instanceof HiggsfieldImageError)?`, ${error.message.slice(0,200)}`:""}`);
+        console.warn(`[images] ${name} 실패: 이유 ${reason}, 상태 ${imageErrorStatus(error)||"-"}${completed.length?`, 일부 ${completed.length}장은 만들어짐`:""}${detail?`, ${detail}`:""}`);
         if(completed.length){images=[...images,...completed];used.push(name);}
         failures.push(error);
         if(index===chain.length-1){
