@@ -105,7 +105,9 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 자동은 키가 있는 Higgsfield부터, 실패하면 무료 Cloudflare, 마지막으로 OpenAI 순서로 남은 장수만 이어서 만든다.
     // 키가 없는 제공자는 자동 순서에서 뺀다(예전에는 Higgsfield 크레딧 부족 → Cloudflare 한도 → 키 없는 OpenAI 순으로 가서
     // 실제 이유 대신 "OpenAI API 키가 연결되지 않았습니다"가 떴다). 하나도 없으면 설정 안내가 나오도록 Cloudflare를 남긴다.
-    const configured:ImageProvider[]=[...(isHiggsfieldConfigured()?["higgsfield" as const]:[]),...(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN?["cloudflare" as const]:[]),...(process.env.OPENAI_API_KEY?["openai" as const]:[])];
+    // 자동 순서에는 유료 OpenAI를 넣지 않는다(Higgsfield → Cloudflare까지만). 예전에는 Higgsfield·Cloudflare가 실패하면 조용히
+    // OpenAI로 넘어가 사장님 모르게 OpenAI 요금이 나갔다(사장님 지적 2026-10-10). OpenAI는 설정에서 "OpenAI만"을 고를 때만 쓴다.
+    const configured:ImageProvider[]=[...(isHiggsfieldConfigured()?["higgsfield" as const]:[]),...(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN?["cloudflare" as const]:[])];
     const chain:ImageProvider[]=settings.imageAiProvider==="automatic"
       ?(configured.length?configured:["cloudflare"])
       :[settings.imageAiProvider];

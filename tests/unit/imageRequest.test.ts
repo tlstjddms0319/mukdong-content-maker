@@ -63,6 +63,7 @@ describe("OpenAI image request", () => {
     expect(request.prompt).toContain("정육면체");
   });
   it("returns an uncaptioned cover reference alongside the captioned image",async()=>{
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
     const source=await sharp({create:{width:40,height:40,channels:3,background:"#778877"}}).png().toBuffer();
     generateImage.mockResolvedValue({data:[{b64_json:source.toString("base64")}]});
     const response=await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어",count:1,...visitSlideMetadata,slide:coverSlide,slideIndex:1})}));
@@ -121,7 +122,8 @@ describe("OpenAI image request", () => {
     expect(form.has("input_image_0")).toBe(false);
   });
 
-  it("falls back to OpenAI when Cloudflare fails in automatic mode", async () => {
+  // 자동 순서는 유료 OpenAI로 넘어가지 않는다(사장님 지적 2026-10-10: 모르는 사이 OpenAI 요금이 나갔다).
+  it("does not fall back to paid OpenAI when Cloudflare fails in automatic mode", async () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","account-123");
     vi.stubEnv("CLOUDFLARE_API_TOKEN","token-123");
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response(JSON.stringify({success:false,errors:[{message:"daily limit"}]}),{status:429,headers:{"Content-Type":"application/json"}})));
@@ -131,10 +133,15 @@ describe("OpenAI image request", () => {
       method:"POST",
       body:JSON.stringify({topic:"홍어 한 상",count:1,aspectRatio:"4:5"}),
     }));
-    const body=await response.json();
+    expect(response.ok).toBe(false);
+    expect(generateImage).not.toHaveBeenCalled();
+  });
 
+  it("still uses OpenAI when the owner picks it explicitly", async () => {
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
+    generateImage.mockResolvedValue({data:[{b64_json:"b3BlbmFpLWltYWdl"}]});
+    const response=await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어 한 상",count:1,aspectRatio:"4:5"})}));
     expect(response.status).toBe(200);
-    expect(body).toMatchObject({images:["data:image/png;base64,b3BlbmFpLWltYWdl"],provider:"openai",fallback:true});
     expect(generateImage).toHaveBeenCalledOnce();
   });
 
@@ -158,7 +165,8 @@ describe("OpenAI image request", () => {
     expect(maxActive).toBe(1);
   });
 
-  it("keeps successful Cloudflare candidates and asks OpenAI only for the missing count", async () => {
+  // 자동 순서에는 OpenAI가 없어서, Cloudflare가 일부만 만들고 멈춰도 OpenAI로 채우지 않는다(유료 요금 방지).
+  it("does not ask OpenAI for the missing count when Cloudflare stops halfway", async () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID","account-123");
     vi.stubEnv("CLOUDFLARE_API_TOKEN","token-123");
     let call=0;
@@ -166,20 +174,8 @@ describe("OpenAI image request", () => {
       ? new Response(JSON.stringify({success:true,result:{image:"Y2xvdWRmbGFyZS1maXJzdA=="}}),{status:200,headers:{"Content-Type":"application/json"}})
       : new Response("limit",{status:429})));
     generateImage.mockResolvedValue({data:[{b64_json:"b3BlbmFpLW1pc3Npbmc="}]});
-
-    const response=await generateImages(new Request("http://localhost/api/images/generate",{
-      method:"POST",
-      body:JSON.stringify({topic:"홍어 표지",count:2,aspectRatio:"4:5"}),
-    }));
-    const body=await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({
-      images:["data:image/jpeg;base64,Y2xvdWRmbGFyZS1maXJzdA==","data:image/png;base64,b3BlbmFpLW1pc3Npbmc="],
-      provider:"mixed",
-      fallback:true,
-    });
-    expect(generateImage).toHaveBeenCalledWith(expect.objectContaining({n:1}));
+    await generateImages(new Request("http://localhost/api/images/generate",{method:"POST",body:JSON.stringify({topic:"홍어 표지",count:2,aspectRatio:"4:5"})}));
+    expect(generateImage).not.toHaveBeenCalled();
   });
 
   it("does not call paid OpenAI when Cloudflare-only mode fails", async () => {
@@ -207,6 +203,7 @@ describe("OpenAI image request", () => {
   });
 
   it("sends two different prompts to OpenAI for two cover candidates", async () => {
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
     generateImage.mockResolvedValue({data:[{b64_json:"aW1n"}]});
     const response=await generateImages(new Request("http://localhost/api/images/generate",{
       method:"POST",
@@ -335,6 +332,7 @@ describe("OpenAI image request", () => {
   });
 
   it("normalizes a base64 slide result to an overlaid JPEG", async () => {
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
     const source=await sharp({create:{width:40,height:40,channels:3,background:"#4f643f"}}).png().toBuffer();
     generateImage.mockResolvedValue({data:[{b64_json:source.toString("base64")}]});
 
@@ -350,6 +348,7 @@ describe("OpenAI image request", () => {
   }, 15_000);
 
   it("downloads a remote slide result before composing it", async () => {
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
     const source=await sharp({create:{width:40,height:40,channels:3,background:"#aa8866"}}).png().toBuffer();
     generateImage.mockResolvedValue({data:[{url:"https://images.example/slide.png"}]});
     const request=vi.fn().mockResolvedValue(new Response(source,{status:200,headers:{"Content-Type":"image/png"}}));
@@ -366,6 +365,7 @@ describe("OpenAI image request", () => {
   }, 15_000);
 
   it("uses the carousel position rather than the provider candidate count for the counter", async () => {
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"openai"});
     const source=await sharp({create:{width:40,height:40,channels:3,background:"#725747"}}).png().toBuffer();
     generateImage.mockResolvedValue({data:[{b64_json:source.toString("base64")}]});
 

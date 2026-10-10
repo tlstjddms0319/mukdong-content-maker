@@ -66,7 +66,7 @@ PowerShell에서 `./scripts/setup-owner-password.ps1`을 한 번 실행하면 `O
 | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` (`NAVER_API_STYLE`) | 네이버 검색어 트렌드로 주제 추천(선택) |
 | `DATA_DIR` | 로컬 저장 폴더(기본 `data/`) |
 
-문안 AI는 `설정 → 문안 AI`에서 자동(Gemini → Groq → Cloudflare)·서비스 하나만을 고르고, 이미지 AI는 자동(Higgsfield → Cloudflare → OpenAI) 또는 서비스 하나만(Higgsfield·Cloudflare·OpenAI)을 고릅니다. 키는 서버 환경 변수에만 두고 브라우저·초안·로그에 저장하지 않습니다.
+문안 AI는 `설정 → 문안 AI`에서 자동(Gemini → Groq → Cloudflare)·서비스 하나만을 고르고, 이미지 AI는 자동(Higgsfield → Cloudflare, 유료 OpenAI 제외) 또는 서비스 하나만(Higgsfield·Cloudflare·OpenAI)을 고릅니다. 키는 서버 환경 변수에만 두고 브라우저·초안·로그에 저장하지 않습니다.
 
 ## 배포와 저장소
 
