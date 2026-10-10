@@ -37,7 +37,7 @@ export type CoverCheck=CoverCheckFields&{score:number;warnings:string[];unchecke
 
 // 기대 음식. 주제·슬라이드 제목에서 메뉴 낱말을 찾아 점검 문장에 넣는다. 못 찾으면 홍어회.
 // 가게 메뉴(과메기·미나리전·홍어애탕·홍어무침·배다리 막걸리 등)는 STORE_MENU의 겉모습 묘사를 쓴다.
-const DEFAULT_FOOD={name:"홍어",description:"삭힌 홍어회(얇게 썬 연분홍·흰 살, 결이 보임)"};
+const DEFAULT_FOOD={name:"홍어",description:"삭힌 홍어회(길고 납작한 띠로 썬 반투명한 연분홍·흰 살, 띠마다 구슬처럼 마디진 흰 연골 줄)"};
 // 메뉴 목록에 없지만 글에 나오면 알아볼 음식(홍어전·찜은 확인된 메뉴가 아니어도 사장님이 직접 적을 수 있다).
 const EXTRA_FOODS:ReadonlyArray<readonly [RegExp,{name:string;description:string}]>=[
   [/홍어\s*전(?!문|통|체|날)/,{name:"홍어전",description:"홍어전(얇은 홍어 살에 전옷을 입혀 노릇하게 부친 전)"}],

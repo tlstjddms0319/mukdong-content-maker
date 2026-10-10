@@ -55,14 +55,14 @@ function foodDirection(input:ImageBrief):string {
   const soup=/애\s*탕|홍어\s*탕/.test(menuText);
   // 삼합(수육·묵은지)은 장면이 말할 때만 꺼낸다. 홍어회 장면마다 "삼합"을 적으면 삼합 사진으로 끌려간다.
   const samhap=/삼합|수육|묵은지/.test(menuText);
-  if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push(`홍어회 장면의 홍어는 숙성 홍어 날개 살을 얇고 불규칙하게 썬 회로, 살은 장밋빛·선홍빛 분홍(가장자리와 연골 마디 사이는 더 붉은 빛)에 촉촉한 윤기가 돌고, 반투명한 흰 연골 마디가 사다리처럼 가로로 줄지어 보이게 표현한다. 하얗거나 아이보리·베이지색으로 바래 보이게 하지 않는다. Raw skate flesh is rosy pink to coral red, glossy and translucent, never white, ivory or pale beige.${samhap?" 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.":""}`);
+  if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push(`홍어회 장면의 홍어는 숙성 홍어 날개 살을 길고 납작한 직사각형 띠로 썬 회로, 띠마다 길이 방향으로 구슬처럼 마디진 흰 연골 줄이 지나가고 살 표면에는 가는 가로 결이 촘촘하다. 살은 반투명한 연분홍·흰빛에 가장자리와 연골 마디 사이만 옅게 붉은 기가 돌고 촉촉한 윤기가 있다. 띠들은 비늘처럼 살짝 겹쳐 가지런히 줄지어 놓는다. Each slice is a long, flat rectangular strip of translucent pale pink-white skate flesh with a white beaded cartilage band running lengthwise through it and fine ridges across its width; only the edges carry a faint red blush. The flesh is not bleached chalk-white, and not the solid orange or deep red of salmon or tuna sashimi.${samhap?" 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.":""}`);
   // 작은 이미지 모델은 '홍어'를 몰라 베이컨·햄처럼 그리기 쉬워서 영어로 무엇인지 한 번 설명한다.
   preparations.push("Hongeo is Korean fermented skate, a flat ray fish: its flesh has fine parallel fibers and thin translucent cartilage lines, never marbled fat stripes. The skate must not look like bacon, ham, sausage or pork belly.");
   // 이미지 모델은 '홍어 한 점'을 꼬리·지느러미 달린 작은 생선 한 마리(가자미·박대 모양)로 그리기 쉽다.
   // 실제 홍어회는 넓은 날개 살을 썬 조각이므로, 통째 생선 모양을 명시적으로 금지한다. 국물 요리(애탕)는 썬 조각 묘사를 빼고 통째만 막는다.
   preparations.push(soup
     ?"홍어는 통째 생선으로 그리지 않는다. Never show a whole small fish with a tail, fins, head or a fish-shaped outline."
-    :"홍어는 통째 생선으로 그리지 않는다. 꼬리·지느러미·머리가 달린 작은 생선 한 마리나 가자미·박대 같은 모양이 아니라, 넓은 날개 살을 썬 손가락 두 마디 크기의 납작한 조각으로 보여 준다. 조각 표면에는 한쪽 방향으로 나란한 연골 결이 줄무늬처럼 보인다. Show the skate only as sliced pieces of wing meat (flat, bite-sized, with parallel cartilage ridges). Never show a whole small fish with a tail, fins, head or a fish-shaped outline.");
+    :"홍어는 통째 생선으로 그리지 않는다. 꼬리·지느러미·머리가 달린 작은 생선 한 마리나 가자미·박대 같은 모양이 아니라, 넓은 날개 살을 길고 납작한 띠로 썬 회로 보여 준다. Show the skate only as sliced pieces of wing meat (long flat strips, each with a white beaded cartilage band). Never show a whole small fish with a tail, fins, head or a fish-shaped outline.");
   // 홍어 요리가 주인공인 장면만 "주인공은 홍어"를 못 박는다(과메기·미나리전·막걸리 장면이면 위 menuHeroDirection이 주인공을 정한다).
   // 삼합 장면은 모델이 익숙한 수육을 크게 그리고 홍어를 뒤로 밀기 쉽다. 다만 장면에 없는 수육·묵은지를 끌어오지 않는다.
   // 곁들임(수육·묵은지)은 장면이 말할 때만 이름을 꺼낸다. 말하지 않으면 "접시 위엔 홍어회뿐"이라고 긍정문으로 닫는다.
@@ -211,9 +211,11 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
     foodDirection(input),
     comparisonCoverDirection(input),
-    // 실사 홍어회 장면의 질감·빛. 결과 비침이 홍어다움을 만든다. 색은 참고 사진(2026-10-10: 홍어가 하얗게만 나온다는 지적)처럼 선홍빛 분홍. 무침·애탕이나 다른 메뉴가 주인공이면 붙이지 않는다. 클로즈업(detail)은 접시 비율을 주지 않는다.
+    // 실사 홍어회 장면의 질감·빛. 결과 연골 줄이 홍어다움을 만든다. 무침·애탕이나 다른 메뉴가 주인공이면 붙이지 않는다. 클로즈업(detail)은 접시 비율을 주지 않는다.
+    // 색: 하얗게만 나온다는 지적(2026-10-10)에 산호빛·선홍빛으로 고쳤더니 참치·연어회처럼 나왔다(2026-10-11).
+    // 사장님이 보낸 실제 홍어회 사진처럼 반투명한 연분홍·흰 살에 가장자리만 옅은 붉은 기로 둔다.
     styleId==="photo"&&showsRawSkate(input)
-      ? `Skate texture: visible parallel fiber texture, rosy pink to coral-red flesh with rows of translucent-white cartilage ridges, translucent pink edges backlit by the side light; keep the white balance neutral so the pink-red stays vivid, not washed out to white.${input.slide?.role==="detail"?"":" The plate fills about 60% of the frame."}` : "",
+      ? `Skate texture: visible parallel fiber texture, translucent pale pink-white flesh with a white beaded cartilage band along each strip, translucent pink edges backlit by the side light; keep the white balance neutral so the soft pink shows.${input.slide?.role==="detail"?"":" The plate fills about 60% of the frame."}` : "",
     PROPS_DIRECTIVE,
     // 레이아웃마다 사진이 쓰이는 방식이 달라서, 그 레이아웃의 사진 분위기와 여백 요청을 붙인다.
     input.slide ? CARD_LAYOUTS[input.slideLayout==="overlay"?"fullscreen":input.slide.layout].photoHint : "",
