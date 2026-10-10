@@ -68,7 +68,8 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     // 표지는 짧고 굵은 제목도 괜찮아서 4자, 본문 장은 6자를 최소로 본다.
     if(length<(slide.role==="cover"?4:6))add(n,"headline","제목이 너무 짧아요. 무엇에 대한 장인지 알 수 있게 쓰세요.");
     const max=slide.role==="cover"?limits.coverHeadline:limits.headline;
-    if(headline.length>max)add(n,"headline",`제목이 ${max}자를 넘어요. 한 가지 정보만 남겨 줄이세요.`);
+    // 결론 장이 길면 대개 이유를 다시 붙인 것이라, 답만 남기라고 콕 집어 말한다(넘치면 카드에서 "…"로 잘린다).
+    if(headline.length>max)add(n,"headline",track&&i===plan.slides.length-1&&i>0?`결론 장 제목이 ${max}자를 넘어요. 앞 장의 이유는 빼고 표지 질문에 대한 답만 한 문장으로 짧게 쓰세요.`:`제목이 ${max}자를 넘어요. 한 가지 정보만 남겨 줄이세요.`);
     for(const word of CLICHES)if(headline.includes(word))add(n,"headline",`광고 상투어 '${word}'를 빼고 구체적인 정보로 바꾸세요.`);
     if(SLOGAN.test(headline))add(n,"headline","명사로 끝나는 슬로건 대신 해요체 문장이나 질문으로 쓰세요.");
     if((headline.match(/!/g)??[]).length>1)add(n,"headline","느낌표를 줄이세요.");

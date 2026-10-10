@@ -70,3 +70,25 @@ describe("review keeps the slides it fixed",()=>{
     expect(review).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("conclusion card headline",()=>{
+  // 사장님 화면(2026-10-10): 결론 장 제목이 "…잡아주어 배다리 막걸리가…"로 잘려 답이 사라졌다.
+  const LONG="산미와 탄산이 전 요리의 느끼함을 잡아주어 배다리 막걸리가 잘 어울려요";
+  it("keeps the answer half instead of cutting it with an ellipsis",async()=>{
+    const { applyTrack,conclusionTail }=await import("@/features/images/track");
+    expect(conclusionTail(LONG,34)).toBe("배다리 막걸리가 잘 어울려요");
+    const base=createFallbackCarouselPlan({topic:"비 오는 날 미나리전엔 왜 막걸리가 생각날까?",slideCount:5,track:"photo"});
+    const plan={...base,slides:base.slides.map((slide,i)=>i===base.slides.length-1?{...slide,headline:LONG}:slide)};
+    const fitted=applyTrack(plan,"photo");
+    expect(fitted.slides.at(-1)!.headline).toBe("배다리 막걸리가 잘 어울려요");
+    // 본문 장은 예전처럼(답을 지어내지 않고) 줄인다.
+    const body={...base,slides:base.slides.map((slide,i)=>i===1?{...slide,headline:LONG}:slide)};
+    expect(applyTrack(body,"photo").slides[1].headline.endsWith("…")).toBe(true);
+  });
+
+  it("asks the review to drop the repeated reason from a long conclusion",()=>{
+    const base=reported();
+    const plan={...base,slides:base.slides.map((slide,i)=>i===4?{...slide,headline:LONG}:slide)};
+    expect(slideCopyIssues(plan,"photo").some(issue=>issue.slide===5&&issue.message.includes("앞 장의 이유는 빼고"))).toBe(true);
+  });
+});
