@@ -228,7 +228,8 @@ const sourceOf=(reported?:string)=>(reported??"ai-generated") as ApprovedImage["
 
 // dish: 사장님 사진(photo번)을 참고해 같은 음식으로 이 장 글에 맞는 새 장면을 그린다(사진 중심의 모자란 장).
 // refinement: "이 장 고치기"에서 사장님이 고른 요청·직접 적은 말(그림 AI가 가장 먼저 따른다).
-async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:{photo:number},refinement?:string):Promise<ApprovedImage>{
+// referenceMode: dish(같은 음식으로 새 장면) 또는 source(같은 사진을 구도 그대로 다듬기, 장 고치기의 "AI로 이 사진 다듬기").
+async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:{photo:number},refinement?:string,referenceMode:"dish"|"source"="dish"):Promise<ApprovedImage>{
   // 요청을 보내는 순간의 자리 정보(서버가 이 번호·장 수로 그린다).
   const drawnAt=positionKey(state,index-1);
   // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
@@ -236,7 +237,7 @@ async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:
   const style=state.plan!.design.style;
   const count=state.slideLayout==="card"?Math.min(Math.max(1,photosNeeded(normalizeCardLayout(slide))),!style||style==="template"?3:2):1;
   const reference=dish?state.photos[dish.photo]?.preview:undefined;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count,...(reference?{referenceImage:reference,referenceMode:"dish"}:{}),...(refinement?.trim()?{refinement:refinement.trim().slice(0,300)}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count,...(reference?{referenceImage:reference,referenceMode}:{}),...(refinement?.trim()?{refinement:refinement.trim().slice(0,300)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("장 그림을 받지 못했어요.");
@@ -582,6 +583,9 @@ export function slideTextProblem(edit:SlideTextEdit):string|null {
 function textEditBase(current:GenerationState,index:number):{photos:string[];photoKind:"real"|"ai"|"none";views?:PhotoView[]}|null {
   const slide=current.plan?.slides[index];
   if(!slide||!current.slides[index])return null;
+  // AI로 다듬은 사진 장은 원래 사진 배치를 남겨 두지만(되돌리기용), 글자는 AI 결과 위에 다시 그린다.
+  const drawn=current.slides[index];
+  if((drawn.source==="ai-generated"||drawn.source==="ai-edited")&&drawn.bases?.length)return {photos:drawn.bases,photoKind:"ai"};
   const slots=current.photoAssignment[index];
   if(slots?.length)return {photos:slots.map(i=>current.photos[i]?.preview).filter((preview):preview is string=>!!preview),photoKind:"real",views:current.photoViews[index]};
   if(current.slideLayout==="card"&&photosNeeded(normalizeCardLayout(slide))===0)return {photos:[],photoKind:"none"};
@@ -960,16 +964,67 @@ export function autoProgress(current:GenerationState):{message:string;progress:n
   return {message:"",progress:0};
 }
 
-// 확인 화면 "장 고치기 → 그림": AI 그림 장은 그림을 새로 만들고(요청이 있으면 그대로), 사장님 사진 장은 다른 사진으로 바꿔 그린다.
+// 확인 화면 "장 고치기 → 그림": AI 그림 장은 그림을 새로 만들고(요청이 있으면 그대로), 사장님 사진 장은
+// AI로 다듬기·이 사진으로 새로 그리기·다른 사진으로 바꾸기·원래 사진으로 되돌리기 중에서 고른다(photoSlideOptions).
 // 글만 있는 장(글 중심 본문·홍보 카드)이나 저장된 예전 초안(구성안 없음)은 다시 만들 것이 없어 null.
 export function redoSlideKind(current:GenerationState):"ai"|"photo"|"scene"|null {
   const index=activeSlideIndex(current),slide=current.slides[index];
   if(!slide||!current.plan||current.phase!=="idle"||index>=current.plan.slides.length)return null;
   // AI 장면을 못 그려 대신 그린 장은 같은 사진을 참고해 AI로 다시 그린다.
   if(current.sceneMisses.some(miss=>miss.index===index)&&current.photos.length)return "scene";
+  // 사장님 사진 장(AI로 다듬은 장 포함: 원래 사진 배치를 남겨 두어 되돌릴 수 있다). 예전에는 사진이 한 장뿐이면
+  // 바꿀 사진이 없어 그림을 고칠 수 없었다.
+  if((current.photoAssignment[index]?.length??0)>0&&current.photos.length)return "photo";
   if((slide.source==="ai-generated"||slide.source==="ai-edited")&&current.cover)return "ai";
-  if((current.photoAssignment[index]?.length??0)>0&&current.photos.length>1)return "photo";
   return null;
+}
+
+// 사장님 사진 장에서 고를 수 있는 것.
+//   ai: AI로 이 사진 다듬기·이 사진으로 새로 그리기(사진 칸이 하나인 장만. 여러 칸 콜라주는 한 사진으로 칸을 다 채우게 된다).
+//   swap: 다른 사진으로 바꾸기(무료, 넣어 둔 사진이 두 장 이상).  restore: AI로 바꾼 장을 원래 사진으로 되돌리기(무료).
+export function photoSlideOptions(current:GenerationState):{ai:boolean;swap:boolean;restore:boolean}{
+  const index=activeSlideIndex(current),slots=current.photoAssignment[index]??[],slide=current.slides[index];
+  return {
+    ai:slots.length===1&&Boolean(current.photos[slots[0]]),
+    swap:slots.length>0&&current.photos.length>1,
+    restore:slots.length>0&&(slide?.source==="ai-generated"||slide?.source==="ai-edited"),
+  };
+}
+
+// 장 고치기 → 그림(사장님 사진 장): retouch는 같은 사진을 구도 그대로 AI로 다듬고, redraw는 그 사진의 음식으로
+// 이 장 글에 맞는 새 장면을 그린다(1~3분, 그림 AI 비용). 원래 사진 배치(photoAssignment·photoViews)는 그대로 두어
+// restoreSlidePhoto로 되돌릴 수 있다.
+export async function editSlidePhoto(kind:"retouch"|"redraw",refinement?:string){
+  const plan=state.plan,index=activeSlideIndex(state),photo=state.photoAssignment[index]?.[0];
+  if(!plan||photo===undefined||!state.photos[photo])return;
+  const token=++run;
+  patch({phase:"slides",error:""});
+  try{
+    const card=await generate(plan.slides[index],index+1,{photo},refinement,kind==="retouch"?"source":"dish");
+    if(token!==run)return;
+    patch({sceneMisses:state.sceneMisses.filter(miss=>miss.index!==index),slides:state.slides.map((item,i)=>i===index?card:item),...(index===0?{cover:card}:{}),approved:false});
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"사진을 AI로 고치지 못했어요."});
+  }finally{
+    if(token===run)patch({phase:"idle"});
+  }
+}
+
+// AI로 바꾼 사진 장을 원래 사진(남겨 둔 배치·자르기 그대로)으로 다시 그린다(무료).
+export async function restoreSlidePhoto(){
+  const plan=state.plan,index=activeSlideIndex(state),slots=state.photoAssignment[index];
+  if(!plan||!slots?.length)return;
+  const token=++run;
+  patch({phase:"slides",error:""});
+  try{
+    const card=await composePhotoSlide(plan,index,slots,state.photoViews[index]);
+    if(token!==run)return;
+    patch({slides:state.slides.map((item,i)=>i===index?card:item),...(index===0?{cover:card}:{}),approved:false});
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"원래 사진으로 되돌리지 못했어요."});
+  }finally{
+    if(token===run)patch({phase:"idle"});
+  }
 }
 // refinement: "이 장 고치기 → 그림"에서 고른 요청·직접 적은 말. 사장님 사진 장(photo)은 사진을 바꾸므로 쓰지 않는다.
 export async function redoSlide(refinement?:string){

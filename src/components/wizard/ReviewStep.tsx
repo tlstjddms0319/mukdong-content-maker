@@ -10,7 +10,7 @@ import type { ReviewImage } from "@/components/review/exportFiles";
 import { SlideFixPanel } from "@/components/images/SlideFixPanel";
 import { DeckEditor } from "@/components/images/DeckEditor";
 import { FreeCardStudio } from "@/components/images/FreeCardStudio";
-import { canEditSlideText, redoSlideKind, sceneNoticeOf, setActiveSlide, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
+import { canEditSlideText, photoSlideOptions, redoSlideKind, sceneNoticeOf, setActiveSlide, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
 // 3단계 "확인하고 올리기": 사진과 글을 한 화면에서 보고, 큰 버튼 네 개(바로 올리기·예약해서 올리기·휴대폰에 저장·보관함에 보관) 중 하나를 누른다.
 // 작은 것은 "N번 장 고치기"(그림·글을 요청대로 다시)와 "글 다시 쓰기"뿐. 장 넣기·빼기·글자 카드·파일 받기는 "더보기" 안에 접어 둔다.
@@ -53,7 +53,7 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,sav
         </div>
         <div className="carousel-thumbnails" aria-label="모든 장">{urls.map((image,slide)=><button key={`${image.url.slice(-24)}-${slide}`} type="button" aria-label={`${slide+1}번째 장 보기`} aria-pressed={shown===slide} className="feed-thumb" style={{backgroundImage:`url(${image.url})`}} onClick={()=>go(slide)}/>)}</div>
         {/* 이 장 고치기: 그림/글 중 고를 것을 고르고, 요청 버튼·직접 적은 말대로 다시 만든다(예전 "이 장 다시 만들기"). */}
-        {generation&&slidePlan&&shown<generation.slides.length&&<SlideFixPanel key={shown} index={shown} pictureKind={redo} canEditText={canEditSlideText(generation,shown)} headline={slidePlan.headline} points={slidePlan.points??[]} busy={busy}/>}
+        {generation&&slidePlan&&shown<generation.slides.length&&<SlideFixPanel key={shown} index={shown} pictureKind={redo} photoOptions={atSlide&&redo==="photo"?photoSlideOptions(atSlide):undefined} canEditText={canEditSlideText(generation,shown)} headline={slidePlan.headline} points={slidePlan.points??[]} busy={busy}/>}
         {busy&&generation&&<GenerationProgress stage={`redo-${generation.phase}`} message={generation.deckStatus||"이 장을 다시 만들고 있어요"} hint="AI가 그리는 장은 1~3분 걸려요."/>}
         {generation?.error&&!busy&&<div className="make-error" role="alert"><p>이 장을 바꾸지 못했어요. 잠시 뒤 다시 눌러 주세요.</p><details><summary>자세한 이유</summary><p>{generation.error}</p></details></div>}
         {imageNotice&&<p role="status" className="field-help">{imageNotice}</p>}
