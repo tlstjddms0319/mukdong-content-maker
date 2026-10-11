@@ -2,6 +2,7 @@ import type { LibraryAsset } from "./freeCards";
 import type { ImageBrief } from "./schema";
 import { showsRawSkate } from "./openaiRequest";
 import { resolveImageStyle } from "./style";
+import { TOPIC_TAG } from "./photoAnalysis";
 
 // 홍어회 장면에 붙일 매장 사진 고르기.
 // 글 설명만으로는 이미지 모델이 삭힌 홍어의 연보라빛 살과 비스듬한 연골 결을 그리지 못하고 참치·연어회처럼 그렸다
@@ -15,7 +16,8 @@ const ROTATION=3;
 
 function isRawSkatePhoto(asset:LibraryAsset):boolean {
   if(asset.kind!=="photo")return false;
-  const text=[asset.name,...asset.tags].join(" ");
+  // 만들기 화면이 올릴 때 붙이는 "주제:…" 검색어는 그때 쓰던 글이지 사진 속 음식이 아니라서 보지 않는다.
+  const text=[asset.name,...asset.tags.filter(tag=>!tag.startsWith(TOPIC_TAG))].join(" ");
   return SKATE.test(text)&&!NOT_RAW.test(text);
 }
 
