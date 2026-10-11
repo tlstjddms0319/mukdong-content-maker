@@ -7,13 +7,15 @@ import { addLibraryPhoto, buildPhotoCarousel, editSlidePhoto, editSlideText, ens
 const photo="data:image/jpeg;base64,HONGEO";
 const card=(n:number)=>`data:image/jpeg;base64,CARD${n}`;
 
-function stub(){
+// box: 사진 분석이 돌려줄 음식 자리(없으면 분석 실패로).
+function stub(box?:{x:number;y:number;w:number;h:number}){
   const plan=createFallbackCarouselPlan({topic:"홍어회는 왜 결이 보일까?",slideCount:5});
   const bodies:Array<Record<string,unknown>>=[];
   let n=0;
   vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
     if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
     if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
+    if(url==="/api/images/analyze"&&box)return {ok:true,json:async()=>({analyzed:true,photos:[{id:"p1",flags:[],labels:[],measured:true,scene:"검은 접시 위 홍어회",box,appetite:null}],ranking:["p1"],recommended:"p1",scored:true,scoreAvailable:true})};
     if(url!=="/api/images/generate")return {ok:false,json:async()=>({})};
     const body=JSON.parse(String(init?.body));bodies.push(body);
     if(body.referenceImage)return {ok:true,json:async()=>({images:[card(100+ ++n)],baseImages:[["data:image/jpeg;base64,BASE"]],source:"ai-edited"})};
@@ -69,6 +71,21 @@ describe("owner photo slide in 장 고치기", () => {
     expect(bodies[0].photos).toEqual([photo]);
     expect(hook.result.current.slides[0].source).toBe("photo");
     expect(photoSlideOptions(hook.result.current).restore).toBe(false);
+  });
+
+  it("sends the food box the photo check found so the photo is cropped around the food", async () => {
+    const box={x:0.1,y:0.2,w:0.3,h:0.3};
+    const bodies=stub(box);
+    const hook=await build();
+    expect(hook.result.current.photoBoxes).toEqual([box]);
+    const photoCards=bodies.filter(body=>Array.isArray(body.photos));
+    expect(photoCards.length).toBeGreaterThan(0);
+    for(const body of photoCards)expect(body.photoBoxes).toEqual([box]);
+    // 원래 사진으로 되돌릴 때도 같은 자리로 자른다.
+    await act(async()=>{await editSlidePhoto("retouch");});
+    bodies.length=0;
+    await act(async()=>{await restoreSlidePhoto();});
+    expect(bodies[0].photoBoxes).toEqual([box]);
   });
 
   it("draws a new scene from the photo for the slide's text", async () => {

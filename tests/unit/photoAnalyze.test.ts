@@ -24,11 +24,13 @@ describe("reading what is in each photo (describe)", () => {
   it("reads every photo, dark ones included, and returns the scene for slide matching", async () => {
     process.env.GEMINI_API_KEY="test-key";
     mocks.read.mockImplementation(async(id:string)=>id===ID_A?asset(ID_A,["dark"]):asset(id,[]));
-    mocks.score.mockResolvedValue([{...check(3),food:"홍어회",scene:"접시에 펼친 홍어회"},{...check(4),food:"막걸리",scene:"사발에 따른 막걸리와 손"}]);
+    mocks.score.mockResolvedValue([{...check(3),food:"홍어회",scene:"접시에 펼친 홍어회",focus:[0.2,0.3,0.5,0.4]},{...check(4),food:"막걸리",scene:"사발에 따른 막걸리와 손",focus:[]}]);
     const data=AnalyzeResponseSchema.parse(await (await post({photos:[{id:ID_A},{id:ID_B}],describe:true,topic:"막걸리엔 왜 전을 곁들일까?"})).json());
     // 표지 추천(score)과 달리 어두운 사진도 읽는다: 캐러셀에 들어갈 사진이라 내용을 알아야 한다.
     expect(mocks.score.mock.calls[0][0]).toHaveLength(2);
     expect(data.photos.map(photo=>photo.scene)).toEqual(["접시에 펼친 홍어회","사발에 따른 막걸리와 손"]);
+    // 음식 자리(사진을 그 자리 중심으로 자른다). 모르면 null.
+    expect(data.photos.map(photo=>photo.box)).toEqual([{x:0.2,y:0.3,w:0.5,h:0.4},null]);
     const { photoNote }=await import("@/features/images/photoAnalysis");
     expect(photoNote(data.photos[1])).toBe("사발에 따른 막걸리와 손");
     expect(photoNote(data.photos[0])).toBe("접시에 펼친 홍어회");
