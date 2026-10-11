@@ -127,7 +127,10 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const keepReference=referenceImage&&referenceMode!=="continuity";
     const draft:ImageBrief={...rest,...(keepReference?{referenceImage,referenceMode}:{}),...(windowRatio?{windowRatio}:{})};
     // 홍어회 장면이면 사진 보관함의 매장 홍어회 사진을 참고 사진으로 붙인다(skateReference.ts). 보관함을 못 읽어도 생성은 계속한다.
-    const storePhoto=wantsSkateReference(draft)?pickSkateReference(await createAssetLibrary().list().catch(()=>[]),draft):undefined;
+    // 사진 정보만 읽어 고르고(listMeta), 고른 한 장의 미리보기만 읽는다. 모든 사진을 한꺼번에 읽으면 메모리가 넘친다.
+    const library=createAssetLibrary();
+    const picked=wantsSkateReference(draft)?pickSkateReference(await library.listMeta().catch(()=>[]),draft):undefined;
+    const storePhoto=picked?await library.read(picked.id).catch(()=>null):null;
     const brief:ImageBrief=storePhoto?{...draft,referenceImage:storePhoto.preview,referenceMode:"dish"}:draft;
     let images:string[]=[];
     const used:ImageProvider[]=[];
