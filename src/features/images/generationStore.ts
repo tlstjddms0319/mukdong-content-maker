@@ -5,7 +5,7 @@ import { ImageStyleSchema, type ImageStyle } from "./style";
 import { DEFAULT_SLIDE_LAYOUT, SlideLayoutSchema, type SlideLayout } from "./slideLayout";
 import { StudioSnapshotSchema, type StudioSnapshotInput } from "@/features/drafts/studio";
 import { normalizeCardLayout, photosNeeded, type CardLayout } from "./design";
-import { AnalyzeResponseSchema, TOPIC_TAG, photoNote } from "./photoAnalysis";
+import { AnalyzeResponseSchema, TOPIC_TAG, photoNote, type FoodBox } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
 import { TRACK_STYLES, type CarouselTrack } from "./track";
 import { readJsonResponse } from "@/lib/http/readJson";
@@ -54,6 +54,7 @@ export type GenerationState={
   photoAssignment:number[][];    // 장마다 들어간 사진 번호(photos 기준). 사진 바꾸기에 쓴다.
   photoViews:PhotoView[][];      // photoAssignment와 같은 모양: 그 칸의 사진을 얼마나 가까이 잘라 쓰는지. 없으면 사진 그대로.
   photoNotes:string[];           // photos와 같은 순서: 사진마다 보이는 것(사진 분석). 모르면 "". 글 쓰기에도 넘긴다.
+  photoBoxes:(FoodBox|null)[];   // photos와 같은 순서: 사진 분석 AI가 본 주인공 음식 자리. 사진을 그 자리 중심으로 자르고 다가간다. 모르면 null.
   deckEdited:boolean;            // 사용자가 완성된 묶음에서 장을 빼거나 넣었는지. 그러면 장 수는 설정값이 아니라 지금 장 수다.
   deckStatus:string;             // 장을 빼고 넣은 뒤 장 번호를 다시 그리는 동안의 진행 안내.
   photoSceneOnly:number[];       // 사진 중심에서 AI 장면으로만 채운 장(같은 사진을 세 번 넘게 쓰는 자리). AI가 못 그리면 글자 카드로 그린다.
@@ -89,7 +90,7 @@ export function setAiFill(aiFill:boolean){
 }
 
 function initialGenerationState(key:string,input:GenerationInput,approvedImages:ApprovedImage[]=[]):GenerationState {
-  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,photoStatus:"",plan:undefined,cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,photos:[],photoAssignment:[],photoViews:[],photoNotes:[],photoSceneOnly:[],sceneMisses:[],aiFill:readAiFill(),
+  return {key,input,mode:"photo",imageStyle:"photo",slideLayout:DEFAULT_SLIDE_LAYOUT,photoStatus:"",plan:undefined,cover:undefined,slides:approvedImages,activeSlide:0,phase:"idle",error:"",approved:false,photos:[],photoAssignment:[],photoViews:[],photoNotes:[],photoBoxes:[],photoSceneOnly:[],sceneMisses:[],aiFill:readAiFill(),
     // 저장된 초안을 다시 열었는데 장 수가 설정과 다르면(예전에 장을 고친 초안) 이미 고친 묶음으로 본다.
     deckEdited:approvedImages.length>0&&approvedImages.length!==input.slideCount,deckStatus:"",
     // 저장된 초안을 다시 연 경우에는 이미 저장된 장(홍보 카드 포함)을 그대로 쓰므로 새로 붙이지 않는다.
@@ -97,7 +98,7 @@ function initialGenerationState(key:string,input:GenerationInput,approvedImages:
 }
 
 // 만든 것들만 비우고 사진은 남긴다(사진을 더하거나 빼거나, 처음부터 다시 만들 때).
-const CLEARED:Partial<GenerationState>={plan:undefined,cover:undefined,slides:[],activeSlide:0,approved:false,error:"",photoAssignment:[],photoViews:[],photoNotes:[],photoSceneOnly:[],sceneMisses:[],deckEdited:false,deckStatus:""};
+const CLEARED:Partial<GenerationState>={plan:undefined,cover:undefined,slides:[],activeSlide:0,approved:false,error:"",photoAssignment:[],photoViews:[],photoNotes:[],photoBoxes:[],photoSceneOnly:[],sceneMisses:[],deckEdited:false,deckStatus:""};
 
 let state:GenerationState=initialGenerationState("",EMPTY_INPUT);
 // 늦게 도착한 응답을 버리기 위한 토큰. 새 작업이 시작되거나 상태가 초기화될 때마다 올라간다.
@@ -228,7 +229,8 @@ const sourceOf=(reported?:string)=>(reported??"ai-generated") as ApprovedImage["
 
 // dish: 사장님 사진(photo번)을 참고해 같은 음식으로 이 장 글에 맞는 새 장면을 그린다(사진 중심의 모자란 장).
 // refinement: "이 장 고치기"에서 사장님이 고른 요청·직접 적은 말(그림 AI가 가장 먼저 따른다).
-async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:{photo:number},refinement?:string):Promise<ApprovedImage>{
+// referenceMode: dish(같은 음식으로 새 장면) 또는 source(같은 사진을 구도 그대로 다듬기, 장 고치기의 "AI로 이 사진 다듬기").
+async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:{photo:number},refinement?:string,referenceMode:"dish"|"source"="dish"):Promise<ApprovedImage>{
   // 요청을 보내는 순간의 자리 정보(서버가 이 번호·장 수로 그린다).
   const drawnAt=positionKey(state,index-1);
   // 콜라주형은 사진 세 장을 만들어 한 카드에 넣는다. 서버는 합친 카드 한 장만 돌려준다.
@@ -236,7 +238,7 @@ async function generate(slide:CarouselPlan["slides"][number],index:number,dish?:
   const style=state.plan!.design.style;
   const count=state.slideLayout==="card"?Math.min(Math.max(1,photosNeeded(normalizeCardLayout(slide))),!style||style==="template"?3:2):1;
   const reference=dish?state.photos[dish.photo]?.preview:undefined;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count,...(reference?{referenceImage:reference,referenceMode:"dish"}:{}),...(refinement?.trim()?{refinement:refinement.trim().slice(0,300)}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:state.plan!.styleAnchor,design:state.plan!.design,slideIndex:index,count,...(reference?{referenceImage:reference,referenceMode}:{}),...(refinement?.trim()?{refinement:refinement.trim().slice(0,300)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"이미지를 만들지 못했습니다.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("장 그림을 받지 못했어요.");
@@ -400,10 +402,12 @@ export function removePhoto(index:number){run++;patch({photos:state.photos.filte
 
 // 칸마다 자르는 거리(가까이·결 확대)가 하나라도 있으면 함께 보낸다. 모두 "사진 그대로"면 보내지 않는다.
 const viewsField=(views:readonly PhotoView[]|undefined)=>views?.some(view=>view!=="full")?{photoViews:[...views]}:{};
+// 사진 분석 AI가 본 음식 자리. 하나라도 알면 칸 순서대로 함께 보낸다(서버가 그 자리 중심으로 자르고 다가간다).
+const boxesField=(slots:readonly number[])=>{const boxes=slots.map(i=>state.photoBoxes[i]??null);return boxes.some(Boolean)?{photoBoxes:boxes}:{};};
 async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[],views?:readonly PhotoView[]):Promise<ApprovedImage>{
   const drawnAt=positionKey(state,index);
   const slide=plan.slides[index];
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide,styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views)}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide,styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views),...boxesField(slots)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 만들지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
@@ -413,13 +417,19 @@ async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[],v
 // 사진마다 보이는 것(음식·장면) 한 줄. Gemini 키가 있으면 AI가 사진을 읽고, 없으면 보관함 이름·태그로만 안다(무료).
 // 실패하거나 모르면 빈 문자열이라 예전처럼 올린 순서대로 배치한다.
 export async function describePhotos(photos:StudioPhoto[],topic:string):Promise<string[]> {
+  return (await analyzePhotos(photos,topic)).notes;
+}
+// 사진마다 보이는 것(notes)과 주인공 음식 자리(boxes, 같은 사진 분석 한 번으로 받는다). 모르면 ""·null.
+async function analyzePhotos(photos:StudioPhoto[],topic:string):Promise<{notes:string[];boxes:(FoodBox|null)[]}> {
+  const unknown={notes:photos.map(()=>""),boxes:photos.map(()=>null)};
   try{
     const response=await fetch("/api/images/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({photos:photos.map(photo=>({id:photo.id})),describe:true,...(topic?{topic:topic.slice(0,200)}:{})})});
-    if(!response.ok)return photos.map(()=>"");
+    if(!response.ok)return unknown;
     const parsed=AnalyzeResponseSchema.safeParse(await readJsonResponse(response));
-    if(!parsed.success)return photos.map(()=>"");
-    return photos.map(photo=>photoNote(parsed.data.photos.find(item=>item.id===photo.id)));
-  }catch{return photos.map(()=>"");}
+    if(!parsed.success)return unknown;
+    const found=photos.map(photo=>parsed.data.photos.find(item=>item.id===photo.id));
+    return {notes:found.map(item=>photoNote(item)),boxes:found.map(item=>item?.box??null)};
+  }catch{return unknown;}
 }
 
 // 구성안을 만들고, 사진 수에 맞게 장을 조정한 뒤, 장마다 카드를 그린다. 사진이 모자란 장만 사장님 사진을 참고해 AI가 그린다.
@@ -431,9 +441,9 @@ export async function buildPhotoCarousel(){
     const {topic,imageBrief,contentBrief,slideCount}=state.input;
     // 1) 사진에 무엇이 보이는지 읽어 문안 AI에게 알려 준다(사진에 없는 음식을 주인공으로 한 장을 쓰지 않게).
     const photos=state.photos;
-    const notes=await describePhotos(photos,topic);
+    const {notes,boxes}=await analyzePhotos(photos,topic);
     if(token!==run)return;
-    patch({photoNotes:notes});
+    patch({photoNotes:notes,photoBoxes:boxes});
     const photoNotes=notes.some(Boolean)?notes:undefined;
     const response=await fetch("/api/images/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic,...(imageBrief?{imageBrief}:{}),...(contentBrief?{contentBrief}:{}),slideCount,imageStyle:"photo",...(photoNotes?{photoNotes}:{}),...trackField()})});
     const data=await readJsonResponse(response);
@@ -579,11 +589,14 @@ export function slideTextProblem(edit:SlideTextEdit):string|null {
 
 // 이 장의 밑바탕을 고른다. 다시 그릴 수 없으면(예: 저장된 초안에서 연 AI 카드) null.
 // photoKind: 사장님 사진이면 "real"(전체 보정), AI가 만든 밑바탕이면 "ai"(처음 그릴 때와 같은 약한 보정).
-function textEditBase(current:GenerationState,index:number):{photos:string[];photoKind:"real"|"ai"|"none";views?:PhotoView[]}|null {
+function textEditBase(current:GenerationState,index:number):{photos:string[];photoKind:"real"|"ai"|"none";views?:PhotoView[];slots?:number[]}|null {
   const slide=current.plan?.slides[index];
   if(!slide||!current.slides[index])return null;
+  // AI로 다듬은 사진 장은 원래 사진 배치를 남겨 두지만(되돌리기용), 글자는 AI 결과 위에 다시 그린다.
+  const drawn=current.slides[index];
+  if((drawn.source==="ai-generated"||drawn.source==="ai-edited")&&drawn.bases?.length)return {photos:drawn.bases,photoKind:"ai"};
   const slots=current.photoAssignment[index];
-  if(slots?.length)return {photos:slots.map(i=>current.photos[i]?.preview).filter((preview):preview is string=>!!preview),photoKind:"real",views:current.photoViews[index]};
+  if(slots?.length)return {photos:slots.map(i=>current.photos[i]?.preview).filter((preview):preview is string=>!!preview),photoKind:"real",views:current.photoViews[index],slots};
   if(current.slideLayout==="card"&&photosNeeded(normalizeCardLayout(slide))===0)return {photos:[],photoKind:"none"};
   const bases=current.slides[index].bases;
   return bases?.length?{photos:bases,photoKind:"ai"}:null;
@@ -592,10 +605,10 @@ export const canEditSlideText=(current:GenerationState,index:number)=>textEditBa
 
 // 밑바탕(사진·AI 원본·없음)으로 한 장을 다시 그린다. 이미지 AI를 부르지 않는다(비용 없음).
 // 장 번호·전체 장 수는 지금 상태(deckTotal)를 따른다.
-async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none";views?:readonly PhotoView[]}):Promise<{preview:string;droppedPoints?:number;drawnAt:string}>{
+async function renderCard(index:number,slide:CarouselPlan["slides"][number],base:{photos:string[];photoKind:"real"|"ai"|"none";views?:readonly PhotoView[];slots?:readonly number[]}):Promise<{preview:string;droppedPoints?:number;drawnAt:string}>{
   const drawnAt=positionKey(state,index);
   const plan=state.plan!;
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind,...(base.photoKind==="real"?viewsField(base.views):{})}:{})})});
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide,styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:index+1,count:1,...(base.photos.length?{photos:base.photos,photoKind:base.photoKind,...(base.photoKind==="real"?{...viewsField(base.views),...(base.slots?boxesField(base.slots):{})}:{})}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 다시 그리지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");
@@ -960,16 +973,67 @@ export function autoProgress(current:GenerationState):{message:string;progress:n
   return {message:"",progress:0};
 }
 
-// 확인 화면 "장 고치기 → 그림": AI 그림 장은 그림을 새로 만들고(요청이 있으면 그대로), 사장님 사진 장은 다른 사진으로 바꿔 그린다.
+// 확인 화면 "장 고치기 → 그림": AI 그림 장은 그림을 새로 만들고(요청이 있으면 그대로), 사장님 사진 장은
+// AI로 다듬기·이 사진으로 새로 그리기·다른 사진으로 바꾸기·원래 사진으로 되돌리기 중에서 고른다(photoSlideOptions).
 // 글만 있는 장(글 중심 본문·홍보 카드)이나 저장된 예전 초안(구성안 없음)은 다시 만들 것이 없어 null.
 export function redoSlideKind(current:GenerationState):"ai"|"photo"|"scene"|null {
   const index=activeSlideIndex(current),slide=current.slides[index];
   if(!slide||!current.plan||current.phase!=="idle"||index>=current.plan.slides.length)return null;
   // AI 장면을 못 그려 대신 그린 장은 같은 사진을 참고해 AI로 다시 그린다.
   if(current.sceneMisses.some(miss=>miss.index===index)&&current.photos.length)return "scene";
+  // 사장님 사진 장(AI로 다듬은 장 포함: 원래 사진 배치를 남겨 두어 되돌릴 수 있다). 예전에는 사진이 한 장뿐이면
+  // 바꿀 사진이 없어 그림을 고칠 수 없었다.
+  if((current.photoAssignment[index]?.length??0)>0&&current.photos.length)return "photo";
   if((slide.source==="ai-generated"||slide.source==="ai-edited")&&current.cover)return "ai";
-  if((current.photoAssignment[index]?.length??0)>0&&current.photos.length>1)return "photo";
   return null;
+}
+
+// 사장님 사진 장에서 고를 수 있는 것.
+//   ai: AI로 이 사진 다듬기·이 사진으로 새로 그리기(사진 칸이 하나인 장만. 여러 칸 콜라주는 한 사진으로 칸을 다 채우게 된다).
+//   swap: 다른 사진으로 바꾸기(무료, 넣어 둔 사진이 두 장 이상).  restore: AI로 바꾼 장을 원래 사진으로 되돌리기(무료).
+export function photoSlideOptions(current:GenerationState):{ai:boolean;swap:boolean;restore:boolean}{
+  const index=activeSlideIndex(current),slots=current.photoAssignment[index]??[],slide=current.slides[index];
+  return {
+    ai:slots.length===1&&Boolean(current.photos[slots[0]]),
+    swap:slots.length>0&&current.photos.length>1,
+    restore:slots.length>0&&(slide?.source==="ai-generated"||slide?.source==="ai-edited"),
+  };
+}
+
+// 장 고치기 → 그림(사장님 사진 장): retouch는 같은 사진을 구도 그대로 AI로 다듬고, redraw는 그 사진의 음식으로
+// 이 장 글에 맞는 새 장면을 그린다(1~3분, 그림 AI 비용). 원래 사진 배치(photoAssignment·photoViews)는 그대로 두어
+// restoreSlidePhoto로 되돌릴 수 있다.
+export async function editSlidePhoto(kind:"retouch"|"redraw",refinement?:string){
+  const plan=state.plan,index=activeSlideIndex(state),photo=state.photoAssignment[index]?.[0];
+  if(!plan||photo===undefined||!state.photos[photo])return;
+  const token=++run;
+  patch({phase:"slides",error:""});
+  try{
+    const card=await generate(plan.slides[index],index+1,{photo},refinement,kind==="retouch"?"source":"dish");
+    if(token!==run)return;
+    patch({sceneMisses:state.sceneMisses.filter(miss=>miss.index!==index),slides:state.slides.map((item,i)=>i===index?card:item),...(index===0?{cover:card}:{}),approved:false});
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"사진을 AI로 고치지 못했어요."});
+  }finally{
+    if(token===run)patch({phase:"idle"});
+  }
+}
+
+// AI로 바꾼 사진 장을 원래 사진(남겨 둔 배치·자르기 그대로)으로 다시 그린다(무료).
+export async function restoreSlidePhoto(){
+  const plan=state.plan,index=activeSlideIndex(state),slots=state.photoAssignment[index];
+  if(!plan||!slots?.length)return;
+  const token=++run;
+  patch({phase:"slides",error:""});
+  try{
+    const card=await composePhotoSlide(plan,index,slots,state.photoViews[index]);
+    if(token!==run)return;
+    patch({slides:state.slides.map((item,i)=>i===index?card:item),...(index===0?{cover:card}:{}),approved:false});
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"원래 사진으로 되돌리지 못했어요."});
+  }finally{
+    if(token===run)patch({phase:"idle"});
+  }
 }
 // refinement: "이 장 고치기 → 그림"에서 고른 요청·직접 적은 말. 사장님 사진 장(photo)은 사진을 바꾸므로 쓰지 않는다.
 export async function redoSlide(refinement?:string){

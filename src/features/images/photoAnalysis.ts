@@ -25,6 +25,19 @@ export const AnalyzeRequestSchema=z.object({
 });
 export type AnalyzeRequest=z.input<typeof AnalyzeRequestSchema>;
 
+// 사진 속 주인공 음식이 있는 곳(사진 크기에 대한 비율: 왼쪽·위·너비·높이). 사진 분석 AI가 알려 주면
+// "가까이·결 확대"를 가운데가 아니라 음식 쪽으로 자르고, 음식이 작게 찍힌 사진은 음식 쪽으로 다가간다(render/photoView.ts).
+export const FoodBoxSchema=z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1),w:z.number().min(0.05).max(1),h:z.number().min(0.05).max(1)});
+export type FoodBox=z.infer<typeof FoodBoxSchema>;
+// AI가 준 [왼쪽, 위, 너비, 높이]를 상자로. 사진 밖으로 넘친 부분은 잘라 내고, 비었거나 너무 작거나 엉뚱하면 null(가운데 자르기).
+export function foodBoxOf(values:readonly number[]|undefined):FoodBox|null {
+  if(!values||values.length!==4||!values.every(Number.isFinite))return null;
+  const [x,y,w,h]=values;
+  if(x<0||y<0||x>=1||y>=1)return null;
+  const box={x,y,w:Math.min(w,1-x),h:Math.min(h,1-y)};
+  return FoodBoxSchema.safeParse(box).success?box:null;
+}
+
 const QualityFlagSchema=z.enum(["dark","blurry","cast","lowres"]);
 export const AnalyzedPhotoSchema=z.object({
   id:z.string(),
@@ -40,6 +53,8 @@ export const AnalyzedPhotoSchema=z.object({
   mismatch:z.string().nullable().default(null),
   // 사진에 보이는 것 한 줄(AI가 본 것, 예: "젓가락으로 집어 든 홍어회 한 점, 뒤에 막걸리 사발"). 모르면 null.
   scene:z.string().nullable().default(null),
+  // 주인공 음식이 있는 곳(FoodBox). AI가 못 봤으면 null.
+  box:FoodBoxSchema.nullable().default(null),
   appetite:z.object({
     score:z.number(),appetite:z.number(),lighting:z.number(),composition:z.number(),
     warnings:z.array(z.string()),note:z.string(),

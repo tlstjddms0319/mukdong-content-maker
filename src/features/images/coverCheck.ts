@@ -30,8 +30,12 @@ export const CoverCheckSchema=z.object({
   // 사진에 보이는 것 한 줄(음식·술·손·그릇 등, 짧은 한국어). 실제 사진 캐러셀이 사진을 글 내용이 맞는 장에 넣고
   // 문안 AI에게 사진 내용을 알려 주는 데 쓴다. 예전 결과에는 없으므로 기본값 "".
   scene:z.string().default(""),
+  // 주인공 음식이 있는 곳: 사진 크기에 대한 비율 [왼쪽, 위, 너비, 높이](0~1). 사진을 그대로 쓰는 장을 음식 쪽으로 자르는 데 쓴다
+  // (photoAnalysis.ts foodBoxOf가 검사). 음식이 없거나 예전 결과에는 빈 배열.
+  focus:z.array(z.number()).default([]),
 });
-export type CoverCheckFields=z.infer<typeof CoverCheckSchema>;
+// focus는 예전 결과·대체 점검(unchecked)에는 없어 선택 항목으로 둔다.
+export type CoverCheckFields=Omit<z.infer<typeof CoverCheckSchema>,"focus">&{focus?:number[]};
 // unchecked: 이 장만 점검 호출이 실패해 점수를 모르는 자리(다른 장의 결과는 그대로 쓴다).
 export type CoverCheck=CoverCheckFields&{score:number;warnings:string[];unchecked?:true};
 
@@ -75,7 +79,8 @@ function promptFor(food:string):string {
 - clutter: 음식과 상관없는 물건이 많아 어수선하면 true
 - note: 가장 큰 문제나 장점을 한국어 20자 안팎 한 줄로
 - food: 사진 속 주인공 음식 이름을 한국어로 짧게(예: 홍어회, 삼합, 홍어무침, 홍어애탕, 과메기, 미나리전, 막걸리, 수육). 모르겠으면 빈 문자열
-- scene: 사진에 실제로 보이는 것을 한국어 30자 안팎 한 줄로(음식, 술, 곁들임, 손·젓가락 같은 사람 요소, 찍은 각도). 예: "젓가락으로 집어 든 홍어회 한 점, 뒤에 막걸리 사발"`;
+- scene: 사진에 실제로 보이는 것을 한국어 30자 안팎 한 줄로(음식, 술, 곁들임, 손·젓가락 같은 사람 요소, 찍은 각도). 예: "젓가락으로 집어 든 홍어회 한 점, 뒤에 막걸리 사발"
+- focus: 주인공 음식(접시 위 음식 전체, 그릇 가장자리는 빼도 됨)을 감싸는 사각형을 사진 크기에 대한 비율로 [왼쪽, 위, 너비, 높이] 네 숫자(0~1)로. 예: 가운데 절반이면 [0.25, 0.25, 0.5, 0.5]. 음식이 안 보이면 []`;
 }
 
 // 세 점수(1~5)를 10점 척도로. 먹음직스러움을 두 배로 친다(표지는 맛있어 보이는 게 먼저).
