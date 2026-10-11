@@ -41,7 +41,7 @@ describe("OpenAI image request", () => {
   it("uses the cooked preparation instead of a raw-slice directive for hongeo jeon",()=>{
     const request=buildImageRequest(ImageBriefSchema.parse({topic:"홍어전의 고소한 한입",imageBrief:"홍어회 접시를 표현한다는 잘못된 기획",count:1,refinement:"접시를 더 작게, 자연광은 부드럽게"}));
     expect(request.prompt).toContain("노릇");
-    expect(request.prompt).not.toContain("납작한 사각형 조각으로 썬 삭힌 홍어");
+    expect(request.prompt).not.toContain("손가락 두 마디 크기로 썬 삭힌 홍어 조각");
     expect(request.prompt).toContain("접시를 더 작게, 자연광은 부드럽게");
     expect(buildImageRequest(ImageBriefSchema.parse({topic:"홍어 전문점"})).prompt).not.toContain("노릇");
   });
@@ -61,9 +61,11 @@ describe("OpenAI image request", () => {
   it("requests explicit high quality and describes the store's square mauve slices crossed by diagonal cartilage lines",()=>{
     const request=buildImageRequest({topic:"홍어삼합",count:1,aspectRatio:"4:5"},"high");
     expect(request.quality).toBe("high");
-    expect(request.prompt).toContain("납작한 사각형 조각");
+    expect(request.prompt).toContain("5-8 mm thick with visible cut sides");
     expect(request.prompt).toContain("herringbone or chevron");
     expect(request.prompt).toContain("dusty mauve");
+    // 똑같은 얇은 정사각형 타일(초콜릿처럼 보임)이 아니라, 두께가 보이는 손썰기 조각.
+    expect(request.prompt).toContain("never identical thin square tiles");
     expect(request.prompt).toContain("정육면체");
   });
   it("returns an uncaptioned cover reference alongside the captioned image",async()=>{
@@ -476,7 +478,7 @@ describe("the topic's menu is the hero", () => {
     expect(prompt).toContain("홍어애탕 장면은 뚝배기");
     expect(prompt).toContain("주인공은 홍어애탕이다");
     expect(prompt).not.toContain("Show the skate only as sliced pieces");
-    expect(prompt).not.toContain("납작한 사각형 조각으로 썬 삭힌 홍어");
+    expect(prompt).not.toContain("손가락 두 마디 크기로 썬 삭힌 홍어 조각");
     expect(prompt).not.toContain("Skate texture:");
   });
   it("keeps the skate combinations out of a gwamegi slide's must-show line", () => {

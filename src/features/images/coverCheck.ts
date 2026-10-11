@@ -37,7 +37,7 @@ export type CoverCheck=CoverCheckFields&{score:number;warnings:string[];unchecke
 
 // 기대 음식. 주제·슬라이드 제목에서 메뉴 낱말을 찾아 점검 문장에 넣는다. 못 찾으면 홍어회.
 // 가게 메뉴(과메기·미나리전·홍어애탕·홍어무침·배다리 막걸리 등)는 STORE_MENU의 겉모습 묘사를 쓴다.
-const DEFAULT_FOOD={name:"홍어",description:"삭힌 홍어회(납작한 사각형 조각, 탁한 연보라빛 분홍·회백색 살에 비스듬한 흰 연골 결이 나란히 보임)"};
+const DEFAULT_FOOD={name:"홍어",description:"삭힌 홍어회(손으로 썬 도톰한 사각 조각으로 두께가 보이고, 탁한 연보라빛 분홍·회백색 살에 비스듬한 흰 연골 결이 나란히 보임)"};
 // 메뉴 목록에 없지만 글에 나오면 알아볼 음식(홍어전·찜은 확인된 메뉴가 아니어도 사장님이 직접 적을 수 있다).
 const EXTRA_FOODS:ReadonlyArray<readonly [RegExp,{name:string;description:string}]>=[
   [/홍어\s*전(?!문|통|체|날)/,{name:"홍어전",description:"홍어전(얇은 홍어 살에 전옷을 입혀 노릇하게 부친 전)"}],
@@ -45,7 +45,7 @@ const EXTRA_FOODS:ReadonlyArray<readonly [RegExp,{name:string;description:string
 ];
 function menuFood(menu:StoreMenuItem,text:string):{name:string;description:string} {
   if(menu.id==="hongeo-hoe")return /삼합/.test(text)
-    ?{name:"삼합",description:"홍어 삼합(얇게 썬 홍어회와 수육, 묵은지를 한입에 겹친 것, 홍어가 주인공)"}
+    ?{name:"삼합",description:"홍어 삼합(도톰히 썬 홍어회와 수육, 묵은지를 한입에 겹친 것, 홍어가 주인공)"}
     :DEFAULT_FOOD;
   return {name:menu.short,description:`${menu.short}(${menu.lookKo})`};
 }
@@ -64,7 +64,7 @@ function promptFor(food:string):string {
   return `이 사진은 식당 Instagram 카드뉴스 표지 후보입니다(글자는 나중에 얹습니다). 음식은 ${food}여야 합니다.
 다음을 JSON으로 답하세요.
 - foodVisible: 음식이 화면의 주인공으로 또렷이 보이면 true
-- looksLikeSkate: 위에서 말한 음식처럼 보이면 true. 다른 음식으로 보이면 false(예: 썬 홍어회여야 하는데 통생선이나 연어·참치처럼 보임)
+- looksLikeSkate: 위에서 말한 음식처럼 보이면 true. 다른 음식으로 보이면 false(예: 썬 홍어회여야 하는데 통생선이나 연어·참치처럼 보이거나, 똑같이 얇은 정사각형 타일이 바둑판처럼 놓여 초콜릿처럼 보임)
 - textInImage: 이미지 안에 글자, 숫자, 간판, 로고, 워터마크가 보이면 true
 - oddHands: 손이 있는데 손가락 개수·모양이 어색하면 true (손이 없으면 false)
 - appetite: 먹음직스러움 1~5 (윤기, 촉촉함, 결과 색이 살아 있는가)
