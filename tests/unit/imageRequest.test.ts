@@ -19,7 +19,13 @@ vi.mock("@/lib/ai/openaiClient",()=>({
 }));
 vi.mock("@/features/settings/repository",()=>({readSettings}));
 const listAssets=vi.hoisted(()=>vi.fn());
-vi.mock("@/features/images/assetLibrary",()=>({createAssetLibrary:()=>({list:listAssets})}));
+// 보관함 흉내: listAssets가 돌려주는 사진들. 생성 라우트는 미리보기 없는 정보(listMeta)로 고르고 고른 한 장만 read한다.
+// 모든 미리보기를 읽는 list()를 부르면 메모리가 넘치므로 테스트에서 바로 실패하게 한다.
+vi.mock("@/features/images/assetLibrary",()=>({createAssetLibrary:()=>({
+  list:()=>{throw new Error("list()는 모든 미리보기를 읽어 메모리가 넘친다. listMeta()를 써야 한다.");},
+  listMeta:async()=>((await listAssets()) as Array<{preview:string}>).map(({preview,...meta})=>{void preview;return meta;}),
+  read:async(id:string)=>((await listAssets()) as Array<{id:string}>).find(asset=>asset.id===id)??null,
+})}));
 
 const visitSlide={
   subline:"",

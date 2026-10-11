@@ -11,6 +11,14 @@ import { AssetDetailsSchema, LibraryAssetSchema, type AssetDetails, type Library
 export const MAX_INPUT_PIXELS=250_000_000;
 
 const QUALITY_BACKFILL=3;
+// 사진 정보(이름·검색어·품질)만 필요한 곳(홍어회 참고 사진 고르기)이 쓰는 목록. 미리보기(base64, 장당 수백 KB~수 MB)는 뺀다.
+// list()는 모든 사진의 미리보기를 한꺼번에 메모리에 올려서, 장마다 부르면 무료 인스턴스(512MB)가 넘쳤다(Render 메모리 초과 재시작).
+export type LibraryAssetMeta=Omit<LibraryAsset,"preview">;
+// 한 번에 읽는 사진 수. 다 읽은 사진은 미리보기를 버리므로 메모리에는 이만큼만 올라간다.
+const META_READ_CONCURRENCY=4;
+// 한 게시물의 여러 장이 1분 안에 연달아 부르므로 정보 목록을 잠깐 기억한다. 사진을 넣고·고치고·빼면 바로 비운다.
+const META_TTL_MS=60_000;
+const metaCache=new Map<string,{at:number;assets:LibraryAssetMeta[]}>();
 // 미리보기가 깨져 잴 수 없던 사진. 같은 서버 프로세스에서는 다시 시도하지 않아 다른 사진 차례를 막지 않는다.
 const unmeasurable=new Set<string>();
 
@@ -18,6 +26,7 @@ export function createAssetLibrary(root=process.env.DATA_DIR??path.join(process.
   const folder=path.join(root,"asset-library");
   async function save(asset:LibraryAsset) {
     const value=LibraryAssetSchema.parse(asset),key=`asset-library/${value.id}.json`,json=JSON.stringify(value);
+    metaCache.delete(folder);
     const remote=remoteStore();
     if(remote)await remote.write(key,json,"application/json");
     else {
@@ -54,16 +63,40 @@ export function createAssetLibrary(root=process.env.DATA_DIR??path.join(process.
     }));
     return filled.size?assets.map(asset=>filled.get(asset.id)??asset):assets;
   }
+  async function assetIds():Promise<string[]> {
+    let names:string[];
+    try{const remote=remoteStore();names=remote?await remote.list("asset-library"):await readdir(folder);}
+    catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return [];throw error;}
+    return names.filter(name=>name.endsWith(".json")&&z.string().uuid().safeParse(name.slice(0,-5)).success).map(name=>name.slice(0,-5));
+  }
   return {
     read,
     async list():Promise<LibraryAsset[]> {
-      let names:string[];
-      try{const remote=remoteStore();names=remote?await remote.list("asset-library"):await readdir(folder);}
-      catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return [];throw error;}
       // Owner's small photo collection; paginate if this grows beyond a few dozen assets.
-      const assets=await Promise.all(names.filter(name=>name.endsWith(".json")&&z.string().uuid().safeParse(name.slice(0,-5)).success).map(name=>read(name.slice(0,-5))));
+      const assets=await Promise.all((await assetIds()).map(read));
       const sorted=assets.filter((asset):asset is LibraryAsset=>asset!==null).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
       return backfillQuality(sorted);
+    },
+    // 미리보기를 뺀 사진 정보 목록(최근 사진부터). 일꾼 META_READ_CONCURRENCY개가 남은 사진을 하나씩 가져가 읽고,
+    // 읽자마자 미리보기를 떼어 버린다. 그래서 사진이 많아도 메모리에는 일꾼 수만큼의 사진만 올라간다.
+    // 품질 채우기(backfillQuality)는 하지 않는다(사진을 디코딩해야 해서 무겁고, 보관함 화면의 list()가 맡는다).
+    async listMeta():Promise<LibraryAssetMeta[]> {
+      const cached=metaCache.get(folder);
+      if(cached&&Date.now()-cached.at<META_TTL_MS)return cached.assets;
+      const queue=await assetIds(),assets:LibraryAssetMeta[]=[];
+      const worker=async()=>{
+        for(let id=queue.shift();id!==undefined;id=queue.shift()){
+          const asset=await read(id);
+          if(!asset)continue;
+          const {preview,...meta}=asset;
+          void preview; // 미리보기는 여기서 버린다.
+          assets.push(meta);
+        }
+      };
+      await Promise.all(Array.from({length:META_READ_CONCURRENCY},worker));
+      assets.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+      metaCache.set(folder,{at:Date.now(),assets});
+      return assets;
     },
     async add(file:File,details:AssetDetails):Promise<LibraryAsset> {
       const metadata=AssetDetailsSchema.parse(details);
@@ -96,6 +129,7 @@ export function createAssetLibrary(root=process.env.DATA_DIR??path.join(process.
     async remove(id:string):Promise<boolean> {
       z.string().uuid().parse(id);
       if(!(await read(id)))return false;
+      metaCache.delete(folder);
       const remote=remoteStore();
       if(remote)await remote.remove(`asset-library/${id}.json`);
       else await rm(path.join(folder,`${id}.json`),{force:true});

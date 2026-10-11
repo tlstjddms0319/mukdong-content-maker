@@ -38,3 +38,23 @@ it("fills quality for old library photos a few at a time and keeps it", async ()
   expect(second.slice(1).every(asset=>asset.quality!==null)).toBe(true);
   expect(second[0].quality).toBeNull();
 });
+
+// 홍어회 참고 사진 고르기는 장마다 보관함을 본다. 모든 미리보기(base64)를 한꺼번에 올리면 무료 인스턴스(512MB)가 넘쳐서
+// 미리보기를 뺀 정보만 돌려주고, 잠깐 기억했다가 사진을 빼면 바로 다시 읽는다.
+it("lists library photo details without previews and refreshes after a photo is removed", async () => {
+  directory=await mkdtemp(path.join(tmpdir(),"mukdong-meta-"));
+  const folder=path.join(directory,"asset-library");
+  await mkdir(folder,{recursive:true});
+  const ids:string[]=[];
+  for(let i=0;i<6;i++){
+    const id=randomUUID();ids.push(id);
+    await writeFile(path.join(folder,`${id}.json`),JSON.stringify({id,name:`홍어회 ${i}`,tags:["홍어회"],kind:"photo",credit:"직접 촬영",preview:"data:image/jpeg;base64,AAAA",createdAt:new Date(Date.UTC(2026,8,1+i)).toISOString(),lastUsedAt:null,quality:null}));
+  }
+  const library=createAssetLibrary(directory);
+  const meta=await library.listMeta();
+  expect(meta.map(asset=>asset.name)).toEqual(["홍어회 5","홍어회 4","홍어회 3","홍어회 2","홍어회 1","홍어회 0"]);
+  expect(meta.every(asset=>!("preview" in asset))).toBe(true);
+  // 보관함에서 빼면 기억해 둔 목록을 버리고 다시 읽는다.
+  expect(await library.remove(ids[5])).toBe(true);
+  expect((await library.listMeta()).map(asset=>asset.name)).not.toContain("홍어회 5");
+});

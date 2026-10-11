@@ -1,4 +1,4 @@
-import type { LibraryAsset } from "./freeCards";
+import type { LibraryAssetMeta } from "./assetLibrary";
 import type { ImageBrief } from "./schema";
 import { showsRawSkate } from "./openaiRequest";
 import { resolveImageStyle } from "./style";
@@ -13,7 +13,7 @@ const NOT_RAW=/무침|애\s*탕|탕|찜|전(?!문)|캐릭터|마스코트|스티
 // 같은 사진만 계속 붙으면 장마다 같은 접시가 나오므로, 좋은 사진 몇 장을 장 번호로 돌려 쓴다.
 const ROTATION=3;
 
-function isRawSkatePhoto(asset:LibraryAsset):boolean {
+function isRawSkatePhoto(asset:LibraryAssetMeta):boolean {
   if(asset.kind!=="photo")return false;
   const text=[asset.name,...asset.tags].join(" ");
   return SKATE.test(text)&&!NOT_RAW.test(text);
@@ -25,7 +25,8 @@ export function wantsSkateReference(input:ImageBrief):boolean {
   return !input.referenceImage&&resolveImageStyle(input)==="photo"&&showsRawSkate(input);
 }
 
-export function pickSkateReference(assets:readonly LibraryAsset[],input:ImageBrief):LibraryAsset|undefined {
+// 미리보기 없는 정보 목록(assetLibrary.listMeta)으로 고른다. 고른 사진의 미리보기는 부르는 쪽이 read(id)로 한 장만 읽는다.
+export function pickSkateReference<T extends LibraryAssetMeta>(assets:readonly T[],input:ImageBrief):T|undefined {
   if(!wantsSkateReference(input))return undefined;
   const ranked=assets.filter(isRawSkatePhoto).sort((a,b)=>
     (a.quality?.flags.length??0)-(b.quality?.flags.length??0)
