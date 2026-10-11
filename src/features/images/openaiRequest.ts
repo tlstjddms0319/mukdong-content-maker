@@ -160,7 +160,8 @@ function referenceDirection(input:ImageBrief):string {
   // 사진 중심에서 사진이 모자란 장: 같은 접시를 확대만 하던 것을, 같은 음식으로 이 장 글에 맞는 새 장면(예: 무침 옆 막걸리 사발)을 그리게 한다.
   if(input.referenceMode==="dish") return `첨부 사진은 이 가게가 실제로 내는 음식이다. 음식의 종류, 색, 양념, 썬 모양, 담음새와 그릇은 첨부 사진 그대로 살리고, 장면·구도·촬영 거리·곁들임(술잔·막걸리 사발·반찬 등)·배경은 이번 슬라이드 장면 설명대로 새로 만들 것. 첨부 사진과 같은 구도·같은 각도를 반복하지 말 것. 첨부 사진에 없는 다른 메뉴를 주인공으로 바꾸지 말 것. ${noCopy}`;
   if(input.referenceMode==="style") return `첨부 이미지는 화풍, 색감, 조명, 분위기만 참고한다. 참고 이미지 속 음식과 사물의 배치는 따르지 말고 선택 주제와 슬라이드 장면에 맞는 새 구도로 만들 것. ${noCopy}`;
-  return `첨부한 원본 음식의 형태와 특징은 유지하고 조명, 색감, 구도만 자연스럽게 보완할 것. ${noCopy}`;
+  // source: 장 고치기의 "AI로 이 사진 다듬기". 사장님이 찍은 사진의 구도까지 지키고 빛·색·선명도만 다듬는다.
+  return `첨부한 원본 음식의 형태와 특징은 유지하고 조명, 색감, 선명도만 자연스럽게 보완할 것. 가게에서 직접 찍은 사진이므로 음식의 종류·색·썬 모양·담음새, 그릇, 접시 위치, 촬영 각도와 구도를 그대로 지키고(장면 설명보다 이 사진이 우선), 초점을 흐리는 어수선한 배경 물건만 정리할 것. 음식을 바꾸거나 새 음식을 더하지 말 것. Keep the attached photo's food, plating, camera angle and composition; only improve light, color and sharpness. ${noCopy}`;
 }
 
 // 썬 홍어회가 주인공인 장면인지(홍어 질감 지시용).
@@ -188,23 +189,25 @@ export function comparisonCoverDirection(input:Pick<ImageBrief,"slide"|"topic">)
 export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
   const styleId=resolveImageStyle(input);
   const style=IMAGE_STYLE_DIRECTIONS[styleId];
+  // 사장님 사진을 구도 그대로 다듬는 요청(source)에는 새 장면을 요구하는 지시(필수 장면·후보 구도·칸별 피사체)를 넣지 않는다.
+  const retouch=reference&&(input.referenceMode??"source")==="source";
   return [
     // 작은 이미지 모델은 질문형 주제를 그대로 글씨로 그리기 쉬워서, 글자 금지를 영어로 맨 앞과 맨 끝에 둔다.
     NO_TEXT_DIRECTIVE,
     `한국 음식점 인스타그램 게시물용 ${style.medium}. 선택 주제(장면의 소재일 뿐, 이미지에 글자로 쓰지 말 것): ${input.topic}.`,
     input.imageBrief ? `기존 이미지 설명: ${input.imageBrief}.` : "",
-    sceneMustShow(input),
+    retouch ? "" : sceneMustShow(input),
     // 이미지 모델은 '홍어'를 보면 젓가락으로 한 점 집어 든 사진으로 가기 쉽다. 장면이 그걸 말하지 않으면 막는다.
     input.slide&&!CHOPSTICK_SCENE.test(input.slide.visualPrompt)
       ? "이 장면에는 젓가락으로 한 점을 집어 든 모습을 넣지 말고, 음식은 접시·그릇·식탁 위에 놓인 모습으로 보여 줄 것. Do NOT show chopsticks lifting a slice in this image; the food rests on the plate or table." : "",
-    input.slide ? `슬라이드 역할: ${input.slide.role}. 장면: ${input.slide.visualPrompt}.${input.photoFocus?` ${input.photoFocus}.`:""}` : `세로 4:5 구도, 하나의 음식 피사체가 선명하고 먹음직스럽게 보이며 자연스러운 조명과 여백이 있는 ${styleId==="photo"?"실제 음식 사진 스타일":`${style.medium} 스타일`}.`,
+    input.slide ? `슬라이드 역할: ${input.slide.role}. 장면: ${input.slide.visualPrompt}.${input.photoFocus&&!retouch?` ${input.photoFocus}.`:""}` : `세로 4:5 구도, 하나의 음식 피사체가 선명하고 먹음직스럽게 보이며 자연스러운 조명과 여백이 있는 ${styleId==="photo"?"실제 음식 사진 스타일":`${style.medium} 스타일`}.`,
     // 공통 스타일은 모든 장에 붙으므로 음식 이름을 걷어 내고 색·빛·그릇·테이블만 보낸다(예전에 저장된 구성안 포함).
     input.styleAnchor ? `전체 캐러셀 공통 스타일: ${foodFreeAnchor(input.styleAnchor)}.` : "",
     style.look,
     // 장면 설명이나 공통 스타일에 "사진"이 남아 있어도 화풍 지시가 이기도록 한 번 더 못 박는다.
     styleId==="photo" ? "" : `화풍: ${style.anchor}. 장면 설명이나 공통 스타일에 '사진'이라는 말이 있어도 사진처럼 만들지 말고 이 화풍으로 그릴 것.`,
     input.slide?.role==="detail"?"Macro detail: emphasize the actual texture of one bite with a gently blurred background. Keep the focal food clear of the title area; the plate may extend beyond the frame.":input.slide?.role==="overview"?"Top-down overview: keep the whole plate inside the central 75% crop-safe area, with sufficient depth of field to read the arrangement.":"Keep the main food inside the central 75% crop-safe area; use depth of field appropriate to this scene, without losing the food's recognizable shape.",
-    input.variant ? `이 후보만의 구도: ${input.variant}.` : "",
+    input.variant&&!retouch ? `이 후보만의 구도: ${input.variant}.` : "",
     // 카드의 사진 칸 비율에 맞춘 구도(가로 칸이면 접시 전체가 가장자리에서 잘리지 않게). 칸 비율을 모르면 넣지 않는다.
     framingDirection(input.windowRatio,input.slide?.role==="detail"),
     // 사람이 먹고 있는 느낌은 장면 설명이 요구할 때만, 얼굴이 식별되지 않는 범위에서 넣는다.

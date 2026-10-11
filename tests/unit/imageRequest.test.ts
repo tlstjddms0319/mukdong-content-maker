@@ -387,6 +387,17 @@ describe("OpenAI image request", () => {
     expect(actual.equals(expected)).toBe(true);
   }, 15_000);
 
+  it("keeps the owner's photo composition when retouching it, without new-scene directions", async () => {
+    const slide={...visitSlide,headline:"막걸리랑 같이 드세요",points:["막걸리 한 사발과 함께"]};
+    const brief={topic:"홍어회",count:1,aspectRatio:"4:5" as const,slide,slideIndex:5,slideTotal:5,styleAnchor:carouselStyleAnchor,variant:"바로 위에서 내려다본 상차림"};
+    const retouch=buildImagePrompt({...brief,referenceImage:"data:image/jpeg;base64,eA==",referenceMode:"source"},true);
+    expect(retouch).toContain("촬영 각도와 구도를 그대로 지키고");
+    expect(retouch).not.toContain("MUST SHOW");
+    expect(retouch).not.toContain("이 후보만의 구도");
+    const redraw=buildImagePrompt({...brief,referenceImage:"data:image/jpeg;base64,eA==",referenceMode:"dish"},true);
+    expect(redraw).toContain("MUST SHOW");
+    expect(redraw).toContain("이 후보만의 구도");
+  });
   it("draws a raw skate scene from the owner's own hongeo photo in the library", async () => {
     const photo=await sharp({create:{width:40,height:40,channels:3,background:"#b493a8"}}).jpeg().toBuffer();
     const preview=`data:image/jpeg;base64,${photo.toString("base64")}`;
