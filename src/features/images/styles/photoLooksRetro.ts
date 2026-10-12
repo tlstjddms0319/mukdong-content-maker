@@ -50,7 +50,7 @@ async function signboard(photo:Buffer,content:StyleContent,index:number):Promise
   layers.push({input:star.data,left:centred(star,cx),top:Math.round(cy-star.info.height/2)});
   let y=Math.round((bandH-head.layer.info.height-(content.cover?54:0))/2);
   if(content.cover){
-    const eyebrow=await textLayer("— 묵동홍어마을 —",{size:34,color:SIGN.cream,width:700,height:80,font:SANS_BOLD,align:"centre",letterSpacing:4});
+    const eyebrow=await textLayer("— 묵동홍어마을 —",{size:40,color:SIGN.cream,width:700,height:80,font:SANS_BOLD,align:"centre",letterSpacing:4});
     layers.push({input:eyebrow.data,left:centred(eyebrow),top:y});y+=54;
   }
   layers.push({input:head.layer.data,left:centred(head.layer),top:y});
@@ -117,7 +117,7 @@ async function inkFrame(photo:Buffer,content:StyleContent,index:number):Promise<
   markup+=`<path d="M${540-110} ${sepY}H${540-22}M${540+22} ${sepY}H${540+110}" stroke="${INK.gold}" stroke-width="2"/><path d="M540 ${sepY-9}L549 ${sepY}L540 ${sepY+9}L531 ${sepY}Z" fill="${INK.gold}"/>`;
   const layers:OverlayOptions[]=[svgLayer(markup),{input:arched,left:ax,top}];
   if(content.cover)layers.push({input:await logoMark(92,INK.cream),left:centred({info:{width:92}}),top:top+AH-92-24});
-  else{const folio=await textLayer(`— ${String(index).padStart(2,"0")} —`,{size:30,color:INK.gold,width:300,height:60,font:SANS_BOLD,align:"centre",features:"tnum"});layers.push({input:folio.data,left:centred(folio),top:78});}
+  else{const folio=await textLayer(`— ${String(index).padStart(2,"0")} —`,{size:40,color:INK.gold,width:300,height:70,font:SANS_BOLD,align:"centre",features:"tnum"});layers.push({input:folio.data,left:centred(folio),top:78});}
   layers.push({input:head.layer.data,left:centred(head.layer),top:textTop});
   if(sub)layers.push({input:sub.data,left:centred(sub),top:sepY+26});
   if(store){const placed=store.place(540,bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
@@ -151,7 +151,7 @@ async function auctionTag(photo:Buffer,content:StyleContent,index:number,look:Tr
   // 꼬리표: 오른쪽 위, 번호와 품목만(산지·중량·숙성일 같은 확인 안 된 사실은 적지 않는다).
   const TW=360,TX=W-MARGIN-TW+10,TY=MARGIN+20;
   const no=await textLayer(content.cover?"No. 묵동":`No. ${String(index).padStart(3,"0")}`,{size:48,color:TAG.ink,width:TW-80,height:100,font:STYLE_FONTS.heavy,features:"tnum"});
-  const item=await textLayer(`품목 · ${(content.keywords?.[0]??"홍어").slice(0,6)}`,{size:36,color:TAG.dim,width:TW-80,height:80,font:SANS_BOLD});
+  const item=await textLayer(`품목 · ${(content.keywords?.[0]??"홍어").slice(0,6)}`,{size:40,color:TAG.dim,width:TW-80,height:80,font:SANS_BOLD});
   const TH=40+no.info.height+18+item.info.height+40;
   const cut=40;
   layers.push(svgLayer(`<path d="M${TX+cut} ${TY+cut}C${TX-30} ${TY-10} ${TX-60} ${TY-40} ${TX-120} ${TY-60}" fill="none" stroke="#F3E9DA" stroke-width="4" stroke-linecap="round"/>`
@@ -182,9 +182,9 @@ async function museum(photo:Buffer,content:StyleContent,index:number):Promise<Bu
   const foot=store?null:await footerRow({color:MUSEUM.dim,cueColor:MUSEUM.ink,cue:!content.last});
   const LW=620,LX=W-MARGIN-LW;
   const head=await fitLines(content.headline,{sizes:content.cover?[68,64,60,56]:[64,60,56,52],width:LW-72,font:TITLE_SERIF,color:MUSEUM.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.08),emphasis:emphasisOf(content,"#8A3A1F")});
-  const meta=await textLayer(`${content.cover?"특별전":`전시 ${String(index).padStart(2,"0")}`} · ${(content.keywords??["홍어"]).slice(0,2).join(" · ")}`,{size:28,color:MUSEUM.dim,width:LW-72,height:80,font:SANS_BOLD,letterSpacing:1});
+  const meta=await textLayer(`${content.cover?"특별전":`전시 ${String(index).padStart(2,"0")}`} · ${(content.keywords??["홍어"]).slice(0,2).join(" · ")}`,{size:40,color:MUSEUM.dim,width:LW-72,height:80,font:SANS_BOLD,letterSpacing:1});
   const line=lineOf(content);
-  const sub=line?await textLayer(line,{size:36,color:MUSEUM.dim,width:LW-72,height:4000,font:SANS,spacing:8}):null;
+  const sub=line?await textLayer(line,{size:40,color:MUSEUM.dim,width:LW-72,height:4000,font:SANS,spacing:8}):null;
   const LH=36+meta.info.height+14+head.layer.info.height+(sub?22+sub.info.height:0)+36;
   const bottomH=store?store.height:foot!.height;
   const bottomTop=H-(store?52:MARGIN)-bottomH;

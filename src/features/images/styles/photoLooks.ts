@@ -149,7 +149,7 @@ async function labelCard(photo:Buffer,content:StyleContent,index:number,look:Tra
   if(content.cover)layers.push({input:await logoMark(104,paper.ring),left:MARGIN,top:MARGIN});
   else{
     // 본문: 왼쪽 위 꼬리표(No.02)로 순서를 알린다.
-    const tag=await textLayer(`No.${String(index).padStart(2,"0")}`,{size:34,color:"#2B1F1A",width:300,height:80,font:SANS_BOLD,features:"tnum"});
+    const tag=await textLayer(`No.${String(index).padStart(2,"0")}`,{size:40,color:"#2B1F1A",width:300,height:80,font:SANS_BOLD,features:"tnum"});
     const tw=tag.info.width+44;
     layers.push(svgLayer(`<path d="M${MARGIN} ${MARGIN}H${MARGIN+tw}L${MARGIN+tw+22} ${MARGIN+30}L${MARGIN+tw} ${MARGIN+60}H${MARGIN}Z" fill="#F3E9DA"/><circle cx="${MARGIN+tw-2}" cy="${MARGIN+30}" r="6" fill="#2B1F1A"/>`),{input:tag.data,left:MARGIN+20,top:MARGIN+30-Math.round(tag.info.height/2)});
   }
@@ -201,7 +201,7 @@ async function stepCard(photo:Buffer,content:StyleContent,index:number,total:num
   const photoH=Math.max(380,(sub?subTop-36:bottomTop-44)-y);
   layers.push(await shadowLayer({x:MARGIN,y:y+12,width:CONTENT_W,height:photoH,rx:28,blur:24,opacity:.18}),{input:await croppedPhoto(photo,CONTENT_W,photoH,28,{zoom:1.03}),left:MARGIN,top:y});
   if(cover){
-    const chip=await textLayer("순서대로 넘겨 보세요 ›",{size:34,color:paper.chipInk,width:700,height:80,font:SANS_BOLD});
+    const chip=await textLayer("순서대로 넘겨 보세요 ›",{size:40,color:paper.chipInk,width:700,height:80,font:SANS_BOLD});
     const ch=chip.info.height+28,cw=chip.info.width+56;
     layers.push(svgLayer(`<rect x="${MARGIN+24}" y="${y+photoH-ch-24}" width="${cw}" height="${ch}" rx="${ch/2}" fill="${paper.chip}"/>`));
     layers.push({input:chip.data,left:MARGIN+52,top:y+photoH-ch-24+14});
