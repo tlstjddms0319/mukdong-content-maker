@@ -66,7 +66,7 @@ export function diversifyCarouselDesign(plan:CarouselPlan,seed:number,options:{f
   const tone=plan.design.tone==="calm"||calmText||(fallback&&RESTRAINABLE_STYLES.has(style)&&Math.floor(seed/8)%3===0)?"calm":"loud";
   const design:DesignSpec=fallback
     // 계절 소품: 기본 구성안은 글의 낱말과 지금 시기의 행사로 고른다(애매하면 없음). AI 구성안은 AI가 고른 값을 쓴다.
-    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),style,theme,titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont,tone,season:suggestSeasonMotif(text)}
+    ?{palette:pick(PaletteIdSchema.options.filter((id:PaletteId)=>id!=="night"),seed,1),style,theme,titleFont:fontSet.titleFont,bodyFont:fontSet.bodyFont,tone,season:suggestSeasonMotif(text),look:0}
     :{...plan.design,style,theme,tone};
   const accent=fallback?fontSet.accent:ACCENT_TITLE[design.titleFont];
   const everyFontAuto=plan.slides.every(slide=>slide.titleFont==="auto"&&slide.bodyFont==="auto");

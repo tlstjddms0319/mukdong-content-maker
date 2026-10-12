@@ -38,6 +38,22 @@ export function trackLayout(track:CarouselTrack,role:CarouselRole):CardLayout {
 }
 export const trackDesign=(track:CarouselTrack,palette:PaletteId=DEFAULT_DESIGN.palette):DesignSpec=>({...DEFAULT_DESIGN,palette,style:TRACK_STYLES[track]});
 
+// 갈래마다 쓸 수 있는 모양(design.look 번호 = 이 목록 순서). 0은 처음부터 있던 기본 모양이고 계속 쓴다.
+// 그리기는 styles/photoLooks.ts·textLooks.ts(0은 photoFocus.ts·textFocus.ts). 사장님 지적(2026-10-12): 게시물마다 같은 템플릿.
+// 새 모양을 늘리면 여기 이름을 더하고 그리기 함수에 같은 번호를 더한다.
+export const TRACK_LOOKS:Record<CarouselTrack,ReadonlyArray<{name:string}>>={
+  photo:[{name:"기본"},{name:"매거진"},{name:"반반"},{name:"숙성 도장"},{name:"순서 카드"},{name:"레트로 간판"},{name:"원형 그릇"},{name:"먹색 액자"},{name:"경매표"},{name:"박물관 라벨"}],
+  text:[{name:"기본"},{name:"메모지"},{name:"노포 메뉴판"},{name:"한지 붓글씨"},{name:"호외 신문"},{name:"공지 안내판"},{name:"큰 한 글자"},{name:"승차권"}],
+};
+// 새 게시물의 모양: 바로 전 게시물 모양(previous)만 빼고 고르게 하나. previous가 범위 밖이면 무시한다.
+export function pickTrackLook(track:CarouselTrack,previous?:number,random:()=>number=Math.random):number {
+  const count=TRACK_LOOKS[track].length;
+  const choices=Array.from({length:count},(_,i)=>i).filter(i=>i!==previous);
+  return choices[Math.min(choices.length-1,Math.floor(random()*choices.length))];
+}
+// 확인 화면의 "다른 모양으로": 다음 모양(끝이면 처음).
+export const nextTrackLook=(track:CarouselTrack,current:number)=>(current+1)%TRACK_LOOKS[track].length;
+
 // 주제(표지 글)에 맞는 색 조합. 예전에는 갈래마다 한 벌(따뜻한 종이)로 고정이라 어느 주제든 같은 템플릿처럼 보였다(사장님 지적 2026-10-09).
 // 레이아웃·글자 크기는 그대로 두고 색만 주제 분위기로 바꾼다(그리는 쪽은 styles/trackLooks.ts). 앞에 있는 규칙이 먼저다.
 const TOPIC_PALETTES:ReadonlyArray<[RegExp,PaletteId]>=[
@@ -233,7 +249,9 @@ export function applyTrack(plan:CarouselPlan,track:CarouselTrack,options:{copy?:
     ...slide,...(copy?fitTrackCopy(slide,track,{conclusion:i===last&&i>0}):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
   }));
   const cover=plan.slides[0];
-  return {...plan,design:trackDesign(track,paletteForTopic(`${cover?.headline??""} ${cover?.subline??""}`)),slides:copy?withReasonCount(withClosingInvite(slides,track)):slides};
+  // 이미 고른 모양(design.look)은 그대로 둔다(갈래 맞추기를 여러 번 불러도 모양이 0으로 돌아가지 않게).
+  const design={...trackDesign(track,paletteForTopic(`${cover?.headline??""} ${cover?.subline??""}`)),look:plan.design?.look??0};
+  return {...plan,design,slides:copy?withReasonCount(withClosingInvite(slides,track)):slides};
 }
 
 // 표지 부제에 "이유 N가지"를 덧붙인다(일반 사용자 비판 C2: 끝이 보이는 글을 더 넘긴다). N = 표지·결론 장을 뺀 이유 장 수.
@@ -279,7 +297,7 @@ ${QUESTION_FOCUS_RULE}
 ${EXPLAIN_REASONS_RULE}
 ${NOTES_FIRST_RULE}`,
     style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. ${HOOK_RULE} 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내)으로, 질문형이나 의외의 사실을 단정하는 문장으로 쓰고, subline(${cover.subline}자 이내 해요체 한 줄)에는 결론(답)을 미리 말하지 말고 궁금증을 키우는 한 줄을 쓰세요(예: "알고 보면 소리 이야기예요". "답은 탄산에 있어요"처럼 답을 밝히면 넘겨 볼 이유가 사라져요). 단정형 표지면 부제에 본문이 답할 질문을 쓰세요. "유혹", "매력", "풍미", "향연", "특별한" 같은 광고 말은 쓰지 마세요(이유 개수는 앱이 덧붙여요). 짧은 글은 그 장 제목을 뒷받침하는 이유·근거만 쓰세요. 먹는 법·고르는 법 같은 써먹을 정보는 notes에 쓰면 올릴 글(캡션)에 들어가요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.`,
-    design:`[디자인] 디자인과 장마다 layout은 앱이 정합니다. design은 {"palette":"warm","style":"${TRACK_STYLES[track]}","theme":"classic","titleFont":"pretendard","bodyFont":"pretendard","tone":"loud","season":"none"} 그대로 두고, 표지 layout은 fullscreen, 나머지 장은 ${track==="photo"?"frame":"browser"}로 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣고, figure는 빈 문자열로 두세요.`,
+    design:`[디자인] 디자인과 장마다 layout은 앱이 정합니다. design은 {"palette":"warm","style":"${TRACK_STYLES[track]}","theme":"classic","titleFont":"pretendard","bodyFont":"pretendard","tone":"loud","season":"none","look":0} 그대로 두고, 표지 layout은 fullscreen, 나머지 장은 ${track==="photo"?"frame":"browser"}로 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣고, figure는 빈 문자열로 두세요.`,
     track:track==="photo"
       ?`[갈래: ${TRACK_LABELS.photo}] 모든 장이 사진 한 장으로 꽉 차는 게시물입니다. 사진이 주인공이므로 글은 사진을 보며 바로 읽히는 한 줄이면 충분합니다. 각 장의 visualPrompt는 그 장의 글이 말하는 장면을 먹음직스럽게, 장마다 서로 다른 구도로 쓰세요.`
       :`[갈래: ${TRACK_LABELS.text}] 표지만 사진이 들어가고 나머지 장은 사진 없이 큰 글자만 나가는 게시물입니다. 장마다 큰 글자 세 줄(제목 한 줄 + 짧은 글 두 줄)로 읽히게 쓰세요. visualPrompt는 표지 장면만 실제 그림이 되지만, 모든 장에 서로 다르게 짧게 쓰세요.`,

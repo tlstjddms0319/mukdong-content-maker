@@ -92,11 +92,14 @@ export const DesignSpecSchema=z.object({
   tone:z.enum(["loud","calm"]).default("loud"),
   // 계절 소품(seasonMotif.ts). 카드 빈 자리에만 옅게 얹는다. 예전 구성안처럼 비어 있으면 none(장식 없음).
   season:SeasonMotifSchema.default("none"),
+  // 두 갈래(사진 중심·글 중심)의 모양 번호(track.ts TRACK_LOOKS, 그리기는 styles/photoLooks·textLooks). 게시물마다 하나.
+  // 예전 구성안처럼 비어 있으면 0(기본 모양). 계열 디자인(template·한지 등)은 쓰지 않는다.
+  look:z.number().int().min(0).max(15).default(0),
 });
 export type DesignSpec=z.output<typeof DesignSpecSchema>;
 // 그리기 함수는 글꼴이 빠진 예전 값도 받는다(빠진 글꼴은 기본값).
 export type DesignSpecInput=z.input<typeof DesignSpecSchema>;
-export const DEFAULT_DESIGN:DesignSpec={palette:"warm",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none"};
+export const DEFAULT_DESIGN:DesignSpec={palette:"warm",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none",look:0};
 
 export const paletteOf=(design?:DesignSpecInput):Palette=>PALETTES[design?.palette??DEFAULT_DESIGN.palette].colors;
 

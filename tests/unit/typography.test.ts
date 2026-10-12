@@ -19,7 +19,7 @@ describe("title and body fonts", () => {
   });
 
   it("fills missing fonts with the default and still sends a strict schema to providers", () => {
-    expect(DesignSpecSchema.parse({palette:"sea"})).toEqual({palette:"sea",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none"});
+    expect(DesignSpecSchema.parse({palette:"sea"})).toEqual({palette:"sea",style:"template",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none",look:0});
     expect(()=>DesignSpecSchema.parse({palette:"sea",titleFont:"comic"})).toThrow();
     // 기본값이 있는 필드도 출력 스키마에서는 필수라 엄격 JSON 스키마 변환이 실패하지 않는다.
     expect(()=>toStrictJsonSchema(CarouselPlanSchema)).not.toThrow();

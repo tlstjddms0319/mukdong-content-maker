@@ -7,7 +7,7 @@ import { StudioSnapshotSchema, type StudioSnapshotInput } from "@/features/draft
 import { normalizeCardLayout, photosNeeded, type CardLayout } from "./design";
 import { AnalyzeResponseSchema, TOPIC_TAG, photoNote, type FoodBox } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
-import { TRACK_STYLES, type CarouselTrack } from "./track";
+import { TRACK_LOOKS, TRACK_STYLES, nextTrackLook, pickTrackLook, type CarouselTrack } from "./track";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { teaserText } from "./teaser";
 import { fillWithPhotoViews, fitPlanToPhotos, matchPhotosToSlides, sceneFallbackSlide, swapPhoto, type PhotoView } from "./photoCarousel";
@@ -116,6 +116,29 @@ export function useGenerationState():GenerationState {
 
 // 구성안 요청에 실을 갈래(없으면 빈 객체: 예전 요청과 똑같다).
 const trackField=()=>state.input.track?{track:state.input.track}:{};
+// 갈래 게시물의 모양(design.look). 새 게시물마다 바로 전 게시물 모양만 빼고 고른다(이 기기에 마지막 모양을 기억).
+const LAST_LOOK_KEY=(track:CarouselTrack)=>`mukdong-last-look-${track}`;
+function readLastLook(track:CarouselTrack):number|undefined {try{const value=localStorage.getItem(LAST_LOOK_KEY(track));return value===null?undefined:Number(value);}catch{return undefined;}}
+function rememberLook(track:CarouselTrack,look:number){try{localStorage.setItem(LAST_LOOK_KEY(track),String(look));}catch{}}
+function withChosenLook(plan:CarouselPlan):CarouselPlan {
+  const track=state.input.track;
+  if(!track)return plan;
+  const look=pickTrackLook(track,readLastLook(track));
+  rememberLook(track,look);
+  return {...plan,design:{...plan.design,look}};
+}
+// 확인 화면에 보여 줄 지금 모양(갈래 게시물이 아니면 null).
+export function trackLookOf(current:Pick<GenerationState,"input"|"plan">):{name:string;number:number;count:number}|null {
+  const track=current.input.track;
+  if(!track||!current.plan)return null;
+  const looks=TRACK_LOOKS[track],look=Math.min(current.plan.design.look??0,looks.length-1);
+  return {name:looks[look].name,number:look+1,count:looks.length};
+}
+// "다른 모양으로"를 누를 수 있는지: 다 만든 갈래 게시물이고, 모든 장의 밑바탕(사진·AI 그림)이 남아 있어야 다시 그릴 수 있다
+// (밑바탕이 없는 장은 예전 모양으로 남아 한 게시물에 모양이 섞인다).
+export function canChangeLook(current:GenerationState):boolean {
+  return Boolean(current.input.track&&current.plan&&current.phase==="idle"&&deckComplete(current)&&current.slides.every((_,i)=>textEditBase(current,i)));
+}
 
 export function resetGenerationStore(){run++;autoRun++;storeRun++;drawnScenes.clear();replace(initialGenerationState("",EMPTY_INPUT));}
 
@@ -212,6 +235,20 @@ async function drawStoreCard(){
     try{await redrawDeck(token);}finally{if(token===run)patch({phase:"idle",deckStatus:""});}
   }
   if(mine===storeRun)patch({storeCard:{...state.storeCard,pending:false}});
+}
+// 확인 화면의 "다른 모양으로": 같은 갈래의 다음 모양으로 모든 장을 다시 그린다(밑바탕 그대로라 AI 비용 없음).
+// 디자인이 바뀌면 장의 자리 열쇠(positionKey)가 모두 바뀌어 redrawDeck이 전부 다시 그리고, 홍보 카드도 새 모양으로 맞춘다.
+export async function changeTrackLook(){
+  const track=state.input.track;
+  if(!track||!state.plan||!canChangeLook(state))return;
+  const look=nextTrackLook(track,state.plan.design.look??0);
+  rememberLook(track,look);
+  const token=++run;
+  const label=`'${TRACK_LOOKS[track][look].name}' 모양으로 다시 그리는 중`;
+  patch({plan:{...state.plan,design:{...state.plan.design,look}},approved:false,error:"",phase:"slides",deckStatus:label});
+  try{await redrawDeck(token,-1,label);}
+  catch(error){if(token===run)patch({error:error instanceof Error?error.message:"다른 모양으로 그리지 못했어요."});}
+  finally{if(token===run)patch({phase:"idle",deckStatus:""});}
 }
 // 장 고치기의 "맨 뒤 가게 홍보 카드" 켜고 끄기. 전체 장 수가 바뀌므로 내용 장의 장 번호를 다시 그린다.
 export async function setStoreCardIncluded(include:boolean){
@@ -453,7 +490,7 @@ export async function buildPhotoCarousel(){
     // 갈래가 있으면 갈래가 장마다 사진 수를 정한다(사진 중심 1장까지, 글 중심은 표지만). 파노라마는 쓰지 않는다.
     const style=(data.plan as CarouselPlan).design.style;
     const track=state.input.track;
-    const fitted=track?fitPlanToPhotos(data.plan as CarouselPlan,photos.length,{track}):fitPlanToPhotos(data.plan as CarouselPlan,photos.length,{maxPerSlide:!style||style==="template"?3:2});
+    const fitted=track?fitPlanToPhotos(withChosenLook(data.plan as CarouselPlan),photos.length,{track}):fitPlanToPhotos(data.plan as CarouselPlan,photos.length,{maxPerSlide:!style||style==="template"?3:2});
     // 2) 장마다 사진 칸 수는 그대로 두고, 사진 내용이 그 장의 글과 맞는 사진을 넣는다(표지는 첫 사진 그대로).
     const matched=photoNotes?{...fitted,...matchPhotosToSlides(fitted.plan,fitted.assignment,notes)}:fitted;
     // 3) 사진이 모자라 글자 카드로 남은 장에 넣을 사진 칸을 정한다(fillWithPhotoViews: 그 장 글과 맞는 사진·레이아웃).
@@ -681,13 +718,13 @@ export type NewSlide={headline:string;points:string[];source:NewSlideSource;phot
 // 예: 맨 뒤에 한 장 넣기 → 새 장과 바로 앞 장(마지막 장이 아니게 됨), 표지 띠가 바뀔 때만 표지.
 //     가운데 장 빼기 → 그 뒤 장들(번호가 하나씩 당겨짐)과 새 마지막 장, 필요하면 표지. 앞쪽 장은 그대로 둔다.
 // skip은 방금 새로 그린 장(다시 그릴 필요 없음). 밑바탕이 없는 장(저장된 초안을 다시 연 경우 등)은 그대로 둔다.
-async function redrawDeck(token:number,skip=-1){
+async function redrawDeck(token:number,skip=-1,label="장 번호를 맞추는 중"){
   const stale=state.slides.map((slide,i)=>i).filter(i=>i!==skip&&state.slides[i].drawnAt!==positionKey(state,i));
   let done=0;
   for(const i of stale){
     const base=state.plan?textEditBase(state,i):null;
     if(!base||!state.plan?.slides[i])continue;
-    patch({deckStatus:`장 번호를 맞추는 중 ${++done}/${stale.length}`});
+    patch({deckStatus:`${label} ${++done}/${stale.length}`});
     const card=await renderCard(i,state.plan.slides[i],base);
     if(token!==run)return;
     const updated={...state.slides[i],id:crypto.randomUUID(),preview:card.preview,droppedPoints:card.droppedPoints,drawnAt:card.drawnAt};
@@ -848,7 +885,7 @@ async function buildAiCarousel(){
     const data=await readJsonResponse(response);
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"글 순서를 정하지 못했어요.");
-    const plan=data.plan as CarouselPlan;
+    const plan=withChosenLook(data.plan as CarouselPlan);
     patch({plan,phase:"cover"});
     const count=state.input.track==="text"?2:1;
     const coverAt=positionKey(state,0);

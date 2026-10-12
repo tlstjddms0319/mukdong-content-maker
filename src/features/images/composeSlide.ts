@@ -10,6 +10,7 @@ import { CONTENT, DECOR_FONT, FONTS, MARGIN, META, blob, brandName, cleanPoints,
 import { BODY_TITLE, COVER_TITLE, EXTRA_RENDERERS, POINT, closingPlan, fillerProp, fillerProps, counterLayer, cueAt, footerPlan, isCover, isLast, cardShadow, mascotContact, photoWell, slideTitle, sublineLayer, teaserLayer, texturedCanvas } from "./render/extraLayouts";
 import { ROLE_POSES, type MascotPose } from "./decor";
 import { STYLE_RENDERERS } from "./styles";
+import { TRACK_STYLES } from "./styleCatalog";
 import { addSeasonMotif } from "./render/seasonLayer";
 import { panoramaReady, panoramaRenderer, type PanoramaSide } from "./render/panorama";
 import { MIN_STROKE } from "./styles/shared";
@@ -738,7 +739,9 @@ export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlide
   const style=design?.style??"template";
   const panorama=options.panorama&&raw[0]&&await panoramaReady(raw[0])?panoramaRenderer(options.panorama):null;
   const render=panorama??(style!=="template"&&layout!=="overlay"?STYLE_RENDERERS[style]:CARD_RENDERERS[card]);
-  const draw=(current:CarouselSlidePlan)=>withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:current.variant??0,palette,brandHandle:options.brandHandle,tone:design?.tone,remoteCutout:options.remoteCutout,storeCard:options.storeCard},()=>render(inputs,current,index,total,palette));
+  // 두 갈래 디자인은 게시물 모양 번호(design.look)를 장의 variant로 받아 모양을 고른다(styles/photoFocus·textFocus).
+  const lookOf=(current:CarouselSlidePlan)=>TRACK_STYLES.has(style)?{...current,variant:design?.look??0}:current;
+  const draw=(current:CarouselSlidePlan)=>withRenderContext({typography:typographyOf(fonts.titleFont,fonts.bodyFont),theme:design?.theme??"classic",variant:current.variant??0,palette,brandHandle:options.brandHandle,tone:design?.tone,remoteCutout:options.remoteCutout,storeCard:options.storeCard},()=>render(inputs,lookOf(current),index,total,palette));
   // 그린 카드를 바로 검수해서(render/audit.ts) 글자가 넘치거나 겹치면 요점을 뒤에서부터 하나씩 빼고 다시 그린다(최대 2번).
   // 그래도 남으면 문제가 가장 적은 결과를 쓰고 서버 로그에 남긴다. 대비 검사는 무거워서 자동 검수 테스트에서만 한다.
   let current=slide,best:{image:Buffer;report:AuditReport;count:number}|null=null;

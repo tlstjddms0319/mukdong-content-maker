@@ -6,6 +6,7 @@ import { contentOf, emphasisOf, snap, type StyleContent } from "./shared";
 import { MARGIN, ON_PHOTO, SANS, SHADE, TITLE_SERIF, TRACK_SURFACES, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines, storeCardBlock } from "./trackKit";
 import { trackLookOf } from "./trackLooks";
 import { renderTextFocus } from "./textFocus";
+import { renderPhotoLook } from "./photoLooks";
 
 // 사진 중심(갈래 "사진"). 사진을 그냥 붙이지 않고 한 가지 고급 모양으로 다듬는다.
 //   표지      : 사진을 화면 가득(블리드) 깔고 아래로 짙어지는 밤색 그라데이션 위에 큰 명조 제목(최대 두 줄)과 부제, 왼쪽 위 원형 로고.
@@ -141,6 +142,9 @@ export const renderPhotoFocus:CardRenderer=async(inputs,slide,index,total,palett
   // 사진이 없는 장(예전 초안을 다시 그릴 때 등)은 같은 가게 색의 글 중심 모양으로 그린다.
   if(!inputs.length)return renderTextFocus(inputs,slide,index,total,palette);
   const content=contentOf(slide,inputs,index,total);
+  // 모양(slide.variant): 0은 아래 기본 모양, 1~3은 photoLooks.ts. 한 게시물의 장은 모두 같은 모양을 쓴다.
+  const looked=renderPhotoLook(slide.variant??0,inputs[0],content,index,trackLookOf(palette),total);
+  if(looked)return looked;
   if(content.cover)return cover(inputs[0],content);
   // 액자 장의 종이 색은 구성안의 색 조합을 따른다(trackLooks.ts, 주제마다 바뀐다).
   if(content.last||index%2===0)return framed(inputs[0],content,index,trackLookOf(palette).light);
