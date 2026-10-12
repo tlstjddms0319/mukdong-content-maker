@@ -18,11 +18,12 @@ const steps: Array<{ id: WizardStep; label: string; short: string }> = [
   { id: "review", label: "3 확인하고 올리기", short: "3 올리기" },
 ];
 
-type Section="create"|"drafts"|"images"|"library"|"settings"|"help"|"plan";
+type Section="create"|"drafts"|"images"|"library"|"settings"|"help"|"plan"|"performance";
 // 자주 쓰는 메뉴 셋만 늘 보이게 두고, 가끔 쓰는 것은 "더보기" 안에 접어 둔다(사장님 결정: 고를 것을 줄인다).
 const MAIN:Array<{section:Section;href:string;label:string}>=[
   {section:"create",href:"/",label:"만들기"},
   {section:"drafts",href:"/drafts",label:"내 게시물"},
+  {section:"performance",href:"/performance",label:"성과"},
   {section:"settings",href:"/settings",label:"설정"},
 ];
 const MORE:Array<{section:Section;href:string;label:string}>=[

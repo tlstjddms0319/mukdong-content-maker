@@ -2,10 +2,11 @@
 import { describe,expect,it,vi } from "vitest";
 import { collectInstagram,createInsightsClient,INSIGHTS_SCOPE } from "@/features/metrics/instagramInsights";
 import type { InstagramDay } from "@/features/metrics/store";
+import type { InstagramConnection } from "@/features/instagram/schema";
 
 const ok=(body:unknown)=>({ok:true,status:200,json:async()=>body}) as Response;
 const bad=(status=400)=>({ok:false,status,json:async()=>({error:{message:"metric not supported"}})}) as Response;
-const conn=(scopes:string[]=["instagram_business_basic","instagram_business_content_publish",INSIGHTS_SCOPE])=>({instagramUserId:"ig1",username:"mukdong",accessToken:"secret-token",expiresAt:"2027-01-01T00:00:00.000Z",scopes,connectedAt:"2026-10-01T00:00:00.000Z",updatedAt:"2026-10-01T00:00:00.000Z"});
+const conn=(scopes:InstagramConnection["scopes"]=["instagram_business_basic","instagram_business_content_publish",INSIGHTS_SCOPE])=>({instagramUserId:"ig1",username:"mukdong",accessToken:"secret-token",expiresAt:"2027-01-01T00:00:00.000Z",scopes,connectedAt:"2026-10-01T00:00:00.000Z",updatedAt:"2026-10-01T00:00:00.000Z"});
 
 describe("인사이트 호출",()=>{
   it("계정 인사이트를 한 번에 요청하고 total_value를 읽는다. 응답에 없는 지표는 빈칸",async()=>{

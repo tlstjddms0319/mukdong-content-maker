@@ -34,7 +34,7 @@ export function PerformanceForm({draftId,topic,performance}:{draftId:string;topi
     void send({id:draftId,performance:record},"성과를 저장했어요.");
   };
   return <details className="performance-form">
-    <summary>성과 기록{performance?` · 반응 점수 ${engagementScore(performance).toLocaleString("ko-KR")}`:" (올린 뒤 숫자 적기)"}</summary>
+    <summary>성과 기록{performance?` · 반응 점수 ${engagementScore(performance).toLocaleString("ko-KR")}${performance.source==="instagram"?` · 인스타그램에서 자동으로 가져옴(${performance.recorded_at.slice(0,10)})`:""}`:" (올린 뒤 숫자 적기)"}</summary>
     <form aria-label={`${topic} 성과 기록`} onSubmit={save}>
       <label htmlFor={`${formId}-day`}>올린 날<input id={`${formId}-day`} type="date" value={postedOn} onChange={event=>setPostedOn(event.target.value)}/></label>
       {FIELDS.map(([key,label])=><label key={key} htmlFor={`${formId}-${key}`}>{label}<input id={`${formId}-${key}`} type="number" inputMode="numeric" min={0} step={1} value={values[key]} onChange={event=>setValues(current=>({...current,[key]:event.target.value}))}/></label>)}
