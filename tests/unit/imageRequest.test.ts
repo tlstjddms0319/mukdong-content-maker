@@ -87,7 +87,8 @@ describe("OpenAI image request", () => {
     expect(body.baseImages).toHaveLength(1);
     expect(body.baseImages[0]).toHaveLength(1);
     expect(await sharp(Buffer.from(body.baseImages[0][0].split(",")[1],"base64")).metadata()).toMatchObject({width:40,height:40,format:"jpeg"});
-  });
+  // 혼자 2초 안팎이지만 전체 테스트를 함께 돌리면 5초 기본 제한을 넘기곤 한다(이미지 합성).
+  },15_000);
   beforeEach(()=>{
     generateImage.mockReset();
     editImage.mockReset();

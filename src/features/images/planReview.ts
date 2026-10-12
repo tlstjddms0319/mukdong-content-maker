@@ -3,7 +3,7 @@ import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
-import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
+import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
@@ -44,6 +44,27 @@ const GIVES_REASON=/때문|라서|해서|덕분|니까|으니|어서|아서|잡�
 // 짧은 글이 그 장 제목·표지에 없는 새 음식을 꺼내는지 볼 낱말(가게 메뉴·곁들임).
 const SIDE_SUBJECTS=["묵은지","수육","초장","막걸리","미나리","과메기","애탕","무침","홍어찜","삼합","쪽파","마늘","고추","미역","깻잎","상추","배추"];
 
+// 비교 장에서 "다르다"는 말(어떻게 다른지는 없이). 양쪽 이름이 함께 있으면 "A는 ~, B는 ~"로 설명한 것으로 본다.
+const SAYS_DIFFERENT=/달라|다르|다른\s|차이|갈라|갈려|갈린/;
+// 공통점을 밝힌 장("둘 다 ~", "모두 ~")은 한쪽만 말한 장으로 보지 않는다.
+const SAYS_SHARED=/둘\s*다|모두|공통|똑같|같은\s/;
+function comparisonIssues(plan:CarouselPlan,pair:{first:string;second:string}):SlideCopyIssue[] {
+  const [ka,kb]=comparedKeys(pair);
+  const both=(text:string)=>text.replace(/\s+/g,"").includes(ka)&&text.replace(/\s+/g,"").includes(kb);
+  const issues:SlideCopyIssue[]=[];
+  const last=plan.slides.length-1;
+  plan.slides.forEach((slide,i)=>{
+    if(i===0)return;
+    const n=i+1,text=[slide.headline,...slide.points].join(" ");
+    if(i<last&&!both(text)&&!SAYS_SHARED.test(text))issues.push({slide:n,field:"headline",message:`비교 장인데 '${ka}'와(과) '${kb}'를 함께 말하지 않아요. 이 장의 비교 기준 하나를 정해 "${ka}는 ~, ${kb}는 ~"처럼 양쪽이 각각 어떤지 쓰세요(둘 다 같은 점이면 "둘 다 ~"라고 밝히세요).`});
+    for(const [field,line] of [["headline",slide.headline],...slide.points.map(point=>["points",point] as const)] as const){
+      if(SAYS_DIFFERENT.test(line)&&!both(line))issues.push({slide:n,field,message:`'${line.trim()}'은(는) 다르다고만 말해요. ${ka}은(는) 어떻고 ${kb}은(는) 어떤지 구체적으로 쓰세요. 확실히 모르는 제조 정보면 맛·색·탄산처럼 직접 확인되는 차이로 바꾸세요.`});
+    }
+    if(i===last&&!both(text))issues.push({slide:n,field:"headline",message:`결론 장이에요. 가장 큰 차이 하나를 '${ka}'와(과) '${kb}' 두 이름과 함께 한 문장으로 말하세요(예: "${ka}는 ~, ${kb}는 ~").`});
+  });
+  return issues;
+}
+
 export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCopyIssue[] {
   const limits=copyLimitsOf(track);
   const issues:SlideCopyIssue[]=[];
@@ -57,11 +78,15 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     if(missed)issues.push({slide:2,field:"headline",message:`표지가 '${missed.label}'에 왜 이 음식이 생각나는지 묻는데, 본문 어느 장도 ${missed.label}과(와) 음식의 연결을 설명하지 않아요. 첫 이유 장은 그 상황과 음식이 왜 이어지는지로 쓰세요.`});
   }
   // 비교 질문("치즈는 익숙한데 다른 발효 음식은 왜 낯설까?")인데 본문이 비교 대상(치즈)을 다시 꺼내지 않으면, 무엇과 무엇이 다른지 답하지 못한다.
-  const pair=track&&plan.slides.length>2?comparedPair(plan.slides[0].headline):undefined;
-  if(pair){
+  const pair=plan.slides.length>2?comparedPair(plan.slides[0].headline):undefined;
+  if(pair&&track){
     const body=plan.slides.slice(1).map(slide=>[slide.headline,...slide.points].join(" ")).join(" ");
-    if(!body.includes(pair.first))issues.push({slide:2,field:"headline",message:`표지가 '${pair.first}'와(과) '${pair.second}'를 견주는데, 본문 어느 장도 '${pair.first}'를 다시 꺼내지 않아요. 이유 장마다 두 대상을 나란히 놓고 무엇이 다른지 쓰세요.`});
+    // 본문은 "무침은 ~"처럼 줄여 쓰기도 해서 두 이름이 함께 가진 앞·뒤를 뗀 이름(comparedKeys)으로도 찾는다.
+    if(!body.includes(pair.first)&&!body.replace(/\s+/g,"").includes(comparedKeys(pair)[0]))issues.push({slide:2,field:"headline",message:`표지가 '${pair.first}'와(과) '${pair.second}'를 견주는데, 본문 어느 장도 '${pair.first}'를 다시 꺼내지 않아요. 이유 장마다 두 대상을 나란히 놓고 무엇이 다른지 쓰세요.`});
   }
+  // 두 대상의 차이를 묻는 비교 질문(COMPARISON_RULE): 이유 장마다 양쪽이 각각 어떤지, "다르다"만 하는 문장 없이, 결론은 양쪽 이름과 함께.
+  // B가 "다른 발효 음식"처럼 넓은 말이면 본문은 가게 메뉴를 대표로 쓰므로 이 검사는 하지 않는다(위 검사만).
+  if(pair&&!/^다른/.test(pair.second))issues.push(...comparisonIssues(plan,pair));
   plan.slides.forEach((slide,i)=>{
     const n=i+1,headline=slide.headline.trim();
     const length=headline.replace(/\s/g,"").length;
