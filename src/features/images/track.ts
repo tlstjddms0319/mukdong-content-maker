@@ -42,7 +42,7 @@ export const trackDesign=(track:CarouselTrack,palette:PaletteId=DEFAULT_DESIGN.p
 // 그리기는 styles/photoLooks.ts·textLooks.ts(0은 photoFocus.ts·textFocus.ts). 사장님 지적(2026-10-12): 게시물마다 같은 템플릿.
 // 새 모양을 늘리면 여기 이름을 더하고 그리기 함수에 같은 번호를 더한다.
 export const TRACK_LOOKS:Record<CarouselTrack,ReadonlyArray<{name:string}>>={
-  photo:[{name:"기본"},{name:"매거진"},{name:"반반"},{name:"숙성 도장"},{name:"순서 카드"}],
+  photo:[{name:"기본"},{name:"매거진"},{name:"반반"},{name:"숙성 도장"},{name:"순서 카드"},{name:"레트로 간판"},{name:"원형 그릇"},{name:"먹색 액자"}],
   text:[{name:"기본"},{name:"메모지"},{name:"노포 메뉴판"},{name:"한지 붓글씨"}],
 };
 // 새 게시물의 모양: 바로 전 게시물 모양(previous)만 빼고 고르게 하나. previous가 범위 밖이면 무시한다.

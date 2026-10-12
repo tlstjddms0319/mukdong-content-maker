@@ -4,6 +4,7 @@ import { shadowLayer, textureLayer } from "../decor";
 import { emphasisOf, snap, type StyleContent } from "./shared";
 import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines, storeCardBlock } from "./trackKit";
 import type { TrackLook } from "./trackLooks";
+import { renderPhotoLookRetro } from "./photoLooksRetro";
 
 // 사진 중심의 추가 모양(사장님 지적 2026-10-12: 게시물마다 같은 템플릿). slide.variant로 고른다(0은 photoFocus.ts의 기본 모양).
 //   1 매거진 : 표지는 종이 위쪽에 큰 명조 제목, 아래로 사진이 화면 끝까지. 본문은 위쪽 사진(가장자리까지) + 아래 종이에 글.
@@ -212,6 +213,7 @@ async function stepCard(photo:Buffer,content:StyleContent,index:number,total:num
 }
 
 export function renderPhotoLook(look:number,photo:Buffer,content:StyleContent,index:number,colors:TrackLook,total=index):Promise<Buffer>|null {
+  if(look>=5)return renderPhotoLookRetro(look,photo,content,index,colors);
   if(look===3)return labelCard(photo,content,index,colors);
   if(look===4)return stepCard(photo,content,index,total,colors);
   if(look===1)return content.cover?magazineCover(photo,content,colors):magazineBody(photo,content,index,colors);

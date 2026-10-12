@@ -55,7 +55,7 @@ for(const [track,style,label] of tracks){
       const layout=index===1?"fullscreen":track==="photo"?"frame":"browser";
       const inputs=track==="photo"||index===1?[photos[i]]:[];
       const fitted={...base,...slide,...fitTrackCopy({...base,...slide},track),layout};
-      const {image,report}=await composeSlideCard(inputs,fitted,index,copy.length,"card",{palette:paletteId,style},{photoKind:"real",contrast:true,brandHandle:handle});
+      const {image,report}=await composeSlideCard(inputs,fitted,index,copy.length,"card",{palette:paletteId,style,look},{photoKind:"real",contrast:true,brandHandle:handle});
       const notes=report.notes.filter(note=>!["photo-crop","photo-quality"].includes(note.kind));
       if(report.issues.length){problems++;console.log(`✗ ${style} ${photoName} ${copyName} ${index}장:`,report.issues.map(describeIssue).join(" | "));}
       if(notes.length)console.log(`· ${style} ${photoName} ${copyName} ${index}장 메모:`,notes.map(describeNote).join(" | "));
