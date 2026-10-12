@@ -2,12 +2,13 @@ import sharp, { type OverlayOptions } from "sharp";
 import { croppedPhoto, finishPhoto, svgLayer, textLayer } from "../render/primitives";
 import { shadowLayer, textureLayer } from "../decor";
 import { emphasisOf, snap, type StyleContent } from "./shared";
-import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines, storeCardBlock } from "./trackKit";
+import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, fitLines, folioMark, footerRow, logoMark, saveChip, shortLines, storeCardBlock } from "./trackKit";
 import type { TrackLook } from "./trackLooks";
 import { renderPhotoLookRetro } from "./photoLooksRetro";
 
 // 사진 중심의 추가 모양(사장님 지적 2026-10-12: 게시물마다 같은 템플릿). slide.variant로 고른다(0은 photoFocus.ts의 기본 모양).
 //   1 매거진 : 표지는 종이 위쪽에 큰 명조 제목, 아래로 사진이 화면 끝까지. 본문은 위쪽 사진(가장자리까지) + 아래 종이에 글.
+//              마지막 장도 본문과 같고 장 번호 자리에 "저장해 두고 다시 보세요" 알약(가게 명함 판 없이 사진 65% 이상).
 //   2 반반   : 사진과 주제 색 판을 위아래로 나눈다. 본문은 장마다 사진 위/아래를 바꿔 넘길 때 리듬이 생기게.
 //   3 숙성 라벨·도장 : 꽉 찬 사진 + 인주색 둥근 도장(키워드·가게 이름), 본문은 No.02 꼬리표.
 //   4 삼합 순서 카드 : 큰 원 번호 + 제목, 둥근 사진, 진행 점. 먹는 순서처럼 단계가 있는 이야기용.
@@ -25,12 +26,13 @@ const finish=(background:string,layers:OverlayOptions[])=>sharp({create:{width:W
 // ── 1 매거진 ──────────────────────────────────────────────────────────────────────────
 async function magazineCover(photo:Buffer,content:StyleContent,look:TrackLook):Promise<Buffer> {
   const paper=look.light;
-  const LOGO=96,TOP=MARGIN;
+  // 위쪽 로고는 빼고(바닥글에 로고가 있다) 제목을 바로 올려 사진이 화면의 65% 이상 되게 한다.
+  const TOP=MARGIN;
   const title=await titleOf(content,paper.ink,paper.accent,[100,92,86,80,74]);
   const sub=content.subline?await lineOf(content.subline,paper.dim,44):null;
-  const titleTop=TOP+LOGO+44;
+  const titleTop=TOP+8;
   const textBottom=titleTop+title.layer.info.height+(sub?22+sub.info.height:0);
-  const photoTop=Math.min(760,textBottom+56);
+  const photoTop=Math.min(600,textBottom+48);
   const shot=await finishPhoto(photo,W,H-photoTop,{zoom:1.04});
   const foot=await footerRow({color:"#FFFFFF",ring:paper.ring,cue:true,shadow:true});
   const footTop=H-MARGIN-foot.height;
@@ -40,7 +42,6 @@ async function magazineCover(photo:Buffer,content:StyleContent,look:TrackLook):P
   const texture=await textureLayer("linen",{opacity:.2});
   if(texture)layers.push(texture);
   layers.push(
-    {input:await logoMark(LOGO,paper.ring),left:MARGIN,top:TOP},
     {input:title.layer.data,left:MARGIN,top:titleTop},
     ...(sub?[{input:sub.data,left:MARGIN,top:titleTop+title.layer.info.height+22}]:[]),
     {input:shot,left:0,top:photoTop},
@@ -55,24 +56,26 @@ async function magazineBody(photo:Buffer,content:StyleContent,index:number,look:
   const title=await titleOf(content,paper.ink,paper.accent,[68,64,60,56,52]);
   const line=shortLines(content,1)[0];
   const sub=line?await lineOf(line,paper.dim):null;
-  const folio=await folioMark(index,paper.accent);
-  const card=content.last?await storeCardBlock({logoSize:110,wordmark:true,surface:paper}):null;
-  const foot=card?null:await footerRow({color:paper.dim,cueColor:paper.ink,cue:true});
-  const bottomH=card?card.height:foot!.height;
-  const bottomTop=H-(card?52:MARGIN)-bottomH;
-  const subTop=bottomTop-(card?40:56)-(sub?.info.height??0);
-  const titleTop=(sub?subTop-20:bottomTop-56)-title.layer.info.height;
-  const folioTop=titleTop-24-folio.layer.info.height;
-  const photoH=Math.max(480,folioTop-48);
+  const folio=content.last?null:await folioMark(index,paper.accent);
+  const chip=content.last?await saveChip(paper.chip,paper.chipInk):null;
+  const foot=await footerRow({color:paper.dim,cueColor:paper.ink,cue:!content.last});
+  const bottomTop=H-MARGIN+16-foot.height;
+  const subTop=bottomTop-48-(sub?.info.height??0);
+  const titleTop=(sub?subTop-18:bottomTop-48)-title.layer.info.height;
+  const markH=folio?folio.layer.info.height:chip!.height;
+  const markTop=titleTop-22-markH;
+  const photoH=Math.max(480,markTop-40);
   const shot=await finishPhoto(photo,W,photoH,{zoom:1.03});
   const layers:OverlayOptions[]=[];
   const texture=await textureLayer("linen",{opacity:.2});
   if(texture)layers.push(texture);
-  layers.push({input:shot,left:0,top:0},{input:folio.layer.data,left:MARGIN,top:folioTop},{input:title.layer.data,left:MARGIN,top:titleTop});
+  const placed=foot.place(bottomTop);
+  const markup=`<rect x="0" y="${photoH}" width="${W}" height="8" fill="${paper.accent}"/>`+(folio?folio.svg(MARGIN,markTop):chip!.svg(MARGIN,markTop))+placed.svg;
+  layers.push({input:shot,left:0,top:0},svgLayer(markup));
+  layers.push(folio?{input:folio.layer.data,left:MARGIN,top:markTop}:{input:chip!.layer.data,left:MARGIN+chip!.padX,top:markTop+chip!.padY});
+  layers.push({input:title.layer.data,left:MARGIN,top:titleTop});
   if(sub)layers.push({input:sub.data,left:MARGIN,top:subTop});
-  let markup=`<rect x="0" y="${photoH}" width="${W}" height="8" fill="${paper.accent}"/>`+folio.svg(MARGIN,folioTop);
-  if(card){const placed=card.place(540,bottomTop);markup+=placed.svg;layers.push(svgLayer(markup),...placed.layers);}
-  else{const placed=foot!.place(bottomTop);layers.push(svgLayer(markup+placed.svg),...placed.layers);}
+  layers.push(...placed.layers);
   return finish(paper.bg,layers);
 }
 

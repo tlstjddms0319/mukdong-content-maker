@@ -124,6 +124,12 @@ export async function folioMark(index:number,color:string,options:{shadow?:boole
 // 원형 로고 → (워드마크) → 계정(설정에 있을 때) → "저장해 두고 다시 보세요" 알약. 가운데 정렬로 cx 기준에 놓는다.
 // 주소·영업시간은 넣지 않는다(확인 안 된 사실). 로고 안의 전화번호는 가게가 직접 쓰는 로고 그대로다.
 export const SAVE_CHIP="저장해 두고 다시 보세요";
+// 마지막 장 "저장해 두고 다시 보세요" 알약 하나(가게 명함 판 없이 사진을 크게 쓰는 모양용). svg(x,y)로 판을 그리고 layer를 (x+padX, y+padY)에 놓는다.
+export async function saveChip(fill:string,ink:string):Promise<{layer:Layer;width:number;height:number;padX:number;padY:number;svg:(x:number,y:number)=>string}> {
+  const layer=await textLayer(SAVE_CHIP,{size:40,color:ink,width:900,height:80,font:SANS_SEMI});
+  const padX=30,padY=12,width=layer.info.width+padX*2,height=layer.info.height+padY*2;
+  return {layer,width,height,padX,padY,svg:(x,y)=>`<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${height/2}" fill="${fill}"/>`};
+}
 // halo: 로고 뒤에 깔 한 톤 짙은 원(색·로고 밖으로 나오는 폭). 원이 계정 글자에 걸리지 않게 그 폭만큼 아래로 띄운다
 // (예전에는 원을 따로 그려 계정 글자 윗부분이 원 테두리에 잘려 보였다).
 export async function storeCardBlock(options:{logoSize:number;ring?:string;wordmark:boolean;surface:Pick<TrackSurface,"ink"|"dim"|"chip"|"chipInk">;width?:number;halo?:{color:string;pad:number}}):Promise<{height:number;place:(cx:number,top:number)=>{layers:OverlayOptions[];svg:string}}> {
