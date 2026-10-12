@@ -23,7 +23,7 @@ function showsSkate(input:ImageBrief,hero:StoreMenuItem|undefined):boolean {
   // 메뉴를 못 찾은 장(주제)은 다른 메뉴와 부딪힐 일이 없으니 장면 설명까지 본다(예전과 같이).
   // 가게 이름 "묵동홍어마을"은 홍어 장면이 아니다(copyMentionsSkate가 걸러 낸다).
   if(!hero)return copyMentionsSkate(input.slide?slideTextOf(input):topicTextOf(input));
-  return copyMentionsSkate(input.slide?[input.slide.headline,...input.slide.points].join(" "):topicTextOf(input));
+  return copyMentionsSkate(input.slide?[input.slide.headline,...input.slide.points].join(" "):topicTextOf(input),hero);
 }
 
 // 홍어가 아닌 메뉴가 주인공일 때. 겉모습은 STORE_MENU에서 가져온다.
@@ -44,15 +44,16 @@ function foodDirection(input:ImageBrief):string {
   if(!skate)return parts.length?`${parts.join(" ")} 메뉴와 무관한 장식 소스는 추가하지 않는다.`:"";
   const subject=[input.topic,input.imageBrief,input.slide?.visualPrompt].filter(Boolean).join(" ");
   // A scene drafted by AI must not change an explicitly chosen preparation.
-  const menuText=/홍어\s*(?:전(?!문|통|체|날)|찜|무침|회|애\s*탕)|삼합/.test(input.topic)?input.topic:subject;
+  const menuText=/홍어\s*(?:전(?!문|통|체|날)|찜|무침|회|애\s*탕|라면)|삼합/.test(input.topic)?input.topic:subject;
   const cooked=[
     [/홍어\s*전(?!문|통|체|날)/,"홍어전 장면은 얇은 생선 살에 전옷을 입혀 노릇하게 부친 표면과 부드러운 속살을 표현한다. 회 접시로 바꾸지 않는다."],
     [/홍어\s*찜/,"홍어찜 장면은 익힌 살의 결을 표현한다. 생회처럼 투명하고 분홍색인 살로 바꾸지 않는다."],
     [/홍어\s*무침/,"홍어무침 장면은 홍어 조각과 양념의 질감을 구분한다. 설명이나 참고 사진에 없는 채소를 임의로 추가하지 않는다."],
+    [/홍어\s*라면/,"홍어라면 장면은 김이 오르는 그릇에 담긴 붉은 국물의 라면으로 표현한다. 회 접시로 바꾸지 않고, 설명에 없는 재료를 임의로 추가하지 않는다."],
     [/애\s*탕|홍어\s*탕/,"홍어애탕 장면은 뚝배기나 깊은 그릇에 담긴 뜨거운 국물 요리로 표현한다. 회 접시로 바꾸지 않고, 설명에 없는 재료를 임의로 추가하지 않는다."],
   ] as const;
   const preparations:string[]=cooked.filter(([pattern])=>pattern.test(menuText)).map(([,description])=>description);
-  const soup=/애\s*탕|홍어\s*탕/.test(menuText);
+  const soup=/애\s*탕|홍어\s*탕|홍어\s*라면/.test(menuText);
   // 삼합(수육·묵은지)은 장면이 말할 때만 꺼낸다. 홍어회 장면마다 "삼합"을 적으면 삼합 사진으로 끌려간다.
   const samhap=/삼합|수육|묵은지/.test(menuText);
   if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push(`홍어회는 이 가게처럼 손가락 두 마디 크기로 썬 삭힌 홍어 조각으로, 탁한 연보라빛 분홍 살에 비스듬한 흰 연골 결이 보이고 검은 접시에 줄지어 담긴다. Hand-cut pieces two finger-widths across, 5-8 mm thick with visible cut sides and uneven edges, in loose rows; never identical thin square tiles like a chocolate bar. The flesh is a muted, dusty mauve to lilac-pink with pale grey-white areas; fine translucent white cartilage lines cross each piece in parallel diagonal rows (a herringbone or chevron pattern), and the cut edges are serrated like a comb. Not the glossy orange of salmon or the deep red of tuna, and not bleached chalk-white.${samhap?" 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.":""}`);
@@ -91,7 +92,7 @@ export function sceneMustShow(input:ImageBrief):string {
   if(!slide)return "";
   const text=[slide.headline,...slide.points].join(" ");
   const hero=sceneHero(input);
-  const skate=!hero||hero.id==="hongeo-hoe"||copyMentionsSkate(text);
+  const skate=!hero||hero.id==="hongeo-hoe"||copyMentionsSkate(text,hero);
   const skateActions=skate?SKATE_ACTIONS.filter(([pattern])=>pattern.test(text)).map(([,description])=>description):[];
   // 삼합이면 수육·묵은지 문장은 삼합 문장에 이미 들어 있으므로 겹쳐 쓰지 않는다.
   const unique=skateActions.some(item=>item.startsWith("삼합"))?skateActions.filter(item=>!item.startsWith("수육")&&!item.startsWith("묵은지")):skateActions;

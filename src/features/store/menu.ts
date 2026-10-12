@@ -1,10 +1,12 @@
 // 묵동홍어마을 메뉴 목록. 주제 추천·구성안·이미지 지시문·표지 점검이 모두 이 한 곳을 본다.
-// 출처: 사장님이 알려 준 메뉴(2026-10-07, 홍어찜은 가게 홍보 포스터 메뉴판에서 확인). 네이버 플레이스 메뉴 페이지는 확인하지 못했다.
-// 가격·구성·원산지는 확인 전이라 적지 않는다. 사진·그림 묘사(look)는 겉모습만 쓰고 재료·맛을 단정하지 않는다.
+// 출처: 사장님이 알려 준 메뉴(2026-10-07, 홍어찜은 가게 홍보 포스터 메뉴판에서 확인)와 사장님이 보내 준 네이버 플레이스
+// 메뉴 페이지(2026-10-09 업데이트: 홍어사시미·홍어전·홍어라면·묵은지김치전·해물라면·지평 막걸리를 더함). 과메기는 네이버 목록에
+// 없지만 사장님이 알려 준 겨울 제철 메뉴라 둔다. 소주·맥주는 이 가게만의 이야깃거리가 아니라 주제 메뉴에 넣지 않는다.
+// 가격은 바뀔 수 있어 글·그림에 쓰지 않는다. 사진·그림 묘사(look)는 겉모습만 쓰고 재료·맛을 단정하지 않는다.
 //
 // 메뉴를 더하려면: 아래 STORE_MENU 목록에 한 줄을 복사해 id·이름·분류·찾을 낱말·겉모습·어울리는 계절만 바꿔 넣으면 된다.
 
-export type MenuCategory="홍어 요리"|"제철 회"|"전"|"술";
+export type MenuCategory="홍어 요리"|"제철 회"|"전"|"식사"|"술";
 export type MenuSeason="봄"|"여름"|"가을"|"겨울";
 
 export type StoreMenuItem={
@@ -29,10 +31,10 @@ export type StoreMenuItem={
 
 export const STORE_MENU:readonly StoreMenuItem[]=[
   {
-    id:"hongeo-hoe",name:"홍어회(삼합 포함)",short:"홍어회",category:"홍어 요리",
-    // "홍어" 하나만 써도 홍어회로 본다. 홍어무침·홍어애탕·홍어전·홍어찜과 가게 이름(묵동홍어마을)은 빼고 본다.
-    // "홍어 애호가"처럼 애탕·애국이 아닌 "애"는 홍어회로 본다.
-    match:/홍어\s*회|삼합|홍어(?!\s*(?:무침|애\s*(?:탕|국)|탕|전(?!문|통|체|날)|찜|마을))/,
+    id:"hongeo-hoe",name:"홍어회(홍어사시미·삼합)",short:"홍어회",category:"홍어 요리",
+    // "홍어" 하나만 써도 홍어회로 본다(이 가게 메뉴판의 "홍어사시미"도 홍어회). 홍어무침·홍어애탕·홍어전·홍어찜·홍어라면과
+    // 가게 이름(묵동홍어마을)은 빼고 본다. "홍어 애호가"처럼 애탕·애국이 아닌 "애"는 홍어회로 본다.
+    match:/홍어\s*(?:회|사시미)|삼합|홍어(?!\s*(?:무침|애\s*(?:탕|국)|탕|전(?!문|통|체|날)|찜|라면|마을))/,
     look:"Korean hongeo-hoe: hand-cut squarish slices of fermented skate wing about two finger-widths across and 5-8 mm thick, muted dusty mauve-pink flesh with pale grey-white areas, crossed by diagonal rows of fine translucent white cartilage lines, set in loose rows on a black slate board.",
     lookKo:"손가락 두 마디 크기로 도톰히(5~8mm) 썬 삭힌 홍어 조각(탁한 연보라빛 분홍 살에 회백색, 비스듬한 흰 연골 결, 검은 접시에 줄지어 담김)",
     seasons:[],moments:"모임·잔칫상·김장철 수육과 함께",
@@ -61,6 +63,21 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     seasons:[],moments:"잔치·모임 상, 따뜻한 요리가 당길 때",
   },
   {
+    id:"hongeo-jeon",name:"홍어전",short:"홍어전",category:"홍어 요리",
+    // "홍어 전문점"·"홍어 전통"처럼 전이 아닌 말은 빼고 본다.
+    match:/홍어\s*전(?!문|통|체|날)/,
+    look:"Korean hongeo-jeon: pieces of skate coated in a thin egg batter and pan-fried until golden, with browned edges, laid overlapping on a plate.",
+    lookKo:"홍어 살에 얇은 달걀 옷을 입혀 노릇하게 부친 전을 접시에 겹쳐 담은 모습",
+    seasons:[],moments:"비 오는 날, 막걸리 한 잔과 함께",
+  },
+  {
+    id:"hongeo-ramyeon",name:"홍어라면",short:"홍어라면",category:"식사",
+    match:/홍어\s*라면/,
+    look:"Korean hongeo-ramyeon: a steaming bowl of ramen noodles in a red broth with a few pieces of skate.",
+    lookKo:"김이 오르는 붉은 국물 라면에 홍어 조각이 들어간 한 그릇",
+    seasons:[],moments:"술자리 마무리 한 그릇",
+  },
+  {
     id:"gwamegi",name:"과메기",short:"과메기",category:"제철 회",
     match:/과메기/,
     look:"Korean gwamegi: half-dried fish fillets cut into long glossy strips, dark reddish-brown flesh with a thin silvery-blue skin edge, laid neatly on a plate.",
@@ -75,8 +92,23 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     seasons:["봄","여름"],moments:"비 오는 날, 봄 미나리철, 막걸리와 함께",
   },
   {
-    id:"baedari-makgeolli",name:"배다리 막걸리",short:"막걸리",category:"술",
-    match:/배다리|막걸리/,
+    id:"kimchi-jeon",name:"묵은지김치전",short:"김치전",category:"전",
+    // 홍어 상차림의 묵은지(삼합)와 다른 메뉴다. "묵은지"만 쓴 글은 김치전으로 보지 않는다(sceneFoods.ts withoutKimchiJeon).
+    match:/(?:묵은지\s*)?김치\s*전|묵은지\s*전/,
+    look:"Korean kimchi-jeon: a thin pan-fried pancake with chopped aged kimchi through an orange-red batter, crisp golden-brown edges.",
+    lookKo:"잘게 썬 묵은지가 섞인 주황빛 반죽을 얇게 부쳐 가장자리가 노릇하고 바삭한 김치전",
+    seasons:[],moments:"비 오는 날, 막걸리와 함께",
+  },
+  {
+    id:"haemul-ramyeon",name:"해물라면",short:"해물라면",category:"식사",
+    match:/해물\s*라면/,
+    look:"Korean haemul-ramyeon: a steaming bowl of ramen noodles in a spicy red broth with assorted seafood pieces on top.",
+    lookKo:"김이 오르는 얼큰한 붉은 국물에 면과 해물이 담긴 라면 한 그릇",
+    seasons:[],moments:"술자리 마무리 한 그릇, 쌀쌀한 날",
+  },
+  {
+    id:"baedari-makgeolli",name:"막걸리(배다리·지평)",short:"막걸리",category:"술",
+    match:/배다리|지평\s*막걸리|막걸리/,
     look:"Korean makgeolli: milky off-white rice wine in a ceramic or brass sabal bowl; any bottle appears without a readable label.",
     lookKo:"사발에 따른 뽀얀 우윳빛 막걸리(병이 보여도 글자 없이)",
     seasons:[],moments:"비 오는 날, 막걸리의 날(10월 마지막 목요일), 전·무침과 함께",

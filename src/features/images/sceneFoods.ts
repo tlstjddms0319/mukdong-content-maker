@@ -27,7 +27,12 @@ export function foodFreeAnchor(anchor:string):string {
 
 // 이 장(또는 주제)이 홍어 상차림을 실제로 말하는지. 장면 설명(visualPrompt)이 아니라 사장님이 읽는 글(제목·요점)로 판단한다.
 // 장면 설명은 AI가 덧붙인 것이라, 글에 없는 홍어·삼합이 거기서만 나오면 믿지 않는다.
-export const copyMentionsSkate=(copy:string)=>/홍어|삼합|수육|묵은지/.test(copy.replace(/묵동\s*홍어\s*마을/g,""));
+// 묵은지김치전·김치전은 홍어 상차림(삼합)의 묵은지가 아니라 전 메뉴다. 홍어 상차림인지 볼 때는 걷어 낸다.
+const KIMCHI_JEON=/(?:묵은지\s*)?김치\s*전|묵은지\s*전|kimchi[- ]jeon|kimchi pancake/gi;
+export const withoutKimchiJeon=(text:string)=>text.replace(KIMCHI_JEON,"");
+// hero: 이 장(주제)의 주인공 메뉴. 김치전이 주인공이면 글 속 "묵은지"는 김치전 재료라 홍어 상차림으로 보지 않는다.
+export const copyMentionsSkate=(copy:string,hero?:Pick<StoreMenuItem,"id">)=>
+  (hero?.id==="kimchi-jeon"?/홍어|삼합|수육/:/홍어|삼합|수육|묵은지/).test(withoutKimchiJeon(copy.replace(/묵동\s*홍어\s*마을/g,"")));
 
 // 홍어 요리가 아닌 메뉴가 주인공인지.
 export const isOtherMenu=(menu:StoreMenuItem|undefined):menu is StoreMenuItem=>Boolean(menu)&&!menu!.id.startsWith("hongeo-");
