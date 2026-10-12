@@ -4,6 +4,7 @@ import { TRACK_COPY, type CarouselTrack } from "./track";
 import { coverHookProblems } from "./planReview";
 import { HOOK_RULE, comparedKeys, comparedPair } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
+import { coverMythRule } from "@/features/store/principles";
 
 // 검수 뒤 마지막 다듬기(결과물 점검 2026-10-12, Gemini 글·게시물 6개):
 // - 후킹 2.3/5, 뻔한 질문 4/6: 표지가 거의 늘 "찬바람 불 때 OO는 왜 ~할까?" 틀이었다. 후킹 규칙(HOOK_RULE)에 오해 깨기·의외의 정체를
@@ -51,13 +52,13 @@ const CoverSchema=z.object({
   options:z.array(z.object({type:z.string(),headline:z.string(),subline:z.string().default("")})).min(1).max(4),
 });
 // 표지 후보가 지켜야 할 것: 글자 수, 후킹 검사(과장·도전형·막연함·질문 없는 단정형), 원래 표지의 음식 이름, 비교라면 두 이름.
-function coverProblem(option:{headline:string;subline:string},original:Slide,track:CarouselTrack,topic=""):string|undefined {
+function coverProblem(option:{headline:string;subline:string},original:Slide,track:CarouselTrack,topic="",bodyHeadlines:readonly string[]=[]):string|undefined {
   const headline=option.headline.trim(),subline=option.subline.trim();
   if(!headline||headline.length>TRACK_COPY.cover.headline)return "length";
   if(subline.length>TRACK_COPY.cover.subline)return "subline-length";
   // 네 번째 점검(2026-10-12): AI가 부제를 "깊은 맛의"처럼 끝맺지 않고 보내 카드에 끊긴 말이 찍혔다. 부제는 비우거나 완결된 문장·질문으로.
   if(subline&&!/[요까다죠네?？!]$/.test(subline.replace(/[.\s]+$/,"")))return "subline-unfinished";
-  if(coverHookProblems({headline,subline},track).length)return "hook";
+  if(coverHookProblems({headline,subline},track,bodyHeadlines).length)return "hook";
   const before=`${original.headline} ${original.subline??""}`,after=`${headline} ${subline}`;
   // 원래 표지나 주제에 나온 음식 이름을 새 표지도 말해야 한다(예전에는 "열이 식감과 향을 어떻게 바꿀까?"처럼 대상이 빠졌다).
   const menus=menuOf(`${before} ${topic}`).filter((item,i,all)=>item.category!=="술"&&all.findIndex(other=>other.id===item.id)===i).slice(0,2);
@@ -73,14 +74,17 @@ function coverProblem(option:{headline:string;subline:string},original:Slide,tra
 export async function rewriteCover(plan:CarouselPlan,track:CarouselTrack,ai:PolishAi,topic=""):Promise<{plan:CarouselPlan;changed:boolean;hookType?:string}> {
   const cover=plan.slides[0];
   if(!cover||cover.role!=="cover")return {plan,changed:false};
-  const body=plan.slides.slice(1).map((slide,i)=>`${i+2}장: ${slide.headline}`).join("\n");
+  const bodyHeadlines=plan.slides.slice(1).map(slide=>slide.headline);
+  const body=bodyHeadlines.map((headline,i)=>`${i+2}장: ${headline}`).join("\n");
+  const myths=coverMythRule(topic,cover.headline,...bodyHeadlines);
   const prompt=`Instagram 카드뉴스의 표지(첫 장)를 다시 씁니다. 지금 표지는 평범해서 스크롤을 멈추게 하지 못합니다.
 ${HOOK_RULE}
 게시물 주제: "${topic||cover.headline}"
 지금 표지: 제목 "${cover.headline}"${cover.subline?`, 부제 "${cover.subline}"`:""}
 본문 장 제목(표지가 약속할 답의 내용):
 ${body}
-서로 다른 후킹 유형(오해 깨기, 의외의 정체, 공감 장면, 대조 가운데)으로 표지 후보 3개를 쓰고, 가장 강한 후보의 번호(0부터)를 best에 적으세요.
+${myths?`${myths}\n`:""}서로 다른 후킹 유형(오해 깨기, 의외의 정체, 공감 장면, 대조 가운데)으로 표지 후보 3개를 쓰고, 가장 강한 후보의 번호(0부터)를 best에 적으세요. 독자가 믿던 것을 뒤집는 오해 깨기 후보가 가장 강한 경우가 많아요.
+- 표지에 답(본문이 밝힐 원인 성분 이름 — 암모니아·콜라겐·감칠맛·당분 같은 말)을 쓰지 마세요. "~의 비밀", "숨은 이유"처럼 무엇이 궁금한지 말하지 않는 말도 쓰지 마세요.
 - headline: 띄어쓰기 포함 20자 안팎(넘어도 ${TRACK_COPY.cover.headline}자 이내). 글자 수를 직접 세어 확인하세요. 물음표 질문이거나, 본문에 있는 의외의 사실을 단정하는 한 문장. 주제·지금 표지의 음식 이름을 그대로 넣으세요(두 대상을 견주는 표지면 두 이름 모두).
 - subline: 띄어쓰기 포함 14자 이내(앱이 뒤에 "· 이유 N가지"를 붙입니다). headline이 단정형이면 subline에 "왜 그럴까요?"처럼 본문이 답할 질문을 쓰세요. 질문형이면 궁금증을 키우는 짧은 한 줄을 쓰거나 비워 두세요. subline에 결론(답)을 미리 말하지 마세요("답은 탄산에 있어요" 금지).
 - 본문에 없는 사실, 수치, 가게만의 사실은 만들지 마세요. 해요체로 쓰세요.
@@ -90,7 +94,7 @@ JSON으로만 답하세요: {"best":0,"options":[{"type":"유형","headline":"�
   const pick=(options:typeof result.options)=>{
     for(const index of order){
       const option=options[index];
-      if(!option||coverProblem(option,cover,track,topic))continue;
+      if(!option||coverProblem(option,cover,track,topic,bodyHeadlines))continue;
       return {plan:{...plan,slides:plan.slides.map((slide,i)=>i===0?{...slide,headline:option.headline.trim(),subline:option.subline.trim()}:slide)},changed:true,hookType:option.type};
     }
     return null;
@@ -98,7 +102,7 @@ JSON으로만 답하세요: {"best":0,"options":[{"type":"유형","headline":"�
   const first=pick(result.options);
   if(first)return first;
   // 길이만 넘긴 후보는 한 번 줄여 달라고 해서 다시 고른다(AI는 글자 수를 자주 넘긴다).
-  const longOnly=order.filter(index=>coverProblem(result.options[index],cover,track,topic)==="length"&&result.options[index].headline.trim().length>0);
+  const longOnly=order.filter(index=>coverProblem(result.options[index],cover,track,topic,bodyHeadlines)==="length"&&result.options[index].headline.trim().length>0);
   if(!longOnly.length)return {plan,changed:false};
   const lines=longOnly.map(index=>{const text=result.options[index].headline.trim();return `- ${index+1}번: "${text}" (지금 ${text.length}자 → ${TRACK_COPY.cover.headline}자 이내)`;}).join("\n");
   const shortened=ShortenSchema.parse(await ai.generate(`Instagram 카드뉴스 표지 제목 후보가 카드에 들어가지 않습니다. 각 제목을 띄어쓰기 포함 목표 글자 수 이내로 다시 쓰세요. 음식 이름(두 대상을 견주면 두 이름 모두)과 물음표 질문·단정 형태, 의외성은 그대로 두고 꾸미는 말을 덜어 내세요. 말을 자르거나 "…"를 쓰지 마세요. 글자 수를 직접 세어 확인하세요.

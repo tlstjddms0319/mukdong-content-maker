@@ -5,7 +5,7 @@ import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
 import { storeNotesRule } from "@/features/store/storeNotes";
 import { principleNotesRule } from "@/features/store/principles";
-import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, obviousQuestion, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
+import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, obviousQuestion, coverSpoiler, SECRET_TEASE, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
@@ -75,10 +75,11 @@ const coverQuestion=(plan:CarouselPlan)=>[plan.slides[0]?.headline??"",plan.slid
 
 // 표지 후킹 검사(HOOK_RULE): 과장, 도전형 말투, 막연한 질문, 질문이 없는 단정형 표지.
 // 표지 다시 쓰기(copyPolish.ts)도 같은 기준으로 후보를 거른다.
-export function coverHookProblems(slide:{headline:string;subline?:string},track?:CarouselTrack):string[] {
-  return coverHookIssues(slide,track).map(issue=>issue.message);
+// bodyHeadlines(본문 장 제목)을 주면 표지가 답(원인 성분 이름)을 먼저 말하는지도 본다.
+export function coverHookProblems(slide:{headline:string;subline?:string},track?:CarouselTrack,bodyHeadlines:readonly string[]=[]):string[] {
+  return coverHookIssues(slide,track,bodyHeadlines).map(issue=>issue.message);
 }
-function coverHookIssues(slide:{headline:string;subline?:string},track?:CarouselTrack):SlideCopyIssue[] {
+function coverHookIssues(slide:{headline:string;subline?:string},track?:CarouselTrack,bodyHeadlines:readonly string[]=[]):SlideCopyIssue[] {
   const issues:SlideCopyIssue[]=[];
   const add=(message:string)=>issues.push({slide:1,field:"headline",message});
   const text=`${slide.headline} ${slide.subline??""}`;
@@ -90,6 +91,11 @@ function coverHookIssues(slide:{headline:string;subline?:string},track?:Carousel
   if(vague)add(`표지 질문이 막연해요('${vague[0]}'). 답에 원리가 필요한 '왜' 질문이나 의외의 사실로 바꾸세요.`);
   // 음식의 이름난 특징을 그대로 묻는 표지("애탕은 왜 진할까?")는 "원래 그래서"로 끝난다. 예상을 뒤집는 대비를 넣게 한다.
   else if(obviousQuestion(slide.headline))add("표지 질문의 답이 뻔해요(원래 그런 음식이라서 끝나요). 독자의 예상을 뒤집는 대비나 의외의 사실로 바꾸세요(예: \"맑은 생선탕과 달리 애탕은 왜 묵직할까?\", \"홍어 뼈는 왜 씹어 먹을 수 있을까?\").");
+  // 결과물 점검 7회: 표지가 답(원인 성분)을 먼저 말하거나("…암모니아 때문이죠") "비밀을 알아봐요"처럼 무엇이 궁금한지 말하지 않으면 후킹 2점이었다.
+  const spoiler=coverSpoiler(text,bodyHeadlines);
+  if(spoiler)add(`표지가 답('${spoiler}')을 먼저 말해요. 원인 이름은 본문에서 밝히고, 표지는 흔한 오해를 뒤집거나 의외의 장면으로 궁금하게 만드세요(예: "홍어회는 썩은 게 아니라 삭히는 거라고?").`);
+  const tease=text.match(SECRET_TEASE);
+  if(tease)add(`'${tease[0]}'처럼 무엇이 궁금한지 말하지 않는 표지 말이에요. 독자가 믿던 것과 다른 사실 하나를 구체적으로 보여 주세요.`);
   // 단정형 표지는 본문이 답할 질문을 부제에 둔다(부제의 "이유 N가지"는 앱이 붙이므로 그 앞부분을 본다).
   const statement=!/[?？]\s*$/.test(slide.headline.trim());
   const subline=(slide.subline??"").replace(/·?\s*이유\s*\d+\s*가지/,"");
@@ -119,7 +125,7 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack,storeNote
   // 두 대상의 차이를 묻는 비교 질문(COMPARISON_RULE): 이유 장마다 양쪽이 각각 어떤지, "다르다"만 하는 문장 없이, 결론은 양쪽 이름과 함께.
   // B가 "다른 발효 음식"처럼 넓은 말이면 본문은 가게 메뉴를 대표로 쓰므로 이 검사는 하지 않는다(위 검사만).
   if(pair&&!/^다른/.test(pair.second))issues.push(...comparisonIssues(plan,pair));
-  if(plan.slides[0]?.role==="cover")issues.push(...coverHookIssues(plan.slides[0],track));
+  if(plan.slides[0]?.role==="cover")issues.push(...coverHookIssues(plan.slides[0],track,plan.slides.slice(1).map(slide=>slide.headline)));
   plan.slides.forEach((slide,i)=>{
     const n=i+1,headline=slide.headline.trim();
     const length=headline.replace(/\s/g,"").length;

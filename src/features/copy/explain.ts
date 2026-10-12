@@ -142,3 +142,13 @@ const SURPRISE=/인데|는데|은데|지만|보다|같은|달리|대신|반대�
 export function obviousQuestion(question:string):boolean {
   return TRAIT_ASK.test(question)&&!SURPRISE.test(question);
 }
+
+// 표지가 답을 먼저 말하는지(결과물 점검 7회, 2026-10-12: "해물라면 감칠맛, 홍어라면 암모니아 때문이죠", "배다리와 지평은 남은 당분과
+// 신맛이 달라요" — 평가자: 정체를 다 밝혀 넘겨 볼 이유가 없다). 본문 제목이 답으로 쓰는 원인 성분 이름이 표지에 이미 나오면 스포일러로 본다.
+const ANSWER_WORDS=/암모니아|요소|당분|산미|신맛|젖산|유기산|유산균|감칠맛|아미노산|콜라겐|젤라틴|지방|기름|효모|효소|탄산|캡사이신|전분|단백질|연골|누룩|수분/g;
+export function coverSpoiler(cover:string,bodyHeadlines:readonly string[]):string|undefined {
+  const body=bodyHeadlines.join(" ");
+  return [...new Set(cover.match(ANSWER_WORDS)??[])].find(word=>body.includes(word));
+}
+// "~의 비밀", "숨은 이유"처럼 무엇이 궁금한지 말하지 않는 표지 말(준비된 표지의 "한 장씩 넘기며 알아봐요"는 안내라 두고 본다).
+export const SECRET_TEASE=/비밀|숨은\s*이유|숨겨진|진짜\s*이유/;
