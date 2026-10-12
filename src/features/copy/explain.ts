@@ -80,13 +80,23 @@ export function comparedPair(question:string):{first:string;second:string}|undef
   if(!match)return undefined;
   // 이름 앞뒤의 문장부호는 뗀다("해물라면과 홍어라면, 무엇이 다를까?" → "홍어라면").
   const clean=(name:string)=>name.trim().replace(/^[\s,，.·:;"'“”‘’(\[]+|[\s,，.·:;!?"'“”‘’)\]]+$/g,"");
-  const [first,second]=[clean(match[1]),clean(match[2])];
+  // 앞에 붙은 상황·때 말("비 오는 날 배다리", "찬바람 불 때 해물라면")은 비교 대상이 아니라 뗀다.
+  const withoutScene=(name:string)=>name.replace(/^.*?(?:날|때|철|밤|저녁|무렵|요즘|오늘|날엔|때엔)\s+/,"");
+  const [first,second]=[withoutScene(clean(match[1])),withoutScene(clean(match[2]))];
   return first&&second&&first!==second?{first,second}:undefined;
 }
 
 // 본문에서 두 대상을 알아볼 짧은 이름: 두 이름이 함께 가진 앞·뒤(홍어무침·홍어회의 "홍어", 배다리 막걸리·지평막걸리의 "막걸리")를
 // 떼어 낸다(본문은 "무침은 ~, 홍어회는 ~", "배다리는 ~, 지평은 ~"처럼 줄여 쓰기 쉽다). 한 글자만 남으면 원래 이름을 쓴다.
 export function comparedKeys(pair:{first:string;second:string}):[string,string] {
+  // 한쪽이라도 "지평 막걸리"처럼 띄어 쓴 이름이면 그 끝말("막걸리")을 두 이름의 공통 부류로 보고 뗀다
+  // ("배다리"·"지평 막걸리" → 배다리·지평). 본문은 "배다리는 ~, 지평은 ~"처럼 줄여 쓴다.
+  const tail=(name:string)=>{const words=name.trim().split(/\s+/);return words.length>1?words[words.length-1]:null;};
+  const shared=tail(pair.first)??tail(pair.second);
+  if(shared){
+    const strip=(name:string)=>{const compact=name.replace(/\s+/g,"");return compact.endsWith(shared)&&compact.length-shared.length>=2?compact.slice(0,-shared.length):compact;};
+    return [strip(pair.first),strip(pair.second)];
+  }
   const [a,b]=[pair.first.replace(/\s+/g,""),pair.second.replace(/\s+/g,"")];
   let prefix=0;while(prefix<Math.min(a.length,b.length)-1&&a[prefix]===b[prefix])prefix++;
   let suffix=0;while(suffix<Math.min(a.length,b.length)-prefix-1&&a[a.length-1-suffix]===b[b.length-1-suffix])suffix++;

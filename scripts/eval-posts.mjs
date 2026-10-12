@@ -100,6 +100,7 @@ for (const [index, topic] of topics.slice(0, POSTS).entries()) {
     post.plan = planned.plan;
     post.planProvider = planned.provider;
     post.review = planned.review;
+    post.polish = planned.polish ?? null;
     // 앱은 검수 뒤에 결론 장 맺음말("~을 묵동홍어마을에서 즐겨 보세요")을 붙인다(applyTrack). 그 줄의 길이 지적은 빼고 본다.
     post.copyIssues = slideCopyIssues(planned.plan, track).filter((issue) => !issue.message.includes(CLOSING_INVITE_TAIL)).map((issue) => `${issue.slide}장: ${issue.message}`);
     post.comparison = Boolean(comparedPair(planned.plan.slides[0]?.headline ?? "") ?? comparedPair(topic.title));
@@ -138,7 +139,7 @@ for (const [index, topic] of topics.slice(0, POSTS).entries()) {
 
 // ── 보고서 ─────────────────────────────────────────────────────────────────────
 function postMarkdown(post) {
-  const lines = [`# ${post.n}. ${post.title}`, "", `- 갈래: ${post.track === "photo" ? "사진 중심" : "글 중심"} · 주제 출처: ${post.topicSource} · 구성안: ${post.planProvider ?? "-"}${post.review ? ` (검수 ${post.review.before}→${post.review.after}건)` : ""} · 표지 이미지: ${post.imageProvider ?? "-"}`, `- 주제 설명: ${post.summary}`, ""];
+  const lines = [`# ${post.n}. ${post.title}`, "", `- 갈래: ${post.track === "photo" ? "사진 중심" : "글 중심"} · 주제 출처: ${post.topicSource} · 구성안: ${post.planProvider ?? "-"}${post.review ? ` (검수 ${post.review.before}→${post.review.after}건)` : ""}${post.polish ? ` · 다듬기: 표지 ${post.polish.coverChanged ? `다시 씀(${post.polish.hookType})` : "그대로"}, 줄인 제목 ${post.polish.shortened}개` : ""} · 표지 이미지: ${post.imageProvider ?? "-"}`, `- 주제 설명: ${post.summary}`, ""];
   if (post.judge) lines.push(`## 평가`, `후킹 ${post.judge.hook} · 이유 깊이 ${post.judge.why_depth} · 흐름 ${post.judge.flow} · 사실 안전 ${post.judge.fact_safety} · 올릴 글 ${post.judge.caption}${post.judge.obvious_question ? " · ⚠ 뻔한 질문" : ""}${post.judge.comparison_vague ? " · ⚠ 비교가 흐림" : ""}`, `- 가장 약한 점: ${post.judge.weakest}`, `- 고칠 점: ${post.judge.fix}`, "");
   if (post.coverCheck) lines.push(`## 표지 사진 점검`, `점수 ${post.coverCheck.score}/10 · 기대 음식처럼 보임: ${post.coverCheck.looksLike ? "예" : "아니요"} · 보인 음식: ${post.coverCheck.food || "-"} · ${post.coverCheck.note}${post.coverCheck.warnings.length ? ` · 경고: ${post.coverCheck.warnings.join(", ")}` : ""}`, `![표지](../covers/${post.n}.jpg)`, "");
   if (post.plan) {
