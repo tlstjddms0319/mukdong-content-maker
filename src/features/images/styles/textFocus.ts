@@ -4,6 +4,7 @@ import { textureLayer } from "../decor";
 import { contentOf, emphasisOf, snap, type StyleContent } from "./shared";
 import { SANS, SANS_BOLD, SANS_SEMI, TITLE_SERIF, countLines, fitLines, folioMark, footerRow, logoMark, storeCardBlock, type TrackSurface } from "./trackKit";
 import { TRACK_LOOKS, trackLookOf, type TrackLook } from "./trackLooks";
+import { renderTextLook } from "./textLooks";
 
 // 글 중심(갈래 "글"). 큰 글자 세 줄이면 끝나는 카드: 본문 장은 사진 없이 제목 한 줄(84px 이상) + 짧은 글 두 줄까지(62px).
 // 예전(제목 64px·짧은 글 52px)은 글 덩어리가 작아 글 아래로 큰 빈 띠(330px)가 남았다. 글자를 키우고 큰 장 번호와 글을
@@ -127,6 +128,9 @@ async function cover(photo:Buffer|undefined,content:StyleContent,look:TrackLook)
 export const renderTextFocus:CardRenderer=async(inputs,slide,index,total,palette)=>{
   const content=contentOf(slide,inputs,index,total);
   const look=trackLookOf(palette);
+  // 모양(slide.variant): 0은 아래 기본 모양, 1~3은 textLooks.ts. 한 게시물의 장은 모두 같은 모양을 쓴다.
+  const looked=renderTextLook(slide.variant??0,content.cover?inputs[0]:undefined,content,index,look);
+  if(looked)return looked;
   // 표지만 사진을 쓴다. 본문 장은 사진이 들어와도(예전 초안·사진 장 레이아웃) 쓰지 않는다 — 글 중심은 글이 주인공.
   if(content.cover)return cover(inputs[0],content,look);
   if(content.last)return last(content,index,look);

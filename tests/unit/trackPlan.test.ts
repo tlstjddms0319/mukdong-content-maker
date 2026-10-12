@@ -19,7 +19,7 @@ vi.mock("@/lib/ai/geminiClient",()=>({createGeminiClient:()=>({generateJson})}))
 // AI가 갈래 규칙을 어기고 길게 쓴 구성안(장 수도 7장이 아닌 5장, 디자인은 다른 계열·테마·계절).
 function wordyPlan():CarouselPlan {
   const base=createFallbackCarouselPlan({topic:"비 오는 날 홍어 한 점",slideCount:5});
-  return {...base,design:{palette:"night",style:"neon",theme:"retro",titleFont:"jua",bodyFont:"dodum",tone:"calm",season:"rain"},slides:base.slides.map((slide,i)=>i===0
+  return {...base,design:{palette:"night",style:"neon",theme:"retro",titleFont:"jua",bodyFont:"dodum",tone:"calm",season:"rain",look:0},slides:base.slides.map((slide,i)=>i===0
     ?{...slide,headline:"비 오는 저녁, 막걸리 한 잔과 함께 먹는 홍어 한 점은 왜 생각날까",subline:"처음 먹는 친구에게 알려 주는 순서를 차근차근 모았어요"}
     :{...slide,layout:"collage",variant:2,titleFont:"jua",
       headline:"홍어 한 점은 씹을수록 진한 감칠맛이 천천히 올라와요",
@@ -34,7 +34,7 @@ function expectTrackRules(plan:CarouselPlan,track:CarouselTrack){
   expect(plan.slideCount).toBe(5);
   expect(plan.slides).toHaveLength(5);
   // 색 조합은 표지 글(주제)로 고른다(paletteForTopic). 나머지 디자인은 갈래가 정한 그대로.
-  expect(plan.design).toEqual({palette:paletteForTopic(`${plan.slides[0].headline} ${plan.slides[0].subline??""}`),style:track==="photo"?"photo-focus":"text-focus",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none"});
+  expect(plan.design).toEqual({palette:paletteForTopic(`${plan.slides[0].headline} ${plan.slides[0].subline??""}`),style:track==="photo"?"photo-focus":"text-focus",theme:"classic",titleFont:"pretendard",bodyFont:"pretendard",tone:"loud",season:"none",look:0});
   const photos=plan.slides.map(slide=>photosNeeded(normalizeCardLayout(slide)));
   expect(photos).toEqual(track==="photo"?[1,1,1,1,1]:[1,0,0,0,0]);
   expect(plan.slides[0].layout).toBe("fullscreen");

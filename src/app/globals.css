@@ -1091,3 +1091,8 @@ input[type="checkbox"], input[type="radio"] { accent-color:var(--accent); }
 /* 가게 이야기 메모: 한 칸 전체 너비, 큰 글씨(사장님 데스크톱) */
 .settings-form .field-wide { grid-column:1 / -1; display:grid; gap:8px; }
 .settings-form .field-wide textarea { width:100%; box-sizing:border-box; padding:14px 16px; font-size:19px; line-height:1.7; resize:vertical; }
+
+/* 확인 화면: 게시물 모양 바꾸기 */
+.look-switch { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 14px; margin:12px 0; padding:10px 14px; border-radius:var(--radius-md); background:var(--accent-wash); border:1px solid rgb(163 72 36 / 18%); }
+.look-switch-name { font-size:17px; }
+.look-switch-name small { color:var(--muted); }
