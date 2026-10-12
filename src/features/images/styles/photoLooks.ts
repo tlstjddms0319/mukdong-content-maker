@@ -80,36 +80,41 @@ async function magazineBody(photo:Buffer,content:StyleContent,index:number,look:
 }
 
 // ── 2 반반 ────────────────────────────────────────────────────────────────────────────
-// photoTop: 사진이 위쪽이면 true. 판 색은 표지 dark, 본문은 mid/dark를 번갈아, 마지막 장은 light(명함이 또렷하게).
+// photoTop: 사진이 위쪽이면 true. 판 색은 표지 dark, 본문은 mid/dark를 번갈아, 마지막 장은 light.
+// 판은 글이 들어갈 만큼만(최소 화면의 30%) 써서 사진이 화면의 65% 안팎이 되게 한다(예전 최소 42% → 사진 56~60%).
+// 마지막 장은 가게 명함 판 대신 장 번호 자리에 "저장해 두고 다시 보세요" 알약 + 바닥글.
 async function splitCard(photo:Buffer,content:StyleContent,index:number,look:TrackLook,options:{photoTop:boolean;panel:TrackSurface}):Promise<Buffer> {
   const panel=options.panel;
   const cover=content.cover;
-  const title=await titleOf(content,panel.ink,panel.accent,cover?[96,88,82,76,72]:[72,68,64,60,56],SANS_BOLD);
+  const title=await titleOf(content,panel.ink,panel.accent,cover?[88,82,76,72,68]:[72,68,64,60,56],SANS_BOLD);
   const line=cover?content.subline:shortLines(content,1)[0];
   const sub=line?await lineOf(line,cover?panel.accent:panel.dim,cover?44:40):null;
-  const card=content.last?await storeCardBlock({logoSize:104,wordmark:false,surface:panel}):null;
-  const foot=card?null:await footerRow({color:panel.dim,cueColor:panel.ink,ring:panel.ring,cue:!content.last});
-  const folio=cover?null:await folioMark(index,panel.accent);
-  // 판 높이: 글 덩어리 + 여백(최소 화면의 42%). 사진은 나머지.
-  const PAD=64;
-  const textH=(folio?folio.layer.info.height+22:0)+title.layer.info.height+(sub?20+sub.info.height:0);
-  const bottomH=card?card.height:foot!.height;
-  const panelH=Math.max(Math.round(H*.42),PAD+textH+48+bottomH+PAD);
+  const foot=await footerRow({color:panel.dim,cueColor:panel.ink,ring:panel.ring,cue:!content.last});
+  const folio=cover||content.last?null:await folioMark(index,panel.accent);
+  const chip=content.last?await saveChip(panel.chip,panel.chipInk):null;
+  // 판 높이: 글 덩어리 + 여백(최소 화면의 30%). 사진은 나머지.
+  const PAD=48;
+  const markH=folio?folio.layer.info.height:chip?chip.height:0;
+  const textH=(markH?markH+20:0)+title.layer.info.height+(sub?18+sub.info.height:0);
+  const bottomH=foot.height;
+  const panelH=Math.max(Math.round(H*.3),PAD+textH+40+bottomH+PAD);
   const photoH=H-panelH;
   const panelTop=options.photoTop?photoH:0;
   const shot=await finishPhoto(photo,W,photoH,{zoom:1.03});
   const layers:OverlayOptions[]=[{input:shot,left:0,top:options.photoTop?0:panelH}];
   const bottomTop=panelTop+panelH-PAD-bottomH;
   // 글 덩어리는 판 위쪽 여백과 바닥글 사이 남는 높이의 가운데에(판이 넓을 때 아래가 비어 보이지 않게).
-  const room=bottomTop-48-(panelTop+PAD);
+  const room=bottomTop-40-(panelTop+PAD);
   let y=panelTop+PAD+Math.max(0,Math.round((room-textH)/2));
-  let markup="";
-  if(folio){markup+=folio.svg(MARGIN,y);layers.push({input:folio.layer.data,left:MARGIN,top:y});y+=folio.layer.info.height+22;}
-  layers.push({input:title.layer.data,left:MARGIN,top:y});y+=title.layer.info.height;
-  if(sub){y+=20;layers.push({input:sub.data,left:MARGIN,top:y});}
+  const placed=foot.place(bottomTop);
+  let markup=placed.svg;
+  const texts:OverlayOptions[]=[];
+  if(folio){markup+=folio.svg(MARGIN,y);texts.push({input:folio.layer.data,left:MARGIN,top:y});y+=folio.layer.info.height+20;}
+  if(chip){markup+=chip.svg(MARGIN,y);texts.push({input:chip.layer.data,left:MARGIN+chip.padX,top:y+chip.padY});y+=chip.height+20;}
+  texts.push({input:title.layer.data,left:MARGIN,top:y});y+=title.layer.info.height;
+  if(sub){y+=18;texts.push({input:sub.data,left:MARGIN,top:y});}
   if(cover)layers.push({input:await logoMark(104,panel.ring),left:W-MARGIN-104,top:options.photoTop?MARGIN:panelH+MARGIN});
-  if(card){const placed=card.place(540,bottomTop);markup+=placed.svg;layers.push(svgLayer(markup),...placed.layers);}
-  else{const placed=foot!.place(bottomTop);layers.push(svgLayer(markup+placed.svg),...placed.layers);}
+  layers.push(svgLayer(markup),...texts,...placed.layers);
   // 사진과 판 경계에 강조색 짧은 막대(어느 쪽이 위든 경계 위에).
   layers.push(svgLayer(`<rect x="${MARGIN}" y="${(options.photoTop?photoH:panelH)-6}" width="120" height="12" rx="6" fill="${panel.accent}"/>`));
   return finish(panel.bg,layers);
