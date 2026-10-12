@@ -4,7 +4,7 @@ import { CardLayoutSchema, DesignSpecSchema, DEFAULT_DESIGN, defaultCardLayout, 
 import { SlideBodyFontSchema, SlideTitleFontSchema } from "./typography";
 import { diversifyCarouselDesign } from "./variety";
 import { MENU_BY_ID, heroMenu, josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
-import { SKATE_TABLE, copyMentionsSkate, foodFreeAnchor, isOtherMenu } from "./sceneFoods";
+import { SKATE_TABLE, copyMentionsSkate, foodFreeAnchor, isOtherMenu, withoutKimchiJeon } from "./sceneFoods";
 import { CarouselTrackSchema, TRACK_SLIDE_COUNT, TRACK_SLIDE_RANGE, applyTrack, ellipsize, trackPromptRules } from "./track";
 import { TRACK_STYLES } from "./styleCatalog";
 import { EXPLAIN_REASONS_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, STORY_ARC_RULE } from "@/features/copy/explain";
@@ -126,6 +126,18 @@ const MENU_WORDS:Record<string,MenuWords>={
   "minari-jeon":{dish:"미나리전",keyword:"미나리전",pairWith:"막걸리 사발",
     detail:{headline:"미나리가 이렇게 보여요",points:["반죽 사이로 미나리가 보여요","가장자리가 노릇하게 익어 있어요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시 위 미나리전의 노릇한 겉면과 초록 줄기를 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
     howTo:{headline:"한 조각은 이렇게 먹어요",points:["미나리전을 한입 크기로 나눠요","양념장은 조금만 찍어 맛을 봐요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 미나리전 한 조각을 집어 든 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
+  "hongeo-jeon":{dish:"홍어전",keyword:"홍어전",pairWith:"막걸리 사발",
+    detail:{headline:"겉이 이렇게 노릇해요",points:["달걀 옷이 노릇하게 익어 있어요","가장자리가 살짝 바삭해요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시에 겹쳐 담긴 홍어전의 노릇한 겉면과 가장자리를 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    howTo:{headline:"한 조각씩 집어 먹어요",points:["따뜻할 때 한 조각을 집어요","양념장은 조금만 찍어 맛을 봐요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 홍어전 한 조각을 집어 든 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
+  "hongeo-ramyeon":{dish:"홍어라면",keyword:"홍어라면",pairWith:"막걸리 사발",
+    detail:{headline:"김이 이렇게 올라와요",points:["그릇 위로 김이 올라와요","국물과 면을 함께 떠서 맛봐요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"그릇에 담긴 홍어라면의 붉은 국물과 면, 피어오르는 김을 낮은 각도에서 가까이 담은 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    howTo:{headline:"면부터 한 젓가락 들어요",points:["뜨거우니 면을 조금씩 들어 식혀요","국물은 숟가락으로 떠서 맛봐요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 홍어라면 면을 들어 올리는 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
+  "kimchi-jeon":{dish:"김치전",keyword:"김치전",pairWith:"막걸리 사발",
+    detail:{headline:"묵은지가 이렇게 보여요",points:["반죽 사이로 묵은지가 보여요","가장자리가 노릇하게 익어 있어요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"접시 위 묵은지김치전의 주황빛 겉면과 바삭한 가장자리를 낮은 각도에서 가까이 담은 매크로 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    howTo:{headline:"한 조각은 이렇게 먹어요",points:["김치전을 한입 크기로 나눠요","바삭한 가장자리부터 맛을 봐요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 김치전 한 조각을 집어 든 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
+  "haemul-ramyeon":{dish:"해물라면",keyword:"해물라면",pairWith:"막걸리 사발",
+    detail:{headline:"국물이 이렇게 올라와요",points:["그릇 위로 김이 올라와요","면 위에 해물이 보여요","어떻게 먹으면 좋은지 다음 장에요"],visualPrompt:"그릇에 담긴 해물라면의 붉은 국물과 해물, 피어오르는 김을 낮은 각도에서 가까이 담은 사진. 뒤로 흐릿한 상차림, 손과 얼굴 없음",textPosition:"bottom"},
+    howTo:{headline:"면부터 한 젓가락 들어요",points:["뜨거우니 면을 조금씩 들어 식혀요","국물은 숟가락으로 떠서 맛봐요","같이 먹으면 좋은 게 뭔지 이어서 볼게요"],visualPrompt:"젓가락으로 해물라면 면을 들어 올리는 손동작을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
   "baedari-makgeolli":{dish:"막걸리",keyword:"막걸리",pairWith:"미나리전 접시",
     detail:{headline:"따르면 이런 빛이에요",points:["사발에 따르면 뽀얀 빛이 보여요","표면에 작은 거품이 올라와요","어떻게 마시면 좋은지 다음 장에요"],visualPrompt:"사발에 담긴 뽀얀 막걸리 표면을 낮은 각도에서 가까이 담은 매크로 사진. 병이 보여도 글자 없이, 손과 얼굴 없음",textPosition:"bottom"},
     howTo:{headline:"한 잔은 이렇게 따라요",points:["가라앉은 것을 살살 섞어 줘요","첫 잔은 조금만 따라 맛을 봐요","같이 먹으면 좋은 안주를 이어서 볼게요"],visualPrompt:"사발에 막걸리를 따르는 손을 옆에서 가까이 담은 사진. 얼굴 없음",textPosition:"top"}},
@@ -296,8 +308,8 @@ export function limitChopstickScenes(plan:CarouselPlan,topic:string,menu?:StoreM
 export function keepScenesOnMenu(plan:CarouselPlan,topic:string,menu:StoreMenuItem|undefined=mainMenuOf(topic)):CarouselPlan {
   const topicMenu=menu;
   return {...plan,styleAnchor:foodFreeAnchor(plan.styleAnchor),slides:plan.slides.map(slide=>{
-    if(!isOtherMenu(topicMenu)||!SKATE_TABLE.test(slide.visualPrompt))return slide;
-    if(copyMentionsSkate([slide.headline,...slide.points].join(" ")))return slide;
+    if(!isOtherMenu(topicMenu)||!SKATE_TABLE.test(withoutKimchiJeon(slide.visualPrompt)))return slide;
+    if(copyMentionsSkate([slide.headline,...slide.points].join(" "),topicMenu))return slide;
     return {...slide,visualPrompt:sceneFromCopy(slide,topic,topicMenu)};
   })};
 }

@@ -50,6 +50,11 @@ const TEXTURE_EXAMPLES:Record<string,string>={
   gwamegi:"'쫀득한 과메기 살과 겉의 윤기, 씹을수록 올라오는 고소함'",
   "minari-jeon":"'바삭한 가장자리와 아삭한 미나리 줄기'",
   "baedari-makgeolli":"'톡 쏘는 탄산감과 은은한 단맛'",
+  // 아래는 가게 네이버 메뉴 설명(2026-10-09)에 있는 표현을 바탕으로 했다.
+  "hongeo-jeon":"'노릇한 겉면과 촉촉한 홍어 속살'",
+  "hongeo-ramyeon":"'김이 오르는 붉은 국물과 꼬들한 면발'",
+  "kimchi-jeon":"'바삭한 가장자리와 새콤한 묵은지'",
+  "haemul-ramyeon":"'시원하면서 얼큰한 국물과 쫄깃한 면발'",
 };
 export function copyHeroMenu(input:Pick<CopyInput,"topic"|"contentBrief"|"imageBrief">&{photoNotes?:readonly string[]}):StoreMenuItem|undefined {
   return mainMenuOf(input.topic,input.contentBrief,input.imageBrief,...(input.photoNotes??[]));

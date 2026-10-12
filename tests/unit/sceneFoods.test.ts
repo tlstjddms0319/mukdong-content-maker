@@ -13,6 +13,8 @@ describe("scene foods stay on the post's menu", () => {
   for(const menu of STORE_MENU.filter(item=>!item.id.startsWith("hongeo-"))){
     it(`${menu.short} 이야기의 어느 장에도 홍어·삼합이 실려 가지 않는다`, async () => {
       const topic=`${menu.short}는 언제 먹으면 좋을까?`;
+      // 김치전은 묵은지가 그 메뉴의 재료라 묵은지·kimchi는 나와도 된다(홍어·삼합·수육은 여전히 안 된다).
+      const forbidden=menu.id==="kimchi-jeon"?/홍어|삼합|수육|skate|boiled pork/i:SKATE_WORDS;
       // 일부러 엇나간 AI 구성안: 공통 스타일과 장면 설명에 홍어 삼합을 적었다(글은 그대로).
       const hostile=createFallbackCarouselPlan({topic,slideCount:5});
       hostile.styleAnchor="홍어 삼합이 놓인 한 상, 따뜻한 조명, 흰 그릇, 짙은 나무 테이블";
@@ -20,9 +22,9 @@ describe("scene foods stay on the post's menu", () => {
       const plan=await planCarousel({topic,slideCount:5},{generate:async()=>hostile});
       expect(plan.styleAnchor).not.toMatch(SKATE_WORDS);
       for(const [i,slide] of plan.slides.entries()){
-        if(copyMentionsSkate([slide.headline,...slide.points].join(" ")))continue; // 글이 직접 말하면 보여 줘도 된다.
+        if(copyMentionsSkate([slide.headline,...slide.points].join(" "),menu))continue; // 글이 직접 말하면 보여 줘도 된다.
         const prompt=buildImagePrompt({topic,count:1,aspectRatio:"4:5",slideIndex:i+1,slideTotal:5,styleAnchor:plan.styleAnchor,slide,design:plan.design});
-        expect(prompt,`${i+1}장`).not.toMatch(SKATE_WORDS);
+        expect(prompt,`${i+1}장`).not.toMatch(forbidden);
         expect(prompt,`${i+1}장`).toContain(menu.short==="막걸리"?"makgeolli":menu.look.slice(0,20));
       }
     });
