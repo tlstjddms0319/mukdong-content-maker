@@ -1,3 +1,4 @@
+import { readTopicHistory, usedTopicTitles } from "@/features/topics/topicHistory";
 import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { z } from "zod";
@@ -35,8 +36,9 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     await purgeExpiredDraftsIfDue().catch(() => {});
     const drafts = await createDraftRepository().listDraftSummaries().catch(() => []);
     const recentDraftTopics = [...drafts].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 10).map((draft) => draft.topic).filter((title) => title.trim().length > 0 && title.length <= 120);
-    // 피할 주제 = 이 브라우저에서 최근에 보여 준 것 + 최근 초안 주제(중복 없이 최대 30개).
-    const avoidTitles = [...new Set([...(body.recentTitles ?? []), ...recentDraftTopics])].slice(0, 30);
+    // 다시 추천하지 않을 주제 = 이 브라우저에서 최근에 보여 준 것 + 모든 게시물(보관함 포함) + 30일이 지나 지운 게시물 기록(topicHistory.ts).
+    const history = await readTopicHistory().catch(() => []);
+    const avoidTitles = usedTopicTitles(drafts, history, body.recentTitles ?? []);
     const input = TopicInputSchema.parse({ storeName: body.storeProfile.name, intent: body.intent, recommendationRound:body.recommendationRound, excludeTitles:body.excludeTitles, avoidTitles, photoNotes:body.photoNotes });
     // 오늘(한국 시간) 기준 계절과 다가오는 행사. 프롬프트와 준비된 주제 양쪽에 쓰고 화면에도 알려 준다.
     const season = seasonContext();

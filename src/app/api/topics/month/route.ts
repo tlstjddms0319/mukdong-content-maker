@@ -1,3 +1,4 @@
+import { readTopicHistory, usedTopicTitles } from "@/features/topics/topicHistory";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ownerApiError } from "@/features/auth/guard";
@@ -59,12 +60,14 @@ export async function POST(request:Request){
     const previousMonth=await readMonthPlan(shiftMonth(month,-1)).catch(()=>null);
     const recentDrafts=drafts.slice(0,10).map(draft=>draft.topic).reverse();
     const recent:string[]=[...(previousMonth?.items??[]).map(item=>item.title),...recentDrafts,...kept.map(item=>item.title)];
+    // 했던 주제(모든 게시물·보관함·30일이 지나 지운 게시물 기록)는 이번 달 기획에도 다시 넣지 않는다(topicHistory.ts).
+    const doneTitles=usedTopicTitles(drafts,await readTopicHistory().catch(()=>[]));
     let filledSlots=0;
     const weekly:Array<{dates:string[];topics:Awaited<ReturnType<typeof suggestTopics>>}>=[];
     let fallbackWeeks=0;
     for(const [index,weekDates] of groupByWeek(dates).entries()){
       const season=seasonContext(new Date(`${weekDates[0]}T12:00:00+09:00`));
-      const input={storeName:STORE_NAME,recommendationRound:index,excludeTitles:recent.slice(-3),avoidTitles:recent.slice(-30)};
+      const input={storeName:STORE_NAME,recommendationRound:index,excludeTitles:recent.slice(-3),avoidTitles:[...new Set([...recent.slice(-30),...doneTitles])].slice(0,300)};
       // 최근 주제(최근 것부터)에 두 번 넘게 나온 메뉴는 이번 주 주인공에서 뺀다(주제 추천 화면과 같은 기준).
       const recentMenus=overusedMenus([...recent].reverse());
       const recentMenuNames=STORE_MENU.filter(item=>recentMenus.has(item.id)).map(item=>item.name);
