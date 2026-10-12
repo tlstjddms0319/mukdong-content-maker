@@ -122,3 +122,27 @@ describe("fifth eval run findings",()=>{
     expect(VAGUE_COVER.test("배다리는 톡 쏘는데 지평은 왜 부드러울까?")).toBe(false);
   });
 });
+
+describe("obvious questions (sixth eval run: 4/6)",()=>{
+  it("flags questions that ask why a dish has its well-known trait, without a surprise",async()=>{
+    const {obviousQuestion}=await import("@/features/copy/explain");
+    for(const title of ["홍어애탕 국물은 왜 고소하면서 진할까?","홍어애탕 국물은 왜 찬바람 불 때 더 진하게 느껴질까?","홍어찜은 왜 따뜻하게 먹을까?"])expect(obviousQuestion(title),title).toBe(true);
+    for(const title of ["맑은 생선탕과 달리 홍어애탕은 왜 국물이 묵직할까?","과메기는 왜 냉동실이 아니라 찬바람에 말려야 할까?","같은 홍어인데 왜 찜이 회보다 향이 셀까?","홍어는 왜 상하지 않고 삭을까?","홍어 뼈는 왜 씹어 먹을 수 있을까?"])expect(obviousQuestion(title),title).toBe(false);
+  });
+  it("rejects obvious AI topics and asks the cover to be rewritten",async()=>{
+    const {topicBasicsProblem}=await import("@/features/topics/service");
+    const topic={id:"t",title:"홍어애탕 국물은 왜 고소하면서 진할까?",summary:"홍어 애에 많은 지방이 끓는 동안 국물에 풀려 고소하고 진한 맛을 낸다는 원리를 설명합니다.",reason:"궁금해요",audience:"A" as const,imageBrief:"애탕",season:"",trend:""};
+    expect(topicBasicsProblem(topic as never,"묵동홍어마을")).toBe("obvious");
+    const issues=slideCopyIssues(deck([
+      {headline:"홍어애탕 국물은 왜 고소하면서 진할까?",points:[]},
+      {headline:"애의 지방이 국물에 풀려요",points:["생선 간은 지방이 많아요"]},
+      {headline:"끓일수록 애가 녹아들어요",points:["열에 애가 풀려요"]},
+      {headline:"보리싹 향이 기름을 받쳐요",points:["전라도식 보릿국이에요"]},
+      {headline:"애탕은 애의 지방 덕에 진해요",points:[]},
+    ],"홍어애탕 국물은 왜 고소하면서 진할까?"),"photo");
+    expect(issues.some(issue=>issue.slide===1&&issue.message.includes("답이 뻔해요"))).toBe(true);
+  });
+  it("tells topic suggestions to build in a surprise instead of restating the hint",()=>{
+    expect(buildTopicPrompt({storeName:"묵동홍어마을"} as never)).toContain("예상을 뒤집는 대비");
+  });
+});

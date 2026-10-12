@@ -5,7 +5,7 @@ import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
 import { storeNotesRule } from "@/features/store/storeNotes";
 import { principleNotesRule } from "@/features/store/principles";
-import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
+import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, obviousQuestion, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
@@ -88,6 +88,8 @@ function coverHookIssues(slide:{headline:string;subline?:string},track?:Carousel
   if(dare)add(`표지가 독자를 시험하는 도전형 말투('${dare[0]}')예요. 광고처럼 읽히니, 의외의 사실이나 공감 장면으로 바꾸세요.`);
   const vague=slide.headline.match(VAGUE_COVER);
   if(vague)add(`표지 질문이 막연해요('${vague[0]}'). 답에 원리가 필요한 '왜' 질문이나 의외의 사실로 바꾸세요.`);
+  // 음식의 이름난 특징을 그대로 묻는 표지("애탕은 왜 진할까?")는 "원래 그래서"로 끝난다. 예상을 뒤집는 대비를 넣게 한다.
+  else if(obviousQuestion(slide.headline))add("표지 질문의 답이 뻔해요(원래 그런 음식이라서 끝나요). 독자의 예상을 뒤집는 대비나 의외의 사실로 바꾸세요(예: \"맑은 생선탕과 달리 애탕은 왜 묵직할까?\", \"홍어 뼈는 왜 씹어 먹을 수 있을까?\").");
   // 단정형 표지는 본문이 답할 질문을 부제에 둔다(부제의 "이유 N가지"는 앱이 붙이므로 그 앞부분을 본다).
   const statement=!/[?？]\s*$/.test(slide.headline.trim());
   const subline=(slide.subline??"").replace(/·?\s*이유\s*\d+\s*가지/,"");

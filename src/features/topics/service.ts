@@ -1,5 +1,5 @@
 import { SAME_TOPIC_SIMILARITY, topicSimilarity } from "./topicSimilarity";
-import { HOOK_DARE, HOOK_HYPE } from "@/features/copy/explain";
+import { HOOK_DARE, HOOK_HYPE, obviousQuestion } from "@/features/copy/explain";
 import { TopicInputSchema, TopicSuggestionSchema, TopicSuggestionsSchema, type TopicInput, type TopicSuggestion, type TopicSuggestionInput } from "./schema";
 import type { SeasonContext } from "./season";
 import { STORE_MENU, isHongeoHoe, mainMenuOf, menuOf, menusForDate, type StoreMenuItem } from "@/features/store/menu";
@@ -62,12 +62,12 @@ const SEASONAL_TOPICS:Record<string,PreparedTopic>={
   chuseok:{title:"명절 상에는 왜 지역마다 다른 음식이 오를까?",summary:"추석 가족 상차림에서 지역마다 빠지지 않는 음식이 다른 장면을 다룹니다. 전라도 잔칫상에 오르는 홍어를 사례로 소개하되, 유래와 역사는 출처를 확인한 뒤에만 씁니다.",reason:"명절에 고향 상차림을 떠올리는 사람이 많은 시기예요.",audience:"C",imageBrief:"명절 상 위에 놓인 홍어회 한 접시"},
   boknal:{title:"복날엔 왜 뜨끈한 국물을 찾을까?",summary:"더운 복날에도 뜨끈한 국물 한 그릇을 찾는 익숙한 장면에서 시작합니다. 홍어애탕을 든든한 한 끼로 소개하되 보양 효능은 단정하지 않고, 재료와 맛은 사장님께 확인한 뒤 씁니다.",reason:"복날을 앞두고 무엇을 먹을지 고민하는 시기예요.",audience:"A",imageBrief:"김이 오르는 홍어애탕 한 그릇"},
   makgeolli:{title:"막걸리엔 왜 전을 곁들일까?",summary:"막걸리의 날 즈음 막걸리 안주를 고르는 장면을 다룹니다. 배다리 막걸리와 미나리전을 함께 놓는 조합을 살피고, 홍어무침처럼 새콤한 안주도 선택지로 덧붙이되 어울림의 원리는 단정하지 않습니다.",reason:"10월 마지막 목요일 막걸리의 날을 앞둔 시기예요.",audience:"B",imageBrief:"막걸리 사발과 노릇한 미나리전 한 장"},
-  spring:{title:"봄 미나리는 왜 향이 더 진하게 느껴질까?",summary:"봄 미나리로 부친 미나리전 한 장에서 시작합니다. 봄에 막 자란 연한 줄기에 향 성분이 많다고 알려진 이유를 설명하되 효능은 말하지 않고, 수치를 지어내지 않으며, 미나리전과 막걸리를 나눠 먹는 봄 모임 자리로 이어 갑니다.",reason:"봄나물 향을 좋아하는 사람이 이유를 궁금해할 수 있어요.",audience:"B",imageBrief:"초록 미나리 줄기가 비치는 노릇한 미나리전"},
+  spring:{title:"같은 미나리인데 왜 봄 미나리 향이 더 진할까?",summary:"봄 미나리로 부친 미나리전 한 장에서 시작합니다. 봄에 막 자란 연한 줄기에 향 성분이 많다고 알려진 이유를 설명하되 효능은 말하지 않고, 수치를 지어내지 않으며, 미나리전과 막걸리를 나눠 먹는 봄 모임 자리로 이어 갑니다.",reason:"봄나물 향을 좋아하는 사람이 이유를 궁금해할 수 있어요.",audience:"B",imageBrief:"초록 미나리 줄기가 비치는 노릇한 미나리전"},
   family:{title:"부모님 세대가 좋아하는 음식은 왜 다를까?",summary:"가정의 달 가족 외식에서 세대마다 좋아하는 음식이 다른 장면을 다룹니다. 부모님 세대에 익숙한 홍어를 함께 맛보며 이야기를 나누는 흐름으로 이어갑니다.",reason:"어버이날 가족 외식 메뉴를 고민하는 시기예요.",audience:"B",imageBrief:"가족이 함께 나눠 먹는 홍어회 한 상"},
   rainy:{title:"비 오는 날엔 왜 전과 막걸리가 생각날까?",summary:"장마철 비 오는 날 전과 막걸리가 생각나는 익숙한 장면에서 시작합니다. 미나리전 한 장과 배다리 막걸리 한 잔을 소개하되, 비와 전이 이어지는 이유는 단정하지 않습니다.",reason:"장마철마다 많이 나누는 이야기예요.",audience:"C",imageBrief:"비 오는 창가의 막걸리와 미나리전"},
   kimjang:{title:"김장하는 날엔 왜 수육을 삶을까?",summary:"김장날 갓 담근 김치에 수육을 곁들이는 장면을 다룹니다. 새 김치와 묵은지의 차이를 살피고, 수육·묵은지에 홍어를 더한 삼합으로 이어갑니다.",reason:"김장철에 집집마다 떠올리는 장면이에요.",audience:"A",imageBrief:"수육과 묵은지, 홍어가 놓인 한 접시"},
   yearend:{title:"송년회 메뉴는 왜 나눠 먹는 음식이 좋을까?",summary:"연말 모임에서 여럿이 한 상을 나누는 장면을 다룹니다. 겨울 제철 과메기와 홍어회처럼 각자 조금씩 골라 먹는 상차림을 소개하고, 구성은 사장님께 확인한 것만 씁니다.",reason:"연말 모임 장소와 메뉴를 정하는 시기예요.",audience:"B",imageBrief:"여럿이 둘러앉아 나눠 먹는 과메기 한 접시"},
-  newyear:{title:"겨울엔 왜 생선이 더 고소할까?",summary:"새해 모임에 겨울 생선을 찾는 장면에서 시작합니다. 찬 바다에서 겨울을 나는 생선은 기름이 오른다고 알려져 있어 고소함이 진해진다는 원리를 설명하고, 겨울 제철 과메기와 뜨끈한 홍어애탕을 함께 나눠 먹는 상으로 이어 가되 기름 함량 같은 수치는 지어내지 않습니다.",reason:"겨울 생선이 맛있다는 말의 이유를 궁금해하는 사람이 많아요.",audience:"B",imageBrief:"새해 모임 상 위의 과메기와 홍어애탕"},
+  newyear:{title:"같은 생선인데 왜 겨울에 잡은 게 더 고소할까?",summary:"새해 모임에 겨울 생선을 찾는 장면에서 시작합니다. 찬 바다에서 겨울을 나는 생선은 기름이 오른다고 알려져 있어 고소함이 진해진다는 원리를 설명하고, 겨울 제철 과메기와 뜨끈한 홍어애탕을 함께 나눠 먹는 상으로 이어 가되 기름 함량 같은 수치는 지어내지 않습니다.",reason:"겨울 생선이 맛있다는 말의 이유를 궁금해하는 사람이 많아요.",audience:"B",imageBrief:"새해 모임 상 위의 과메기와 홍어애탕"},
 };
 
 // 준비된 주제 제목 전부(질문·메뉴·이번 시기). 주제 품질 테스트가 쓴다.
@@ -204,15 +204,17 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
 // 주제 한 개가 기본 조건을 못 지키는 이유(지키면 undefined).
 // - 제목 끝 물음표 뒤의 따옴표·괄호·공백은 봐준다(AI가 "…일까?" 처럼 따옴표로 감싸 보내곤 한다).
 // - 가게 메뉴는 제목과 설명을 함께 본다(제목에만 메뉴 이름을 쓴 주제를 버리지 않게).
-export type TopicRejectReason="question"|"hype"|"store"|"summary"|"menu"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
+export type TopicRejectReason="question"|"hype"|"obvious"|"store"|"summary"|"menu"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
 export const TOPIC_REJECT_LABELS:Record<TopicRejectReason,string>={
-  question:"물음표 질문이 아니어서",hype:"과장하거나 독자를 시험하는 말투라서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
+  question:"물음표 질문이 아니어서",hype:"과장하거나 독자를 시험하는 말투라서",obvious:"답이 뻔한 질문이라서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
   current:"지금 화면 주제와 같아서",recent:"최근에 보여 준 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",photo:"넣은 사진 속 메뉴가 아니어서",
 };
 function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason|undefined {
   if(!/[?？]["'”’」』)\]\s]*$/.test(topic.title.trim()))return "question";
   // 후킹(HOOK_RULE): "충격·소름" 같은 과장이나 "알면 고수" 같은 도전형 말투는 낚시처럼 읽혀 버린다.
   if(HOOK_HYPE.test(topic.title)||HOOK_DARE.test(topic.title))return "hype";
+  // 음식의 이름난 특징을 그대로 묻는 질문("홍어애탕 국물은 왜 고소하면서 진할까?")은 답이 뻔하다(explain.ts obviousQuestion).
+  if(obviousQuestion(topic.title))return "obvious";
   if(topic.title.includes(storeName))return "store";
   if(topic.summary.trim().length<30)return "summary";
   if(!menuOf(`${topic.title} ${topic.summary}`).length)return "menu";
