@@ -21,6 +21,8 @@ describe("A와 B의 차이 questions",()=>{
     expect(comparedPair("홍어무침과 홍어회는 무엇이 다를까?")).toEqual({first:"홍어무침",second:"홍어회"});
     expect(comparedPair("과메기랑 홍어회는 뭐가 다를까?")).toEqual({first:"과메기",second:"홍어회"});
     expect(comparedPair("홍어전과 홍어찜의 차이는 뭘까?")).toEqual({first:"홍어전",second:"홍어찜"});
+    // 결과물 점검(2026-10-12)에서 나온 표지: 쉼표가 이름에 붙어 "홍어라면,"를 본문에서 못 찾았다.
+    expect(comparedPair("해물라면과 홍어라면, 무엇이 다를까?")).toEqual({first:"해물라면",second:"홍어라면"});
     // 예전 꼴도 그대로.
     expect(comparedPair("치즈는 익숙한데 다른 발효 음식은 왜 낯설까?")).toEqual({first:"치즈",second:"다른 발효 음식"});
     for(const plain of ["홍어는 왜 수육이랑 먹을까?","같은 회인데 왜 식감은 다를까?","같은 음식을 먹는데 왜 취향은 갈릴까?","미나리전엔 왜 막걸리가 생각날까?","막걸리 한 잔엔 어떤 안주가 어울릴까?"])
@@ -39,6 +41,8 @@ describe("comparison decks must say how each side differs",()=>{
     ]),"photo");
     const messages=issues.map(issue=>`${issue.slide}:${issue.message}`).join("\n");
     for(const slide of [2,3,4])expect(messages).toMatch(new RegExp(`${slide}:.*'배다리'.*'지평'`));
+    // 안내 예시의 조사도 이름에 맞춘다("배다리는 ~, 지평은 ~").
+    expect(messages).toContain('"배다리는 ~, 지평은 ~"');
     expect(messages).toMatch(/2:.*'쌀과 밀의 배합 비율이 달라요'.*다르다고만/);
     expect(messages).toMatch(/5:.*결론/);
   });

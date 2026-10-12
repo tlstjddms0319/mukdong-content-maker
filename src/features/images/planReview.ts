@@ -56,11 +56,11 @@ function comparisonIssues(plan:CarouselPlan,pair:{first:string;second:string}):S
   plan.slides.forEach((slide,i)=>{
     if(i===0)return;
     const n=i+1,text=[slide.headline,...slide.points].join(" ");
-    if(i<last&&!both(text)&&!SAYS_SHARED.test(text))issues.push({slide:n,field:"headline",message:`비교 장인데 '${ka}'와(과) '${kb}'를 함께 말하지 않아요. 이 장의 비교 기준 하나를 정해 "${ka}는 ~, ${kb}는 ~"처럼 양쪽이 각각 어떤지 쓰세요(둘 다 같은 점이면 "둘 다 ~"라고 밝히세요).`});
+    if(i<last&&!both(text)&&!SAYS_SHARED.test(text))issues.push({slide:n,field:"headline",message:`비교 장인데 '${ka}'와(과) '${kb}'를 함께 말하지 않아요. 이 장의 비교 기준 하나를 정해 "${josa(ka,"은","는")} ~, ${josa(kb,"은","는")} ~"처럼 양쪽이 각각 어떤지 쓰세요(둘 다 같은 점이면 "둘 다 ~"라고 밝히세요).`});
     for(const [field,line] of [["headline",slide.headline],...slide.points.map(point=>["points",point] as const)] as const){
-      if(SAYS_DIFFERENT.test(line)&&!both(line))issues.push({slide:n,field,message:`'${line.trim()}'은(는) 다르다고만 말해요. ${ka}은(는) 어떻고 ${kb}은(는) 어떤지 구체적으로 쓰세요. 확실히 모르는 제조 정보면 맛·색·탄산처럼 직접 확인되는 차이로 바꾸세요.`});
+      if(SAYS_DIFFERENT.test(line)&&!both(line))issues.push({slide:n,field,message:`'${line.trim()}'은(는) 다르다고만 말해요. ${josa(ka,"은","는")} 어떻고 ${josa(kb,"은","는")} 어떤지 구체적으로 쓰세요. 확실히 모르는 제조 정보면 맛·색·탄산처럼 직접 확인되는 차이로 바꾸세요.`});
     }
-    if(i===last&&!both(text))issues.push({slide:n,field:"headline",message:`결론 장이에요. 가장 큰 차이 하나를 '${ka}'와(과) '${kb}' 두 이름과 함께 한 문장으로 말하세요(예: "${ka}는 ~, ${kb}는 ~").`});
+    if(i===last&&!both(text))issues.push({slide:n,field:"headline",message:`결론 장이에요. 가장 큰 차이 하나를 '${ka}'와(과) '${kb}' 두 이름과 함께 한 문장으로 말하세요(예: "${josa(ka,"은","는")} ~, ${josa(kb,"은","는")} ~").`});
   });
   return issues;
 }
