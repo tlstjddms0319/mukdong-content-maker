@@ -9,6 +9,7 @@ import { ExportActions } from "@/components/review/ExportActions";
 import type { ReviewImage } from "@/components/review/exportFiles";
 import { SlideFixPanel } from "@/components/images/SlideFixPanel";
 import { DeckEditor } from "@/components/images/DeckEditor";
+import { LookPicker } from "@/components/wizard/LookPicker";
 import { FreeCardStudio } from "@/components/images/FreeCardStudio";
 import { canChangeLook, canEditSlideText, changeTrackLook, photoSlideOptions, redoSlideKind, sceneNoticeOf, setActiveSlide, trackLookOf, type ApprovedImage, type GenerationState } from "@/features/images/generationStore";
 
@@ -39,6 +40,7 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,sav
   const redo=atSlide?redoSlideKind(atSlide):null;
   const busy=Boolean(generation&&generation.phase!=="idle");
   const plan=generation?.plan,slidePlan=plan?.slides[shown];
+  const lookNow=generation?trackLookOf(generation):null;
   const ai=images.some(image=>image.source==="ai-generated"||image.source==="ai-edited");
   return <section aria-labelledby="review-title">
     <h1 id="review-title">확인하고 올리기</h1>
@@ -52,11 +54,8 @@ export function ReviewStep({draftId,topic,audience,images,generation,caption,sav
           <button type="button" className="button secondary" aria-label="다음 장" disabled={shown>=urls.length-1} onClick={()=>go(shown+1)}>▶</button>
         </div>
         <div className="carousel-thumbnails" aria-label="모든 장">{urls.map((image,slide)=><button key={`${image.url.slice(-24)}-${slide}`} type="button" aria-label={`${slide+1}번째 장 보기`} aria-pressed={shown===slide} className="feed-thumb" style={{backgroundImage:`url(${image.url})`}} onClick={()=>go(slide)}/>)}</div>
-        {/* 게시물 모양: 같은 갈래의 다른 모양으로 모든 장을 다시 그린다(사진·글은 그대로, AI 비용 없음). */}
-        {generation&&trackLookOf(generation)&&<div className="look-switch">
-          <span className="look-switch-name">모양 · <strong>{trackLookOf(generation)!.name}</strong> <small>({trackLookOf(generation)!.number}/{trackLookOf(generation)!.count})</small></span>
-          <button type="button" className="button secondary" disabled={busy||!canChangeLook(generation)} title={canChangeLook(generation)?undefined:"다 만든 뒤에, 사진이 남아 있는 게시물만 바꿀 수 있어요"} onClick={()=>void changeTrackLook()}>🎨 다른 모양으로</button>
-        </div>}
+        {/* 게시물 모양: 접힌 목록을 펴서 견본을 보고 고른 뒤 '변경하기'로 모든 장을 다시 그린다(사진·글은 그대로, AI 비용 없음). */}
+        {generation&&lookNow&&<LookPicker key={`${lookNow.track}-${lookNow.look}`} track={lookNow.track} current={lookNow.look} disabled={busy||!canChangeLook(generation)} disabledReason={busy?undefined:"다 만든 뒤에, 사진이 남아 있는 게시물만 바꿀 수 있어요"} onChange={look=>void changeTrackLook(look)}/>}
         {/* 이 장 고치기: 그림/글 중 고를 것을 고르고, 요청 버튼·직접 적은 말대로 다시 만든다(예전 "이 장 다시 만들기"). */}
         {generation&&slidePlan&&shown<generation.slides.length&&<SlideFixPanel key={shown} index={shown} pictureKind={redo} photoOptions={atSlide&&redo==="photo"?photoSlideOptions(atSlide):undefined} canEditText={canEditSlideText(generation,shown)} headline={slidePlan.headline} points={slidePlan.points??[]} busy={busy}/>}
         {busy&&generation&&<GenerationProgress stage={`redo-${generation.phase}`} message={generation.deckStatus||"이 장을 다시 만들고 있어요"} hint="AI가 그리는 장은 1~3분 걸려요."/>}

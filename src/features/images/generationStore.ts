@@ -128,11 +128,11 @@ function withChosenLook(plan:CarouselPlan):CarouselPlan {
   return {...plan,design:{...plan.design,look}};
 }
 // 확인 화면에 보여 줄 지금 모양(갈래 게시물이 아니면 null).
-export function trackLookOf(current:Pick<GenerationState,"input"|"plan">):{name:string;number:number;count:number}|null {
+export function trackLookOf(current:Pick<GenerationState,"input"|"plan">):{name:string;number:number;count:number;track:CarouselTrack;look:number}|null {
   const track=current.input.track;
   if(!track||!current.plan)return null;
   const looks=TRACK_LOOKS[track],look=Math.min(current.plan.design.look??0,looks.length-1);
-  return {name:looks[look].name,number:look+1,count:looks.length};
+  return {name:looks[look].name,number:look+1,count:looks.length,track,look};
 }
 // "다른 모양으로"를 누를 수 있는지: 다 만든 갈래 게시물이고, 모든 장의 밑바탕(사진·AI 그림)이 남아 있어야 다시 그릴 수 있다
 // (밑바탕이 없는 장은 예전 모양으로 남아 한 게시물에 모양이 섞인다).
@@ -236,12 +236,15 @@ async function drawStoreCard(){
   }
   if(mine===storeRun)patch({storeCard:{...state.storeCard,pending:false}});
 }
-// 확인 화면의 "다른 모양으로": 같은 갈래의 다음 모양으로 모든 장을 다시 그린다(밑바탕 그대로라 AI 비용 없음).
+// 확인 화면의 "모양 바꾸기": 고른 모양(target, 없으면 다음 모양)으로 모든 장을 다시 그린다(밑바탕 그대로라 AI 비용 없음).
 // 디자인이 바뀌면 장의 자리 열쇠(positionKey)가 모두 바뀌어 redrawDeck이 전부 다시 그리고, 홍보 카드도 새 모양으로 맞춘다.
-export async function changeTrackLook(){
+export async function changeTrackLook(target?:number){
   const track=state.input.track;
   if(!track||!state.plan||!canChangeLook(state))return;
-  const look=nextTrackLook(track,state.plan.design.look??0);
+  const current=state.plan.design.look??0;
+  const valid=target!==undefined&&Number.isInteger(target)&&target>=0&&target<TRACK_LOOKS[track].length;
+  if(target!==undefined&&(!valid||target===current))return;
+  const look=valid?target:nextTrackLook(track,current);
   rememberLook(track,look);
   const token=++run;
   const label=`'${TRACK_LOOKS[track][look].name}' 모양으로 다시 그리는 중`;
