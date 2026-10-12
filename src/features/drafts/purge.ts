@@ -1,6 +1,7 @@
 import { createDraftRepository } from "./repository";
 import { isDraftExpired } from "./retention";
 import { createInstagramRepository } from "@/features/instagram/repository";
+import { appendTopicHistory } from "@/features/topics/topicHistory";
 
 // 만든 지 30일이 지난 게시물(보관함 제외)을 지운다(retention.ts). 내 게시물·한 달 계획을 열거나 주제를 추천받을 때 부르고,
 // 한 서버에서 6시간에 한 번만 실제로 돈다(목록을 매번 훑지 않게). 실패해도 화면은 그대로 열린다.
@@ -9,14 +10,17 @@ import { createInstagramRepository } from "@/features/instagram/repository";
 const PURGE_EVERY_MS=6*60*60*1000;
 const store=globalThis as typeof globalThis&{__draftPurge?:{at:number;running?:Promise<number>}};
 
-export async function purgeExpiredDrafts(now=Date.now(),deps={drafts:createDraftRepository(),instagram:createInstagramRepository()}):Promise<number> {
+export async function purgeExpiredDrafts(now=Date.now(),deps={drafts:createDraftRepository(),instagram:createInstagramRepository(),history:appendTopicHistory}):Promise<number> {
   const expired=(await deps.drafts.listDraftSummaries()).filter(draft=>isDraftExpired(draft,now));
   let removed=0;
+  const gone:string[]=[];
   for(const draft of expired){
     const publication=await deps.instagram.readPublication(draft.id).catch(()=>null);
     if(publication?.status==="preparing"&&!publication.mediaId)continue;
-    if(await deps.drafts.deleteDraft(draft.id).catch(()=>false))removed++;
+    if(await deps.drafts.deleteDraft(draft.id).catch(()=>false)){removed++;gone.push(draft.topic);}
   }
+  // 지운 게시물의 주제는 "했던 주제" 기록에 남겨 다시 추천하지 않는다(topics/topicHistory.ts). 기록을 못 남겨도 지우기는 그대로.
+  if(gone.length)await deps.history(gone).catch(error=>console.warn("[drafts] 지운 게시물 주제를 기록하지 못했어요:",error instanceof Error?error.message:String(error)));
   if(removed)console.info(`[drafts] 만든 지 30일이 지난 게시물 ${removed}개를 지웠어요(보관함 제외).`);
   return removed;
 }

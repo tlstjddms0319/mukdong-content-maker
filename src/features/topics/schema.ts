@@ -5,8 +5,9 @@ export const TopicInputSchema = z.object({
   intent: z.string().trim().max(300).optional().default(""),
   recommendationRound: z.number().int().nonnegative().max(9999).optional().default(0),
   excludeTitles: z.array(z.string().trim().min(1).max(120)).max(3).optional().default([]),
-  // 최근에 보여 줬거나 이미 초안으로 만든 주제. excludeTitles(지금 화면, 반드시 제외)와 달리 "되도록 피하기"용이다.
-  avoidTitles: z.array(z.string().trim().min(1).max(120)).max(30).optional().default([]),
+  // 최근에 보여 줬거나 이미 만든 주제(보관함·지워진 게시물 기록 포함, topicHistory.ts). AI 주제는 이 제목(말만 바꾼 것 포함)이면 버리고,
+  // 준비된 주제는 되도록 피한다(다 피할 수 없으면 excludeTitles만 지킨다).
+  avoidTitles: z.array(z.string().trim().min(1).max(120)).max(300).optional().default([]),
   // 사장님이 주제보다 먼저 올린 사진에 보이는 것(사진마다 한 줄). 있으면 이번 추천은 그 사진에서 출발한다.
   photoNotes: z.array(z.string().trim().min(1).max(200)).max(10).optional().default([]),
 });
