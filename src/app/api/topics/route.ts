@@ -74,7 +74,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // AI가 분당 한도(429)에 걸려 준비된 주제로 넘어갔으면 다음 추천까지 1분을 쉰다.
     let rateLimited = false;
     const topics = await suggestTopics(input, { suggest:async () => { if (paced) recordTopicRefresh(); return readTopicGeneration(await client.generateJson(
-      buildTopicPrompt(input, season, likedTitles, freshTrends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name)),
+      buildTopicPrompt(input, season, likedTitles, freshTrends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name), settings?.storeNotes ?? ""),
       topicGenerationSchema(),
     )); } }, (reason, error, rejected) => { source = "fallback"; rateLimited = error !== undefined && planFallbackReason(error) === "quota"; fallbackMessage = topicFallbackMessage(error, rejected); console.warn("[topics] using prepared topics:", reason); }, season,
     (filled) => { filledSlots = filled; console.warn(`[topics] AI 추천 중 ${filled}개가 규칙에 맞지 않아 준비된 주제로 바꿨어요.`); }, hints);

@@ -14,10 +14,10 @@ async function saveSettings(value: AppSettings) {
 // 두 저장 버튼이 같은 설정 값을 저장한다(한쪽에서 바꾼 값이 다른 쪽 저장으로 되돌아가지 않게 상태를 하나로 둔다).
 export function SettingsForm({ onSave = saveSettings, connections = { gemini:false, groq:false, cloudflare:false, openai:false, higgsfield:false }, initialSettings = DEFAULT_SETTINGS, adminCards }: { onSave?: (value:AppSettings)=>void|Promise<void>; connections?:{gemini:boolean;groq:boolean;cloudflare:boolean;openai:boolean;higgsfield?:boolean;naver?:boolean}; initialSettings?:AppSettings; adminCards?:ReactNode }) {
   const [settings,setSettings]=useState<AppSettings>({ ...initialSettings });
-  const [saved,setSaved]=useState<""|"brand"|"admin">("");
-  const [error,setError]=useState<{part:"brand"|"admin";message:string}|null>(null);
+  const [saved,setSaved]=useState<""|"brand"|"notes"|"admin">("");
+  const [error,setError]=useState<{part:"brand"|"notes"|"admin";message:string}|null>(null);
   const update=<K extends keyof AppSettings>(key:K,value:AppSettings[K])=>{setSaved("");setSettings(current=>({...current,[key]:value}));};
-  const submit=(part:"brand"|"admin")=>async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();setError(null);try{await onSave(settings);setSaved(part);}catch(reason){setSaved("");setError({part,message:reason instanceof Error?reason.message:"설정을 저장하지 못했어요. 다시 눌러 주세요."});}};
+  const submit=(part:"brand"|"notes"|"admin")=>async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();setError(null);try{await onSave(settings);setSaved(part);}catch(reason){setSaved("");setError({part,message:reason instanceof Error?reason.message:"설정을 저장하지 못했어요. 다시 눌러 주세요."});}};
   return <>
   <form className="settings-form brand-form" aria-label="브랜드 키트" onSubmit={submit("brand")}>
     <section className="settings-section"><div><h2>브랜드 키트</h2><p>모든 카드 맨 아래에 가게 이름과 함께 찍혀요. 비우면 가게 이름만 찍혀요.</p></div><div className="field-grid">
@@ -25,6 +25,14 @@ export function SettingsForm({ onSave = saveSettings, connections = { gemini:fal
       <label>인스타그램 계정<input aria-label="Instagram 계정" placeholder="@mukdong_hongeo" maxLength={31} value={settings.brandHandle??""} onChange={e=>update("brandHandle",e.target.value.trim())}/><small className="field-help">카드 예시: 묵동홍어마을 · {settings.brandHandle?.trim()?`@${settings.brandHandle.trim().replace(/^@/,"")}`:"@계정"}</small></label>
     </div></section>
     <div className="settings-actions"><span/><button type="submit" className="button secondary">계정 저장</button>{saved==="brand"&&<span role="status">저장했어요.</span>}{error?.part==="brand"&&<span role="alert">{error.message}</span>}</div>
+  </form>
+  {/* 가게 이야기 메모(why_depth 개선 2026-10-12): AI는 가게만의 사실을 지어내지 못하게 막혀 있어서 이유가 늘 일반론에 머물렀다.
+      사장님이 적어 둔 사실은 AI가 근거로 쓰고, 사실 검사도 확인된 말로 본다(store/storeNotes.ts). */}
+  <form className="settings-form" aria-label="가게 이야기 메모" onSubmit={submit("notes")}>
+    <section className="settings-section"><div><h2>가게 이야기 메모</h2><p>사장님만 아는 가게 사실을 적어 두면 AI가 글의 근거로 써요. 여기 없는 가게 이야기는 AI가 지어내지 않아요.</p></div><div className="field-grid">
+      <label className="field-wide">메모<textarea aria-label="가게 이야기 메모" rows={7} maxLength={1500} placeholder={"한 줄에 사실 하나씩 적어 주세요. 예)\n홍어는 들어오는 날 직접 손질해요.\n묵은지는 가게에서 직접 담가 오래 익혀요."} value={settings.storeNotes??""} onChange={e=>update("storeNotes",e.target.value)}/><small className="field-help">{(settings.storeNotes??"").length.toLocaleString("ko-KR")} / 1,500자 · 가격·원산지처럼 바뀔 수 있는 정보는 바뀌면 꼭 고쳐 주세요.</small></label>
+    </div></section>
+    <div className="settings-actions"><span/><button type="submit" className="button secondary">메모 저장</button>{saved==="notes"&&<span role="status">저장했어요.</span>}{error?.part==="notes"&&<span role="alert">{error.message}</span>}</div>
   </form>
   <details className="admin-settings">
     <summary>관리자용 설정</summary>

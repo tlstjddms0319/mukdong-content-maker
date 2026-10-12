@@ -22,10 +22,12 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   const requestedPlanSchema=lenientPlanSchema(input.data.track?TRACK_SLIDE_RANGE:input.data.slideCount,fixes);
   let fallbackReason:PlanFallbackReason|null=null;
   const settings=await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:",error instanceof Error?error.message:String(error));return null;});
+  // 가게 이야기 메모(설정): 구성안·검수·카드 거르기가 같은 메모를 확인된 가게 사실로 쓴다(store/storeNotes.ts).
+  const storeNotes=settings?.storeNotes??"";
   const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
   const plan=await planCarousel(input.data,{
     generate:async()=>{
-      const result=await client.generateJson(buildCarouselPlanPrompt(input.data),requestedPlanSchema);
+      const result=await client.generateJson(buildCarouselPlanPrompt(input.data,{storeNotes}),requestedPlanSchema);
       // 제공자 클라이언트가 이미 검사했어도 한 번 더 같은 "고쳐 쓰기" 스키마로 읽는다(고친 값에 다시 써도 그대로다).
       const candidate=requestedPlanSchema.parse(result);
       if(!slideCountFits(input.data,candidate.slideCount))throw new Error("wrong slide count");
@@ -45,7 +47,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   if(provider!=="fallback"){
     // 검수에도 구성안과 같은 주인공 메뉴·사진 설명·내용 메모를 준다. 검수가 글을 바꾸면 장면이 메뉴를 벗어나지 않았는지 한 번 더 맞춘다.
     const menu=carouselMenu(input.data);
-    const result=await reviewCarouselPlan(plan,input.data.topic,{review:(prompt,schema)=>client.generateJson(prompt,schema)},{menu,photoNotes:input.data.photoNotes,contentBrief:input.data.contentBrief,track:input.data.track});
+    const result=await reviewCarouselPlan(plan,input.data.topic,{review:(prompt,schema)=>client.generateJson(prompt,schema)},{menu,photoNotes:input.data.photoNotes,contentBrief:input.data.contentBrief,track:input.data.track,storeNotes});
     finalPlan=result.applied?keepScenesOnMenu(result.plan,input.data.topic,menu):result.plan;
     review={applied:result.applied,before:result.before,after:result.after};
     if(result.applied)console.info(`[plan-review] 문안 검수 적용: 문제 ${result.before}건 → ${result.after}건`);
@@ -59,7 +61,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   }
   const fallback=provider==="fallback"?{fallbackReason:fallbackReason??"error",fallbackMessage:PLAN_FALLBACK_MESSAGES[fallbackReason??"error"]}:{};
   // 카드에 찍히는 글을 마지막으로 거른다. 큰 숫자는 주제·메모·사진 설명에 있는 것만 남긴다.
-  const sources={topic:input.data.topic,contentBrief:input.data.contentBrief,imageBrief:input.data.imageBrief,photoNotes:input.data.photoNotes};
+  const sources={topic:input.data.topic,contentBrief:input.data.contentBrief,imageBrief:input.data.imageBrief,photoNotes:input.data.photoNotes,storeNotes};
   const guarded=guardSlidePoints(finalPlan,sources);
   // 갈래 규칙은 검수·거르기가 글을 바꾼 뒤에 마지막으로 한 번 더 맞춘다(제목이 요점으로 바뀌어도 길이·개수가 지켜지게).
   return NextResponse.json({plan:input.data.track?applyTrack(guarded,input.data.track):guarded,provider,review,...(polish?{polish}:{}),...fallback});
