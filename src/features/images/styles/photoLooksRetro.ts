@@ -1,6 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { croppedPhoto, finishPhoto, svgLayer, textLayer, type Font } from "../render/primitives";
-import { textureLayer } from "../decor";
+import { shadowLayer, textureLayer } from "../decor";
 import { STYLE_FONTS, emphasisOf, snap, type StyleContent } from "./shared";
 import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines, storeCardBlock } from "./trackKit";
 import type { TrackLook } from "./trackLooks";
@@ -9,6 +9,7 @@ import type { TrackLook } from "./trackLooks";
 //   5 레트로 간판 : 위쪽 빨간 간판 띠(굵은 크림 글씨·안쪽 선), 사진 가득, 노란 별 딱지, 아래 크림 띠에 짧은 글. 을지로 뉴트로.
 //   6 원형 그릇   : 주제 짙은 색 바탕에 동심원, 가운데 큰 원형 사진(위에서 찍은 접시와 잘 맞는다), 아래 가운데 제목.
 //   7 먹색 액자   : 먹색 바탕, 금색 두 줄 테두리, 아치 창 사진, 명조 제목과 마름모 구분선. 시즌 특선·모임용.
+//   8 경매표 꼬리표 · 9 박물관 라벨 : 아래 각 함수 설명(2차 조사 후보 1·4).
 // 간판·먹색은 고정 색(주제 색과 무관한 상징색), 원형 그릇은 주제 색을 따른다. 글 양은 기본 모양과 같다(제목 + 짧은 글 한 줄).
 const W=1080,H=1350,CONTENT_W=W-MARGIN*2;
 const finish=(background:string,layers:OverlayOptions[])=>sharp({create:{width:W,height:H,channels:3,background}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();
@@ -125,7 +126,90 @@ async function inkFrame(photo:Buffer,content:StyleContent,index:number):Promise<
   return finish(INK.bg,texture?[texture,...layers]:layers);
 }
 
+// ── 8 경매표 꼬리표 ───────────────────────────────────────────────────────────────────
+// 사진을 가득 깔고 오른쪽 위에 마닐라지 꼬리표(모서리 자른 오각형·구멍·끈). 꼬리표에는 장 번호와 장 키워드만 적는다
+// (산지·중량·숙성일 같은 확인 안 된 사실은 적지 않는다). 수산시장 경매표 느낌으로 원물을 강조한다(2차 조사 후보 1).
+const TAG={paper:"#E9D7AE",ink:"#2B2118",dim:"#5A4732",red:"#A3241F"};
+async function auctionTag(photo:Buffer,content:StyleContent,index:number,look:TrackLook):Promise<Buffer> {
+  const paper=look.light;
+  const store=content.last?await storeCardBlock({logoSize:96,wordmark:false,surface:paper}):null;
+  const foot=await footerRow({color:"#FFFFFF",ring:paper.ring,cue:!content.last,shadow:true});
+  const panelH=store?store.height+96:0;
+  const photoH=H-panelH;
+  // 제목·짧은 글은 아래 그늘 위 큰 흰 글씨(꼬리표 안 작은 손글씨는 50대 손님이 읽기 어려웠다).
+  const head=await title(content,"#FFFFFF","#F0C66A",content.cover?[96,88,82,76,70]:[72,68,64,60,56],TITLE_SERIF,2,"left");
+  const line=lineOf(content);
+  const sub=line?await textLayer(line,{size:content.cover?44:40,color:"#F3E9DA",width:CONTENT_W,height:4000,font:SANS,spacing:10}):null;
+  const footTop=store?photoH:H-MARGIN-foot.height;
+  const subTop=footTop-(store?40:56)-(sub?.info.height??0);
+  const titleTop=(sub?subTop-20:footTop-56)-head.layer.info.height;
+  const shadeFrom=Math.max(380,titleTop-240);
+  const layers:OverlayOptions[]=[
+    {input:await finishPhoto(photo,W,photoH,{zoom:1.03}),left:0,top:0},
+    svgLayer(`<defs><linearGradient id="atB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1C1310" stop-opacity="0"/><stop offset=".45" stop-color="#1C1310" stop-opacity=".62"/><stop offset="1" stop-color="#1C1310" stop-opacity=".9"/></linearGradient></defs><rect x="0" y="${shadeFrom}" width="${W}" height="${photoH-shadeFrom}" fill="url(#atB)"/>`),
+  ];
+  // 꼬리표: 오른쪽 위, 번호와 품목만(산지·중량·숙성일 같은 확인 안 된 사실은 적지 않는다).
+  const TW=360,TX=W-MARGIN-TW+10,TY=MARGIN+20;
+  const no=await textLayer(content.cover?"No. 묵동":`No. ${String(index).padStart(3,"0")}`,{size:48,color:TAG.ink,width:TW-80,height:100,font:STYLE_FONTS.heavy,features:"tnum"});
+  const item=await textLayer(`품목 · ${(content.keywords?.[0]??"홍어").slice(0,6)}`,{size:36,color:TAG.dim,width:TW-80,height:80,font:SANS_BOLD});
+  const TH=40+no.info.height+18+item.info.height+40;
+  const cut=40;
+  layers.push(svgLayer(`<path d="M${TX+cut} ${TY+cut}C${TX-30} ${TY-10} ${TX-60} ${TY-40} ${TX-120} ${TY-60}" fill="none" stroke="#F3E9DA" stroke-width="4" stroke-linecap="round"/>`
+    +`<path d="M${TX+cut} ${TY}H${TX+TW}V${TY+TH}H${TX}V${TY+cut}Z" fill="${TAG.paper}" stroke="${TAG.dim}" stroke-opacity=".5" stroke-width="2"/>`
+    +`<circle cx="${TX+cut}" cy="${TY+cut}" r="11" fill="#1C1310" fill-opacity=".55" stroke="${TAG.dim}" stroke-width="3"/>`
+    +`<path d="M${TX+40} ${TY+40+no.info.height+8}H${TX+TW-40}" stroke="${TAG.red}" stroke-width="4"/>`));
+  layers.push({input:no.data,left:TX+cut+30,top:TY+40},{input:item.data,left:TX+cut+30,top:TY+40+no.info.height+18});
+  if(content.cover)layers.push({input:await logoMark(104,paper.ring),left:MARGIN,top:MARGIN});
+  layers.push({input:head.layer.data,left:MARGIN,top:titleTop});
+  if(sub)layers.push({input:sub.data,left:MARGIN,top:subTop});
+  if(store){
+    const placed=store.place(540,photoH+48);
+    layers.push(svgLayer(`<rect x="0" y="${photoH}" width="${W}" height="${panelH}" fill="${paper.bg}"/>`+placed.svg),...placed.layers);
+  }else{
+    const placed=foot.place(footTop);
+    layers.push(svgLayer(placed.svg),...placed.layers);
+  }
+  return finish("#1C1310",layers);
+}
+
+// ── 9 박물관 라벨 ────────────────────────────────────────────────────────────────────
+// 연회색 벽에 걸린 액자 사진(가는 그림자), 아래 오른쪽에 작은 흰 전시 라벨: 제목(명조) · 키워드 · 짧은 글 한 줄.
+// 정보 위계가 분명하고 20~30대 감성에 맞는 '전시' 느낌(2차 조사 후보 4).
+const MUSEUM={wall:"#E7E4DE",label:"#FFFFFF",ink:"#22201D",dim:"#55514A",rule:"#B9B2A6"};
+async function museum(photo:Buffer,content:StyleContent,index:number):Promise<Buffer> {
+  const surface={ink:MUSEUM.ink,dim:MUSEUM.dim,chip:MUSEUM.ink,chipInk:MUSEUM.label};
+  const store=content.last?await storeCardBlock({logoSize:96,wordmark:false,surface}):null;
+  const foot=store?null:await footerRow({color:MUSEUM.dim,cueColor:MUSEUM.ink,cue:!content.last});
+  const LW=620,LX=W-MARGIN-LW;
+  const head=await fitLines(content.headline,{sizes:content.cover?[68,64,60,56]:[64,60,56,52],width:LW-72,font:TITLE_SERIF,color:MUSEUM.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.08),emphasis:emphasisOf(content,"#8A3A1F")});
+  const meta=await textLayer(`${content.cover?"특별전":`전시 ${String(index).padStart(2,"0")}`} · ${(content.keywords??["홍어"]).slice(0,2).join(" · ")}`,{size:28,color:MUSEUM.dim,width:LW-72,height:80,font:SANS_BOLD,letterSpacing:1});
+  const line=lineOf(content);
+  const sub=line?await textLayer(line,{size:36,color:MUSEUM.dim,width:LW-72,height:4000,font:SANS,spacing:8}):null;
+  const LH=36+meta.info.height+14+head.layer.info.height+(sub?22+sub.info.height:0)+36;
+  const bottomH=store?store.height:foot!.height;
+  const bottomTop=H-(store?52:MARGIN)-bottomH;
+  const labelTop=bottomTop-48-LH;
+  const FX=MARGIN+20,FY=MARGIN+(content.cover?40:20),FW=W-FX*2,FH=Math.max(480,labelTop-48-FY);
+  const layers:OverlayOptions[]=[
+    await shadowLayer({x:FX,y:FY+16,width:FW,height:FH,rx:2,blur:30,opacity:.28}),
+    svgLayer(`<rect x="${FX-14}" y="${FY-14}" width="${FW+28}" height="${FH+28}" fill="#FAF8F4"/>`),
+    {input:await finishPhoto(photo,FW,FH,{zoom:1.03}),left:FX,top:FY},
+    await shadowLayer({x:LX,y:labelTop+6,width:LW,height:LH,rx:2,blur:12,opacity:.18}),
+    svgLayer(`<rect x="${LX}" y="${labelTop}" width="${LW}" height="${LH}" fill="${MUSEUM.label}"/><path d="M${LX+36} ${labelTop+36+meta.info.height+6}H${LX+LW-36}" stroke="${MUSEUM.rule}" stroke-width="1.5"/>`),
+  ];
+  let y=labelTop+36;
+  layers.push({input:meta.data,left:LX+36,top:y});y+=meta.info.height+14;
+  layers.push({input:head.layer.data,left:LX+36,top:y});y+=head.layer.info.height;
+  if(sub){y+=22;layers.push({input:sub.data,left:LX+36,top:y});}
+  if(content.cover)layers.push({input:await logoMark(96,"#FAF8F4"),left:MARGIN,top:labelTop+Math.round((LH-96)/2)});
+  if(store){const placed=store.place(540,bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
+  else{const placed=foot!.place(bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
+  return finish(MUSEUM.wall,layers);
+}
+
 export function renderPhotoLookRetro(look:number,photo:Buffer,content:StyleContent,index:number,colors:TrackLook):Promise<Buffer>|null {
+  if(look===8)return auctionTag(photo,content,index,colors);
+  if(look===9)return museum(photo,content,index);
   if(look===5)return signboard(photo,content,index);
   if(look===6)return plate(photo,content,index,colors);
   if(look===7)return inkFrame(photo,content,index);
