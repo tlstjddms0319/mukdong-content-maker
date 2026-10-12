@@ -127,3 +127,79 @@ export function coverMythRule(...texts:Array<string|undefined>):string {
   return `[오해 깨기 재료] 독자가 흔히 믿는 오해와 실제 원리입니다(참고 데이터). 후보 하나는 반드시 이 가운데 본문과 맞는 오해 하나를 뒤집는 표지로 쓰세요. 형태는 "~가 아니라 ~라고?"처럼 오해를 뒤집은 사실을 보여 주거나(예: "홍어회는 썩은 게 아니라 삭히는 거라고?", "과메기, 냉동실에선 못 만든다고?"), 오해와 다른 구체적 현상을 대조하세요(예: "홍어전은 왜 삭힌 홍어보다 덜 쏠까?"). 오해를 그대로 예/아니오로 묻는 질문("홍어애탕은 오래 고아서 진할까?", "홍어 향은 상해서 나는 냄새일까요?")은 답이 "아니요" 하나라 약하니 쓰지 마세요. 표지에는 오해를 뒤집는다는 것만 보여 주고, 실제 원인의 이름(요소·콜라겐 같은 성분)은 본문에서 밝히세요.
 ${lines}`;
 }
+
+// 비교 주제 목록(사장님 요청 2026-10-12: 홍어 vs 가오리, 삭힌 홍어 vs 생홍어처럼 비교할 거리는 많다).
+// 결과물 점검에서 비교 주제는 매번 "흐리다"(3/4, 2/3)였는데 대부분 배다리 vs 지평처럼 원료·제조를 확인할 수 없는 상표 비교였다.
+// 여기 있는 쌍은 기준마다 "A는 ~, B는 ~"를 확인된 원리로 말할 수 있다. 주제 추천은 이 목록(또는 가게 이야기 메모에 사실이 있는 쌍)에서만
+// 비교 주제를 고르고, 구성안·올릴 글은 기준별 차이를 근거로 쓴다. sure:false인 차이는 "~로 알려져 있어요"로 쓴다.
+export type ComparisonPair={id:string;a:string;b:string;match:RegExp;differences:readonly {criterion:string;text:string;sure:boolean}[]};
+export const COMPARISON_PAIRS:readonly ComparisonPair[]=[
+  {id:"skate-vs-ray",a:"홍어",b:"가오리",match:/홍어[^?]*가오리|가오리[^?]*홍어/,differences:[
+    {criterion:"생김새",sure:true,text:"홍어는 주둥이가 뾰족하게 튀어나온 마름모꼴이고, 흔히 보는 가오리는 주둥이가 둥글고 몸이 원반처럼 둥근 편이에요. 둘 다 같은 가오리 무리라 시장에서 헷갈리기 쉬워요."},
+    {criterion:"먹는 법",sure:true,text:"홍어는 삭혀서 회·찜·무침으로 먹는 전라도 잔칫상 음식이고, 가오리는 주로 삭히지 않고 말리거나 찜·탕·무침으로 먹어요."},
+    {criterion:"향",sure:false,text:"둘 다 연골어류라 살에 요소가 있지만, 홍어는 삭혀 먹는 문화 덕에 암모니아 향이 강하게 살아 있고, 삭히지 않은 가오리는 향이 훨씬 순하다고 알려져 있어요."},
+    {criterion:"식감",sure:false,text:"홍어 살은 찰지고 쫀득한 편, 가오리는 상대적으로 부드럽고 담백한 편으로 알려져 있어요. 둘 다 뼈가 연골이라 함께 씹혀요."},
+  ]},
+  {id:"fermented-vs-fresh",a:"삭힌 홍어",b:"생홍어",match:/삭힌\s*홍어[^?]*(?:생\s*홍어|싱싱한\s*홍어|안\s*삭힌)|(?:생\s*홍어|싱싱한\s*홍어|안\s*삭힌)[^?]*삭힌/,differences:[
+    {criterion:"향",sure:true,text:"삭힌 홍어는 살 속 요소가 미생물의 효소로 암모니아가 되어 코를 톡 쏘고, 생홍어는 아직 요소가 그대로라 톡 쏘는 향이 약하고 담백해요."},
+    {criterion:"식감",sure:false,text:"생홍어는 탱탱하고 오독한 편이고, 삭히는 동안 단백질이 조금씩 분해되어 삭힌 홍어 살은 더 부드럽고 찰지게 느껴진다고 해요."},
+    {criterion:"맛",sure:true,text:"생홍어는 담백하고 은은한 단맛이 나고, 삭힌 홍어는 톡 쏘는 향 뒤에 감칠맛이 올라와요."},
+    {criterion:"유래",sure:false,text:"섬에서는 싱싱한 홍어를 회로 먹었고, 뱃길로 내륙까지 오래 실어 오는 동안 저절로 삭은 홍어를 먹던 데서 삭힌 홍어가 퍼졌다고 전해져요."},
+  ]},
+  {id:"raw-fish-vs-hongeo",a:"생선회",b:"홍어회",match:/(?:생선회|광어|우럭|일반\s*회)[^?]*홍어|홍어[^?]*(?:생선회|광어|우럭|일반\s*회)/,differences:[
+    {criterion:"신선함",sure:true,text:"생선회는 잡은 지 얼마 안 된 싱싱함이 맛이고, 홍어회는 일부러 삭혀 생긴 향이 맛이에요."},
+    {criterion:"뼈",sure:true,text:"생선회는 단단한 뼈를 발라내고 살만 뜨지만, 홍어는 뼈가 연골이라 살과 함께 썰어 오독하게 씹어요."},
+    {criterion:"상하는 방식",sure:false,text:"보통 생선은 시간이 지나면 부패균이 늘어 상하지만, 홍어는 요소에서 생긴 암모니아가 다른 균을 막아 상하지 않고 삭는다고 알려져 있어요."},
+  ]},
+  {id:"hoe-vs-muchim",a:"홍어회",b:"홍어무침",match:/홍어\s*회[^?]*무침|무침[^?]*홍어\s*회/,differences:[
+    {criterion:"향",sure:false,text:"홍어회는 암모니아 향이 그대로 코로 올라오고, 무침은 식초의 산이 알칼리성 암모니아를 붙잡아 향이 덜하게 느껴진다고 해요."},
+    {criterion:"맛",sure:true,text:"홍어회는 홍어 살 맛과 향이 중심이고, 무침은 새콤달콤한 양념과 고춧가루의 매운 자극이 먼저 와요."},
+    {criterion:"식감",sure:true,text:"홍어회는 도톰하게 썰어 쫀득함이 살아 있고, 무침은 한입 크기로 썰어 채소의 아삭함과 함께 씹혀요."},
+  ]},
+  {id:"hoe-vs-jjim",a:"홍어회",b:"홍어찜",match:/홍어\s*회[^?]*찜|찜[^?]*홍어\s*회/,differences:[
+    {criterion:"향",sure:false,text:"향 성분은 뜨거울수록 많이 날아올라서, 차가운 홍어회보다 김이 오르는 홍어찜의 향이 훨씬 세게 느껴지는 편이에요."},
+    {criterion:"식감",sure:true,text:"홍어회는 날것이라 탱탱하고 쫀득하며, 찜은 열에 콜라겐이 젤라틴으로 풀려 살이 촉촉하고 부드러워져요."},
+    {criterion:"먹는 자리",sure:true,text:"홍어찜은 전라도 잔칫상·제사상에 오르던 음식으로 알려져 있고, 홍어회는 삼합처럼 곁들임과 함께 먹는 경우가 많아요."},
+  ]},
+  {id:"hoe-vs-jeon",a:"홍어회",b:"홍어전",match:/홍어\s*회[^?]*홍어\s*전|홍어\s*전[^?]*홍어\s*회/,differences:[
+    {criterion:"향",sure:false,text:"부치는 동안 향 성분 일부가 날아가고 고소한 전 향이 더해져, 홍어전을 회보다 순하게 느끼는 사람이 많다고 해요."},
+    {criterion:"식감",sure:true,text:"홍어회는 쫀득한 날 살이고, 홍어전은 달걀옷이 노릇하게 구워져 겉은 고소하고 속은 촉촉해요."},
+  ]},
+  {id:"aged-vs-fresh-kimchi",a:"묵은지",b:"겉절이",match:/묵은지[^?]*(?:겉절이|새\s*김치|생김치)|(?:겉절이|새\s*김치|생김치)[^?]*묵은지/,differences:[
+    {criterion:"신맛",sure:true,text:"묵은지는 오래 익는 동안 유산균이 배추의 당을 젖산으로 바꿔 신맛이 깊고, 겉절이는 거의 발효되지 않아 신맛이 없어요."},
+    {criterion:"식감",sure:true,text:"겉절이는 배추가 아삭하고, 묵은지는 오래 익으며 조직이 부드러워져 흐물하면서도 씹는 맛이 남아요."},
+    {criterion:"어울림",sure:true,text:"묵은지의 강한 신맛은 기름진 수육·전의 느끼함을 끊어 주고, 겉절이는 신선한 양념 맛으로 담백한 음식과 어울려요."},
+  ]},
+  {id:"live-vs-pasteurized",a:"생막걸리",b:"살균 막걸리",match:/생\s*막걸리[^?]*살균|살균[^?]*생\s*막걸리/,differences:[
+    {criterion:"탄산",sure:true,text:"생막걸리는 효모가 살아 있어 병 속에서도 발효가 이어지며 탄산이 생기고, 살균 막걸리는 열로 효모를 멈춰 맛이 그대로 유지돼요."},
+    {criterion:"맛의 변화",sure:true,text:"생막걸리는 날이 갈수록 당이 줄고 신맛이 늘어 맛이 변하고, 살균 막걸리는 오래 두어도 맛이 거의 같아요."},
+    {criterion:"보관",sure:true,text:"생막걸리는 냉장 보관하고 유통기한이 짧으며, 살균 막걸리는 상온에서도 오래 둘 수 있어요."},
+  ]},
+  {id:"herring-vs-saury",a:"청어 과메기",b:"꽁치 과메기",match:/청어[^?]*꽁치|꽁치[^?]*청어/,differences:[
+    {criterion:"유래",sure:true,text:"과메기는 원래 청어로 만들었는데, 청어가 잘 잡히지 않던 시기에 꽁치로 만들기 시작해 지금은 꽁치 과메기가 흔해요."},
+    {criterion:"맛",sure:false,text:"청어 과메기는 기름이 더 많고 진한 맛, 꽁치 과메기는 상대적으로 담백하고 쫀득한 맛으로 알려져 있어요."},
+  ]},
+  {id:"seafood-vs-hongeo-ramyeon",a:"해물라면",b:"홍어라면",match:/해물\s*라면[^?]*홍어\s*라면|홍어\s*라면[^?]*해물\s*라면/,differences:[
+    {criterion:"국물 맛",sure:true,text:"해물라면은 조개·새우·오징어의 감칠맛 성분이 우러나 '시원한' 국물이 되고, 홍어라면은 뜨거운 국물에서 홍어 향이 피어올라 톡 쏘는 맛이 더해져요."},
+    {criterion:"건더기",sure:true,text:"해물라면은 여러 해물의 탱글한 식감, 홍어라면은 홍어 살과 연골의 쫀득·오독한 식감이 씹혀요."},
+  ]},
+];
+
+// 주제·표지 질문이 이 목록의 비교인지. 아니면 undefined.
+export function comparisonPairOf(text:string):ComparisonPair|undefined {
+  return COMPARISON_PAIRS.find(pair=>pair.match.test(text));
+}
+
+// 구성안·올릴 글 프롬프트용: 이 비교의 기준별 차이.
+export function comparisonPairRule(...texts:Array<string|undefined>):string {
+  const pair=comparisonPairOf(texts.filter(Boolean).join(" "));
+  if(!pair)return "";
+  const lines=pair.differences.map(item=>`- ${item.criterion}: ${item.text}${item.sure?"":" (단정하지 말고 \"~로 알려져 있어요\"처럼 쓰세요)"}`).join("\n");
+  return `[비교 근거: ${pair.a} vs ${pair.b}] 이유 장마다 아래 기준 하나를 골라 "${pair.a}는 ~, ${pair.b}는 ~"처럼 양쪽을 한 장에 함께 쓰세요(참고 데이터).
+${lines}`;
+}
+
+// 주제 추천용: 고를 수 있는 비교 쌍 목록.
+export function comparisonTopicRule():string {
+  return `[비교 주제] 두 대상을 견주는 주제는 아래 쌍 가운데서만 고르세요. 이 쌍들은 기준마다 차이를 확인된 원리로 말할 수 있습니다: ${COMPARISON_PAIRS.map(pair=>`${pair.a} vs ${pair.b}`).join(", ")}. 배다리·지평처럼 상표끼리 견주는 주제는 원료·만드는 법을 확인할 수 없어 흐려지니, 가게 이야기 메모에 두 상표의 사실이 적혀 있을 때만 쓰세요.`;
+}

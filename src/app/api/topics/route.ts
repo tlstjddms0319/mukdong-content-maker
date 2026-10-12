@@ -59,8 +59,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     for (const id of photoMenus) recentMenus.delete(id);
     // 사진에서 가게 메뉴를 하나도 못 찾았으면(사진을 못 읽음·메뉴에 없는 음식) "사진 모드"로 보지 않는다: 메뉴 고르게 규칙을 그대로 지킨다
     // (예전에는 사진 메모만 있으면 규칙이 꺼져 삼합 주제만 둘 나오기도 했다. 검수 보고서 B-7).
-    const hints = { recentMenus, trends: freshTrends.map(({ keyword }) => keyword), ...(photoMenus.size ? { photoMenus } : {}) };
     const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
+    const hints = { recentMenus, trends: freshTrends.map(({ keyword }) => keyword), ...(photoMenus.size ? { photoMenus } : {}), storeNotes: settings?.storeNotes ?? "" };
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     // 무료 문안 AI의 분당 한도를 넘기지 않게 "다른 주제 보기" 간격을 지킨다(refreshPace.ts). 너무 빨리 다시 누르면 AI를 부르지 않고
     // 몇 초 뒤에 다시 볼 수 있는지만 알려 준다(화면은 지금 추천을 그대로 두고 버튼에 남은 초를 띄운다).

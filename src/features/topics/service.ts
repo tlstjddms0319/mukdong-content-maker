@@ -1,5 +1,8 @@
 import { SAME_TOPIC_SIMILARITY, topicSimilarity } from "./topicSimilarity";
-import { HOOK_DARE, HOOK_HYPE, obviousQuestion } from "@/features/copy/explain";
+import { HOOK_DARE, HOOK_HYPE, comparedKeys, comparedPair, obviousQuestion } from "@/features/copy/explain";
+import { comparisonPairOf } from "@/features/store/principles";
+// 상표 이름(가게가 내는 막걸리). 상표끼리 비교인지 볼 때 쓴다.
+const BRAND_PAIR=/배다리|지평/;
 import { TopicInputSchema, TopicSuggestionSchema, TopicSuggestionsSchema, type TopicInput, type TopicSuggestion, type TopicSuggestionInput } from "./schema";
 import type { SeasonContext } from "./season";
 import { STORE_MENU, isHongeoHoe, mainMenuOf, menuOf, menusForDate, type StoreMenuItem } from "@/features/store/menu";
@@ -23,7 +26,8 @@ type PreparedTopic=Omit<TopicSuggestion,"id"|"season"|"trend">;
 // recentMenus: 최근에 보여 준 주제에 자주 나온 메뉴 id(이번에는 되도록 빼서 메뉴를 고르게 돌린다).
 // trends: 네이버 검색이 늘어난 말(묶음 이름). 준비된 주제는 그 말과 이어지는 메뉴를 먼저 고른다.
 // photoMenus: 사장님이 먼저 올린 사진에 보이는 가게 메뉴 id. 있으면(사진으로 주제 정하기) 세 주제 모두 그 메뉴에서 고른다.
-export type TopicHints={recentMenus?:ReadonlySet<string>;trends?:readonly string[];photoMenus?:ReadonlySet<string>};
+// storeNotes: 가게 이야기 메모. 상표끼리 비교(배다리 vs 지평)는 메모에 두 상표 이야기가 있을 때만 받는다.
+export type TopicHints={recentMenus?:ReadonlySet<string>;trends?:readonly string[];photoMenus?:ReadonlySet<string>;storeNotes?:string};
 
 // 준비된 질문 주제(AI 실패 시). 정해진 칸 없이 아래 메뉴 주제·시기 주제와 한 후보 목록에 놓고 fallbackTopics가 고른다.
 // summary 앞쪽에 이어질 가게 메뉴를 먼저 적는다(메뉴 판별에 쓰인다).
@@ -204,9 +208,9 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
 // 주제 한 개가 기본 조건을 못 지키는 이유(지키면 undefined).
 // - 제목 끝 물음표 뒤의 따옴표·괄호·공백은 봐준다(AI가 "…일까?" 처럼 따옴표로 감싸 보내곤 한다).
 // - 가게 메뉴는 제목과 설명을 함께 본다(제목에만 메뉴 이름을 쓴 주제를 버리지 않게).
-export type TopicRejectReason="question"|"hype"|"obvious"|"store"|"summary"|"menu"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
+export type TopicRejectReason="question"|"hype"|"obvious"|"pair"|"store"|"summary"|"menu"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
 export const TOPIC_REJECT_LABELS:Record<TopicRejectReason,string>={
-  question:"물음표 질문이 아니어서",hype:"과장하거나 독자를 시험하는 말투라서",obvious:"답이 뻔한 질문이라서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
+  question:"물음표 질문이 아니어서",hype:"과장하거나 독자를 시험하는 말투라서",obvious:"답이 뻔한 질문이라서",pair:"차이를 확인할 수 없는 상표 비교라서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
   current:"지금 화면 주제와 같아서",recent:"최근에 보여 준 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",photo:"넣은 사진 속 메뉴가 아니어서",
 };
 function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason|undefined {
@@ -255,7 +259,15 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   // 홍어와 상관없는데 설명에 "삼합으로 이어진다"를 붙인 주제가 통과했고, 구성안이 홍어를 억지로 끼워 넣었다(사장님 지적 2026-10-10).
   // 사진으로 정하는 주제는 사진 속 메뉴 검사(aboutPhoto)가 따로 있다.
   const titled=(topic:TopicSuggestion)=>photoMode||menuOf(topic.title).length>0;
-  const problem=(topic:TopicSuggestion):TopicRejectReason|undefined=>basicsProblem(topic,options.storeName)
+  // 상표끼리 비교(배다리 vs 지평)는 원료·제조를 확인할 수 없어 늘 흐렸다(점검 7~9회). 확인된 비교 목록(store/principles.ts)에 있거나
+  // 가게 이야기 메모에 두 상표가 함께 적혀 있을 때만 받는다.
+  const unverifiedPair=(topic:TopicSuggestion)=>{
+    const pair=comparedPair(topic.title);
+    if(!pair||comparisonPairOf(topic.title)||!BRAND_PAIR.test(topic.title))return false;
+    const notes=options.hints?.storeNotes??"";
+    return !comparedKeys(pair).every(key=>notes.includes(key));
+  };
+  const problem=(topic:TopicSuggestion):TopicRejectReason|undefined=>basicsProblem(topic,options.storeName)??(unverifiedPair(topic)?"pair":undefined)
     ??(!titled(topic)?"menu":!aboutPhoto(topic)?"photo":onScreen(topic)?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
   // 최근에 보여 준 주제(말만 바꾼 것 포함)는 다시 쓰지 않는다. 예전에는 자리가 남으면 "준비된 주제보다 낫다"며 다시 써서
   // "다른 주제 보기"를 눌러도 같은 주제가 돌아왔다(사장님 지적 2026-10-10). 빈자리는 최근에 안 보인 준비된 주제로 채운다.

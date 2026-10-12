@@ -1,3 +1,5 @@
+import { polishCaption } from "@/features/copy/captionPolish";
+import { principleNotesRule } from "@/features/store/principles";
 import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { CopyInputSchema, GeneratedCopyContentSchema, GeneratedCopySchema } from "@/features/copy/schema";
@@ -87,6 +89,13 @@ export async function POST(request:Request) { const denied=await ownerApiError()
       instruction=prompt+"\n이전 초안을 한 번 보완하세요. 수정할 항목: "+JSON.stringify(issues)+"\n이전 초안(참고 데이터): "+JSON.stringify(copy).slice(0,3000);
     }
     if(!best||best.hard.length)throw new CopyQualityError(best?.hard??["no draft"]);
+    // 남은 문제 중 첫 문장 길이·짧은 본문만 따로 고친다(captionPolish.ts). 실패하면 그대로 쓴다.
+    const polished=best.soft.length?await polishCaption(best.copy,copyLength,{generate:(text,schema)=>client.generateJson(text,schema)},{context:principleNotesRule(input.data.topic,input.data.contentBrief,input.data.imageBrief,...(input.data.photoNotes??[])),storeNotes}):null;
+    if(polished?.hookSwapped||polished?.expanded){
+      best.copy=polished.copy;
+      best.soft=generatedCopyIssues(polished.copy,copyLength,storeNotes).filter(issue=>!hardCopyIssues(polished.copy,storeNotes).includes(issue));
+      console.info(`[copy-polish] 첫 문장 ${polished.hookSwapped?"후보로 바꿈":"그대로"}, 정보 ${polished.expanded?"늘림":"그대로"}`);
+    }
     const {copy}=best;
     const claims=checkTextClaims([copy.hook,copy.information,copy.store_connection,copy.call_to_action].join("\n"),{storeNotes});
     copy.facts_to_verify=[...new Set([...copy.facts_to_verify,...claims.verify])];
