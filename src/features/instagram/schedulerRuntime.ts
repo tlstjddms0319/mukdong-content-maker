@@ -38,7 +38,13 @@ export function startPublishSchedulerLoop(intervalSeconds=Number(process.env.INS
       if(run.published.length||run.failed.length)await runNotificationCheck({run}).catch(error=>console.warn("[notifications] 게시 결과 알림 실패:",error instanceof Error?error.message:String(error)));
     }catch(error){
       if(!(error instanceof SchedulerConfigurationError))console.warn("[instagram] 예약 게시 점검 실패:",error instanceof Error?error.message:String(error));
-    }finally{running=false;}
+    }
+    // 성과 숫자(인스타그램 인사이트·GA4)는 채널마다 하루 한 번 가져온다. 실패해도 게시에는 영향이 없다.
+    try{
+      const metrics=await (await import("@/features/metrics/collect")).runDailyMetricsIfDue();
+      if(metrics&&(metrics.instagram!=="not-due"||metrics.ga4==="ran"||metrics.ga4==="failed"))console.info(`[metrics] 성과 수집: 인스타그램 ${metrics.instagram}, 홈페이지 ${metrics.ga4}`);
+    }catch(error){console.warn("[metrics] 성과 수집 실패:",error instanceof Error?error.message:String(error));}
+    finally{running=false;}
   };
   timer=setInterval(()=>{void tick();},Math.max(15,intervalSeconds)*1000);
   timer.unref?.();

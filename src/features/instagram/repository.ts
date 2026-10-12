@@ -26,7 +26,7 @@ async function writeJson(target:string,value:unknown){
 
 export function toPublicConnection(value:InstagramConnection|null):PublicInstagramConnection{
   if(!value)return {connected:false};
-  return {connected:true,username:value.username,expiresAt:value.expiresAt,needsReconnect:new Date(value.expiresAt).getTime()<=Date.now()};
+  return {connected:true,username:value.username,expiresAt:value.expiresAt,needsReconnect:new Date(value.expiresAt).getTime()<=Date.now(),insights:(value.scopes??[]).includes("instagram_business_manage_insights")};
 }
 
 export function createInstagramRepository(root=process.env.DATA_DIR??path.join(process.cwd(),"data")){

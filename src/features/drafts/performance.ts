@@ -14,6 +14,7 @@ export const PerformanceSchema=z.object({
   reach:count.optional(),                                   // 도달(계정 수). 있으면 반응률을 계산한다.
   posted_on:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // 실제로 올린 날(요일 분석용)
   recorded_at:z.string().datetime(),
+  source:z.enum(["manual","instagram"]).optional(),         // 없으면 직접 적은 값. instagram이면 자동 수집 값(직접 적은 값은 자동 수집이 덮어쓰지 않는다)
 });
 export type Performance=z.infer<typeof PerformanceSchema>;
 

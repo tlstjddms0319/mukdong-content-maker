@@ -658,3 +658,20 @@ h2 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.2; letter-spac
 
 /* 예약이 풀렸다는 알림(글·사진을 고친 뒤). */
 .schedule-released { background:#fbe9e3; color:#7a2a1d; }
+
+/* 성과 화면 */
+.metric-grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); margin:16px 0; }
+.metric-card { display:grid; gap:10px; align-content:start; padding:20px; border:1px solid var(--line); border-radius:var(--panel-radius); background:#fff; min-width:0; }
+.metric-card h2 { margin:0; }
+.metric-wide { grid-column:1/-1; }
+.metric-big { font-size:28px; font-weight:800; margin:0; }
+.metric-chart { margin:0; } .metric-chart svg { width:100%; height:auto; } .metric-chart figcaption { color:var(--muted); font-size:14px; }
+.metric-line { fill:none; stroke:var(--accent); stroke-width:3; } .metric-axis { stroke:var(--line); } .metric-tick { font-size:12px; fill:var(--muted); }
+.metric-table { width:100%; border-collapse:collapse; } .metric-table th,.metric-table td { padding:6px 8px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; } .metric-table td { text-align:right; }
+.table-scroll { overflow-x:auto; }
+.metric-range { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; } .metric-range a { min-height:44px; display:inline-flex; align-items:center; font-weight:700; }
+.metric-range form { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+.metric-actions { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.metric-details summary { cursor:pointer; font-weight:700; min-height:44px; display:flex; align-items:center; }
+.naver-form { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); margin-top:10px; }
+.naver-form label { display:grid; gap:4px; } .naver-form textarea { width:100%; }

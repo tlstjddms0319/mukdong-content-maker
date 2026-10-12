@@ -1,7 +1,7 @@
 import { randomBytes,timingSafeEqual } from "node:crypto";
 import type { InstagramConnection } from "./schema";
 
-export const INSTAGRAM_SCOPES=["instagram_business_basic","instagram_business_content_publish"] as const;
+export const INSTAGRAM_SCOPES=["instagram_business_basic","instagram_business_content_publish","instagram_business_manage_insights"] as const;
 
 export type InstagramOAuthConfig={appId:string;appSecret:string;redirectUri:string};
 type TokenResult={accessToken:string;expiresIn:number};

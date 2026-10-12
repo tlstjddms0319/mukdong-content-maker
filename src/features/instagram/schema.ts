@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const InstagramScopeSchema=z.enum(["instagram_business_basic","instagram_business_content_publish"]);
+export const InstagramScopeSchema=z.enum(["instagram_business_basic","instagram_business_content_publish","instagram_business_manage_insights"]);
 
 export const InstagramConnectionSchema=z.object({
   instagramUserId:z.string().min(1),
@@ -24,4 +24,4 @@ export const PublicationSchema=z.object({
 
 export type InstagramConnection=z.infer<typeof InstagramConnectionSchema>;
 export type Publication=z.infer<typeof PublicationSchema>;
-export type PublicInstagramConnection={connected:boolean;username?:string;expiresAt?:string;needsReconnect?:boolean};
+export type PublicInstagramConnection={connected:boolean;username?:string;expiresAt?:string;needsReconnect?:boolean;insights?:boolean};
