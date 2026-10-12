@@ -63,3 +63,12 @@ it("rejects a blank owner password without modifying local settings", () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+// Windows PowerShell 5.1은 콘솔이 UTF-8일 때 node로 파이프하는 문자열 앞에 BOM(U+FEFF)을 붙인다.
+// 예전에는 BOM까지 암호로 해시해, 입력한 암호로 로그인할 수 없었다(전체 테스트를 돌릴 때만 재현됐다).
+it("hashes the typed password even when PowerShell prefixes a byte order mark", () => {
+  const output = execFileSync(process.execPath, [resolve("scripts/hash-owner-password.mjs")], { input:"\uFEFFowner-pass\r\n", encoding:"utf8" });
+  const hash = output.match(/^OWNER_PASSWORD_HASH=(.+)$/m)?.[1];
+  const [, salt, digest] = hash?.split(":") ?? [];
+  expect(scryptSync("owner-pass", Buffer.from(salt!, "base64url"), 64).toString("base64url")).toBe(digest);
+});

@@ -87,7 +87,8 @@ describe("DraftWizard",()=>{
     expect(screen.getByRole("button",{name:"인스타그램에 바로 올리기"})).not.toHaveClass("primary");
     // 예전 화면의 골라야 하는 것들은 화면에 없다.
     for(const gone of [/디자인 계열/,/화풍/,/파노라마/,/첫 문장 후보/,/음악 방향/,/해시태그/])expect(screen.queryByText(gone)).not.toBeInTheDocument();
-  });
+  // 혼자 돌면 1초 안팎이지만, 전체 테스트를 함께 돌리면 CPU를 나눠 써 5초 기본 제한을 넘기곤 한다.
+  },15_000);
 
   it("asks the AI for only one cover candidate on the photo-focus track",async()=>{
     const request=api(makingRoutes("photo"));
