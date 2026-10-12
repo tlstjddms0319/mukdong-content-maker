@@ -1,5 +1,8 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 const generateJson = vi.hoisted(() => vi.fn());
 
@@ -25,8 +28,14 @@ const topics = ["치즈는 익숙한데 다른 발효 음식은 왜 낯설까?",
   imageBrief:"사진",
 }));
 
+// 라우트는 저장된 초안의 주제를 "최근 주제"에 더하고, 30일 지난 초안을 지운다. 이 PC의 실제 데이터 폴더(data/)를
+// 읽거나 지우지 않도록 빈 임시 폴더를 쓴다(예전에는 로컬 초안 주제가 recentTitles에 섞여 테스트가 실패했다).
+const emptyDataDir=mkdtempSync(path.join(tmpdir(),"topic-route-"));
+
 describe("topic route", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
+    vi.stubEnv("DATA_DIR",emptyDataDir);
     // 추천 간격 기록은 테스트마다 비운다(연달아 부르면 간격 규칙에 걸린다).
     resetTopicPace();
     generateJson.mockReset().mockImplementation(async (_prompt, schema) => schema.parse(topics));
@@ -106,5 +115,19 @@ describe("topic route", () => {
     expect(body.source).toBe("fallback");
     expect(body.fallbackMessage).toBe("AI 추천이 기준에 맞지 않았어요(물음표 질문이 아니어서 3개). '다른 주제 보기'를 누르면 다시 받아요.");
     expect(body.cooldownSeconds).not.toBe(RATE_LIMITED_COOLDOWN_SECONDS);
+  });
+});
+
+describe("topic prompt menu rules", () => {
+  it("does not call a menu on the shop's list a non-menu example", async () => {
+    const { buildTopicPrompt }=await import("@/features/topics/prompt");
+    const { STORE_MENU }=await import("@/features/store/menu");
+    const prompt=buildTopicPrompt({storeName:"묵동홍어마을"});
+    // 예전에는 "목록에 없는 메뉴(예: 홍어전…)"라고 적힌 채로 홍어전을 메뉴에 더해 프롬프트가 서로 어긋났다.
+    const examples=(prompt.match(/위 목록에 없는 메뉴\(예: ([^)]*)\)/)?.[1]??"").split(/,\s*/).filter(Boolean);
+    expect(examples.length).toBeGreaterThan(0);
+    const menuNames=STORE_MENU.flatMap(item=>[item.name,item.short]);
+    for(const example of examples)expect(menuNames).not.toContain(example);
+    expect(examples).not.toContain("홍어전");
   });
 });
