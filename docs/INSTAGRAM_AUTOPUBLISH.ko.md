@@ -21,7 +21,7 @@
 3. 앱 대시보드 → 왼쪽 **Instagram** → **API 설정(Instagram 로그인)** 화면에서:
    - **Instagram 앱 ID**와 **Instagram 앱 시크릿**을 확인합니다. → `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`
    - **비즈니스 로그인 설정**의 OAuth 리디렉션 URI에 `https://<배포 주소>/api/instagram/callback` 을 추가합니다. → `INSTAGRAM_REDIRECT_URI` 와 글자 하나까지 같아야 합니다.
-   - 권한(scope)에 `instagram_business_basic`, `instagram_business_content_publish` 가 포함돼 있는지 확인합니다.
+   - 권한(scope)에 `instagram_business_basic`, `instagram_business_content_publish`, `instagram_business_manage_insights` 가 포함돼 있는지 확인합니다. 마지막 권한은 앱이 올린 게시물의 반응(도달·저장·공유·좋아요·댓글)을 자동으로 가져오는 데 씁니다(2026-10-12 추가). 이 권한 없이 연결한 계정은 게시는 그대로 되고, 설정 화면이 `다시 연결`을 한 번 안내합니다. Meta는 연결을 자주 반복하면 접근을 막는 확인을 띄울 수 있으니, 실제 매장 계정은 처음 연결할 때 이 권한까지 켜 두세요.
 4. 앱이 **개발 모드**인 동안은 테스터로 등록된 계정만 로그인할 수 있습니다.
    - 앱 대시보드 → **앱 역할** → **역할** → **Instagram 테스터** 추가 → 게시할 Instagram 계정 아이디 입력.
    - Instagram 앱 → 설정 → **앱 및 웹사이트** → **테스터 초대**에서 초대를 수락합니다.

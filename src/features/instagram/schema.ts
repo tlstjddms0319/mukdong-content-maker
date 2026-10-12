@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const InstagramScopeSchema=z.enum(["instagram_business_basic","instagram_business_content_publish"]);
+// manage_insights: 앱이 올린 게시물의 반응(도달·저장·공유·좋아요·댓글)을 읽는다(insights.ts). 이 권한 없이 연결한 예전 연결도 그대로 읽힌다.
+export const InstagramScopeSchema=z.enum(["instagram_business_basic","instagram_business_content_publish","instagram_business_manage_insights"]);
 
 export const InstagramConnectionSchema=z.object({
   instagramUserId:z.string().min(1),
@@ -24,4 +25,5 @@ export const PublicationSchema=z.object({
 
 export type InstagramConnection=z.infer<typeof InstagramConnectionSchema>;
 export type Publication=z.infer<typeof PublicationSchema>;
-export type PublicInstagramConnection={connected:boolean;username?:string;expiresAt?:string;needsReconnect?:boolean};
+// insights: 반응을 자동으로 가져올 권한이 있는지(없으면 화면이 "한 번 다시 연결"을 안내한다).
+export type PublicInstagramConnection={connected:boolean;username?:string;expiresAt?:string;needsReconnect?:boolean;insights?:boolean};

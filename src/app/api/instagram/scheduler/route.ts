@@ -4,6 +4,7 @@ import { ownerApiError } from "@/features/auth/guard";
 import { SchedulerConfigurationError, isAutoPublishEnabled, runScheduledPublishing } from "@/features/instagram/schedulerRuntime";
 import type { SchedulerRun } from "@/features/instagram/scheduler";
 import { runNotificationCheck } from "@/features/notifications/runtime";
+import { runInsightsSyncIfDue } from "@/features/instagram/insightsRuntime";
 
 // 외부 크론(또는 로그인한 주인)이 호출해 예약 게시를 한 번 점검한다.
 // Authorization: Bearer <INSTAGRAM_SCHEDULER_SECRET> 또는 주인 세션 쿠키 중 하나로 인증한다.
@@ -22,7 +23,9 @@ export async function POST(request:Request){
   const notify=(run:SchedulerRun|null)=>runNotificationCheck({run}).catch(error=>{console.warn("[notifications] 알림 점검 실패:",error instanceof Error?error.message:String(error));return {sent:[]};});
   try{
     const run=await runScheduledPublishing(console.info,isAutoPublishEnabled());
-    return NextResponse.json({...run,notifications:(await notify(run)).sent});
+    // 게시물 반응 가져오기(6시간에 한 번, 인사이트 권한이 있을 때만). 실패해도 게시 결과는 그대로 돌려준다.
+    const insights=await runInsightsSyncIfDue().catch(()=>null);
+    return NextResponse.json({...run,notifications:(await notify(run)).sent,...(insights?{insights:{updated:insights.updated.length,failed:insights.failed.length}}:{})});
   }catch(error){
     await notify(null);
     if(error instanceof SchedulerConfigurationError)return NextResponse.json({error:error.message},{status:503});

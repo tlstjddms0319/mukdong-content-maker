@@ -14,6 +14,10 @@ export const PerformanceSchema=z.object({
   reach:count.optional(),                                   // 도달(계정 수). 있으면 반응률을 계산한다.
   posted_on:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // 실제로 올린 날(요일 분석용)
   recorded_at:z.string().datetime(),
+  // 어디서 온 숫자인지: 사장님이 직접 적은 것(없으면 manual) 또는 Instagram에서 자동으로 가져온 것(instagram/insights.ts).
+  // 자동 가져오기는 사장님이 직접 적은 숫자를 덮어쓰지 않는다. fetched_at: 마지막으로 가져온 때(다시 가져올지 정한다).
+  source:z.enum(["manual","instagram"]).optional(),
+  fetched_at:z.string().datetime().optional(),
 });
 export type Performance=z.infer<typeof PerformanceSchema>;
 

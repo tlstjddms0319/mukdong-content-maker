@@ -62,7 +62,8 @@ export async function PATCH(request: Request) { const denied=await ownerApiError
     return withDraftLock(recorded.data.id,async()=>{
     const existing=await repository.readDraft(recorded.data.id);
     if(!existing)return privateJson({error:"게시물을 찾지 못했어요. 내 게시물에서 다시 골라 주세요."},{status:404});
-    const performance=recorded.data.performance?{...recorded.data.performance,recorded_at:new Date().toISOString()}:undefined;
+    // 화면에서 저장한 숫자는 사장님이 직접 적은 것(manual): Instagram 자동 가져오기(insights.ts)가 덮어쓰지 않는다.
+    const performance=recorded.data.performance?{...recorded.data.performance,source:"manual" as const,fetched_at:undefined,recorded_at:new Date().toISOString()}:undefined;
     return privateJson(statusOf(await repository.saveDraft({...existing,performance},{thumbnail:false})));
     });
   }

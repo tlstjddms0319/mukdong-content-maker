@@ -1,7 +1,8 @@
 import { randomBytes,timingSafeEqual } from "node:crypto";
 import type { InstagramConnection } from "./schema";
 
-export const INSTAGRAM_SCOPES=["instagram_business_basic","instagram_business_content_publish"] as const;
+// 반응 자동 가져오기(insights.ts)를 위해 인사이트 권한도 함께 받는다. Meta 앱 대시보드에서도 이 권한을 켜야 한다.
+export const INSTAGRAM_SCOPES=["instagram_business_basic","instagram_business_content_publish","instagram_business_manage_insights"] as const;
 
 export type InstagramOAuthConfig={appId:string;appSecret:string;redirectUri:string};
 type TokenResult={accessToken:string;expiresIn:number};

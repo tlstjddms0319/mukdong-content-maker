@@ -58,6 +58,8 @@ it("records, keeps and clears performance through the draft route", async () => 
   await POST(request("POST",draft));
   expect((await PATCH(request("PATCH",{id,performance:{likes:12,comments:1,saves:4,shares:2,posted_on:"2026-10-06"}}))).status).toBe(200);
   expect((await createDraftRepository(directory).readDraft(id))).toMatchObject({design_style:"film",performance:{likes:12,saves:4,posted_on:"2026-10-06"}});
+  // 화면에서 저장한 숫자는 직접 적은 것으로 남아, Instagram 자동 가져오기가 덮어쓰지 않는다.
+  expect((await createDraftRepository(directory).readDraft(id))?.performance?.source).toBe("manual");
   // 이미지를 다시 저장해도(POST) 적어 둔 성과는 남는다.
   await POST(request("POST",{...draft,updated_at:"2026-10-07T00:00:00.000Z"}));
   expect((await createDraftRepository(directory).readDraft(id))?.performance?.likes).toBe(12);

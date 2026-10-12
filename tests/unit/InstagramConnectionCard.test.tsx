@@ -57,6 +57,13 @@ describe("InstagramConnectionCard",()=>{
     expect(screen.getByText("이미지 보안 키")).toBeInTheDocument();
   });
 
+  it("반응 읽기 권한 없이 연결된 예전 연결이면 다시 연결을 안내한다",async()=>{
+    vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:true,json:async()=>({connected:true,username:"mukdong",expiresAt:"2026-12-01T00:00:00.000Z",needsReconnect:false,insights:false,setup:{appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:true,signingKey:true}})}));
+    render(<InstagramConnectionCard/>);
+    expect(await screen.findByText(/반응\(도달·저장·공유\)을 자동으로 가져오려면/)).toBeInTheDocument();
+    expect(screen.getByRole("link",{name:"다시 연결"})).toHaveAttribute("href","/api/instagram/connect");
+  });
+
   it("연결된 계정은 토큰 없이 사용자명만 보여주고, 한 번 물은 뒤 연결을 끊을 수 있다",async()=>{
     const request=vi.fn()
       .mockResolvedValueOnce({ok:true,json:async()=>({connected:true,username:"mukdong",expiresAt:"2026-10-01T00:00:00.000Z",needsReconnect:false,setup:{appId:true,appSecret:true,redirectUri:true,mediaHttpsUrl:true,signingKey:true}})})

@@ -35,6 +35,8 @@ export function PerformanceForm({draftId,topic,performance}:{draftId:string;topi
   };
   return <details className="performance-form">
     <summary>성과 기록{performance?` · 반응 점수 ${engagementScore(performance).toLocaleString("ko-KR")}`:" (올린 뒤 숫자 적기)"}</summary>
+    {/* 앱이 올린 게시물은 Instagram에서 반응을 자동으로 가져온다(instagram/insights.ts). 직접 고쳐 저장하면 그 숫자를 지킨다. */}
+    {performance?.source==="instagram"&&<p className="field-help">Instagram에서 자동으로 가져온 숫자예요{performance.fetched_at?` (${new Date(performance.fetched_at).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit"})})`:""}. 게시 뒤 7일까지 6시간마다 새로 가져와요. 직접 고쳐 저장하면 그 뒤로는 덮어쓰지 않아요.</p>}
     <form aria-label={`${topic} 성과 기록`} onSubmit={save}>
       <label htmlFor={`${formId}-day`}>올린 날<input id={`${formId}-day`} type="date" value={postedOn} onChange={event=>setPostedOn(event.target.value)}/></label>
       {FIELDS.map(([key,label])=><label key={key} htmlFor={`${formId}-${key}`}>{label}<input id={`${formId}-${key}`} type="number" inputMode="numeric" min={0} step={1} value={values[key]} onChange={event=>setValues(current=>({...current,[key]:event.target.value}))}/></label>)}
