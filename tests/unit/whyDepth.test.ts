@@ -111,3 +111,14 @@ describe("comparison names followed by a question word",()=>{
     expect(comparedPair("배다리 막걸리와 지평막걸리의 맛의 차이점은 어디서 오는 걸까?")).toEqual({first:"배다리 막걸리",second:"지평막걸리"});
   });
 });
+
+describe("fifth eval run findings",()=>{
+  it("reads '배다리와 지평은 왜 맛이 다를까요?' as 배다리 vs 지평",()=>{
+    expect(comparedPair("배다리와 지평은 왜 맛이 다를까요?")).toEqual({first:"배다리",second:"지평"});
+  });
+  it("treats a cover that only asks the reader's feelings as vague",async()=>{
+    const {VAGUE_COVER}=await import("@/features/copy/explain");
+    expect(VAGUE_COVER.test("지평과 배다리 막걸리를 고를 때 고민되시죠?")).toBe(true);
+    expect(VAGUE_COVER.test("배다리는 톡 쏘는데 지평은 왜 부드러울까?")).toBe(false);
+  });
+});

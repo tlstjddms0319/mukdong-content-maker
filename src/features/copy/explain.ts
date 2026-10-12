@@ -12,7 +12,8 @@ export const HOOK_RULE=`[후킹 — 첫 장에서 손가락을 멈추게] 표지
 // 후킹 검사용 낱말: 과장, 도전형 말투, 막연한 질문. 주제 거르기(topics/service.ts)와 표지 검수(planReview.ts)가 쓴다.
 export const HOOK_HYPE=/충격|소름|역대급|무조건|이것만|대박|경악|레전드/;
 export const HOOK_DARE=/고수|모르면\s*손해|안\s*보면\s*후회|알면\s*(?:당신|진짜|찐)/;
-export const VAGUE_COVER=/어떤\s*(?:맛|음식|국물|안주|요리)|어떻게\s*달라질까|따뜻하게\s*먹을까/;
+// 다섯 번째 점검(2026-10-12): 표지 다시 쓰기가 "지평과 배다리 막걸리를 고를 때 고민되시죠?"처럼 독자 마음만 묻는 표지를 골랐다.
+export const VAGUE_COVER=/어떤\s*(?:맛|음식|국물|안주|요리)|어떻게\s*달라질까|따뜻하게\s*먹을까|고민되(?:시|지|죠|나)|궁금하(?:시|지)죠|아시나요|알고\s*계신가요|진짜\s*차이를?\s*알려/;
 
 // 카드 본문 장에는 가게 홍보를 넣지 않는다(맨 뒤에 가게 홍보 카드가 따로 붙는다).
 export const NO_PROMO_IN_CARDS="headline·points에는 가게 이름(묵동홍어마을)·방문 권유(\"오세요\", \"들러 보세요\")·예약 안내를 쓰지 마세요. 마지막 장 맨 끝의 \"~을 묵동홍어마을에서 즐겨 보세요\" 한 줄은 앱이 붙이니 따로 쓰지 말고, 본문은 끝까지 궁금증을 풀어 주는 이야기로만 채우세요.";
@@ -83,7 +84,7 @@ export function comparedPair(question:string):{first:string;second:string}|undef
   // 앞에 붙은 상황·때 말("비 오는 날 배다리", "찬바람 불 때 해물라면")은 비교 대상이 아니라 뗀다.
   const withoutScene=(name:string)=>name.replace(/^.*?(?:날|때|철|밤|저녁|무렵|요즘|오늘|날엔|때엔)\s+/,"");
   // 뒤에 붙은 물음 말("배다리와 지평은 어떤 맛의 차이가 날까?" → "지평은 어떤 맛")도 뗀다(네 번째 점검에서 '지평은어떤'으로 읽었다).
-  const withoutAsk=(name:string)=>name.replace(/[은는이가]?\s+(?:어떤|무슨|어느|무엇|뭐가|어떻게|얼마나)(?:\s.*)?$/,"");
+  const withoutAsk=(name:string)=>name.replace(/[은는이가]?\s+(?:어떤|무슨|어느|무엇|뭐가|어떻게|얼마나|왜|어째서)(?:\s.*)?$/,"");
   const [first,second]=[withoutScene(withoutAsk(clean(match[1]))),withoutScene(withoutAsk(clean(match[2])))];
   return first&&second&&first!==second?{first,second}:undefined;
 }
