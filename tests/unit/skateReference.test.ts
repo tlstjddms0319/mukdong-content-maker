@@ -33,6 +33,11 @@ describe("store skate photo as the image reference", () => {
     ];
     expect(pickSkateReference(assets,brief)).toBeUndefined();
   });
+  it("does not trust the topic tag the upload screen adds automatically", () => {
+    // 홍어 글을 쓰다 올린 과메기 사진에는 "주제:홍어…" 검색어가 붙는다. 사진 속 음식이 아니다.
+    expect(pickSkateReference([asset("과메기 한 접시",["주제:홍어회는 왜 결이 보일까","매장 사진"])],brief)).toBeUndefined();
+    expect(pickSkateReference([asset("IMG 1234",["주제:홍어 한 상","매장 사진"])],brief)).toBeUndefined();
+  });
   it("prefers a sharp, well-lit photo over a flagged one", () => {
     const dark=asset("홍어회 어두운",["홍어회"],{quality:{luminance:0.1,saturation:0.2,cast:0,sharpness:1,longSide:1400,flags:["dark"]}});
     const good=asset("홍어회 밝은",["홍어회"],{quality:{luminance:0.5,saturation:0.3,cast:0,sharpness:9,longSide:1400,flags:[]}});

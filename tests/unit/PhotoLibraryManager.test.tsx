@@ -25,3 +25,25 @@ it("shows quality badges and can put good cover photos first",async()=>{
   fireEvent.click(screen.getByLabelText(/표지로 좋은 사진 먼저/));
   expect(names()).toEqual(["좋은 사진","어두운 사진","예전 사진"]);
 });
+
+it("uploads store hongeo photos as AI reference photos from their own box",async()=>{
+  const existing={...asset("44444444-4444-4444-8444-444444444444","홍어회","2026-10-04T00:00:00.000Z",null),tags:["홍어회","AI 참고"]};
+  const posted:FormData[]=[];
+  vi.stubGlobal("fetch",vi.fn(async(_url:string,init?:RequestInit)=>{
+    if(init?.method==="POST"){
+      const body=init.body as FormData;posted.push(body);
+      return {ok:true,status:201,json:async()=>({asset:{...existing,id:`55555555-5555-4555-8555-55555555555${posted.length}`,name:String(body.get("name"))}})};
+    }
+    return {ok:true,status:200,json:async()=>({assets:[existing,{...asset("66666666-6666-4666-8666-666666666666","과메기","2026-10-03T00:00:00.000Z",null),tags:["과메기"]}]})};
+  }));
+  render(<PhotoLibraryManager/>);
+  const box=await screen.findByRole("region",{name:"홍어회 참고 사진"});
+  // 이미 있는 홍어회 사진만 센다(과메기는 세지 않음).
+  expect(await within(box).findByText(/지금 1장/)).toBeInTheDocument();
+  const files=[new File(["a"],"IMG_1.jpg",{type:"image/jpeg"}),new File(["b"],"IMG_2.jpg",{type:"image/jpeg"})];
+  fireEvent.change(within(box).getByLabelText("홍어회 사진 고르기"),{target:{files}});
+  expect(await within(box).findByText(/2장을 올렸어요/)).toBeInTheDocument();
+  expect(posted).toHaveLength(2);
+  expect(posted.map(form=>[form.get("name"),form.get("tags"),form.get("kind")])).toEqual([["홍어회","홍어회,AI 참고","photo"],["홍어회","홍어회,AI 참고","photo"]]);
+  expect(within(box).getByText(/지금 3장/)).toBeInTheDocument();
+});

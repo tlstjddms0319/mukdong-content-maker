@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { viewOf } from "@/features/images/render/photoView";
+import { foodBoxOf } from "@/features/images/photoAnalysis";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
 import { photosNeeded } from "@/features/images/design";
 import { fillWithPhotoViews, fitPlanToPhotos } from "@/features/images/photoCarousel";
@@ -18,6 +19,50 @@ async function redShare(image:Buffer){
   let red=0;for(let i=0;i<data.length;i+=3)if(data[i]>160&&data[i+1]<110)red++;
   return red/(info.width*info.height);
 }
+
+// 왼쪽 위에 작은 빨간 접시(음식), 오른쪽 아래에 큰 회색 그릇. 가운데를 자르면 접시가 잘려 나간다.
+async function offCenterPlate(){
+  const svg=`<svg width="1600" height="1200"><rect width="100%" height="100%" fill="#d8d8d8"/><circle cx="360" cy="300" r="180" fill="#c83a2a"/><rect x="1000" y="700" width="500" height="400" fill="#777"/></svg>`;
+  return sharp(Buffer.from(svg)).jpeg().toBuffer();
+}
+// 접시를 감싸는 상자(비율): 왼쪽 180/1600, 위 120/1200, 너비 360/1600, 높이 360/1200.
+const plateBox={x:180/1600,y:120/1200,w:360/1600,h:360/1200};
+
+describe("food box from the photo check", () => {
+  it("accepts a sane [left, top, width, height] box and clamps it into the photo", () => {
+    expect(foodBoxOf([0.1,0.2,0.3,0.4])).toEqual({x:0.1,y:0.2,w:0.3,h:0.4});
+    const clamped=foodBoxOf([0.8,0.8,0.5,0.5])!;
+    expect(clamped.w).toBeCloseTo(0.2);expect(clamped.h).toBeCloseTo(0.2);
+  });
+  it("rejects missing, tiny or broken boxes", () => {
+    expect(foodBoxOf([])).toBeNull();
+    expect(foodBoxOf([0.1,0.1,0.01,0.01])).toBeNull();
+    expect(foodBoxOf([Number.NaN,0,0.5,0.5])).toBeNull();
+    expect(foodBoxOf([1.2,0,0.5,0.5])).toBeNull();
+    expect(foodBoxOf(undefined)).toBeNull();
+  });
+});
+
+describe("crops around the food the check found", () => {
+  it("centres close and detail crops on the food instead of the middle", async () => {
+    const photo=await offCenterPlate();
+    const middle=await redShare(await viewOf(photo,"detail"));
+    const onFood=await redShare(await viewOf(photo,"detail",plateBox));
+    expect(onFood).toBeGreaterThan(0.18);
+    expect(onFood).toBeGreaterThan(middle*3);
+    expect(await sharp(await viewOf(photo,"close",plateBox)).metadata()).toMatchObject({width:1152,height:864});
+  });
+  it("moves closer to small food even for a photo used as-is, but not beyond 55%", async () => {
+    const photo=await offCenterPlate();
+    const zoomed=await viewOf(photo,"full",plateBox);
+    expect(await sharp(zoomed).metadata()).toMatchObject({width:880,height:660});
+    expect(await redShare(zoomed)).toBeGreaterThan((await redShare(photo))*2);
+  });
+  it("keeps a photo as-is when the food already fills it", async () => {
+    const photo=await offCenterPlate();
+    expect(await viewOf(photo,"full",{x:0.05,y:0.05,w:0.9,h:0.85})).toBe(photo);
+  });
+});
 
 describe("closer crops of one photo", () => {
   it("keeps the photo for full and crops the middle for close and detail", async () => {

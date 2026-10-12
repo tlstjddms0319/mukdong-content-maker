@@ -5,7 +5,7 @@ import { createAssetLibrary } from "@/features/images/assetLibrary";
 import { PHOTO_QUALITY_LABELS, photoQuality, type PhotoQualityFlag } from "@/features/images/render/photoEnhance";
 import { coverRank, expectedFoodFrom, scoreImages, type CoverCheck } from "@/features/images/coverCheck";
 import { panoramaReady } from "@/features/images/render/panorama";
-import { AnalyzeRequestSchema, FOOD_TAG, menuMismatch, photoFoodOf, photoFoodText, photoRank, rankPhotos, type AnalyzeResponse, type AnalyzedPhoto } from "@/features/images/photoAnalysis";
+import { AnalyzeRequestSchema, FOOD_TAG, foodBoxOf, menuMismatch, photoFoodOf, photoFoodText, photoRank, rankPhotos, type AnalyzeResponse, type AnalyzedPhoto } from "@/features/images/photoAnalysis";
 
 // 사장님 사진 표지 추천. 1) 로컬 품질 검사(무료: 어두움·흔들림·색 틀어짐·작은 사진)로 먼저 거르고
 // 2) 요청에 score:true가 있고 Gemini 키가 있으면 거르고 남은 사진만 식욕 점수(coverCheck)를 매긴다.
@@ -84,7 +84,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     const aiMismatch=!tagged&&check&&check.foodVisible&&!check.looksLikeSkate&&topic?`AI가 보기엔 ${expected.name} 사진이 아니에요`:null;
     return {id:item.id,flags,labels:flags.map(flag=>PHOTO_QUALITY_LABELS[flag]),measured:item.flags!==null,wide:item.wide,
       food:photoFoodOf(foodText)?.label??(check?.food?.trim().slice(0,10)||null),mismatch:tagged?.message??aiMismatch,
-      scene:check?.scene?.trim().slice(0,60)||tagScene(item.meta),
+      scene:check?.scene?.trim().slice(0,60)||tagScene(item.meta),box:foodBoxOf(check?.focus),
       appetite:check?{score:check.score,appetite:check.appetite,lighting:check.lighting,composition:check.composition,warnings:check.warnings,note:check.note}:null};
   });
   // 점수가 붙은 사진은 coverRank, 못 붙은 사진은 중간값(5)에서 품질 감점만 한다.
