@@ -51,7 +51,8 @@ export const CarouselSlidePlanSchema=z.object({
   titleFont:SlideTitleFontSchema.default("auto"),
   bodyFont:SlideBodyFontSchema.default("auto"),
   // 같은 레이아웃의 모양 변형 번호(제목 위치·사진 모양 등). 서버가 게시물마다 섞어 채우므로 AI는 0을 두면 된다.
-  variant:z.number().int().min(0).max(3).default(0),
+  // 모양 변형. 계열(템플릿) 레이아웃은 LAYOUT_VARIANTS로 나눈 나머지, 두 갈래(사진·글 중심)는 모양 번호(0~7, photoLooks·textLooks).
+  variant:z.number().int().min(0).max(7).default(0),
 });
 
 export type CarouselPlanInput=z.input<typeof CarouselPlanInputSchema>;

@@ -1,4 +1,5 @@
 // 두 갈래(사진 중심·글 중심) 디자인을 샘플 사진으로 그려 한 장의 비교 시트로 모은다. AI 호출 없음.
+// --look=0~3: 모양(slide.variant), --palette=warm|sea|night|herb|clay|plum: 색 조합.
 // 실행: node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/render-track-samples.mjs [--out=폴더] [--track=photo|text] [--full]
 // 결과: <폴더>/photo-focus.jpg, <폴더>/text-focus.jpg (행 = 어두운/밝은 사진 × 보통/긴 글, 열 = 표지·본문 3장·마지막 장)
 // --full 을 붙이면 장마다 원본 크기(1080×1350)도 <폴더>/full/에 남긴다. 각 장의 자동 검수 문제·경고도 함께 출력한다.
@@ -12,6 +13,8 @@ import { fitTrackCopy } from "../src/features/images/track.ts";
 const OUT=process.argv.find(arg=>arg.startsWith("--out="))?.slice(6)??"output/track-samples";
 const only=process.argv.find(arg=>arg.startsWith("--track="))?.slice(8);
 const full=process.argv.includes("--full");
+const look=Number(process.argv.find(arg=>arg.startsWith("--look="))?.slice(7)??0);
+const paletteId=process.argv.find(arg=>arg.startsWith("--palette="))?.slice(10)??"warm";
 const handle=process.argv.find(arg=>arg.startsWith("--handle="))?.slice(9)??"mukdong_hongeo";
 const sample=name=>readFile(path.join("assets/design/samples",`${name}.jpg`));
 const photoSets={
@@ -36,7 +39,7 @@ const copies={
     {role:"visit",headline:"가기 전에 이것만 확인해 두세요",points:["처음이라면 덜 삭힌 걸로 주문해 보세요"]},
   ],
 };
-const base={visualPrompt:"",textPosition:"bottom",figure:"",titleFont:"auto",bodyFont:"auto",variant:0,subline:"",keywords:["홍어","막걸리"]};
+const base={visualPrompt:"",textPosition:"bottom",figure:"",titleFont:"auto",bodyFont:"auto",variant:look,subline:"",keywords:["홍어","막걸리"]};
 const tracks=[["photo","photo-focus","사진 중심"],["text","text-focus","글 중심"]].filter(([track])=>!only||only===track);
 await mkdir(OUT,{recursive:true});
 if(full)await mkdir(path.join(OUT,"full"),{recursive:true});
@@ -52,7 +55,7 @@ for(const [track,style,label] of tracks){
       const layout=index===1?"fullscreen":track==="photo"?"frame":"browser";
       const inputs=track==="photo"||index===1?[photos[i]]:[];
       const fitted={...base,...slide,...fitTrackCopy({...base,...slide},track),layout};
-      const {image,report}=await composeSlideCard(inputs,fitted,index,copy.length,"card",{palette:"warm",style},{photoKind:"real",contrast:true,brandHandle:handle});
+      const {image,report}=await composeSlideCard(inputs,fitted,index,copy.length,"card",{palette:paletteId,style},{photoKind:"real",contrast:true,brandHandle:handle});
       const notes=report.notes.filter(note=>!["photo-crop","photo-quality"].includes(note.kind));
       if(report.issues.length){problems++;console.log(`✗ ${style} ${photoName} ${copyName} ${index}장:`,report.issues.map(describeIssue).join(" | "));}
       if(notes.length)console.log(`· ${style} ${photoName} ${copyName} ${index}장 메모:`,notes.map(describeNote).join(" | "));
@@ -62,7 +65,7 @@ for(const [track,style,label] of tracks){
     const caption=await sharp({text:{text:`<span foreground="#333">${label} · ${photoName} · ${copyName}</span>`,font:"Pretendard SemiBold 24",fontfile:"assets/fonts/Pretendard-SemiBold.otf",rgba:true}}).png().toBuffer();
     rows.push(await sharp({create:{width:TW*5+GAP*4,height:TH+LABEL,channels:3,background:"#FFFFFF"}}).composite([{input:caption,left:4,top:6},...tiles.map((input,i)=>({input,left:i*(TW+GAP),top:LABEL}))]).png().toBuffer());
   }
-  const sheet=path.join(OUT,`${style}.jpg`);
+  const sheet=path.join(OUT,`${style}-look${look}-${paletteId}.jpg`);
   await sharp({create:{width:TW*5+GAP*4+32,height:rows.length*(TH+LABEL+GAP)+32,channels:3,background:"#FFFFFF"}}).composite(rows.map((input,i)=>({input,left:16,top:16+i*(TH+LABEL+GAP)}))).jpeg({quality:90}).toFile(sheet);
   console.log(sheet);
 }
