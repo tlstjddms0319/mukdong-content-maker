@@ -4,6 +4,7 @@ import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
 import { storeNotesRule } from "@/features/store/storeNotes";
+import { principleNotesRule } from "@/features/store/principles";
 import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
@@ -232,7 +233,8 @@ ${found}
 ${STORY_ARC_RULE}
 ${QUESTION_FOCUS_RULE}
 ${EXPLAIN_REASONS_RULE}`:"눈이나 입으로 확인할 수 있는 관찰(색, 결, 식감, 먹는 순서)이나 널리 알려진 이유로 쓰세요."}
-5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.${context.storeNotes?.trim()?`
+5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.${principleNotesRule(topic,context.contentBrief)?`
+${principleNotesRule(topic,context.contentBrief)}`:""}${context.storeNotes?.trim()?`
 ${storeNotesRule(context.storeNotes)}`:""}
 6. 문제가 없는 장은 그대로 두세요. 장 수, 장 순서, 장마다 요점 개수(표지는 빈 배열)는 바꾸지 마세요. 표지의 points는 빈 배열입니다.
 
