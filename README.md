@@ -4,6 +4,7 @@
 50대 사장님이 고를 것은 주제와 모양(사진 중심·글 중심) 하나뿐이고, `만들기`를 한 번 누르면 카드 5장(1080×1350, 서버에서 직접 그림)과 맨 뒤 가게 홍보 카드, 올릴 글까지 자동으로 만듭니다. 한 달 계획과 예약 자동 올리기, 올린 뒤 반응 기록도 `더보기`에서 관리합니다.
 
 - 공개 주소: <https://mukdong-content-maker-0319.onrender.com/> (관리자 암호 로그인)
+- 사장님 운영 가이드(인수인계): [docs/OWNER_HANDOVER_GUIDE.ko.md](docs/OWNER_HANDOVER_GUIDE.ko.md)
 - 사용법과 실제 동작: [docs/APP_OPERATION_GUIDE.ko.md](docs/APP_OPERATION_GUIDE.ko.md)
 
 ## 주요 기능
