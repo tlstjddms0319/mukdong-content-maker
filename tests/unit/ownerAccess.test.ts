@@ -71,7 +71,7 @@ describe("owner access", () => {
   });
 
   it("offers logout from the application shell", () => {
-    render(createElement(WizardShell, { step: "topic", children: createElement("p", null, "초안") }));
+    render(createElement(WizardShell, { step: "topic" } as Parameters<typeof WizardShell>[0], createElement("p", null, "초안")));
     expect(screen.getByRole("button", { name: "로그아웃" })).toBeInTheDocument();
   });
 });

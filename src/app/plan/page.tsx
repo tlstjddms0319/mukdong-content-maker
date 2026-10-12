@@ -9,6 +9,7 @@ import { PerformanceInsights } from "@/components/drafts/PerformanceInsights";
 import { summarizePerformance } from "@/features/drafts/performance";
 import { createInstagramRepository } from "@/features/instagram/repository";
 import { publishStatusOf } from "@/features/instagram/publicationState";
+import { MoreInfo } from "@/components/states/Guide";
 
 export const dynamic="force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function PlanPage() {
     <p className="lead">한 달 동안 올릴 주제를 미리 정하고, 올릴 날짜를 정한 게시물을 달력으로 봐요.</p>
     <MonthPlanner drafts={drafts.map(draft=>({id:draft.id,topic:draft.topic,plan_date:draft.plan_date,hasImages:draft.imageCount>0,hasCaption:draft.hasCaption,reviewed:!!draft.final_review_complete}))}/>
     <section className="planning-overview" aria-label="올릴 날짜">
-      <div><h2>올릴 날짜를 정한 게시물</h2><p>인스타그램을 연결하고 ‘최종 확인 완료’를 켠 게시물만 그 시각에 저절로 올라가요. 늦어질 수 있고, 6시간 넘게 지나면 올리지 않아요.</p></div>
+      <div><h2>올릴 날짜를 정한 게시물</h2><p>‘최종 확인 완료’를 켠 게시물만 그 시각에 저절로 올라가요.</p><MoreInfo><p>인스타그램이 연결돼 있어야 해요. 조금 늦어질 수 있고, 6시간 넘게 지나면 올리지 않아요.</p></MoreInfo></div>
       {initialMonth&&<ContentCalendar items={calendarItems} initialMonth={initialMonth}/>}
       {plannedInDisplayOrder.length?<ol className="planning-list">{plannedInDisplayOrder.map(draft=>{const overdue=Date.parse(draft.planned_publish_at!)<now;const status=statusOf(draft);return <li key={draft.id}><div><strong>{draft.topic}</strong><small>{new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",dateStyle:"medium",timeStyle:"short"}).format(new Date(draft.planned_publish_at!))}</small></div><div className="planning-overview-status">{status.state==="none"||status.state==="scheduled"?<><span className="soft-badge">{draft.final_review_complete?"최종 확인 완료":"확인 필요"}</span>{overdue&&<span className="soft-badge">날짜 지남</span>}</>:<span className={`soft-badge publish-state-${status.state}`}>{status.label}</span>}</div><Link className="button secondary" href={`/?draft=${encodeURIComponent(draft.id)}`}>열기</Link></li>;})}</ol>
         :<p>아직 날짜를 정한 게시물이 없어요. 내 게시물에서 게시물마다 ‘올릴 날짜·반응 적기’를 눌러 정할 수 있어요.</p>}

@@ -2,6 +2,7 @@
 import { useEffect,useState } from "react";
 import { readJsonResponse } from "@/lib/http/readJson";
 import type { NotificationPrefs } from "@/features/notifications/schema";
+import { StepGuide } from "@/components/states/Guide";
 
 // 설정 화면의 "휴대폰 알림". 이 기기에서 알림 받기/끄기, 시험 알림, 알림 종류·요일·시각을 고른다.
 // 알림은 서버가 보내므로 사이트를 닫아 둬도 온다(안드로이드 크롬). 받은 알림을 누르면 해당 화면이 열린다.
@@ -129,7 +130,7 @@ export function NotificationCard(){
           ?<><button type="button" className="button secondary" disabled={Boolean(busy)} onClick={()=>void test()}>{busy==="test"?"보내는 중…":"시험 알림 보내기"}</button><button type="button" className="button secondary" disabled={Boolean(busy)} onClick={()=>void unsubscribe()}>{busy==="unsubscribe"?"끄는 중…":"이 휴대폰 알림 끄기"}</button></>
           :<button type="button" className="button primary big" disabled={!loaded||Boolean(busy)} onClick={()=>void subscribe()}>{busy==="subscribe"?"켜는 중…":"이 휴대폰으로 알림 받기"}</button>}
       </div>
-      {permission==="denied"&&<p className="connection-help">알림이 막혀 있어요. 크롬 주소창 왼쪽의 아이콘(설정 모양) → ‘권한’ → ‘알림’을 허용으로 바꾼 뒤 다시 눌러 주세요.</p>}
+      {permission==="denied"&&<div className="connection-help"><p>알림이 막혀 있어요. 이렇게 풀어 주세요.</p><StepGuide label="알림 허용하기" steps={[{icon:"🔒",title:"주소창 왼쪽 아이콘"},{icon:"⚙️",title:"‘권한’ → ‘알림’"},{icon:"✅",title:"‘허용’ 뒤 다시 누르기"}]}/></div>}
       <p className="connection-help">크롬 메뉴(⋮) → ‘홈 화면에 추가’를 해 두면 알림이 더 잘 오고, 누르면 앱처럼 바로 열려요.</p>
     </>}
     {notice&&<p role={notice.ok?"status":"alert"}>{notice.text}</p>}

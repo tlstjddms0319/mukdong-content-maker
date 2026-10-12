@@ -11,7 +11,7 @@ export function TopicPhotoBox({photos,busy,status,error,onAdd,onRemove}:{photos:
   const inputRef=useRef<HTMLInputElement>(null);
   return <section className="photo-picker topic-photo-box" aria-labelledby="topic-photo-title">
     <h2 id="topic-photo-title">📷 사진으로 주제 정하기 <small>(선택)</small></h2>
-    <p className="field-help">찍어 둔 음식 사진을 먼저 넣으면, 그 사진에 맞는 주제 3개를 추천해 드려요. 넣은 사진은 만들 때 그대로 써요.</p>
+    <p className="field-help">사진을 넣으면 그 사진에 맞는 주제 3개를 추천해요. 사진은 만들 때 그대로 써요.</p>
     <input ref={inputRef} aria-label="주제용 사진 파일" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={event=>{onAdd([...(event.target.files??[])].slice(0,TOPIC_PHOTO_MAX-photos.length));event.target.value="";}}/>
     <div className="photo-picker-actions">
       <button type="button" className="button secondary" disabled={busy||photos.length>=TOPIC_PHOTO_MAX} onClick={()=>inputRef.current?.click()}>{photos.length?"사진 더 넣기":"사진 넣고 주제 추천받기"}</button>

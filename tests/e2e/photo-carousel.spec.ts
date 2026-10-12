@@ -10,7 +10,7 @@ test("builds a photo-focus post from several owner photos and fixes one slide", 
   await page.getByLabel("사진 파일").setInputFiles(["assets/design/samples/hands-makgeolli.jpg","assets/design/samples/studio-hongeo.jpg","assets/design/samples/table-topdown.jpg"]);
   await expect(page.getByRole("list", { name: "고른 사진" }).getByRole("listitem")).toHaveCount(3, { timeout: 60_000 });
   // 사진이 5장보다 적으면 모자란 장은 AI가 사진을 참고해 그린다고 알린다(AI 키가 없는 이 테스트에서는 확대 사진으로 그려진다).
-  await expect(page.getByText("사진이 모자란 장은 AI가 올린 사진을 참고해 글에 맞는 장면으로 새로 그려요. 3~5분쯤 걸려요.")).toBeVisible();
+  await expect(page.getByText("모자란 장은 AI가 내 사진을 참고해 그려요.")).toBeVisible();
   await page.getByRole("button", { name: "만들기", exact: true }).click();
   await expect(page.getByRole("heading", { name: "확인하고 올리기" })).toBeVisible({ timeout: 180_000 });
   await expect(page.getByLabel("모든 장").getByRole("button")).toHaveCount(6);

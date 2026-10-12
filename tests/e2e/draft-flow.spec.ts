@@ -67,7 +67,7 @@ test("makes a five-slide post with one press, then checks and saves it without l
   await page.getByRole("button", { name:"다음" }).click();
   // 2단계: 갈래 카드 두 개 중 사진 중심(처음부터 골라져 있음) → 만들기 한 번.
   await expect(page.getByRole("button", { name:/사진 중심/ })).toHaveAttribute("aria-pressed","true");
-  await expect(page.getByText("사진이 없으면 AI가 모든 장(내용에 맞춰 4~9장)을 그려요. 10~15분쯤 걸려요.")).toBeVisible();
+  await expect(page.getByText("사진이 없으면 AI가 모든 장을 그려요.")).toBeVisible();
   await page.screenshot({ path:testInfo.outputPath(`${testInfo.project.name}-make.png`), fullPage:true });
   await page.getByRole("button", { name:"만들기", exact:true }).click();
 
