@@ -174,49 +174,53 @@ async function labelCard(photo:Buffer,content:StyleContent,index:number,look:Tra
 }
 
 // ── 4 삼합 순서 카드 ──────────────────────────────────────────────────────────────────
-// 밝은 종이 위쪽에 큰 원 번호(1·2·3…)와 제목, 가운데 둥근 사진, 아래 짧은 글. 맨 위 진행 점(●●○○)으로 몇 번째 단계인지 보인다.
-// "처음 먹는 법"처럼 순서가 있는 이야기용(저장을 부르는 정보형). 표지는 "순서대로 넘겨 보세요" 알약을 단다.
+// 밝은 종이 위쪽에 원 번호(1·2·3…)와 제목, 그 아래 큰 둥근 사진, 아래 짧은 글. 사진 오른쪽 아래 진행 점(●●○○)으로 몇 번째 단계인지 보인다.
+// "처음 먹는 법"처럼 순서가 있는 이야기용(저장을 부르는 정보형). 표지는 "순서대로 넘겨 보세요", 마지막 장은 "저장해 두고 다시 보세요" 알약을 사진 위에 단다.
+// 사진이 화면의 65% 이상이 되게 여백(36px)·원 번호(104px)를 줄였다(예전 사진 44~52%).
 async function stepCard(photo:Buffer,content:StyleContent,index:number,total:number,look:TrackLook):Promise<Buffer> {
   const paper=look.light;
   const cover=content.cover;
   const step=index-1,steps=Math.max(1,total-2);
   const line=cover?content.subline:shortLines(content,1)[0];
   const sub=line?await lineOf(line,paper.dim,cover?44:40):null;
-  const store=content.last?await storeCardBlock({logoSize:100,wordmark:false,surface:paper}):null;
-  const foot=store?null:await footerRow({color:paper.dim,cueColor:paper.ink,cue:!content.last});
+  const foot=await footerRow({color:paper.dim,cueColor:paper.ink,cue:!content.last});
   const layers:OverlayOptions[]=[];
   const texture=await textureLayer("linen",{opacity:.2});
   if(texture)layers.push(texture);
-  let markup="";
-  let y=MARGIN;
-  if(!cover&&!content.last){
-    for(let i=0;i<steps;i++)markup+=`<circle cx="${MARGIN+12+i*36}" cy="${y+12}" r="10" fill="${i<step?paper.accent:paper.soft}"/>`;
-    y+=48;
-  }
-  const NUM=150;
-  const num=await textLayer(cover?"홍":content.last?"✓":String(step),{size:84,color:paper.chipInk,width:NUM,height:NUM,font:TITLE_SERIF,align:"centre",features:"tnum"});
+  const X=36,PW=W-X*2;
+  let y=48;
+  const NUM=104;
+  const num=await textLayer(cover?"홍":content.last?"✓":String(step),{size:60,color:paper.chipInk,width:NUM,height:NUM,font:TITLE_SERIF,align:"centre",features:"tnum"});
+  const head=await fitLines(content.headline,{sizes:cover?[68,64,60,56]:[60,56,52,48],width:W-MARGIN*2-NUM-32,font:SANS_BOLD,color:paper.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.12),letterSpacing:size=>-size*.015,emphasis:emphasisOf(content,paper.accent)});
+  const rowH=Math.max(NUM,head.layer.info.height);
   // 도형은 글보다 먼저 깐다(나중에 깔면 글을 덮는다).
-  layers.push(svgLayer(markup+`<circle cx="${MARGIN+NUM/2}" cy="${y+NUM/2}" r="${NUM/2}" fill="${paper.chip}"/>`));
-  markup="";
-  layers.push({input:num.data,left:Math.round(MARGIN+NUM/2-num.info.width/2),top:Math.round(y+NUM/2-num.info.height/2)});
-  const head=await fitLines(content.headline,{sizes:cover?[80,74,68,62,58]:[64,60,56,52,48],width:W-MARGIN*2-NUM-36,font:SANS_BOLD,color:paper.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.12),letterSpacing:size=>-size*.015,emphasis:emphasisOf(content,paper.accent)});
-  layers.push({input:head.layer.data,left:MARGIN+NUM+36,top:Math.round(y+NUM/2-head.layer.info.height/2)});
-  y+=Math.max(NUM,head.layer.info.height)+44;
-  // 아래에서 위로: 바닥글(명함) → 짧은 글 → 사진.
-  const bottomH=store?store.height:foot!.height;
-  const bottomTop=H-(store?52:MARGIN)-bottomH;
-  const subTop=bottomTop-44-(sub?.info.height??0);
-  const photoH=Math.max(380,(sub?subTop-36:bottomTop-44)-y);
-  layers.push(await shadowLayer({x:MARGIN,y:y+12,width:CONTENT_W,height:photoH,rx:28,blur:24,opacity:.18}),{input:await croppedPhoto(photo,CONTENT_W,photoH,28,{zoom:1.03}),left:MARGIN,top:y});
-  if(cover){
-    const chip=await textLayer("순서대로 넘겨 보세요 ›",{size:40,color:paper.chipInk,width:700,height:80,font:SANS_BOLD});
-    const ch=chip.info.height+28,cw=chip.info.width+56;
-    layers.push(svgLayer(`<rect x="${MARGIN+24}" y="${y+photoH-ch-24}" width="${cw}" height="${ch}" rx="${ch/2}" fill="${paper.chip}"/>`));
-    layers.push({input:chip.data,left:MARGIN+52,top:y+photoH-ch-24+14});
+  let markup=`<circle cx="${MARGIN+NUM/2}" cy="${y+rowH/2}" r="${NUM/2}" fill="${paper.chip}"/>`;
+  const texts:OverlayOptions[]=[
+    {input:num.data,left:Math.round(MARGIN+NUM/2-num.info.width/2),top:Math.round(y+rowH/2-num.info.height/2)},
+    {input:head.layer.data,left:MARGIN+NUM+32,top:Math.round(y+rowH/2-head.layer.info.height/2)},
+  ];
+  y+=rowH+28;
+  // 아래에서 위로: 바닥글 → 짧은 글 → 사진.
+  const bottomTop=H-52-foot.height;
+  const subTop=bottomTop-28-(sub?.info.height??0);
+  const photoH=Math.max(380,(sub?subTop-24:bottomTop-28)-y);
+  layers.push(await shadowLayer({x:X,y:y+12,width:PW,height:photoH,rx:28,blur:24,opacity:.18}),{input:await croppedPhoto(photo,PW,photoH,28,{zoom:1.03}),left:X,top:y});
+  // 진행 점: 사진 오른쪽 아래, 반투명 판 위.
+  if(!cover&&!content.last){
+    const dotsW=steps*36+20,dx=X+PW-24-dotsW,dy=y+photoH-24-44;
+    markup+=`<rect x="${dx}" y="${dy}" width="${dotsW}" height="44" rx="22" fill="#1C1310" fill-opacity=".55"/>`;
+    for(let i=0;i<steps;i++)markup+=`<circle cx="${dx+28+i*36}" cy="${dy+22}" r="10" fill="${i<step?paper.chip:"#FFFFFF"}" fill-opacity="${i<step?1:.75}"/>`;
   }
-  if(sub)layers.push({input:sub.data,left:MARGIN,top:subTop});
-  if(store){const placed=store.place(540,bottomTop);layers.push(svgLayer(markup+placed.svg),...placed.layers);}
-  else{const placed=foot!.place(bottomTop);layers.push(svgLayer(markup+placed.svg),...placed.layers);}
+  // 알약: 표지 "순서대로 넘겨 보세요", 마지막 장 "저장해 두고 다시 보세요"(사진 왼쪽 아래).
+  if(cover||content.last){
+    const chip=cover?await textLayer("순서대로 넘겨 보세요 ›",{size:40,color:paper.chipInk,width:700,height:80,font:SANS_BOLD}):(await saveChip(paper.chip,paper.chipInk)).layer;
+    const ch=chip.info.height+28,cw=chip.info.width+56;
+    markup+=`<rect x="${X+24}" y="${y+photoH-ch-24}" width="${cw}" height="${ch}" rx="${ch/2}" fill="${paper.chip}"/>`;
+    texts.push({input:chip.data,left:X+52,top:y+photoH-ch-24+14});
+  }
+  if(sub)texts.push({input:sub.data,left:MARGIN,top:subTop});
+  const placed=foot.place(bottomTop);
+  layers.push(svgLayer(markup+placed.svg),...texts,...placed.layers);
   return finish(paper.bg,layers);
 }
 
