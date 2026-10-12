@@ -1,4 +1,5 @@
-import { formatCount,formatDelta,type Delta } from "./format";
+import { CountUp } from "./CountUp";
+import { formatDelta,type Delta } from "./format";
 
 // 숫자 하나를 크게 보여 주는 칸: 이름 · 값 · 변화(화살표+부호) · 작은 추이선.
 export function Sparkline({values,label}:{values:number[];label:string}){
@@ -17,7 +18,7 @@ export function StatTile({label,value,unit,delta,spark,hint,compact,display}:{la
   const direction=delta?(delta.value>0?"up":delta.value<0?"down":"flat"):undefined;
   return <div className="stat-tile">
     <span className="stat-label">{label}</span>
-    <strong className="stat-value">{display??formatCount(value,{compact})}{unit&&value!==undefined&&<small>{unit}</small>}</strong>
+    <strong className="stat-value">{display??(value===undefined?"—":<CountUp value={value} compact={compact}/>)}{unit&&value!==undefined&&<small>{unit}</small>}</strong>
     {delta&&<span className={`stat-delta ${direction}`}><span aria-hidden="true">{direction==="up"?"▲":direction==="down"?"▼":"■"}</span> {formatDelta(delta)} <span className="stat-delta-caption">{delta.caption}</span></span>}
     {spark&&<Sparkline values={spark} label={label}/>}
     {hint&&<span className="stat-hint">{hint}</span>}
