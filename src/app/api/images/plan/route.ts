@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { polishPlan } from "@/features/images/copyPolish";
 import { ownerApiError } from "@/features/auth/guard";
 import { createTextClient } from "@/lib/ai/textClient";
 import { readSettings } from "@/features/settings/repository";
@@ -39,6 +40,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   if(fixes.length)console.info(`[plan] AI 구성안을 고쳐 썼어요: ${[...new Set(fixes)].join(", ")}`);
   // AI가 쓴 구성안은 한 번 더 검수해서 상투어·반복·끝맺음 문제를 고친다(준비된 기본 문안은 이미 다듬어져 있어 건너뛴다).
   let review:{applied:boolean;before:number;after:number}|null=null;
+  let polish:{coverChanged:boolean;hookType?:string;shortened:number}|null=null;
   let finalPlan=plan;
   if(provider!=="fallback"){
     // 검수에도 구성안과 같은 주인공 메뉴·사진 설명·내용 메모를 준다. 검수가 글을 바꾸면 장면이 메뉴를 벗어나지 않았는지 한 번 더 맞춘다.
@@ -47,11 +49,18 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     finalPlan=result.applied?keepScenesOnMenu(result.plan,input.data.topic,menu):result.plan;
     review={applied:result.applied,before:result.before,after:result.after};
     if(result.applied)console.info(`[plan-review] 문안 검수 적용: 문제 ${result.before}건 → ${result.after}건`);
+    // 검수 뒤 마지막 다듬기(copyPolish.ts): 표지를 후킹 유형으로 다시 쓰고, 카드에 안 들어가는 제목만 줄인다. 실패하면 그대로 쓴다.
+    if(input.data.track){
+      const polished=await polishPlan(finalPlan,input.data.track,{generate:(prompt,schema)=>client.generateJson(prompt,schema)});
+      finalPlan=polished.plan;
+      polish={coverChanged:polished.coverChanged,...(polished.hookType?{hookType:polished.hookType}:{}),shortened:polished.shortened};
+      if(polished.coverChanged||polished.shortened)console.info(`[plan-polish] 표지 ${polished.coverChanged?`다시 씀(${polished.hookType})`:"그대로"}, 줄인 제목 ${polished.shortened}개`);
+    }
   }
   const fallback=provider==="fallback"?{fallbackReason:fallbackReason??"error",fallbackMessage:PLAN_FALLBACK_MESSAGES[fallbackReason??"error"]}:{};
   // 카드에 찍히는 글을 마지막으로 거른다. 큰 숫자는 주제·메모·사진 설명에 있는 것만 남긴다.
   const sources={topic:input.data.topic,contentBrief:input.data.contentBrief,imageBrief:input.data.imageBrief,photoNotes:input.data.photoNotes};
   const guarded=guardSlidePoints(finalPlan,sources);
   // 갈래 규칙은 검수·거르기가 글을 바꾼 뒤에 마지막으로 한 번 더 맞춘다(제목이 요점으로 바뀌어도 길이·개수가 지켜지게).
-  return NextResponse.json({plan:input.data.track?applyTrack(guarded,input.data.track):guarded,provider,review,...fallback});
+  return NextResponse.json({plan:input.data.track?applyTrack(guarded,input.data.track):guarded,provider,review,...(polish?{polish}:{}),...fallback});
 }

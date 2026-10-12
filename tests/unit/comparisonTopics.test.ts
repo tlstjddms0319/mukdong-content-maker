@@ -50,8 +50,8 @@ describe("comparison decks must say how each side differs",()=>{
   it("accepts a deck where every reason names both sides and the conclusion says the difference",()=>{
     const issues=slideCopyIssues(deck([
       {headline:"홍어무침과 홍어회는 무엇이 다를까?",points:[]},
-      {headline:"홍어회는 향부터 코에 닿아요",points:["무침은 새콤한 양념 맛이 먼저예요"]},
-      {headline:"홍어회는 쫀득, 무침은 꼬들해요",points:["무침은 양념에 버무려 더 단단해요"]},
+      {headline:"홍어회는 향부터 코에 닿아요",points:["무침은 양념의 산미가 향을 덮어요"]},
+      {headline:"홍어회는 쫀득, 무침은 꼬들해요",points:["무침은 양념이 수분을 빼서 단단해요"]},
       {headline:"둘 다 홍어 날개 살로 만들어요",points:["홍어회와 무침 모두 연골이 씹혀요"]},
       {headline:"홍어회는 향, 무침은 양념이 먼저",points:["새콤한 쪽이 좋으면 무침이에요"]},
     ]),"photo");

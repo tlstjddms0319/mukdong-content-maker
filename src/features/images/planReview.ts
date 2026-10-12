@@ -65,11 +65,18 @@ function comparisonIssues(plan:CarouselPlan,pair:{first:string;second:string}):S
   return issues;
 }
 
+// 원인을 말하는 말: 이유를 잇는 말(때문·덕분·라서·어서…)이나 원리를 가리키는 낱말(성분·온도·조리·감각).
+const SAYS_CAUSE=/때문|덕분|라서|해서|어서|아서|면서|니까|으로\s|로\s|원리|성분|분해|단백질|지방|기름|수분|온도|열을|열에|탄산|산미|효소|발효|숙성|삭히|삭혀|콜라겐|젤라틴|암모니아|요소|감칠맛|전분|당분|알코올|누룩|섬유|연골|향\s*성분|굳|녹|풀려|풀리/;
+
 // 표지가 묻는 것: 제목과 부제를 함께 본다. 단정형 표지("홍어는 썩은 게 아니라 삭은 거예요")는 질문을 부제("왜 안 상할까요?")에 둔다(HOOK_RULE).
 const coverQuestion=(plan:CarouselPlan)=>[plan.slides[0]?.headline??"",plan.slides[0]?.subline??""].join(" ").trim();
 
 // 표지 후킹 검사(HOOK_RULE): 과장, 도전형 말투, 막연한 질문, 질문이 없는 단정형 표지.
-function coverHookIssues(slide:CarouselPlan["slides"][number],track?:CarouselTrack):SlideCopyIssue[] {
+// 표지 다시 쓰기(copyPolish.ts)도 같은 기준으로 후보를 거른다.
+export function coverHookProblems(slide:{headline:string;subline?:string},track?:CarouselTrack):string[] {
+  return coverHookIssues(slide,track).map(issue=>issue.message);
+}
+function coverHookIssues(slide:{headline:string;subline?:string},track?:CarouselTrack):SlideCopyIssue[] {
   const issues:SlideCopyIssue[]=[];
   const add=(message:string)=>issues.push({slide:1,field:"headline",message});
   const text=`${slide.headline} ${slide.subline??""}`;
@@ -149,6 +156,9 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
       // "왜 낯설까?"를 묻는데 맛있는 이유(감칠맛·고소함·곁들임이 덜어 줌)를 말하면 질문의 술어를 놓친 것이다(결론 장은 해결을 말해도 된다).
       if(ASKS_UNFAMILIAR.test(cover)&&i<plan.slides.length-1&&praisesInsteadOfExplaining(headline))add(n,"headline",`표지는 왜 낯선지(어려운지)를 묻는데 이 장 제목은 음식의 장점을 말해요. 왜 낯설게 느껴지는지(향을 느끼는 경로, 접해 본 경험, 익숙한 맛과의 차이) 하나를 답하는 제목으로 바꾸세요.`);
       if(VAGUE_REASON.test(headline))add(n,"headline","'조화롭게 잡아줘요'·'정돈해줘요'처럼 결과만 말하는 막연한 제목이에요. 무엇이 무엇을 어떻게 바꾸는지(이유) 쓰세요.");
+      // 결과물 점검(2026-10-12): "해물라면은 시원하고, 홍어라면은 깊어요"처럼 이유 장이 결과(맛·느낌)만 말하고 원인이 없었다(이유 깊이 3.0/5).
+      // 결론 장이 아닌 이유 장의 제목·짧은 글 어디에도 원인을 말하는 말이 없으면 다시 쓰게 한다.
+      else if(i<plan.slides.length-1&&!SAYS_CAUSE.test([headline,...slide.points].join(" ")))add(n,"headline","이 장은 결과(맛·느낌)만 말해요. 무엇이 그렇게 만드는지 원인(성분·온도·조리법·감각의 원리)을 제목이나 짧은 글에 함께 쓰세요(예: \"삭히는 동안 요소가 암모니아로 바뀌어요\").");
       for(const point of slide.points)if(VAGUE_REASON.test(point))add(n,"points",`요점 '${point.trim()}'이 결과만 말하고 이유가 없어요. 무엇이 어떻게 작용하는지 쓰세요.`);
       // 표지가 "왜"를 묻는데 요점이 먹는 법이면 제목과 따로 논다(사장님 지적 2026-10-10: 제목 "지방층이 묵은지의 산미를 감싸요" 아래
       // "홍어 한 점을 묵은지에 살짝 감싸요"). 먹는 법은 속 글(notes)·올릴 글로 보내고, 요점은 제목의 이유·근거로 쓴다.
