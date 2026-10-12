@@ -3,7 +3,7 @@ import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { STORE_MENU, josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { EXPLAIN_REASONS_RULE, HOOK_RULE, NAMES_CAUSE } from "./explain";
 import { storeNotesRule } from "@/features/store/storeNotes";
-import { principleNotesRule } from "@/features/store/principles";
+import { comparisonPairRule, principleNotesRule } from "@/features/store/principles";
 
 
 export const COPY_LENGTHS={short:[200,350],medium:[500,800],detailed:[900,1200]} as const;
@@ -85,7 +85,7 @@ export function buildCopyPrompt(input:CopyInput,length:CopyLength,{storeNotes=""
 문체는 가까운 사람에게 음식을 설명하듯 해요체로 통일하세요. '식감의 레이어', '감촉을 선사', '포근하게 완화', '입안의 경쾌한 리듬'처럼 감각을 꾸미는 추상적 비유는 쓰지 마세요. 대신 ${textureExample(hero,input.topic)}처럼 무엇이 어떻게 다른지 구체적으로 설명하세요. 낯선 음식에 대한 질문이나 작은 한입으로 맛을 비교하는 방법으로 내용을 넓히고 비유로 글자 수를 늘리지 마세요.
 이미지 기획의 음식·장면과 글의 중심 소재를 맞추세요. 이미지 기획은 실제 사진을 분석한 결과가 아닙니다. 사진에 없는 재료를 있다고 단정하거나 실제 매장의 청결·인테리어를 본 것처럼 서술하지 마세요.
 이미지 기획에 명시되지 않은 재료의 위아래 순서·개수·양을 추정하지 마세요. 이 가게 음식의 조리·숙성 방법(얼마나 삭혔는지, 어떻게 무쳤는지)은 확인되지 않았으니 이 가게 이야기로 단정하지 마세요.
-${EXPLAIN_REASONS_RULE}${principleNotesRule(input.topic,input.contentBrief,input.imageBrief,...(input.photoNotes??[]))?`
+${EXPLAIN_REASONS_RULE}${comparisonPairRule(input.topic,input.contentBrief)?`\n${comparisonPairRule(input.topic,input.contentBrief)} information도 기준마다 두 대상을 한 문단에 함께 견주세요.`:""}${principleNotesRule(input.topic,input.contentBrief,input.imageBrief,...(input.photoNotes??[]))?`
 ${principleNotesRule(input.topic,input.contentBrief,input.imageBrief,...(input.photoNotes??[]))}`:""}
 홍어는 삭힘의 향과 호불호가 있는 음식임을 존중하세요. 향이 사라진다거나 누구나 쉽게 먹는다고 보장하지 마세요. 홍어회·삼합·무침·애탕 등 선택한 조리법을 구분하고, 주제에 없는 삼합 소개를 매번 반복하지 마세요. 한 문단에 한 가지 새로운 정보를 담고 분량을 채우기 위한 반복은 금지합니다.
 확인된 가게 정보는 매장명 묵동홍어마을, 지역 묵동·중랑구뿐입니다. 확인되지 않은 가격, 원산지, 숙성 기간, 영업시간, 주차, 건강 효능, 실제 제공 메뉴·예약 가능 여부는 만들지 마세요. 확인이 필요한 정보는 본문에서 단정하지 말고 facts_to_verify에 적으세요.${storeNotesRule(storeNotes)?`\n${storeNotesRule(storeNotes)} 메모의 사실은 information의 이유를 뒷받침하는 실제 사례로 쓰거나 store_connection에서 가게와 잇는 데 쓰세요.`:""}
