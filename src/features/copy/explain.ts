@@ -78,7 +78,9 @@ const DIFFERENCE=/^\s*(.{1,14}?)(?:와|과|이랑|랑|하고)\s+(.{1,14}?)(?:의
 export function comparedPair(question:string):{first:string;second:string}|undefined {
   const match=question.match(COMPARISON)??question.match(DIFFERENCE);
   if(!match)return undefined;
-  const [first,second]=[match[1].trim(),match[2].trim()];
+  // 이름 앞뒤의 문장부호는 뗀다("해물라면과 홍어라면, 무엇이 다를까?" → "홍어라면").
+  const clean=(name:string)=>name.trim().replace(/^[\s,，.·:;"'“”‘’(\[]+|[\s,，.·:;!?"'“”‘’)\]]+$/g,"");
+  const [first,second]=[clean(match[1]),clean(match[2])];
   return first&&second&&first!==second?{first,second}:undefined;
 }
 
