@@ -39,9 +39,10 @@ describe("유입 경로 이름",()=>{
 describe("홈페이지 카드의 유입 표",()=>{
   it("쉬운 이름·방문·비율로 보여 주고, 원래 이름은 자세히 안에 둔다",()=>{
     render(<HomepageCard configured state={undefined} days={[{date:"2026-10-11",sessions:59,sources:real,fetchedAt:"t"}]}/>);
-    const row=screen.getByRole("row",{name:"네이버 검색 12 20.3%"});
-    expect(within(row).getByText("12")).toBeTruthy();
-    expect(within(row).getByText("20.3%")).toBeTruthy();
+    const items=within(screen.getByRole("list",{name:"들어온 곳"})).getAllByRole("listitem");
+    expect(items.map(item=>item.querySelector(".bar-name")!.textContent)).toEqual(["직접 방문","네이버 검색","네이버 블로그","인스타그램","네이버 플레이스·지도","페이스북"]);
+    expect(items[1].querySelector(".bar-value")!.textContent).toBe("1220.3%");
+    expect(items[1].querySelector(".bar-value small")!.textContent).toBe("20.3%");
     expect(screen.queryByRole("rowheader",{name:"naver / organic"})).toBeNull();
     expect(screen.getByText("naver / organic")).toBeTruthy(); // 자세히 안
   });

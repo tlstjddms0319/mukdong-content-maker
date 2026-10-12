@@ -11,6 +11,14 @@ const n=z.number().min(0).optional();
 const day=z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const InstagramDaySchema=z.object({date:day,followers:n,mediaCount:n,reach:n,views:n,accountsEngaged:n,totalInteractions:n,profileViews:n,websiteClicks:n,fetchedAt:z.string()});
 export const Ga4DaySchema=z.object({date:day,activeUsers:n,sessions:n,pageViews:n,phoneClicks:n,directionsClicks:n,sources:z.array(z.object({sourceMedium:z.string(),sessions:z.number().min(0)})).default([]),fetchedAt:z.string()});
+// 계정의 게시물 하나의 최신 숫자. 날마다 통째로 바꿔 저장한다(지운 게시물은 빠진다).
+export const InstagramPostSchema=z.object({
+  id:z.string(),caption:z.string().optional(),
+  type:z.enum(["IMAGE","CAROUSEL_ALBUM","VIDEO"]),product:z.string().optional(),
+  timestamp:z.string(),permalink:z.string(),thumbnail:z.string().optional(),
+  likes:n,comments:n,saves:n,shares:n,reach:n,views:n,fetchedAt:z.string(),
+});
+export type InstagramPost=z.infer<typeof InstagramPostSchema>;
 export type InstagramDay=z.infer<typeof InstagramDaySchema>;
 export type Ga4Day=z.infer<typeof Ga4DaySchema>;
 const ChannelStateSchema=z.object({lastRunOn:day.optional(),lastSuccessAt:z.string().optional(),lastError:z.string().nullable().optional(),filledThrough:day.optional()});
@@ -71,6 +79,14 @@ export function createMetricsStore(root=process.env.DATA_DIR??path.join(process.
     async saveNaver(list:NaverPeriod[]){
       const parsed=z.array(NaverPeriodSchema).parse(list).sort((a,b)=>a.start.localeCompare(b.start));
       await write("metrics/naver/periods.json",parsed);return parsed;
+    },
+    async readPosts():Promise<InstagramPost[]>{
+      const raw=await read("metrics/instagram/posts.json");
+      return raw?z.array(InstagramPostSchema).parse(JSON.parse(raw)):[];
+    },
+    async savePosts(list:InstagramPost[]){
+      const parsed=z.array(InstagramPostSchema).parse(list).sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp));
+      await write("metrics/instagram/posts.json",parsed);return parsed;
     },
     async readState():Promise<MetricsState>{const raw=await read("metrics/state.json");return raw?StateSchema.parse(JSON.parse(raw)):{};},
     async saveState(state:MetricsState){await write("metrics/state.json",StateSchema.parse(state));},

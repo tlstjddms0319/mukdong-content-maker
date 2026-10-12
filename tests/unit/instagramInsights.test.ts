@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe,expect,it,vi } from "vitest";
 import { collectInstagram,createInsightsClient,INSIGHTS_SCOPE } from "@/features/metrics/instagramInsights";
-import type { InstagramDay } from "@/features/metrics/store";
+import type { InstagramDay,InstagramPost } from "@/features/metrics/store";
 import type { InstagramConnection } from "@/features/instagram/schema";
 
 const ok=(body:unknown)=>({ok:true,status:200,json:async()=>body}) as Response;
@@ -34,8 +34,21 @@ function fakeStore(){
   const saved:Partial<InstagramDay>[]=[];
   return {saved,store:{saveDays:vi.fn(async(_c:string,days:Partial<InstagramDay>[])=>{saved.push(...days);})}};
 }
-const client=()=>({accountSnapshot:vi.fn().mockResolvedValue({followers:130,mediaCount:12}),dayInsights:vi.fn().mockResolvedValue({reach:10}),mediaInsights:vi.fn().mockResolvedValue({likes:5,comments:1,saves:2,shares:0,reach:80})});
+const client=()=>({listMedia:vi.fn().mockResolvedValue([]),accountSnapshot:vi.fn().mockResolvedValue({followers:130,mediaCount:12}),dayInsights:vi.fn().mockResolvedValue({reach:10}),mediaInsights:vi.fn().mockResolvedValue({likes:5,comments:1,saves:2,shares:0,reach:80})});
 const noDrafts={listDraftSummaries:async()=>[],readDraft:async()=>null,saveDraft:vi.fn()};
+
+describe("게시물 목록",()=>{
+  it("계정의 게시물을 필요한 필드로 요청하고 좋아요·댓글을 읽는다",async()=>{
+    const fetcher=vi.fn().mockResolvedValue(ok({data:[{id:"m1",caption:"홍어 한 점",media_type:"CAROUSEL_ALBUM",media_product_type:"FEED",timestamp:"2026-10-10T03:00:00+0000",permalink:"https://www.instagram.com/p/x/",media_url:"https://cdn/x.jpg",like_count:12,comments_count:2}]}));
+    const list=await createInsightsClient(fetcher).listMedia("ig1","t");
+    expect(new URL(fetcher.mock.calls[0][0]).searchParams.get("fields")).toContain("like_count");
+    expect(list).toEqual([{id:"m1",caption:"홍어 한 점",type:"CAROUSEL_ALBUM",product:"FEED",timestamp:"2026-10-10T03:00:00+0000",permalink:"https://www.instagram.com/p/x/",thumbnail:"https://cdn/x.jpg",likes:12,comments:2}]);
+  });
+  it("영상은 media_url 대신 thumbnail_url을 미리보기로 쓴다",async()=>{
+    const fetcher=vi.fn().mockResolvedValue(ok({data:[{id:"r1",media_type:"VIDEO",media_product_type:"REELS",timestamp:"2026-10-10T03:00:00+0000",permalink:"p",media_url:"https://cdn/v.mp4",thumbnail_url:"https://cdn/t.jpg"}]}));
+    expect((await createInsightsClient(fetcher).listMedia("ig1","t"))[0].thumbnail).toBe("https://cdn/t.jpg");
+  });
+});
 
 describe("인사이트 실패 처리",()=>{
   it("지표별로 다시 물어도 하나도 안 되면 빈 기록 대신 오류를 낸다(권한 안내 포함)",async()=>{
@@ -83,6 +96,22 @@ describe("인스타그램 수집",()=>{
     const result=await collectInstagram({connection:conn(),store,client:c,drafts,readPublication:async()=>pub as never,today:"2026-10-12",filledThrough:"2026-10-11"});
     expect(result.mediaUpdated).toBe(1);
     expect(drafts.saveDraft.mock.calls[0][0]).toMatchObject({id:"a",performance:{likes:5,comments:1,saves:2,shares:0,reach:80,posted_on:"2026-10-10",source:"instagram"}});
+  });
+  it("계정의 모든 게시물 숫자를 모아 저장하고, 앱으로 올린 게시물은 같은 값을 다시 묻지 않는다",async()=>{
+    const posts:unknown[]=[];
+    const store={saveDays:vi.fn(),savePosts:vi.fn(async(list:InstagramPost[])=>{posts.push(...list);return list;})};
+    const c=client();
+    c.listMedia.mockResolvedValue([{id:"m1",type:"IMAGE",timestamp:"2026-10-10T03:00:00+0000",permalink:"p1",likes:12,comments:2},{id:"m2",type:"VIDEO",product:"REELS",timestamp:"2026-09-01T03:00:00+0000",permalink:"p2",likes:4}]);
+    c.mediaInsights.mockImplementation(async(id:string)=>id==="m1"?{likes:12,comments:2,saves:5,shares:1,reach:300,views:640}:Promise.reject(new Error("HTTP 500")));
+    const drafts={listDraftSummaries:async()=>[{id:"a"}] as never,readDraft:async(id:string)=>({id}) as never,saveDraft:vi.fn(async(v:unknown)=>v)};
+    const result=await collectInstagram({connection:conn(),store,client:c,drafts,readPublication:async()=>({status:"published",mediaId:"m1",publishedAt:"2026-10-10T03:00:00.000Z"}) as never,today:"2026-10-12",filledThrough:"2026-10-11"});
+    expect(result.posts).toBe(2);
+    expect(posts).toEqual([
+      expect.objectContaining({id:"m1",likes:12,comments:2,saves:5,shares:1,reach:300,views:640}),
+      expect.objectContaining({id:"m2",likes:4}), // 인사이트가 실패해도 목록의 좋아요는 남긴다
+    ]);
+    expect(c.mediaInsights.mock.calls.filter(call=>call[0]==="m1")).toHaveLength(1);
+    expect(result.mediaUpdated).toBe(1);
   });
   it("8일 넘은 게시물은 7일마다, 90일 넘으면 가져오지 않는다",async()=>{
     const {store}=fakeStore();const c=client();
