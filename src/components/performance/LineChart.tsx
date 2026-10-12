@@ -39,7 +39,7 @@ export function LineChart({label,points,unit=""}:{label:string;points:{x:string;
         <defs><linearGradient id={gradient} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" className="chart-area-top"/><stop offset="100%" className="chart-area-bottom"/></linearGradient></defs>
         {ticks.map(t=><g key={t}><line x1={L} x2={W-R} y1={y(t)} y2={y(t)} className="chart-grid"/><text x={L-8} y={y(t)+4} textAnchor="end" className="chart-tick">{formatCount(Math.round(t),{compact:true})}</text></g>)}
         <path d={`${line}L${x(points.length-1)},${y(bottom)}L${x(0)},${y(bottom)}Z`} fill={`url(#${gradient})`}/>
-        <path d={line} className="chart-line"/>
+        <path d={line} pathLength={1} className="chart-line"/>
         {labelIndexes.map(i=><text key={i} x={x(i)} y={H-8} textAnchor={i===0?"start":i===points.length-1?"end":"middle"} className="chart-tick">{shortDate(points[i].x)}</text>)}
         <circle cx={x(points.length-1)} cy={y(points.at(-1)!.y)} r={4} className="chart-dot"/>
         {point&&<g className="chart-cursor"><line x1={x(active!)} x2={x(active!)} y1={T} y2={H-B}/><circle cx={x(active!)} cy={y(point.y)} r={5}/></g>}

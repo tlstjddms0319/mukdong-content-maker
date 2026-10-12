@@ -58,7 +58,7 @@ describe("WizardShell", () => {
       const { unmount } = render(<WizardShell step="topic" section={section}><h1>{label}</h1></WizardShell>);
       fireEvent.click(screen.getByText("더보기"));
       expect(screen.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
-      expect(screen.getByText("더보기")).toHaveAttribute("aria-current","location");
+      expect(screen.getByText("더보기").closest("summary")).toHaveAttribute("aria-current","location");
       expect(screen.queryByLabelText("만드는 순서")).not.toBeInTheDocument();
       unmount();
     }
