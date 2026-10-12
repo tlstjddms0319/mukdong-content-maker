@@ -3,7 +3,7 @@ import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
-import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
+import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
@@ -44,6 +44,48 @@ const GIVES_REASON=/때문|라서|해서|덕분|니까|으니|어서|아서|잡�
 // 짧은 글이 그 장 제목·표지에 없는 새 음식을 꺼내는지 볼 낱말(가게 메뉴·곁들임).
 const SIDE_SUBJECTS=["묵은지","수육","초장","막걸리","미나리","과메기","애탕","무침","홍어찜","삼합","쪽파","마늘","고추","미역","깻잎","상추","배추"];
 
+// 비교 장에서 "다르다"는 말(어떻게 다른지는 없이). 양쪽 이름이 함께 있으면 "A는 ~, B는 ~"로 설명한 것으로 본다.
+const SAYS_DIFFERENT=/달라|다르|다른\s|차이|갈라|갈려|갈린/;
+// 공통점을 밝힌 장("둘 다 ~", "모두 ~")은 한쪽만 말한 장으로 보지 않는다.
+const SAYS_SHARED=/둘\s*다|모두|공통|똑같|같은\s/;
+function comparisonIssues(plan:CarouselPlan,pair:{first:string;second:string}):SlideCopyIssue[] {
+  const [ka,kb]=comparedKeys(pair);
+  const both=(text:string)=>text.replace(/\s+/g,"").includes(ka)&&text.replace(/\s+/g,"").includes(kb);
+  const issues:SlideCopyIssue[]=[];
+  const last=plan.slides.length-1;
+  plan.slides.forEach((slide,i)=>{
+    if(i===0)return;
+    const n=i+1,text=[slide.headline,...slide.points].join(" ");
+    if(i<last&&!both(text)&&!SAYS_SHARED.test(text))issues.push({slide:n,field:"headline",message:`비교 장인데 '${ka}'와(과) '${kb}'를 함께 말하지 않아요. 이 장의 비교 기준 하나를 정해 "${ka}는 ~, ${kb}는 ~"처럼 양쪽이 각각 어떤지 쓰세요(둘 다 같은 점이면 "둘 다 ~"라고 밝히세요).`});
+    for(const [field,line] of [["headline",slide.headline],...slide.points.map(point=>["points",point] as const)] as const){
+      if(SAYS_DIFFERENT.test(line)&&!both(line))issues.push({slide:n,field,message:`'${line.trim()}'은(는) 다르다고만 말해요. ${ka}은(는) 어떻고 ${kb}은(는) 어떤지 구체적으로 쓰세요. 확실히 모르는 제조 정보면 맛·색·탄산처럼 직접 확인되는 차이로 바꾸세요.`});
+    }
+    if(i===last&&!both(text))issues.push({slide:n,field:"headline",message:`결론 장이에요. 가장 큰 차이 하나를 '${ka}'와(과) '${kb}' 두 이름과 함께 한 문장으로 말하세요(예: "${ka}는 ~, ${kb}는 ~").`});
+  });
+  return issues;
+}
+
+// 표지가 묻는 것: 제목과 부제를 함께 본다. 단정형 표지("홍어는 썩은 게 아니라 삭은 거예요")는 질문을 부제("왜 안 상할까요?")에 둔다(HOOK_RULE).
+const coverQuestion=(plan:CarouselPlan)=>[plan.slides[0]?.headline??"",plan.slides[0]?.subline??""].join(" ").trim();
+
+// 표지 후킹 검사(HOOK_RULE): 과장, 도전형 말투, 막연한 질문, 질문이 없는 단정형 표지.
+function coverHookIssues(slide:CarouselPlan["slides"][number],track?:CarouselTrack):SlideCopyIssue[] {
+  const issues:SlideCopyIssue[]=[];
+  const add=(message:string)=>issues.push({slide:1,field:"headline",message});
+  const text=`${slide.headline} ${slide.subline??""}`;
+  const hype=text.match(HOOK_HYPE);
+  if(hype)add(`표지에 '${hype[0]}' 같은 과장 말이 있어요. 의외의 사실이나 공감 장면으로 궁금하게 만드세요.`);
+  const dare=text.match(HOOK_DARE);
+  if(dare)add(`표지가 독자를 시험하는 도전형 말투('${dare[0]}')예요. 광고처럼 읽히니, 의외의 사실이나 공감 장면으로 바꾸세요.`);
+  const vague=slide.headline.match(VAGUE_COVER);
+  if(vague)add(`표지 질문이 막연해요('${vague[0]}'). 답에 원리가 필요한 '왜' 질문이나 의외의 사실로 바꾸세요.`);
+  // 단정형 표지는 본문이 답할 질문을 부제에 둔다(부제의 "이유 N가지"는 앱이 붙이므로 그 앞부분을 본다).
+  const statement=!/[?？]\s*$/.test(slide.headline.trim());
+  const subline=(slide.subline??"").replace(/·?\s*이유\s*\d+\s*가지/,"");
+  if(track&&statement&&!/[?？]|왜/.test(subline))add("단정형 표지예요. 부제에 '왜 그럴까요?'처럼 본문이 답할 질문을 쓰세요.");
+  return issues;
+}
+
 export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCopyIssue[] {
   const limits=copyLimitsOf(track);
   const issues:SlideCopyIssue[]=[];
@@ -51,17 +93,22 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
   const allPoints:Array<{slide:number;text:string}>=[];
   // 표지 질문에 붙은 상황·때(비 오는 날·찬바람…)를 본문 어느 장도 설명하지 않으면, 첫 이유 장에서 그 연결을 설명하게 한다.
   if(track&&plan.slides.length>2){
-    const cover=plan.slides[0].headline;
+    const cover=coverQuestion(plan);
     const body=plan.slides.slice(1).map(slide=>[slide.headline,...slide.points].join(" ")).join(" ");
     const missed=QUESTION_CONDITIONS.find(condition=>condition.asked.test(cover)&&!condition.answered.test(body));
     if(missed)issues.push({slide:2,field:"headline",message:`표지가 '${missed.label}'에 왜 이 음식이 생각나는지 묻는데, 본문 어느 장도 ${missed.label}과(와) 음식의 연결을 설명하지 않아요. 첫 이유 장은 그 상황과 음식이 왜 이어지는지로 쓰세요.`});
   }
   // 비교 질문("치즈는 익숙한데 다른 발효 음식은 왜 낯설까?")인데 본문이 비교 대상(치즈)을 다시 꺼내지 않으면, 무엇과 무엇이 다른지 답하지 못한다.
-  const pair=track&&plan.slides.length>2?comparedPair(plan.slides[0].headline):undefined;
-  if(pair){
+  const pair=plan.slides.length>2?comparedPair(plan.slides[0].headline):undefined;
+  if(pair&&track){
     const body=plan.slides.slice(1).map(slide=>[slide.headline,...slide.points].join(" ")).join(" ");
-    if(!body.includes(pair.first))issues.push({slide:2,field:"headline",message:`표지가 '${pair.first}'와(과) '${pair.second}'를 견주는데, 본문 어느 장도 '${pair.first}'를 다시 꺼내지 않아요. 이유 장마다 두 대상을 나란히 놓고 무엇이 다른지 쓰세요.`});
+    // 본문은 "무침은 ~"처럼 줄여 쓰기도 해서 두 이름이 함께 가진 앞·뒤를 뗀 이름(comparedKeys)으로도 찾는다.
+    if(!body.includes(pair.first)&&!body.replace(/\s+/g,"").includes(comparedKeys(pair)[0]))issues.push({slide:2,field:"headline",message:`표지가 '${pair.first}'와(과) '${pair.second}'를 견주는데, 본문 어느 장도 '${pair.first}'를 다시 꺼내지 않아요. 이유 장마다 두 대상을 나란히 놓고 무엇이 다른지 쓰세요.`});
   }
+  // 두 대상의 차이를 묻는 비교 질문(COMPARISON_RULE): 이유 장마다 양쪽이 각각 어떤지, "다르다"만 하는 문장 없이, 결론은 양쪽 이름과 함께.
+  // B가 "다른 발효 음식"처럼 넓은 말이면 본문은 가게 메뉴를 대표로 쓰므로 이 검사는 하지 않는다(위 검사만).
+  if(pair&&!/^다른/.test(pair.second))issues.push(...comparisonIssues(plan,pair));
+  if(plan.slides[0]?.role==="cover")issues.push(...coverHookIssues(plan.slides[0],track));
   plan.slides.forEach((slide,i)=>{
     const n=i+1,headline=slide.headline.trim();
     const length=headline.replace(/\s/g,"").length;
@@ -94,7 +141,7 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
       if(asked.length&&!menuOf(headline).some(item=>asked.some(other=>other.id===item.id)))add(n,"headline",`마지막 장은 결론이에요. 표지 질문의 '${asked[0].short}'을(를) 다시 써서 질문에 대한 답을 한 문장으로 분명하게 말하세요.`);
     }
     if(track&&slide.role!=="cover"){
-      const cover=plan.slides[0]?.headline??"";
+      const cover=coverQuestion(plan);
       if(ASKS_WHY.test(cover)&&HOW_TO.test(headline)&&!GIVES_REASON.test(headline))add(n,"headline",`표지가 "${cover.trim()}"라고 이유를 묻는데 이 장 제목은 먹는 법이에요. 제목만 이어 읽어도 흐름이 이어지게 표지 질문의 이유(근거) 하나를 답하는 제목으로 바꾸세요.`);
       // 표지가 "왜"를 묻는데 본문 제목이 표지에 없는 곁들임을 꺼내면 흐름이 끊긴다(5장 구성의 4번째 장이 늘 pairing 자리라 잘 생긴다).
       const sideTurn=ASKS_WHY.test(cover)?SIDE_SUBJECTS.find(word=>headline.includes(word)&&!cover.includes(word)):undefined;
