@@ -11,7 +11,7 @@ describe("Instagram OAuth",()=>{
     expect(url.searchParams.get("redirect_uri")).toBe(config.redirectUri);
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("state")).toBe("safe-state");
-    expect(url.searchParams.get("scope")).toBe("instagram_business_basic,instagram_business_content_publish");
+    expect(url.searchParams.get("scope")).toBe("instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights");
   });
 
   it("state가 다르면 토큰 교환 전에 중단한다",async()=>{
@@ -47,7 +47,7 @@ describe("Instagram OAuth",()=>{
       username:"mukdong",
       accessToken:"private-token",
       expiresAt:"2026-09-11T01:00:00.000Z",
-      scopes:["instagram_business_basic","instagram_business_content_publish"],
+      scopes:["instagram_business_basic","instagram_business_content_publish","instagram_business_manage_insights"],
       connectedAt:"2026-09-11T00:00:00.000Z",
       updatedAt:"2026-09-11T00:00:00.000Z",
     });

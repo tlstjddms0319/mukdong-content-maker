@@ -32,7 +32,7 @@ describe("Instagram repository",()=>{
     const repo=createInstagramRepository(await temporaryDirectory());
     await repo.saveConnection(connection);
     expect(await repo.readConnection()).toEqual(connection);
-    expect(toPublicConnection(connection)).toEqual({connected:true,username:"mukdong",expiresAt:connection.expiresAt,needsReconnect:false});
+    expect(toPublicConnection(connection)).toEqual({connected:true,username:"mukdong",expiresAt:connection.expiresAt,needsReconnect:false,insights:false});
     expect(JSON.stringify(toPublicConnection(connection))).not.toContain(connection.accessToken);
   });
 

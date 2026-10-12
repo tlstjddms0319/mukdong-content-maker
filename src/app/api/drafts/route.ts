@@ -45,7 +45,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
 }
 
 const CaptionInput = z.object({ id:z.string().uuid(), caption:z.string().trim().min(1).max(2200) });
-const PerformanceInput = z.object({ id:z.string().uuid(), performance:PerformanceSchema.omit({recorded_at:true}).nullable() });
+const PerformanceInput = z.object({ id:z.string().uuid(), performance:PerformanceSchema.omit({recorded_at:true,source:true}).nullable() });
 const ArchiveInput = z.object({ id:z.string().uuid(), archived:z.boolean() });
 // 상태만 바꾼 저장(예약·보관·성과·글)의 응답. 예전에는 저장한 게시물 전체를 돌려줘서, 카드 사진 6장(base64, 수 MB)이
 // 휴대폰으로 다 내려올 때까지 화면이 "예약하는 중…"에 머물렀다(저장은 이미 끝난 뒤). 화면이 쓰는 칸만 돌려준다.
@@ -62,7 +62,7 @@ export async function PATCH(request: Request) { const denied=await ownerApiError
     return withDraftLock(recorded.data.id,async()=>{
     const existing=await repository.readDraft(recorded.data.id);
     if(!existing)return privateJson({error:"게시물을 찾지 못했어요. 내 게시물에서 다시 골라 주세요."},{status:404});
-    const performance=recorded.data.performance?{...recorded.data.performance,recorded_at:new Date().toISOString()}:undefined;
+    const performance=recorded.data.performance?{...recorded.data.performance,source:"manual" as const,recorded_at:new Date().toISOString()}:undefined;
     return privateJson(statusOf(await repository.saveDraft({...existing,performance},{thumbnail:false})));
     });
   }
