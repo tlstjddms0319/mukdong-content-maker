@@ -55,6 +55,8 @@ function coverProblem(option:{headline:string;subline:string},original:Slide,tra
   const headline=option.headline.trim(),subline=option.subline.trim();
   if(!headline||headline.length>TRACK_COPY.cover.headline)return "length";
   if(subline.length>TRACK_COPY.cover.subline)return "subline-length";
+  // 네 번째 점검(2026-10-12): AI가 부제를 "깊은 맛의"처럼 끝맺지 않고 보내 카드에 끊긴 말이 찍혔다. 부제는 비우거나 완결된 문장·질문으로.
+  if(subline&&!/[요까다죠네?？!]$/.test(subline.replace(/[.\s]+$/,"")))return "subline-unfinished";
   if(coverHookProblems({headline,subline},track).length)return "hook";
   const before=`${original.headline} ${original.subline??""}`,after=`${headline} ${subline}`;
   // 원래 표지나 주제에 나온 음식 이름을 새 표지도 말해야 한다(예전에는 "열이 식감과 향을 어떻게 바꿀까?"처럼 대상이 빠졌다).

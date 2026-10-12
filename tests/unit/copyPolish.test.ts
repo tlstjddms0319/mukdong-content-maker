@@ -47,6 +47,7 @@ describe("cover hook rewrite",()=>{
     const ai={generate:vi.fn(async()=>({best:0,options:[
       {type:"의외의 정체",headline:"충격! 홍어회 식감의 비밀",subline:"왜 쫀득할까요?"},            // 과장 → 버린다
       {type:"오해 깨기",headline:"참치처럼 부드러울 줄 알았나요?",subline:"왜 쫀득할까요?"},       // 메뉴(홍어) 빠짐 → 버린다
+      {type:"공감 장면",headline:"홍어회는 왜 이렇게 쫀득할까?",subline:"깊은 식감의"},             // 끝맺지 않은 부제 → 버린다
       {type:"의외의 정체",headline:"홍어회 쫀득함, 범인은 콜라겐",subline:"왜 그럴까요?"},
     ]}))};
     const {plan,changed,hookType}=await rewriteCover(reported(),"photo",ai);
