@@ -56,6 +56,21 @@ describe("cover hook rewrite",()=>{
     expect(String((ai.generate.mock.calls[0] as unknown[])[0])).toContain("오해 깨기");
   });
 
+  it("asks once to shorten options that only failed on length, then picks from them",async()=>{
+    // 세 번째 점검(2026-10-12): 좋은 대조형 후보가 25~34자라 모두 버려지고 밋밋한 표지가 남았다.
+    const ai={generate:vi.fn()
+      .mockResolvedValueOnce({best:0,options:[
+        {type:"대조",headline:"홍어회는 왜 붉은 살코기 생선보다 훨씬 쫀득할까?",subline:""},
+        {type:"오해 깨기",headline:"이거 알면 홍어 고수예요",subline:"왜 그럴까요?"},
+      ]})
+      .mockResolvedValueOnce({items:[{slide:1,headline:"홍어회는 왜 참치보다 쫀득할까?"}]})};
+    const {plan,changed,hookType}=await rewriteCover(reported(),"photo",ai);
+    expect(changed).toBe(true);
+    expect(hookType).toBe("대조");
+    expect(plan.slides[0].headline).toBe("홍어회는 왜 참치보다 쫀득할까?");
+    expect(String((ai.generate.mock.calls[1] as unknown[])[0])).toMatch(/지금 \d+자 → 24자 이내/);
+  });
+
   it("keeps the original cover when no option passes",async()=>{
     const ai={generate:vi.fn(async()=>({best:0,options:[{type:"대조",headline:"이거 알면 홍어 고수예요",subline:"왜 그럴까요?"}]}))};
     const before=reported();

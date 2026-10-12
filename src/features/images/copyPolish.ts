@@ -79,18 +79,34 @@ ${HOOK_RULE}
 본문 장 제목(표지가 약속할 답의 내용):
 ${body}
 서로 다른 후킹 유형(오해 깨기, 의외의 정체, 공감 장면, 대조 가운데)으로 표지 후보 3개를 쓰고, 가장 강한 후보의 번호(0부터)를 best에 적으세요.
-- headline: 띄어쓰기 포함 ${TRACK_COPY.cover.headline}자 이내. 물음표 질문이거나, 본문에 있는 의외의 사실을 단정하는 한 문장. 주제·지금 표지의 음식 이름을 그대로 넣으세요(두 대상을 견주는 표지면 두 이름 모두).
+- headline: 띄어쓰기 포함 20자 안팎(넘어도 ${TRACK_COPY.cover.headline}자 이내). 글자 수를 직접 세어 확인하세요. 물음표 질문이거나, 본문에 있는 의외의 사실을 단정하는 한 문장. 주제·지금 표지의 음식 이름을 그대로 넣으세요(두 대상을 견주는 표지면 두 이름 모두).
 - subline: 띄어쓰기 포함 14자 이내(앱이 뒤에 "· 이유 N가지"를 붙입니다). headline이 단정형이면 subline에 "왜 그럴까요?"처럼 본문이 답할 질문을 쓰세요. 질문형이면 궁금증을 키우는 짧은 한 줄을 쓰거나 비워 두세요. subline에 결론(답)을 미리 말하지 마세요("답은 탄산에 있어요" 금지).
 - 본문에 없는 사실, 수치, 가게만의 사실은 만들지 마세요. 해요체로 쓰세요.
 JSON으로만 답하세요: {"best":0,"options":[{"type":"유형","headline":"제목","subline":"부제"}]}`;
   const result=CoverSchema.parse(await ai.generate(prompt,CoverSchema));
   const order=[result.best,...result.options.keys()].filter((index,i,all)=>index<result.options.length&&all.indexOf(index)===i);
-  for(const index of order){
-    const option=result.options[index];
-    if(coverProblem(option,cover,track,topic))continue;
-    return {plan:{...plan,slides:plan.slides.map((slide,i)=>i===0?{...slide,headline:option.headline.trim(),subline:option.subline.trim()}:slide)},changed:true,hookType:option.type};
-  }
-  return {plan,changed:false};
+  const pick=(options:typeof result.options)=>{
+    for(const index of order){
+      const option=options[index];
+      if(!option||coverProblem(option,cover,track,topic))continue;
+      return {plan:{...plan,slides:plan.slides.map((slide,i)=>i===0?{...slide,headline:option.headline.trim(),subline:option.subline.trim()}:slide)},changed:true,hookType:option.type};
+    }
+    return null;
+  };
+  const first=pick(result.options);
+  if(first)return first;
+  // 길이만 넘긴 후보는 한 번 줄여 달라고 해서 다시 고른다(AI는 글자 수를 자주 넘긴다).
+  const longOnly=order.filter(index=>coverProblem(result.options[index],cover,track,topic)==="length"&&result.options[index].headline.trim().length>0);
+  if(!longOnly.length)return {plan,changed:false};
+  const lines=longOnly.map(index=>{const text=result.options[index].headline.trim();return `- ${index+1}번: "${text}" (지금 ${text.length}자 → ${TRACK_COPY.cover.headline}자 이내)`;}).join("\n");
+  const shortened=ShortenSchema.parse(await ai.generate(`Instagram 카드뉴스 표지 제목 후보가 카드에 들어가지 않습니다. 각 제목을 띄어쓰기 포함 목표 글자 수 이내로 다시 쓰세요. 음식 이름(두 대상을 견주면 두 이름 모두)과 물음표 질문·단정 형태, 의외성은 그대로 두고 꾸미는 말을 덜어 내세요. 말을 자르거나 "…"를 쓰지 마세요. 글자 수를 직접 세어 확인하세요.
+${lines}
+JSON으로만 답하세요: {"items":[{"slide":후보 번호,"headline":"줄인 제목"}]}`,ShortenSchema));
+  const retried=result.options.map((option,index)=>{
+    const next=longOnly.includes(index)?shortened.items.find(item=>item.slide===index+1)?.headline.trim():undefined;
+    return next?{...option,headline:next}:option;
+  });
+  return pick(retried)??{plan,changed:false};
 }
 
 export async function polishPlan(plan:CarouselPlan,track:CarouselTrack,ai:PolishAi,topic=""):Promise<{plan:CarouselPlan;coverChanged:boolean;hookType?:string;shortened:number}> {
