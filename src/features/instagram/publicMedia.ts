@@ -18,8 +18,10 @@ export async function prepareInstagramImage(draft:Draft,mediaId?:string){
   catch{throw new InstagramMediaError("게시 이미지를 변환하지 못했습니다.");}
 }
 
+// 서명할 값들을 JSON 배열로 묶는다. 예전에는 점(.)으로 이어 붙여 draftId "a"+이미지 "b"와 draftId "a.b"+이미지 없음이
+// 같은 서명이 됐다(초안 id가 UUID라 실제로 악용되지는 않았다). 형식을 바꾸면 이미 나간 링크(10분짜리)는 무효가 된다.
 function signatureFor(draftId:string,expiresAt:number,secret:string,mediaId?:string){
-  return createHmac("sha256",secret).update(mediaId?`${draftId}.${mediaId}.${expiresAt}`:`${draftId}.${expiresAt}`).digest("base64url");
+  return createHmac("sha256",secret).update(JSON.stringify(["media-v2",draftId,mediaId??null,expiresAt])).digest("base64url");
 }
 
 export function signMediaUrl(input:{draftId:string;mediaId?:string;expiresAt:number;baseUrl:string;secret:string}){

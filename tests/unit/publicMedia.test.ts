@@ -50,6 +50,13 @@ describe("Instagram public media",()=>{
     expect(verifyMediaSignature({...base,mediaId:second.id,signature,now:1_900_000_000})).toBe(false);
   });
 
+  it("draftId와 이미지 id를 이어 붙인 값이 같아도 서명은 서로 다르다",()=>{
+    const base={expiresAt:2_000_000_000,baseUrl:"https://example.com",secret:"test-secret"};
+    const signature=new URL(signMediaUrl({...base,draftId:"a",mediaId:"b"})).searchParams.get("sig")!;
+    expect(verifyMediaSignature({...base,draftId:"a",mediaId:"b",signature,now:1_900_000_000})).toBe(true);
+    expect(verifyMediaSignature({...base,draftId:"a.b",signature,now:1_900_000_000})).toBe(false);
+  });
+
   it("요청한 선택 슬라이드를 준비하고 선택되지 않은 이미지는 거절한다",async()=>{
     const draft=await carouselDraft(),[first,second]=draft.media_candidates;
     await expect(prepareInstagramImage(draft)).rejects.toThrow("이미지 식별자");
