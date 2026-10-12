@@ -18,6 +18,12 @@ describe("갈래 모양 고르기",()=>{
     expect(pickTrackLook("text",0,()=>0)).toBe(1);
     expect(pickTrackLook("text",99,()=>.999)).toBe(7); // 저장값이 범위 밖이어도 안전하게
   });
+  it("원형 그릇·먹색 액자(사진이 작은 모양)는 자동으로 고르지 않는다",()=>{
+    expect(TRACK_LOOKS.photo.filter(look=>look.manual).map(look=>look.name)).toEqual(["원형 그릇","먹색 액자"]);
+    const seen=new Set<number>();
+    for(let i=0;i<200;i++)seen.add(pickTrackLook("photo",undefined,()=>i/200));
+    expect([...seen].sort((a,b)=>a-b)).toEqual([0,1,2,3,4,5,8,9]);
+  });
   it("'다른 모양으로'는 다음 모양으로 돌고 끝에서 처음으로 간다",()=>{
     expect(nextTrackLook("text",0)).toBe(1);
     expect(nextTrackLook("text",7)).toBe(0);

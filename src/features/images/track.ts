@@ -41,17 +41,18 @@ export const trackDesign=(track:CarouselTrack,palette:PaletteId=DEFAULT_DESIGN.p
 // 갈래마다 쓸 수 있는 모양(design.look 번호 = 이 목록 순서). 0은 처음부터 있던 기본 모양이고 계속 쓴다.
 // 그리기는 styles/photoLooks.ts·textLooks.ts(0은 photoFocus.ts·textFocus.ts). 사장님 지적(2026-10-12): 게시물마다 같은 템플릿.
 // 새 모양을 늘리면 여기 이름을 더하고 그리기 함수에 같은 번호를 더한다.
-export const TRACK_LOOKS:Record<CarouselTrack,ReadonlyArray<{name:string}>>={
-  photo:[{name:"기본"},{name:"매거진"},{name:"반반"},{name:"숙성 도장"},{name:"순서 카드"},{name:"레트로 간판"},{name:"원형 그릇"},{name:"먹색 액자"},{name:"경매표"},{name:"박물관 라벨"}],
+// manual: 자동 선택에서 빼고 확인 화면 '모양 바꾸기'에서 직접 고를 때만 쓴다. 원형 그릇·먹색 액자는 모양 특성상 사진이
+// 화면의 20~37%뿐이라(사진이 주인공이어야 한다는 사장님 의견, 2026-10-12) 자동으로는 고르지 않는다.
+export const TRACK_LOOKS:Record<CarouselTrack,ReadonlyArray<{name:string;manual?:boolean}>>={
+  photo:[{name:"기본"},{name:"매거진"},{name:"반반"},{name:"숙성 도장"},{name:"순서 카드"},{name:"레트로 간판"},{name:"원형 그릇",manual:true},{name:"먹색 액자",manual:true},{name:"경매표"},{name:"박물관 라벨"}],
   text:[{name:"기본"},{name:"메모지"},{name:"노포 메뉴판"},{name:"한지 붓글씨"},{name:"호외 신문"},{name:"공지 안내판"},{name:"큰 한 글자"},{name:"승차권"}],
 };
-// 새 게시물의 모양: 바로 전 게시물 모양(previous)만 빼고 고르게 하나. previous가 범위 밖이면 무시한다.
+// 새 게시물의 모양: 직접 고를 때만 쓰는 모양(manual)과 바로 전 게시물 모양(previous)을 빼고 고르게 하나. previous가 범위 밖이면 무시한다.
 export function pickTrackLook(track:CarouselTrack,previous?:number,random:()=>number=Math.random):number {
-  const count=TRACK_LOOKS[track].length;
-  const choices=Array.from({length:count},(_,i)=>i).filter(i=>i!==previous);
+  const choices=TRACK_LOOKS[track].map((look,i)=>look.manual?-1:i).filter(i=>i>=0&&i!==previous);
   return choices[Math.min(choices.length-1,Math.floor(random()*choices.length))];
 }
-// 확인 화면의 "다른 모양으로": 다음 모양(끝이면 처음).
+// 다음 모양(끝이면 처음). 확인 화면은 이제 목록에서 직접 고르지만, 번호 없이 부르면 이것을 쓴다.
 export const nextTrackLook=(track:CarouselTrack,current:number)=>(current+1)%TRACK_LOOKS[track].length;
 
 // 주제(표지 글)에 맞는 색 조합. 예전에는 갈래마다 한 벌(따뜻한 종이)로 고정이라 어느 주제든 같은 템플릿처럼 보였다(사장님 지적 2026-10-09).
