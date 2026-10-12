@@ -1,5 +1,6 @@
 import { LineChart } from "./LineChart";
 import { NaverPeriodForm } from "./NaverPeriodForm";
+import { groupSources } from "@/features/metrics/sources";
 import { dailyAverage,monthEquivalent,newKeywords,youngShare,type NaverPeriod } from "@/features/metrics/naver";
 import type { ChannelState,Ga4Day,InstagramDay } from "@/features/metrics/store";
 
@@ -29,13 +30,21 @@ export function InstagramCard({days,state,insights,connected}:{days:InstagramDay
 export function HomepageCard({days,state,configured}:{days:Ga4Day[];state?:ChannelState;configured:boolean}){
   const sources=new Map<string,number>();
   for(const d of days)for(const s of d.sources)sources.set(s.sourceMedium,(sources.get(s.sourceMedium)??0)+s.sessions);
-  const top=[...sources].sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const groups=groupSources([...sources].map(([sourceMedium,sessions])=>({sourceMedium,sessions})));
   return <section className="metric-card" aria-label="홈페이지">
     <h2>홈페이지</h2>
     {!configured&&<p className="notice">구글 애널리틱스 연결이 필요해요. 도움말 문서(PERFORMANCE_METRICS)의 순서대로 서비스 계정을 추가해 주세요.</p>}
     <LineChart label="일별 방문자" points={days.filter(d=>d.activeUsers!==undefined).map(d=>({x:d.date,y:d.activeUsers!}))}/>
     <Totals rows={[["방문",sum(days,d=>d.sessions)],["페이지 조회",sum(days,d=>d.pageViews)],["전화 버튼",sum(days,d=>d.phoneClicks)],["길찾기 버튼",sum(days,d=>d.directionsClicks)]]}/>
-    {top.length>0&&<><h3>어디서 들어왔나(방문)</h3><table className="metric-table"><tbody>{top.map(([name,count])=><tr key={name}><th scope="row">{name==="naver / place"?"네이버 플레이스 (naver / place)":name}</th><td>{fmt(count)}</td></tr>)}</tbody></table></>}
+    {groups.length>0&&<>
+      <h3>어디서 들어왔나</h3>
+      <table className="metric-table"><thead><tr><th>들어온 곳</th><td>방문</td><td>비율</td></tr></thead>
+        <tbody>{groups.map(g=><tr key={g.group}><th scope="row">{g.group}</th><td>{fmt(g.sessions)}</td><td>{`${g.percent}%`}</td></tr>)}</tbody></table>
+      <p className="field-help">직접 방문은 주소를 직접 치거나 즐겨찾기, 카카오톡처럼 출처가 남지 않는 앱 안 링크로 들어온 경우예요. 비율은 날마다 많이 들어온 10곳을 모은 것 기준이에요.</p>
+      <details className="metric-details"><summary>자세히 (구글 애널리틱스 원래 이름)</summary>
+        <table className="metric-table"><tbody>{groups.flatMap(g=>g.items.map(item=><tr key={item.sourceMedium}><th scope="row">{item.label===g.group?g.group:`${g.group} · ${item.label}`}<br/><small className="source-raw">{item.sourceMedium}</small></th><td>{fmt(item.sessions)}</td></tr>))}</tbody></table>
+      </details>
+    </>}
     <Status state={state}/>
   </section>;
 }
