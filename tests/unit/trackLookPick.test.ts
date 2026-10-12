@@ -35,7 +35,7 @@ describe("확인 화면의 모양 표시",()=>{
   it("갈래 게시물이면 지금 모양 이름과 번호, 아니면 없음",async()=>{
     const { trackLookOf }=await import("@/features/images/generationStore");
     const plan=applyTrack(createFallbackCarouselPlan({topic:"홍어 한 점",track:"text"}),"text");
-    expect(trackLookOf({input:{track:"text"} as never,plan:{...plan,design:{...plan.design,look:2}}})).toEqual({name:"노포 메뉴판",number:3,count:8});
+    expect(trackLookOf({input:{track:"text"} as never,plan:{...plan,design:{...plan.design,look:2}}})).toEqual({name:"노포 메뉴판",number:3,count:8,track:"text",look:2});
     expect(trackLookOf({input:{} as never,plan})).toBeNull();
     // 저장된 모양 번호가 목록보다 크면(모양을 줄였을 때) 마지막 모양으로 본다
     expect(trackLookOf({input:{track:"text"} as never,plan:{...plan,design:{...plan.design,look:15}}})?.name).toBe("승차권");
