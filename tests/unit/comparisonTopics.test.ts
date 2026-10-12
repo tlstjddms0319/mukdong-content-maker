@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { createFallbackCarouselPlan, type CarouselPlan } from "@/features/images/carousel";
 import { slideCopyIssues } from "@/features/images/planReview";
-import { COMPARISON_RULE, comparedPair } from "@/features/copy/explain";
+import { COMPARISON_RULE, comparedKeys, comparedPair } from "@/features/copy/explain";
 import { buildTopicPrompt } from "@/features/topics/prompt";
 
 const COVER="배다리 막걸리와 지평막걸리의 맛의 차이점은 어디서 오는 걸까?";
@@ -23,6 +23,11 @@ describe("A와 B의 차이 questions",()=>{
     expect(comparedPair("홍어전과 홍어찜의 차이는 뭘까?")).toEqual({first:"홍어전",second:"홍어찜"});
     // 결과물 점검(2026-10-12)에서 나온 표지: 쉼표가 이름에 붙어 "홍어라면,"를 본문에서 못 찾았다.
     expect(comparedPair("해물라면과 홍어라면, 무엇이 다를까?")).toEqual({first:"해물라면",second:"홍어라면"});
+    // 두 번째 점검: 앞의 상황 말("비 오는 날")이 이름에 붙어 "비오는날배다"·"지평막걸"로 읽혔다.
+    expect(comparedPair("비 오는 날 배다리와 지평 막걸리는 무엇이 다를까?")).toEqual({first:"배다리",second:"지평 막걸리"});
+    expect(comparedKeys({first:"배다리",second:"지평 막걸리"})).toEqual(["배다리","지평"]);
+    expect(comparedKeys({first:"배다리 막걸리",second:"지평막걸리"})).toEqual(["배다리","지평"]);
+    expect(comparedKeys({first:"홍어무침",second:"홍어회"})).toEqual(["무침","홍어회"]);
     // 예전 꼴도 그대로.
     expect(comparedPair("치즈는 익숙한데 다른 발효 음식은 왜 낯설까?")).toEqual({first:"치즈",second:"다른 발효 음식"});
     for(const plain of ["홍어는 왜 수육이랑 먹을까?","같은 회인데 왜 식감은 다를까?","같은 음식을 먹는데 왜 취향은 갈릴까?","미나리전엔 왜 막걸리가 생각날까?","막걸리 한 잔엔 어떤 안주가 어울릴까?"])

@@ -133,7 +133,7 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
     // 표지 제목·부제의 광고 말(일반 사용자 비판 C1: "빗소리와 함께 찾아오는 고소한 유혹"은 광고처럼 읽혀 넘기지 않는다).
     if(track&&slide.role==="cover"){
       const ad=`${headline} ${slide.subline??""}`.match(COVER_AD_WORDS);
-      if(ad)add(n,"headline",`표지에 '${ad[0]}' 같은 광고 말이 있어요. 부제는 답의 실마리를 구체적으로 예고하세요(예: "답은 빗소리에 있어요").`);
+      if(ad)add(n,"headline",`표지에 '${ad[0]}' 같은 광고 말이 있어요. 부제는 결론을 밝히지 말고 궁금증을 키우는 한 줄로 쓰세요(예: "알고 보면 소리 이야기예요").`);
     }
     // 갈래 게시물 카드는 궁금증을 푸는 이야기만 담는다. 가게 홍보는 맨 뒤 홍보 카드와 캡션 끝 한 줄이 맡는다
     // (사장님 요청 2026-10-09: 장마다 "묵동홍어마을로 오세요"가 나오면 사람도 알고리즘도 광고로 보고 넘긴다).

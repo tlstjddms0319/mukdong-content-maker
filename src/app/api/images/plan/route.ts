@@ -51,7 +51,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     if(result.applied)console.info(`[plan-review] 문안 검수 적용: 문제 ${result.before}건 → ${result.after}건`);
     // 검수 뒤 마지막 다듬기(copyPolish.ts): 표지를 후킹 유형으로 다시 쓰고, 카드에 안 들어가는 제목만 줄인다. 실패하면 그대로 쓴다.
     if(input.data.track){
-      const polished=await polishPlan(finalPlan,input.data.track,{generate:(prompt,schema)=>client.generateJson(prompt,schema)});
+      const polished=await polishPlan(finalPlan,input.data.track,{generate:(prompt,schema)=>client.generateJson(prompt,schema)},input.data.topic);
       finalPlan=polished.plan;
       polish={coverChanged:polished.coverChanged,...(polished.hookType?{hookType:polished.hookType}:{}),shortened:polished.shortened};
       if(polished.coverChanged||polished.shortened)console.info(`[plan-polish] 표지 ${polished.coverChanged?`다시 씀(${polished.hookType})`:"그대로"}, 줄인 제목 ${polished.shortened}개`);
