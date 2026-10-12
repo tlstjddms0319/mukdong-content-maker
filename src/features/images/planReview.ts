@@ -5,7 +5,7 @@ import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
 import { storeNotesRule } from "@/features/store/storeNotes";
 import { principleNotesRule } from "@/features/store/principles";
-import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, obviousQuestion, coverSpoiler, SECRET_TEASE, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
+import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, obviousQuestion, coverSpoiler, SECRET_TEASE, yesNoCover, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
@@ -94,6 +94,7 @@ function coverHookIssues(slide:{headline:string;subline?:string},track?:Carousel
   // 결과물 점검 7회: 표지가 답(원인 성분)을 먼저 말하거나("…암모니아 때문이죠") "비밀을 알아봐요"처럼 무엇이 궁금한지 말하지 않으면 후킹 2점이었다.
   const spoiler=coverSpoiler(text,bodyHeadlines);
   if(spoiler)add(`표지가 답('${spoiler}')을 먼저 말해요. 원인 이름은 본문에서 밝히고, 표지는 흔한 오해를 뒤집거나 의외의 장면으로 궁금하게 만드세요(예: "홍어회는 썩은 게 아니라 삭히는 거라고?").`);
+  if(yesNoCover(slide.headline))add("표지가 예/아니오로 답하는 질문이에요. \"왜\"를 묻거나 오해를 뒤집은 사실(\"~가 아니라 ~라고?\")이나 구체적 대조(\"A는 ~한데 B는 왜 ~?\")로 바꾸세요.");
   const tease=text.match(SECRET_TEASE);
   if(tease)add(`'${tease[0]}'처럼 무엇이 궁금한지 말하지 않는 표지 말이에요. 독자가 믿던 것과 다른 사실 하나를 구체적으로 보여 주세요.`);
   // 단정형 표지는 본문이 답할 질문을 부제에 둔다(부제의 "이유 N가지"는 앱이 붙이므로 그 앞부분을 본다).

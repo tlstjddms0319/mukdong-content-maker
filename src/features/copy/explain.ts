@@ -151,4 +151,10 @@ export function coverSpoiler(cover:string,bodyHeadlines:readonly string[]):strin
   return [...new Set(cover.match(ANSWER_WORDS)??[])].find(word=>body.includes(word));
 }
 // "~의 비밀", "숨은 이유"처럼 무엇이 궁금한지 말하지 않는 표지 말(준비된 표지의 "한 장씩 넘기며 알아봐요"는 안내라 두고 본다).
-export const SECRET_TEASE=/비밀|숨은\s*이유|숨겨진|진짜\s*이유/;
+export const SECRET_TEASE=/비밀|숨은\s*이유|숨겨진|진짜\s*이유|속사정/;
+// 예/아니오로 끝나는 표지 질문("배다리와 지평은 맛이 같을까요?"): 답이 "아니요" 하나라 넘겨 볼 이유가 약하다(점검 9회, 후킹 2점).
+// "왜·어째서·어떻게·무엇" 같은 물음 말이 없고 "~ㄹ까(요)?"로 끝나면 본다. "~라고?"(오해 뒤집기)는 보지 않는다.
+export function yesNoCover(headline:string):boolean {
+  const text=headline.trim();
+  return /(?:까요?|나요|가요)\s*[?？]$/.test(text)&&!/왜|어째서|어떻게|어떤|무엇|뭐|무슨|누가|어디|언제|얼마나/.test(text);
+}

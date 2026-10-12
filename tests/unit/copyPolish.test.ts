@@ -138,3 +138,13 @@ describe("covers that give the answer away (seventh eval run)",()=>{
     expect(prompt).toContain("홍어는 썩혀 먹는 생선이다");
   });
 });
+
+describe("ninth eval run covers",()=>{
+  it("flags yes/no cover questions and '속사정' teases, but not myth flips or why-questions",()=>{
+    const problems=(headline:string)=>coverHookProblems({headline,subline:""},"photo").join(" ");
+    expect(problems("배다리와 지평은 맛이 같을까요?")).toContain("예/아니오");
+    expect(problems("과메기가 반쯤 말려야만 하는 진짜 속사정")).toContain("속사정");
+    expect(problems("신 묵은지는 상한 김치가 아니라고?")).not.toContain("예/아니오");
+    expect(problems("홍어회는 톡 쏘는데 홍어무침은 왜 덜 쏠까?")).toBe("");
+  });
+});
