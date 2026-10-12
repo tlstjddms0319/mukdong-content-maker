@@ -106,10 +106,10 @@ describe("track design families", () => {
     const areas:number[]=[];
     for(const [i,slide] of copies.normal.entries())areas.push((await render("photo-focus",slide,i+1,dark)).report.metrics.photoArea);
     expect(areas[0]).toBeGreaterThanOrEqual(.95);              // 표지: 화면 가득
-    for(const area of areas.slice(1,4))expect(area).toBeGreaterThanOrEqual(.5); // 본문: 액자형도 절반 넘게
-    expect(areas[4]).toBeGreaterThanOrEqual(.3);               // 마지막 장: 사진 + 가게 명함
+    for(const area of areas.slice(1,4))expect(area).toBeGreaterThanOrEqual(.65); // 본문: 액자형도 65% 넘게
+    expect(areas[4]).toBeGreaterThanOrEqual(.95);              // 마지막 장: 꽉 찬 사진 + 저장 알약
     expect([2,3,4,5].map(index=>photoFocusComposition(index,6))).toEqual(["framed","bleed","framed","bleed"]);
-    expect(photoFocusComposition(5,5)).toBe("framed");
+    expect(photoFocusComposition(5,5)).toBe("bleed");
     // 사진이 없는 장(예전 초안)도 깨지지 않고 그린다.
     const empty=await composeSlideCard([],{...copies.normal[2],layout:"browser"},3,5,"card",{palette:"warm",style:"photo-focus"});
     expect(empty.report.issues).toEqual([]);
