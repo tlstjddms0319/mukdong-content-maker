@@ -52,9 +52,18 @@ async function baseImage(original:Buffer):Promise<string> {
   return `data:image/jpeg;base64,${base.toString("base64")}`;
 }
 
+// 사장님이 올린 사진(photos)은 data URL만 받는다. 서버가 화면에서 온 주소를 내려받는 일이 없게 한다.
+function photoBytes(source:string):Buffer {
+  const data=source.match(/^data:image\/(?:png|jpeg|webp);base64,(.+)$/);
+  if(!data)throw new Error("photo must be a data URL");
+  return Buffer.from(data[1],"base64");
+}
+
+// 이미지 AI가 돌려준 결과: data URL이거나 제공자가 준 https 주소(OpenAI url)만 내려받는다.
 async function imageBytes(source:string):Promise<Buffer> {
   const data=source.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
   if(data)return Buffer.from(data[1],"base64");
+  if(!source.startsWith("https://"))throw new Error("image url must be https");
   const response=await fetch(source);
   if(!response.ok)throw new Error("image download failed");
   return Buffer.from(await response.arrayBuffer());
@@ -87,7 +96,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     }
     // 사장님이 올린 실제 사진으로 만드는 장: 이미지 AI 없이 그 사진들로 바로 카드를 그린다.
     if(parsed.data.slide&&parsed.data.photos?.length){
-      const originals=await Promise.all(parsed.data.photos.map(async(source,index)=>viewOf(await imageBytes(source),parsed.data.photoViews?.[index],parsed.data.panorama?null:parsed.data.photoBoxes?.[index])));
+      const originals=await Promise.all(parsed.data.photos.map(async(source,index)=>viewOf(photoBytes(source),parsed.data.photoViews?.[index],parsed.data.panorama?null:parsed.data.photoBoxes?.[index])));
       await prepareCutouts(originals);
       const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,parsed.data.slideLayout??"card",parsed.data.design,{...cardOptions,photoKind:parsed.data.photoKind??(parsed.data.enhance===false?"none":"real")});
       return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"photo",provider:"none",fallback:false,...dropped()});

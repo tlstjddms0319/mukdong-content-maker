@@ -31,8 +31,13 @@ export function recordLoginAttempt(key: string, accepted: boolean, now = Date.no
   return { blocked: false };
 }
 
-// 요청한 곳의 주소(Render는 x-forwarded-for 맨 앞에 실제 주소를 넣는다). 모르면 "unknown".
+// 요청한 곳의 주소. 모르면 "unknown".
+// Render 앞단의 Cloudflare가 넣는 cf-connecting-ip·true-client-ip를 먼저 쓴다(접속한 쪽이 보낸 값은 Cloudflare가 덮어쓴다).
+// x-forwarded-for는 Render가 접속한 쪽이 보낸 값 뒤에 덧붙이기만 해서, 맨 앞 값은 마음대로 바꿔 보낼 수 있다.
+// 예전에는 그 맨 앞 값으로 세어, 요청마다 주소를 바꿔 보내면 주소별 5번 한도를 피할 수 있었다(전체 100번 한도만 남음).
 export function clientAddress(headers: Pick<Headers, "get"> | undefined): string {
+  const edge = headers?.get("cf-connecting-ip")?.trim() || headers?.get("true-client-ip")?.trim();
+  if (edge) return edge;
   const forwarded = headers?.get("x-forwarded-for")?.split(",")[0]?.trim();
   return forwarded || headers?.get("x-real-ip")?.trim() || "unknown";
 }

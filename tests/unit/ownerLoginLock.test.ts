@@ -15,4 +15,9 @@ describe("owner login lockout", () => {
     expect(clientAddress(new Headers({ "x-forwarded-for": "203.0.113.9, 10.0.0.1" }))).toBe("203.0.113.9");
     expect(clientAddress(new Headers())).toBe("unknown");
   });
+  it("prefers the edge address over a forwarded address the client can fake", () => {
+    // 접속한 쪽이 x-forwarded-for 맨 앞을 바꿔 보내도 Cloudflare가 넣은 실제 주소로 센다.
+    expect(clientAddress(new Headers({ "cf-connecting-ip": "198.51.100.7", "x-forwarded-for": "1.2.3.4, 198.51.100.7" }))).toBe("198.51.100.7");
+    expect(clientAddress(new Headers({ "true-client-ip": "198.51.100.8", "x-forwarded-for": "1.2.3.4" }))).toBe("198.51.100.8");
+  });
 });
