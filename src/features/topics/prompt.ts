@@ -3,6 +3,7 @@ import { TopicInputSchema, TopicSuggestionSchema, type TopicInput } from "./sche
 import { topicAnglesForRound, topicFamiliesForRound } from "./service";
 import { seasonPromptText, type SeasonContext } from "./season";
 import { STORE_MENU, isHongeoHoe, menuPromptLines, menusForDate } from "@/features/store/menu";
+import { HOOK_RULE } from "@/features/copy/explain";
 
 // 홍어회·삼합이 아닌 메뉴 이름(메뉴 데이터에서 만든다. 손으로 적은 목록에 홍어찜이 빠져 있었다).
 const OTHER_MENUS=STORE_MENU.filter(item=>!isHongeoHoe(item)).map(item=>item.short).join(", ");
@@ -30,6 +31,7 @@ ${menuPromptLines()}
 - 제목에는 매장명을 쓰지 않습니다. 메뉴 추천, 할인, 방문 권유로 시작하지 마세요.
 
 좋은 질문의 조건
+- ${HOOK_RULE} 세 주제는 되도록 서로 다른 후킹 유형으로 쓰세요. 주제 목록의 제목은 물음표 질문으로 쓰고, 단정형 반전은 질문 안에 담으세요(예: "홍어는 썩은 게 아니라 삭은 거라고?").
 - 독자가 먹어 봤을 법한 구체적인 장면과 '왜 / 어떻게 / 무슨 차이 / 무엇이 달라질까'라는 설명할 거리가 함께 있어야 합니다.
 - 예시 제목은 위 갈래의 예시와 familyHints를 참고하되 그대로 쓰지 마세요(이미 준비된 주제라 새 추천이 되지 않습니다).
 - 나쁜 예: '오늘은 홍어 한 상 어때요?', '묵동 맛집 추천', '처음 먹는 홍어, 삼합부터', '모르면 손해 보는 충격적인 비밀'. 질문형 말투만 붙인 광고도 제외합니다.

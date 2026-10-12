@@ -1,4 +1,5 @@
 import { SAME_TOPIC_SIMILARITY, topicSimilarity } from "./topicSimilarity";
+import { HOOK_DARE, HOOK_HYPE } from "@/features/copy/explain";
 import { TopicInputSchema, TopicSuggestionSchema, TopicSuggestionsSchema, type TopicInput, type TopicSuggestion, type TopicSuggestionInput } from "./schema";
 import type { SeasonContext } from "./season";
 import { STORE_MENU, isHongeoHoe, mainMenuOf, menuOf, menusForDate, type StoreMenuItem } from "@/features/store/menu";
@@ -203,18 +204,21 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
 // 주제 한 개가 기본 조건을 못 지키는 이유(지키면 undefined).
 // - 제목 끝 물음표 뒤의 따옴표·괄호·공백은 봐준다(AI가 "…일까?" 처럼 따옴표로 감싸 보내곤 한다).
 // - 가게 메뉴는 제목과 설명을 함께 본다(제목에만 메뉴 이름을 쓴 주제를 버리지 않게).
-export type TopicRejectReason="question"|"store"|"summary"|"menu"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
+export type TopicRejectReason="question"|"hype"|"store"|"summary"|"menu"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
 export const TOPIC_REJECT_LABELS:Record<TopicRejectReason,string>={
-  question:"물음표 질문이 아니어서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
+  question:"물음표 질문이 아니어서",hype:"과장하거나 독자를 시험하는 말투라서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
   current:"지금 화면 주제와 같아서",recent:"최근에 보여 준 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",photo:"넣은 사진 속 메뉴가 아니어서",
 };
 function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason|undefined {
   if(!/[?？]["'”’」』)\]\s]*$/.test(topic.title.trim()))return "question";
+  // 후킹(HOOK_RULE): "충격·소름" 같은 과장이나 "알면 고수" 같은 도전형 말투는 낚시처럼 읽혀 버린다.
+  if(HOOK_HYPE.test(topic.title)||HOOK_DARE.test(topic.title))return "hype";
   if(topic.title.includes(storeName))return "store";
   if(topic.summary.trim().length<30)return "summary";
   if(!menuOf(`${topic.title} ${topic.summary}`).length)return "menu";
   return undefined;
 }
+export const topicBasicsProblem=basicsProblem;
 const meetsTopicBasics=(topic:TopicSuggestion,storeName:string)=>!basicsProblem(topic,storeName);
 // 세 주제가 메뉴를 고르게 다루는지: 하나 이상은 홍어회·삼합이 아닌 메뉴, 셋 다 같은 메뉴는 아님(순서와 상관없음).
 // 셋 다 같은 메뉴만 아니면 된다(사장님: 묵동홍어마을과 관련된 궁금증이면 뭐든 괜찮다). 예전에는 "홍어회·삼합이 아닌 메뉴 하나"를 꼭 넣게 해서 메뉴를 돌려 쓰는 쏠림이 더 심했다.

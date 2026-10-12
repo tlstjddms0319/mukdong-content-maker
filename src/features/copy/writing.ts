@@ -1,7 +1,7 @@
 import type { CopyInput, CopyPart, GeneratedCopy } from "./schema";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { STORE_MENU, josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
-import { EXPLAIN_REASONS_RULE } from "./explain";
+import { EXPLAIN_REASONS_RULE, HOOK_RULE } from "./explain";
 
 
 export const COPY_LENGTHS={short:[200,350],medium:[500,800],detailed:[900,1200]} as const;
@@ -88,7 +88,7 @@ ${EXPLAIN_REASONS_RULE}
 store_connection은 한 문장으로, 설명을 읽고 생긴 관심을 지역과 가게로 가볍게 잇기만 하세요. '정갈한 삼합 한 상을 준비하고 있습니다'처럼 실제 메뉴·서비스 제공을 주장하지 마세요. 안전한 연결 예: '이 조합이 궁금해졌다면, 묵동에서 ${josa(hero?.short??"홍어","을","를")} 알아볼 때 묵동홍어마을의 메뉴도 살펴보세요.' 예문은 그대로 반복하기보다 선택 주제에 맞게 바꾸세요. facts_to_verify에 적었다고 본문의 단정이 허용되는 것은 아닙니다.
 call_to_action은 '프로필의 네이버 플레이스에서 메뉴 확인' 또는 '전화로 방문·예약 가능 여부 문의' 중 문맥에 맞는 행동 하나만 제안하세요. 온라인 예약·주문이 가능하다고 단정하지 마세요.
 call_to_action도 자연스러운 해요체 한 문장으로 쓰세요. 예: '프로필의 네이버 플레이스에서 메뉴를 확인해 보세요.' 또는 '방문을 정하기 전에 전화로 예약 가능 여부를 확인해 보세요.' '문의 부탁드립니다'처럼 갑자기 공문체로 끝내지 마세요.
-hook_options는 hook을 대신할 수 있는 첫 문장 후보 3개입니다. 각각 다른 방식(질문형, 장면 묘사형, 비교형)으로, 40자 이내로 쓰세요. hook과 같은 문장은 넣지 마세요.
+${HOOK_RULE} hook은 카드 표지 제목과 다른 후킹 유형으로 쓰세요(표지가 질문이면 의외의 정체·공감 장면 등으로, 표지 문장을 그대로 되풀이하지 마세요). hook_options는 hook을 대신할 수 있는 첫 문장 후보 3개입니다. 오해 깨기·의외의 정체·공감 장면·대조 가운데 서로 다른 유형으로, 40자 이내로 쓰세요. hook과 같은 문장은 넣지 마세요.
 hashtags는 실제 본문 주제를 나타내는 서로 다른 관련 태그 3개(가게·지역 태그는 서버가 붙이니 쓰지 마세요). 본문이 해산물 탐색과 관련 있을 때만 해산물 태그를 쓰고 무관한 인기 키워드는 넣지 마세요. 인기 또는 실시간 순위라고 주장하지 마세요.`;
 }
 
