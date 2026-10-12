@@ -3,6 +3,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { readJsonResponse } from "@/lib/http/readJson";
+import { MoreInfo } from "@/components/states/Guide";
 
 export function PlanningControls({ draftId, topic, plannedPublishAt, finalReviewComplete, canReview }: { draftId:string; topic:string; plannedPublishAt?:string|null; finalReviewComplete?:boolean; canReview:boolean }) {
   const router=useRouter();
@@ -38,6 +39,6 @@ export function PlanningControls({ draftId, topic, plannedPublishAt, finalReview
     {!canReview&&<small>사진과 글을 먼저 만들어 주세요.</small>}
     {message&&<small role="status">{message}</small>}
     {error&&<small role="alert">{error}</small>}
-    <small>인스타그램을 연결하고 ‘최종 확인 완료’를 켜 두면 이 시각에 저절로 올라가요. 조금 늦어질 수 있고, 6시간 넘게 지나면 올리지 않아요. 멈추려면 ‘최종 확인 완료’를 끄고 저장하세요.</small>
+    <small>‘최종 확인 완료’를 켜 두면 이 시각에 저절로 올라가요. 멈추려면 끄고 저장해요.</small><MoreInfo><p>인스타그램이 연결돼 있어야 해요. 조금 늦어질 수 있고, 6시간 넘게 지나면 올리지 않아요.</p></MoreInfo>
   </form>;
 }

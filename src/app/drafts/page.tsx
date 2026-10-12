@@ -45,7 +45,7 @@ export default async function DraftsPage({searchParams}:{searchParams:Promise<{v
     <h1>내 게시물</h1>
     <StorageWarning/>
     <p className="lead">만든 게시물을 다시 열어 보고, 올리거나 고칠 수 있어요.</p>
-    <p className="field-help retention-note">{archiveView?"보관함에 넣은 게시물은 지워지지 않고 계속 남아요.":`만든 지 ${DRAFT_RETENTION_DAYS}일이 지나면 저절로 지워져요(예약이 걸려 있어도). 계속 남기려면 ‘더보기 → 보관함에 넣기’를 눌러 주세요.`}</p>
+    <p className="field-help retention-note">{archiveView?"보관함에 넣은 게시물은 지워지지 않고 계속 남아요.":`🗓 ${DRAFT_RETENTION_DAYS}일 지나면 저절로 지워져요 · 남기려면 ‘더보기 → 보관함에 넣기’`}</p>
     <nav className="drafts-tabs" aria-label="게시물 / 보관함"><a href="/drafts" aria-current={archiveView?undefined:"page"}>게시물 {all.length-archivedCount}</a><a href="/drafts?view=archive" aria-current={archiveView?"page":undefined}>보관함 {archivedCount}</a></nav>
     {drafts.length===0&&archiveView?<div className="state-card drafts-empty"><h2>보관함이 비어 있어요</h2><p>확인 화면에서 ‘보관함에 보관하기’를 누르면 여기에 모여요.</p></div>
     :drafts.length===0?<div className="state-card drafts-empty"><h2>아직 만든 게시물이 없어요</h2><p>‘만들기’에서 주제를 고르고 만들기를 누르면 여기에 저절로 모여요.</p><KeepRunningLink className="button primary big" href="/?new=1">새로 만들기</KeepRunningLink></div>

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatKstTime, isoToLocalInput, localInputToIso, quickScheduleChoices } from "@/features/instagram/scheduleChoices";
 import { readJsonResponse } from "@/lib/http/readJson";
+import { MoreInfo } from "@/components/states/Guide";
 
 // 확인 화면의 세 번째 큰 버튼 "예약해서 올리기".
 // 누르면 시각 고르기(오늘·내일 점심/저녁 버튼 + 직접 고르기)가 펼쳐지고, "이 시각에 예약하기"를 누르면
@@ -91,7 +92,7 @@ export function ScheduleShare({draftId,ready,busy=false,refreshKey="",onBeforeSc
   const cancel=()=>{if(window.confirm("예약을 취소할까요? 취소하면 저절로 올라가지 않아요."))void save(null);};
 
   if(reservedAt)return <div className="share-action">
-    <p role="status" className="share-done"><strong>{formatKstTime(reservedAt)}에 올라가요.</strong> 그때 인스타그램에 저절로 올라가요(서버가 쉬고 있으면 최대 1시간쯤 늦을 수 있어요). 글이나 사진을 고치면 예약이 풀려요.</p>
+    <p role="status" className="share-done"><strong>{formatKstTime(reservedAt)}에 올라가요.</strong> 글이나 사진을 고치면 예약이 풀려요.</p><MoreInfo><p>서버가 쉬고 있으면 최대 1시간쯤 늦게 올라갈 수 있어요.</p></MoreInfo>
     <button type="button" className="button secondary" disabled={mode==="saving"} onClick={cancel}>{mode==="saving"&&canceling?"취소하는 중…":"예약 취소"}</button>
     {error&&<p role="alert" className="field-help">{error}</p>}
   </div>;

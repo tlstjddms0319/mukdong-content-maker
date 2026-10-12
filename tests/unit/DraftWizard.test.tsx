@@ -106,7 +106,7 @@ describe("DraftWizard",()=>{
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);
     fireEvent.click(await screen.findByRole("button",{name:"다음"}));
     expect(screen.getByRole("heading",{name:"어떻게 만들까요?"})).toBeInTheDocument();
-    expect(screen.getByText(/AI가 모든 장\(내용에 맞춰 4~9장\)을 그려요/)).toBeInTheDocument();
+    expect(screen.getByText(/사진이 없으면 AI가 모든 장을 그려요/)).toBeInTheDocument();expect(screen.getByText(/10~15분/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:/글 중심/}));
     expect(screen.getByText(/AI가 표지 한 장만 그려요/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:/사진 중심/}));
@@ -301,7 +301,7 @@ describe("DraftWizard",()=>{
     expect(await screen.findByText(/사진을 다 만들지 못했어요. '다시 해 보기'를 눌러 주세요/,undefined,{timeout:5000})).toBeInTheDocument();
     expect(calls(request,"/api/drafts","POST")).toHaveLength(0);
     // 사진 없이 AI 그림이 멈췄을 때는 사장님이 할 수 있는 다른 길(가게 사진 올리기)도 한 줄로 알려 준다.
-    expect(screen.getByText(/가게 사진을 올린 뒤 눌러 보세요/)).toBeInTheDocument();
+    expect(screen.getByText(/가게 사진을 올리고 다시 눌러 보세요/)).toBeInTheDocument();
     failSlide3=false;
     const before=calls(request,"/api/images/generate").length;
     fireEvent.click(screen.getByRole("button",{name:"다시 해 보기"}));
@@ -351,7 +351,7 @@ describe("DraftWizard",()=>{
     fireEvent.click(screen.getByRole("button",{name:/글 중심/}));
     fireEvent.change(screen.getByLabelText("사진 파일"),{target:{files:[new File(["a"],"a.png",{type:"image/png"}),new File(["b"],"b.png",{type:"image/png"})]}});
     await waitFor(()=>expect(within(screen.getByRole("list",{name:"고른 사진"})).getAllByRole("listitem")).toHaveLength(2));
-    expect(screen.getByText(/올린 첫 사진이 표지가 되고/)).toBeInTheDocument();
+    expect(screen.getByText(/첫 사진이 표지, 나머지는 큰 글씨 장/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:"만들기"}));
     await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
     const generated=calls(request,"/api/images/generate");

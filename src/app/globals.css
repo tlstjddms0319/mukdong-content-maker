@@ -1085,3 +1085,6 @@ input[type="checkbox"], input[type="radio"] { accent-color:var(--accent); }
 
 /* 화살표가 다음 카드에 가리지 않게 앞 카드를 위에 둔다 */
 .step-guide li:nth-child(1) { z-index:5; } .step-guide li:nth-child(2) { z-index:4; } .step-guide li:nth-child(3) { z-index:3; } .step-guide li:nth-child(4) { z-index:2; }
+.time-chip { display:inline-flex; align-items:center; gap:4px; margin-right:6px; padding:3px 12px; border-radius:999px; background:var(--accent-soft); color:var(--accent-deep); font-weight:800; }
+/* 컴퓨터 메뉴판: '만드는 중' 표시가 위 '만들기' 칸에 겹치지 않게 간격을 둔다(예전 -4px 위 여백 때문에 겹쳤다). */
+@media (min-width:721px) { .side-nav .nav-badge { margin:6px 4px 8px; padding:6px 12px; } }

@@ -7,6 +7,7 @@ import { readJsonResponse } from "@/lib/http/readJson";
 import { shrinkPhoto } from "@/lib/files/shrinkPhoto";
 import { SKATE_REFERENCE_NAME, SKATE_REFERENCE_TAGS, isRawSkatePhoto } from "@/features/images/skatePhoto";
 import { LibraryFilterBar } from "./LibraryFilterBar";
+import { MoreInfo } from "@/components/states/Guide";
 
 // 사진 품질 배지(계획서 A11). 이름표는 서버와 같은 PHOTO_QUALITY_LABELS를 쓴다.
 const QUALITY_LABELS=PHOTO_QUALITY_LABELS;
@@ -98,7 +99,7 @@ function SkateReferenceUpload({assets,onAdded}:{assets:LibraryAsset[]|null;onAdd
   };
   return <section className="skate-reference-upload" aria-label="홍어회 참고 사진">
     <h3>홍어회 참고 사진</h3>
-    <p className="field-help">AI가 홍어회 장면을 그릴 때 이 사진의 색·썬 모양·담음새를 따라 그려요. 매장에서 직접 찍은 홍어회 사진(무침·애탕 말고)을 올려 주세요. 여러 장이면 장마다 돌려 써요.</p>
+    <p className="field-help">AI가 홍어회를 그릴 때 이 사진을 따라 그려요. 매장 홍어회 사진을 올려 주세요.</p><MoreInfo><p>사진의 색·썬 모양·담음새를 따라 그려요. 무침·애탕 말고 홍어회 사진이어야 해요. 여러 장이면 장마다 돌려 써요.</p></MoreInfo>
     <p className="skate-reference-count">{assets===null?"불러오는 중…":photos.length?`지금 ${photos.length}장`:"아직 없어요"}</p>
     {photos.length>0&&<ul className="skate-reference-thumbs" aria-label="올린 홍어회 참고 사진">{photos.slice(0,8).map(photo=><li key={photo.id}><Image src={photo.preview} alt={photo.name} width={72} height={72} unoptimized/></li>)}</ul>}
     <input ref={inputRef} aria-label="홍어회 사진 고르기" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={event=>{void upload([...(event.target.files??[])]);event.target.value="";}}/>
