@@ -16,6 +16,11 @@
 
 ## 2. Meta 개발자 앱 만들기
 
+> **지금 쓰는 앱(2026-10-12 사장님 확인):** Meta 개발자 대시보드의 **`mukdong`** 앱이다. Instagram 앱 ID는 `1089316360625829`(Render의 `INSTAGRAM_APP_ID`와 같음)이다. 같은 계정에 있는 `mukdong_1`, `Test` 앱은 쓰지 않는다.
+> - 반응 읽기 권한 `instagram_business_manage_insights`는 2026-10-12 이 앱에 추가했다.
+> - 아래 단계는 앱을 새로 만들 때의 안내다. 지금 앱을 고칠 때는 `mukdong` → 사용 사례 → Instagram API → API 설정(Instagram 로그인)에서 한다.
+> - 앱 목록·기본 설정에 보이는 "앱 ID"(Meta 앱 ID)는 이 번호와 다르니, `INSTAGRAM_APP_ID`에는 Instagram 쪽 번호를 쓴다.
+
 1. https://developers.facebook.com 에 Instagram 계정과 연결된 Facebook 계정으로 로그인 → **내 앱** → **앱 만들기**.
 2. 사용 사례에서 **Instagram**(Instagram API with Instagram Login)을 고릅니다. 앱 유형을 물으면 "비즈니스"를 고릅니다.
 3. 앱 대시보드 → 왼쪽 **Instagram** → **API 설정(Instagram 로그인)** 화면에서:
