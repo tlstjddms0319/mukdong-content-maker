@@ -7,6 +7,7 @@ import { BrandLogo } from "@/components/brand/BrandLogo";
 import { GenerationBadge } from "./GenerationBadge";
 import { NavIcon } from "./NavIcon";
 import { DisplayControls } from "./DisplayControls";
+import { NavPending } from "./NavPending";
 
 // 만들기 3단계(간소화 계획 B). 예전 "3 문안" 단계는 없어졌다: 글은 자동으로 쓰이고 3단계에서 고친다.
 // id "image"는 예전 이름 그대로 둔다(탭 세션·테스트가 쓰는 값). 화면에 보이는 이름만 "만들기"다.
@@ -46,7 +47,7 @@ export function WizardShell({ step, children, canVisit=[], onStepChange, onNewDr
     window.addEventListener("keydown",onKey);
     return ()=>window.removeEventListener("keydown",onKey);
   },[]);
-  const link=(item:{section:Section;href:string;label:string})=><Link key={item.href} className={section===item.section?"active":undefined} aria-current={section===item.section?"page":undefined} href={item.href} onClick={event=>{closeMore();if(item.section==="create"&&onCreateMenu){event.preventDefault();onCreateMenu();}}}><NavIcon name={item.section}/><span className="nav-label">{item.label}</span></Link>;
+  const link=(item:{section:Section;href:string;label:string})=><Link key={item.href} className={section===item.section?"active":undefined} aria-current={section===item.section?"page":undefined} href={item.href} onClick={event=>{closeMore();if(item.section==="create"&&onCreateMenu){event.preventDefault();onCreateMenu();}}}><NavIcon name={item.section}/><span className="nav-label">{item.label}</span><NavPending/></Link>;
   const inMore=MORE.some(item=>item.section===section);
   return (
     <div className="app-shell">
