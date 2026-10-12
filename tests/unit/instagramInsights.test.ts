@@ -37,6 +37,23 @@ function fakeStore(){
 const client=()=>({accountSnapshot:vi.fn().mockResolvedValue({followers:130,mediaCount:12}),dayInsights:vi.fn().mockResolvedValue({reach:10}),mediaInsights:vi.fn().mockResolvedValue({likes:5,comments:1,saves:2,shares:0,reach:80})});
 const noDrafts={listDraftSummaries:async()=>[],readDraft:async()=>null,saveDraft:vi.fn()};
 
+describe("인사이트 실패 처리",()=>{
+  it("지표별로 다시 물어도 하나도 안 되면 빈 기록 대신 오류를 낸다(권한 안내 포함)",async()=>{
+    const fetcher=vi.fn().mockResolvedValue(bad(400));
+    await expect(createInsightsClient(fetcher).dayInsights("ig1","t","2026-10-11")).rejects.toThrow(/다시 연결/);
+  });
+  it("게시물 인사이트가 비거나 실패하면 저장된 숫자를 0으로 덮지 않고, 다른 게시물은 계속한다",async()=>{
+    const {store}=fakeStore();const c=client();
+    c.mediaInsights.mockImplementation(async(id:string)=>{if(id==="gone")throw new Error("HTTP 400");if(id==="empty")return {};return {likes:3};});
+    const drafts={listDraftSummaries:async()=>[{id:"a"},{id:"b"},{id:"c"}] as never,readDraft:async(id:string)=>({id}) as never,saveDraft:vi.fn(async(v:unknown)=>v)};
+    const media:Record<string,string>={a:"gone",b:"empty",c:"ok"};
+    const result=await collectInstagram({connection:conn(),store,client:c,drafts,readPublication:async(id:string)=>({status:"published",mediaId:media[id],publishedAt:"2026-10-10T03:00:00.000Z"}) as never,today:"2026-10-12",filledThrough:"2026-10-11"});
+    expect(result.mediaUpdated).toBe(1);
+    expect(drafts.saveDraft).toHaveBeenCalledOnce();
+    expect(drafts.saveDraft.mock.calls[0][0]).toMatchObject({id:"c"});
+  });
+});
+
 describe("인스타그램 수집",()=>{
   it("예전 권한뿐이면 건너뛴다",async()=>{
     const {store}=fakeStore();

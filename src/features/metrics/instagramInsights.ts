@@ -11,7 +11,8 @@ const MEDIA_METRICS={likes:"likes",comments:"comments",saved:"saves",shares:"sha
 type MediaValues=Partial<Record<(typeof MEDIA_METRICS)[keyof typeof MEDIA_METRICS],number>>;
 const BACKFILL_DAYS=30;
 
-class InsightsHttpError extends Error{constructor(readonly status:number){super(`Instagram 인사이트 요청 실패(HTTP ${status})`);}}
+// 권한을 끄고 연결했거나 권한이 사라지면 Meta는 400·403을 준다. 그때는 다시 연결이 답이므로 함께 안내한다.
+class InsightsHttpError extends Error{constructor(readonly status:number){super(`Instagram 인사이트 요청 실패(HTTP ${status})${status===400||status===403?". 권한이 없으면 설정에서 인스타그램을 다시 연결해 주세요.":""}`);}}
 
 export function createInsightsClient(fetcher:typeof fetch=fetch,version=process.env.INSTAGRAM_API_VERSION??"v24.0"){
   async function get(pathname:string,params:Record<string,string>){
@@ -34,8 +35,10 @@ export function createInsightsClient(fetcher:typeof fetch=fetch,version=process.
     try{return read(await get(pathname,{...extra,metric:Object.keys(metrics).join(","),access_token:token}));}
     catch(error){
       if(!(error instanceof InsightsHttpError)||error.status!==400)throw error;
-      const parts=await Promise.all(Object.keys(metrics).map(metric=>get(pathname,{...extra,metric,access_token:token}).then(read).catch(()=>({}))));
-      return Object.assign({},...parts) as Partial<Record<M[keyof M],number>>;
+      const parts=await Promise.all(Object.keys(metrics).map(metric=>get(pathname,{...extra,metric,access_token:token}).then(read).catch(()=>null)));
+      // 하나도 안 되면(권한 없음·지운 게시물) 빈 기록을 성공처럼 남기지 않고 처음 오류를 그대로 알린다.
+      if(parts.every(part=>part===null))throw error;
+      return Object.assign({},...parts.filter(Boolean)) as Partial<Record<M[keyof M],number>>;
     }
   }
   return {
@@ -85,7 +88,9 @@ async function collectMedia(deps:CollectInstagramDeps,token:string){
     if(publication?.status!=="published"||!publication.mediaId||!publication.publishedAt)continue;
     const postedOn=kstDateOf(publication.publishedAt),age=diffDays(postedOn,deps.today);
     if(age<0||age>90||(age>7&&age%7!==0))continue;
-    const values=await deps.client.mediaInsights(publication.mediaId,token);
+    // 한 게시물이 실패해도(지운 게시물 등) 다른 게시물은 계속한다. 값이 비면 저장된 숫자를 0으로 덮지 않는다.
+    const values=await deps.client.mediaInsights(publication.mediaId,token).catch(()=>({} as MediaValues));
+    if(!Object.keys(values).length)continue;
     const saved=await lock(id,async()=>{
       const draft=await deps.drafts.readDraft(id);
       if(!draft||(draft.performance&&draft.performance.source!=="instagram"))return false;

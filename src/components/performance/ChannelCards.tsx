@@ -13,11 +13,11 @@ function Totals({rows}:{rows:[string,number|undefined][]}){
   return <table className="metric-table"><tbody>{rows.map(([label,value])=><tr key={label}><th scope="row">{label}</th><td>{fmt(value)}</td></tr>)}</tbody></table>;
 }
 
-export function InstagramCard({days,state,insights}:{days:InstagramDay[];state?:ChannelState;insights:boolean}){
+export function InstagramCard({days,state,insights,connected}:{days:InstagramDay[];state?:ChannelState;insights:boolean;connected:boolean}){
   const followers=days.filter(d=>d.followers!==undefined);
   return <section className="metric-card" aria-label="인스타그램">
     <h2>인스타그램</h2>
-    {!insights&&<p className="notice">설정에서 인스타그램을 다시 연결하면 팔로워·도달·조회를 자동으로 가져와요.</p>}
+    {!insights&&<p className="notice">{connected?"설정에서 인스타그램을 다시 연결하면 팔로워·도달·조회를 자동으로 가져와요.":"설정에서 인스타그램을 연결하면 팔로워·도달·조회를 자동으로 가져와요."}</p>}
     {followers.length>0&&<p className="metric-big">{`${fmt(followers[0].followers)} → ${fmt(followers.at(-1)!.followers)}명`}</p>}
     <LineChart label="팔로워" points={followers.map(d=>({x:d.date,y:d.followers!}))}/>
     <Totals rows={[["도달",sum(days,d=>d.reach)],["조회",sum(days,d=>d.views)],["반응한 계정",sum(days,d=>d.accountsEngaged)],["프로필 방문",sum(days,d=>d.profileViews)],["링크 클릭",sum(days,d=>d.websiteClicks)]]}/>

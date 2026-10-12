@@ -30,7 +30,7 @@ export default async function PerformancePage({searchParams}:{searchParams:Promi
     </nav>
     <p className="field-help">{from} ~ {to}</p>
     <div className="metric-grid">
-      <InstagramCard days={instagram} state={state.instagram} insights={!!pub.insights}/>
+      <InstagramCard days={instagram} state={state.instagram} insights={!!pub.insights} connected={pub.connected}/>
       <HomepageCard days={ga4} state={state.ga4} configured={!!getGa4Config()}/>
       <NaverCard periods={naver.filter(p=>p.end>=from&&p.start<=to)}/>
     </div>

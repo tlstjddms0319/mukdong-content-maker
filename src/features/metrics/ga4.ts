@@ -10,7 +10,9 @@ type Env=Partial<Record<"GA4_PROPERTY_ID"|"GA4_SERVICE_ACCOUNT_JSON"|"GA4_START_
 export function getGa4Config(env:Env=process.env as Env):Ga4Config|null{
   const raw=env.GA4_SERVICE_ACCOUNT_JSON?.trim();
   if(!raw)return null;
-  const parsed=JSON.parse(raw) as {client_email?:string;private_key?:string};
+  // 붙여 넣다 깨진 JSON이면 연결 안 된 것으로 본다. JSON.parse 오류 문구에는 키 일부가 실릴 수 있어 그대로 던지지 않는다.
+  let parsed:{client_email?:string;private_key?:string};
+  try{parsed=JSON.parse(raw);}catch{console.warn("[metrics] GA4_SERVICE_ACCOUNT_JSON을 읽지 못했어요. JSON 전체를 다시 붙여 넣어 주세요.");return null;}
   if(!parsed.client_email||!parsed.private_key)return null;
   return {propertyId:env.GA4_PROPERTY_ID?.trim()||"555483214",clientEmail:parsed.client_email,privateKey:parsed.private_key,startDate:env.GA4_START_DATE?.trim()||"2026-09-07"};
 }

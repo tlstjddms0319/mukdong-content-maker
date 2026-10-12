@@ -7,11 +7,16 @@ import { NAVER_SEED } from "@/features/metrics/naver";
 
 describe("성과 카드",()=>{
   it("인사이트 권한이 없으면 다시 연결 안내를 보인다",()=>{
-    render(<InstagramCard days={[]} state={undefined} insights={false}/>);
+    render(<InstagramCard days={[]} state={undefined} insights={false} connected/>);
     expect(screen.getByText(/다시 연결하면/)).toBeTruthy();
   });
+  it("연결한 적이 없으면 '다시'가 아니라 연결 안내를 보인다",()=>{
+    render(<InstagramCard days={[]} state={undefined} insights={false} connected={false}/>);
+    expect(screen.getByText(/설정에서 인스타그램을 연결하면/)).toBeTruthy();
+    expect(screen.queryByText(/다시 연결/)).toBeNull();
+  });
   it("팔로워는 처음과 마지막 값을, 기간 합계는 빈칸을 빼고 더한다",()=>{
-    render(<InstagramCard insights state={undefined} days={[{date:"2026-10-10",followers:100,reach:10,fetchedAt:"t"},{date:"2026-10-11",reach:5,fetchedAt:"t"},{date:"2026-10-12",followers:130,fetchedAt:"t"}]}/>);
+    render(<InstagramCard insights connected state={undefined} days={[{date:"2026-10-10",followers:100,reach:10,fetchedAt:"t"},{date:"2026-10-11",reach:5,fetchedAt:"t"},{date:"2026-10-12",followers:130,fetchedAt:"t"}]}/>);
     expect(screen.getByText("100 → 130명")).toBeTruthy();
     expect(within(screen.getByRole("row",{name:/도달/})).getByText("15")).toBeTruthy();
   });

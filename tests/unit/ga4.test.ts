@@ -15,6 +15,9 @@ describe("GA4",()=>{
     const env={GA4_SERVICE_ACCOUNT_JSON:JSON.stringify({client_email:config.clientEmail,private_key:pem})};
     expect(getGa4Config(env)).toMatchObject({propertyId:"555483214",clientEmail:config.clientEmail,startDate:"2026-09-07"});
   });
+  it("서비스 계정 JSON이 깨져 있으면 던지지 않고 null(키 내용을 오류에 싣지 않음)",()=>{
+    expect(getGa4Config({GA4_SERVICE_ACCOUNT_JSON:"{'client_email': broken"})).toBeNull();
+  });
   it("JWT를 RS256으로 서명하고 읽기 전용 범위를 요청한다",()=>{
     const jwt=signServiceJwt(config,1_000_000);
     const [h,c,s]=jwt.split(".");
