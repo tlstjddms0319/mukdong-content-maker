@@ -175,6 +175,8 @@ export function showsRawSkate(input:ImageBrief):boolean {
 const PROPS_DIRECTIVE="Props, if any, are Korean: brass yugi bowls, onggi or ttukbaegi earthenware, a dented yangeun kettle, a makgeolli sabal bowl. No Japanese props: no sushi geta board, wasabi, pickled ginger, chopstick rests or sake set.";
 
 const NO_TEXT_DIRECTIVE="Absolutely no text in the image: no letters, words, Korean or English characters, numbers, captions, speech bubbles, question marks, signs or logos. Food and background only.";
+// 디자인 힌트가 비워 두라는 자리에 이미지 AI가 엉터리 한글 제목을 그려 넣었다(사장님 지적 2026-10-12, "우춘향희 사딩월."). 맨 앞에 한 번만 붙인다.
+const EMPTY_AREAS_PLAIN="Leave empty areas plain (table, wall or blur); never fill them with lettering, titles or fake writing.";
 
 // 표지가 두 음식을 견주면("치즈는 익숙한데 다른 발효 음식은 왜 낯설까?") 표지 그림에 두 음식을 나란히 둔다.
 // 예전에는 모든 장면의 주인공을 주제 메뉴(홍어)로 못 박아, 표지 질문의 '치즈'가 그림에 없었다(사장님 지적 2026-10-10).
@@ -195,6 +197,7 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
   return [
     // 작은 이미지 모델은 질문형 주제를 그대로 글씨로 그리기 쉬워서, 글자 금지를 영어로 맨 앞과 맨 끝에 둔다.
     NO_TEXT_DIRECTIVE,
+    EMPTY_AREAS_PLAIN,
     `한국 음식점 인스타그램 게시물용 ${style.medium}. 선택 주제(장면의 소재일 뿐, 이미지에 글자로 쓰지 말 것): ${input.topic}.`,
     input.imageBrief ? `기존 이미지 설명: ${input.imageBrief}.` : "",
     retouch ? "" : sceneMustShow(input),
@@ -207,7 +210,7 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     style.look,
     // 장면 설명이나 공통 스타일에 "사진"이 남아 있어도 화풍 지시가 이기도록 한 번 더 못 박는다.
     styleId==="photo" ? "" : `화풍: ${style.anchor}. 장면 설명이나 공통 스타일에 '사진'이라는 말이 있어도 사진처럼 만들지 말고 이 화풍으로 그릴 것.`,
-    input.slide?.role==="detail"?"Macro detail: emphasize the actual texture of one bite with a gently blurred background. Keep the focal food clear of the title area; the plate may extend beyond the frame.":input.slide?.role==="overview"?"Top-down overview: keep the whole plate inside the central 75% crop-safe area, with sufficient depth of field to read the arrangement.":"Keep the main food inside the central 75% crop-safe area; use depth of field appropriate to this scene, without losing the food's recognizable shape.",
+    input.slide?.role==="detail"?"Macro detail: emphasize the actual texture of one bite with a gently blurred background. Keep the focal food in the upper two thirds of the frame; the plate may extend beyond the frame.":input.slide?.role==="overview"?"Top-down overview: keep the whole plate inside the central 75% crop-safe area, with sufficient depth of field to read the arrangement.":"Keep the main food inside the central 75% crop-safe area; use depth of field appropriate to this scene, without losing the food's recognizable shape.",
     input.variant&&!retouch ? `이 후보만의 구도: ${input.variant}.` : "",
     // 카드의 사진 칸 비율에 맞춘 구도(가로 칸이면 접시 전체가 가장자리에서 잘리지 않게). 칸 비율을 모르면 넣지 않는다.
     framingDirection(input.windowRatio,input.slide?.role==="detail"),

@@ -37,7 +37,7 @@ export type CardLayout=z.infer<typeof CardLayoutSchema>;
 
 export const CARD_LAYOUTS:Record<CardLayout,{label:string;when:string;photoCount:number;coverAllowed:boolean;photoHint:string}>={
   fullscreen:{label:"감성 풀스크린",when:"표지, 분위기 장, 한 문장으로 마음을 건드리는 장. 사진이 화면을 꽉 채우고 아래 가운데에 큰 흰 제목",photoCount:1,coverAllowed:true,
-    photoHint:"Full-screen lifestyle photo: warm tone, soft sunlight, a touch of analog film grain. Keep the bottom 45% of the frame calm and uncluttered for a title."},
+    photoHint:"Full-screen lifestyle photo: warm tone, soft sunlight, a touch of analog film grain. Keep the bottom 45% of the frame calm and uncluttered: plain table surface only."},
   frame:{label:"대조 프레임",when:"문제 제기, 비교, 반전 메시지. 흐린 배경 가운데 얇은 흰 테두리 프레임에 선명한 장면",photoCount:1,coverAllowed:true,
     photoHint:"One clear, calm subject centered in the frame with simple edges; the center must read well even when the surroundings are blurred."},
   illustration:{label:"일러스트 설명",when:"어려운 정보를 친근하게 풀어 주는 장. 파스텔 배경 위 기울어진 흰 카드, 일러스트, 노란 말풍선",photoCount:1,coverAllowed:false,
@@ -55,7 +55,7 @@ export const CARD_LAYOUTS:Record<CardLayout,{label:string;when:string;photoCount
   qa:{label:"Q&A 말풍선",when:"자주 묻는 질문, 고민 상담처럼 질문과 답이 한 쌍인 장. headline이 질문, 첫 요점이 답, 마지막 요점이 팁. 사진 없음",photoCount:0,coverAllowed:false,
     photoHint:""},
   quote:{label:"인용구",when:"한 문장이 기억에 남게 하는 장, 분위기 장, 표지. 톤을 낮춘 사진 위에 큰 따옴표와 흰 인용구, 아래 출처 줄",photoCount:1,coverAllowed:true,
-    photoHint:"Moody editorial photo with muted tones and side light; a back view or hands only, no recognizable face; keep the center-left area calm for text."},
+    photoHint:"Moody editorial photo with muted tones and side light; a back view or hands only, no recognizable face; keep the center-left area calm: plain background only."},
   magazine:{label:"잡지 편집형",when:"메뉴·재료를 차분히 소개하는 장, 표지. 위쪽 큰 사진 아래 작은 머리글, 큰 제목, 가는 선과 본문",photoCount:1,coverAllowed:true,
     photoHint:"Editorial magazine food photo, wide composition, the dish in the upper-middle; the bottom edge of the frame can be cropped."},
   split:{label:"반반 분할",when:"사진과 설명을 나란히 보여 주는 장, 표지. 화면 반쪽은 세로 사진, 반쪽은 제목과 요점",photoCount:1,coverAllowed:true,
