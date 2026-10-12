@@ -16,6 +16,9 @@ export const AppSettingsSchema = z.object({
   remoteCutout: z.boolean().default(false),
   // 원격 누끼 월 예산(크레딧). 이번 달 사용량이 이 값에 닿으면 부르지 않고 로컬 누끼로 그린다.
   remoteCutoutMonthlyCredits: z.number().int().min(0).max(200).default(20),
+  // 가게 이야기 메모: 사장님이 직접 적은 가게 사실(예: "홍어는 매일 아침 직접 손질해요"). AI가 이유의 근거로 쓸 수 있고,
+  // 사실 검사도 메모에 있는 말은 확인된 사실로 본다(store/storeNotes.ts). 예전 설정에는 없으므로 빈 값으로 읽는다.
+  storeNotes: z.string().max(1500, "가게 이야기 메모는 1,500자까지 쓸 수 있어요.").default(""),
   aiModelMode: z.enum(["automatic", "manual"]),
   preserveOriginals: z.boolean(),
   blockUnverifiedClaims: z.boolean(),

@@ -39,7 +39,9 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     const settings=await readSettings().catch((error)=>{console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:",error instanceof Error?error.message:String(error));return null;});
     const copyLength=settings?.copyLength??DEFAULT_SETTINGS.copyLength;
     const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
-    const prompt=buildCopyPrompt(input.data,copyLength);
+    // 가게 이야기 메모(설정): 확인된 가게 사실로 쓰고, 사실 검사도 메모에 있는 말은 통과시킨다(store/storeNotes.ts).
+    const storeNotes=settings?.storeNotes??"";
+    const prompt=buildCopyPrompt(input.data,copyLength,{storeNotes});
     if(input.data.focus){
       if(!input.data.currentText?.trim())return NextResponse.json({message:"먼저 글을 써 주세요."},{status:400});
       const context=prompt+"\n현재 문안(내용 참고용): "+JSON.stringify(input.data.currentText)+"\n"+input.data.focus+" 부분만 새롭게 작성하세요. 부분 수정에는 전체 본문 길이 기준을 적용하지 않습니다. 다른 부분은 출력하지 마세요.";
@@ -54,7 +56,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
       const result=await client.generateJson(context+(hook?' JSON 필드는 replacement(문자열)만 반환하세요. 첫 문장은 한 문장, 공백 포함 60자 이내로 쓰세요.':' JSON 필드는 replacement(문자열)만 반환하세요. 이 부분은 1~3문장, 최대 250자로 쓰세요.'),z.object({replacement:z.string().trim().min(1).max(hook?80:250)}));
       if(hook&&result.replacement.length>60)result.replacement=result.replacement.split(/(?<=[.!?])\s+/)[0].slice(0,60).trim();
       // 부분 수정도 꼭 막아야 하는 문제(확인 안 된 단정·매장 제공 주장)만 거절하고, 말투·상투어는 화면의 "문안 다듬기"에 맡긴다.
-      const blocked=checkTextClaims(result.replacement).blocked;
+      const blocked=checkTextClaims(result.replacement,{storeNotes}).blocked;
       if(blocked.length)throw new CopyQualityError(blocked);
       if(input.data.focus==="store_connection"&&storeConnectionIssues(result.replacement).length)throw new CopyQualityError(storeConnectionIssues(result.replacement));
       return NextResponse.json({...result,_meta:{provider:client.provider??"unknown"}});
@@ -78,7 +80,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
       copy.hashtags=mixHashtags(copy.hashtags);
       copy.hook_options=cleanHookOptions(copy.hook_options??[],copy.hook);
       copy.image_disclosure=input.data.hasAiImages?AI_IMAGE_DISCLOSURE:null;
-      const issues=generatedCopyIssues(copy,copyLength),hard=hardCopyIssues(copy);
+      const issues=generatedCopyIssues(copy,copyLength,storeNotes),hard=hardCopyIssues(copy,storeNotes);
       const soft=issues.filter(issue=>!hard.includes(issue));
       if(!best||hard.length<best.hard.length||(hard.length===best.hard.length&&soft.length<best.soft.length))best={copy,hard,soft,attempt};
       if(!issues.length)break;
@@ -86,7 +88,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     }
     if(!best||best.hard.length)throw new CopyQualityError(best?.hard??["no draft"]);
     const {copy}=best;
-    const claims=checkTextClaims([copy.hook,copy.information,copy.store_connection,copy.call_to_action].join("\n"));
+    const claims=checkTextClaims([copy.hook,copy.information,copy.store_connection,copy.call_to_action].join("\n"),{storeNotes});
     copy.facts_to_verify=[...new Set([...copy.facts_to_verify,...claims.verify])];
     if(best.soft.length)console.info(`[copy] 다듬을 곳이 남은 문안을 썼어요: ${best.soft.join(" / ").slice(0,300)}`);
     return NextResponse.json({...copy,...(best.soft.length?{quality_warnings:best.soft}:{}),_meta:{provider:client.provider??"unknown",qualityRepaired:best.attempt===1,...(repairFailed?{repairFailed:true}:{})}});
