@@ -30,6 +30,15 @@ describe("성과 저장소",()=>{
     await store.saveNaver([NAVER_SEED[1]]);
     expect((await store.readNaver()).map(p=>p.id)).toEqual(["2026-09"]);
   });
+  it("게시물 목록은 통째로 바꿔 저장하고 최신순으로 읽는다",async()=>{
+    const store=createMetricsStore(root);
+    expect(await store.readPosts()).toEqual([]);
+    await store.savePosts([
+      {id:"1",timestamp:"2026-10-01T03:00:00+0000",permalink:"https://instagram.com/p/1",type:"IMAGE",likes:3,fetchedAt:"t"},
+      {id:"2",timestamp:"2026-10-10T03:00:00+0000",permalink:"https://instagram.com/p/2",type:"CAROUSEL_ALBUM",likes:9,views:120,fetchedAt:"t"},
+    ]);
+    expect((await store.readPosts()).map(p=>p.id)).toEqual(["2","1"]);
+  });
   it("수집 상태를 저장하고 읽는다",async()=>{
     const store=createMetricsStore(root);
     expect(await store.readState()).toEqual({});

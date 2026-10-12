@@ -1,13 +1,20 @@
 import { dailyAverage,monthEquivalent,youngShare,type NaverPeriod } from "./naver";
-import type { Ga4Day,InstagramDay } from "./store";
+import type { Ga4Day,InstagramDay,InstagramPost } from "./store";
+import { kstDateOf } from "./dates";
 
 const IG_LABELS:Record<string,string>={followers:"팔로워",mediaCount:"게시물 수",reach:"도달",views:"조회",accountsEngaged:"반응한 계정",totalInteractions:"전체 반응",profileViews:"프로필 방문",websiteClicks:"링크 클릭"};
 const GA_LABELS:Record<string,string>={activeUsers:"방문자",sessions:"방문",pageViews:"페이지 조회",phoneClicks:"전화 버튼",directionsClicks:"길찾기 버튼"};
 const cell=(value:string|number)=>{const text=String(value);return /[",\n]/.test(text)?`"${text.replaceAll('"','""')}"`:text;};
 
-export function toCsv({instagram,ga4,naver}:{instagram:InstagramDay[];ga4:Ga4Day[];naver:NaverPeriod[]}){
+const POST_LABELS:Record<string,string>={views:"조회",reach:"도달",likes:"좋아요",comments:"댓글",saves:"저장",shares:"공유"};
+export function toCsv({instagram,ga4,naver,posts=[]}:{instagram:InstagramDay[];ga4:Ga4Day[];naver:NaverPeriod[];posts?:InstagramPost[]}){
   const rows:(string|number)[][]=[["채널","기간","지표","값"]];
   for(const d of instagram)for(const [key,label] of Object.entries(IG_LABELS)){const v=d[key as keyof InstagramDay];if(typeof v==="number")rows.push(["인스타그램",d.date,label,v]);}
+  // 게시물 줄: 기간 칸에 "올린 날 글 첫 줄"을 둔다(열 수는 그대로, 엑셀에서 게시물별로 거르기 쉽게).
+  for(const p of posts){
+    const title=(p.caption?.split(/\r?\n/)[0]??"").slice(0,40)||p.permalink;
+    for(const [key,label] of Object.entries(POST_LABELS)){const v=p[key as keyof InstagramPost];if(typeof v==="number")rows.push(["인스타그램 게시물",`${kstDateOf(p.timestamp)} ${title}`,label,v]);}
+  }
   for(const d of ga4){
     for(const [key,label] of Object.entries(GA_LABELS)){const v=d[key as keyof Ga4Day];if(typeof v==="number")rows.push(["홈페이지",d.date,label,v]);}
     for(const s of d.sources)rows.push(["홈페이지",d.date,`유입:${s.sourceMedium}`,s.sessions]);

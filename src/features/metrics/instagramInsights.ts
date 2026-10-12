@@ -2,7 +2,7 @@ import type { InstagramConnection,Publication } from "@/features/instagram/schem
 import type { Draft } from "@/features/drafts/schema";
 import type { Performance } from "@/features/drafts/performance";
 import { addDays,dateRange,diffDays,kstDateOf,kstStartSeconds } from "./dates";
-import type { InstagramDay,MetricsStore } from "./store";
+import type { InstagramDay,InstagramPost,MetricsStore } from "./store";
 
 export const INSIGHTS_SCOPE="instagram_business_manage_insights";
 // impressions는 없어진 지표라 묻지 않는다. profile_views는 문서마다 지원 여부가 달라, 실패하면 그 칸만 비운다.
@@ -41,7 +41,19 @@ export function createInsightsClient(fetcher:typeof fetch=fetch,version=process.
       return Object.assign({},...parts.filter(Boolean)) as Partial<Record<M[keyof M],number>>;
     }
   }
+  const num=(value:unknown)=>typeof value==="number"?value:undefined;
   return {
+    // 계정의 최근 게시물(최대 50개). 좋아요·댓글은 목록에 들어 있고, 조회·도달·저장·공유는 게시물 인사이트로 따로 묻는다.
+    async listMedia(userId:string,token:string):Promise<Omit<InstagramPost,"fetchedAt">[]>{
+      const body=await get(`${userId}/media`,{fields:"id,caption,media_type,media_product_type,timestamp,permalink,media_url,thumbnail_url,like_count,comments_count",limit:"50",access_token:token});
+      return (Array.isArray(body.data)?body.data:[]).map((item:Record<string,unknown>)=>{
+        const type=item.media_type==="VIDEO"||item.media_type==="CAROUSEL_ALBUM"?item.media_type:"IMAGE";
+        const thumbnail=type==="VIDEO"?item.thumbnail_url:item.media_url??item.thumbnail_url;
+        return {id:String(item.id),...(typeof item.caption==="string"?{caption:item.caption}:{}),type,...(typeof item.media_product_type==="string"?{product:item.media_product_type}:{}),
+          timestamp:String(item.timestamp),permalink:String(item.permalink),...(typeof thumbnail==="string"?{thumbnail}:{}),
+          ...(num(item.like_count)!==undefined?{likes:num(item.like_count)}:{}),...(num(item.comments_count)!==undefined?{comments:num(item.comments_count)}:{})};
+      });
+    },
     async accountSnapshot(userId:string,token:string){
       const body=await get(userId,{fields:"followers_count,media_count",access_token:token});
       return {followers:typeof body.followers_count==="number"?body.followers_count:undefined,mediaCount:typeof body.media_count==="number"?body.media_count:undefined};
@@ -56,7 +68,7 @@ export type InsightsClient=ReturnType<typeof createInsightsClient>;
 
 type DraftAccess={listDraftSummaries:()=>Promise<{id:string}[]>;readDraft:(id:string)=>Promise<Draft|null>;saveDraft:(value:Draft,options?:{thumbnail?:boolean})=>Promise<unknown>};
 export type CollectInstagramDeps={
-  connection:InstagramConnection|null;store:Pick<MetricsStore,"saveDays">;client:InsightsClient;
+  connection:InstagramConnection|null;store:Pick<MetricsStore,"saveDays">&Partial<Pick<MetricsStore,"savePosts">>;client:Pick<InsightsClient,"accountSnapshot"|"dayInsights"|"mediaInsights">&Partial<Pick<InsightsClient,"listMedia">>;
   drafts:DraftAccess;readPublication:(draftId:string)=>Promise<Publication|null>;
   today:string;filledThrough:string|undefined;now?:()=>Date;
   withLock?:<T>(id:string,work:()=>Promise<T>)=>Promise<T>;
@@ -75,12 +87,30 @@ export async function collectInstagram(deps:CollectInstagramDeps){
   const from=deps.filledThrough?[addDays(deps.filledThrough,-1),earliest].sort().at(-1)!:earliest;
   const days=from<=yesterday?dateRange(from,yesterday):[];
   for(const date of days)await deps.store.saveDays("instagram",[{date,...await deps.client.dayInsights(id,token,date)}]);
-  const mediaUpdated=await collectMedia(deps,token);
-  return {daysFilled:days.length,mediaUpdated,filledThrough:days.length?yesterday:deps.filledThrough};
+  const {count:posts,insights}=await collectPosts(deps,id,token);
+  const mediaUpdated=await collectMedia(deps,token,insights);
+  return {daysFilled:days.length,mediaUpdated,posts,filledThrough:days.length?yesterday:deps.filledThrough};
 }
 
 // 앱으로 올린 게시물: 올린 뒤 7일은 날마다, 90일까지는 7일마다. 직접 적은 성과는 그대로 둔다.
-async function collectMedia(deps:CollectInstagramDeps,token:string){
+// 계정의 모든 게시물(최근 50개)의 최신 숫자. 한 게시물의 인사이트가 실패해도 목록의 좋아요·댓글은 남긴다.
+async function collectPosts(deps:CollectInstagramDeps,userId:string,token:string){
+  const insights=new Map<string,MediaValues>();
+  if(!deps.client.listMedia||!deps.store.savePosts)return {count:0,insights};
+  const list=await deps.client.listMedia(userId,token);
+  const fetchedAt=new Date().toISOString();
+  const posts:InstagramPost[]=[];
+  for(const post of list){
+    const values=await deps.client.mediaInsights(post.id,token).catch(()=>({} as MediaValues));
+    if(Object.keys(values).length)insights.set(post.id,values);
+    const defined=Object.fromEntries(Object.entries(values).filter(([,v])=>v!==undefined));
+    posts.push({...post,...defined,fetchedAt});
+  }
+  await deps.store.savePosts(posts);
+  return {count:posts.length,insights};
+}
+
+async function collectMedia(deps:CollectInstagramDeps,token:string,known=new Map<string,MediaValues>()){
   let updated=0;
   const lock=deps.withLock??(async(_id,work)=>work());
   for(const {id} of await deps.drafts.listDraftSummaries()){
@@ -89,7 +119,7 @@ async function collectMedia(deps:CollectInstagramDeps,token:string){
     const postedOn=kstDateOf(publication.publishedAt),age=diffDays(postedOn,deps.today);
     if(age<0||age>90||(age>7&&age%7!==0))continue;
     // 한 게시물이 실패해도(지운 게시물 등) 다른 게시물은 계속한다. 값이 비면 저장된 숫자를 0으로 덮지 않는다.
-    const values=await deps.client.mediaInsights(publication.mediaId,token).catch(()=>({} as MediaValues));
+    const values=known.get(publication.mediaId)??await deps.client.mediaInsights(publication.mediaId,token).catch(()=>({} as MediaValues));
     if(!Object.keys(values).length)continue;
     const saved=await lock(id,async()=>{
       const draft=await deps.drafts.readDraft(id);

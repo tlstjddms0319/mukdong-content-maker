@@ -39,4 +39,9 @@ describe("CSV",()=>{
     expect(lines).toContain("네이버 플레이스,2026-08-25~2026-08-31,한 달 환산 유입,385");
     expect(csv).not.toMatch(/token|fetchedAt/i);
   });
+  it("게시물별 숫자를 게시물 줄로 쓴다",()=>{
+    const csv=toCsv({instagram:[],ga4:[],naver:[],posts:[{id:"m1",timestamp:"2026-10-10T03:00:00+0000",permalink:"https://www.instagram.com/p/x/",type:"IMAGE",caption:["홍어, 한 점","두 번째 줄"].join("\n"),likes:12,views:640,fetchedAt:"t"}]});
+    expect(csv).toContain("인스타그램 게시물,\"2026-10-10 홍어, 한 점\",좋아요,12");
+    expect(csv).toContain("인스타그램 게시물,\"2026-10-10 홍어, 한 점\",조회,640");
+  });
 });
