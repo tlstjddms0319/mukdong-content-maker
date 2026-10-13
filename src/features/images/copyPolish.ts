@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { CarouselPlan } from "./carousel";
 import { TRACK_COPY, type CarouselTrack } from "./track";
-import { coverHookProblems } from "./planReview";
+import { SAYS_SHARED, coverHookProblems } from "./planReview";
+import { comparisonPairRule } from "@/features/store/principles";
 import { HOOK_RULE, comparedKeys, comparedPair } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 import { coverMythRule } from "@/features/store/principles";
@@ -115,9 +116,62 @@ JSON으로만 답하세요: {"items":[{"slide":후보 번호,"headline":"줄인 
   return pick(retried)??{plan,changed:false};
 }
 
-export async function polishPlan(plan:CarouselPlan,track:CarouselTrack,ai:PolishAi,topic=""):Promise<{plan:CarouselPlan;coverChanged:boolean;hookType?:string;shortened:number}> {
-  let current=plan,coverChanged=false,hookType:string|undefined,shortened=0;
+// 비교 게시물의 한쪽만 말하는 장 다시 쓰기(사장님 지적 2026-10-13: "지평과 배다리 막걸리는 어떤 점이 다를까요?"인데 본문이 지평 이야기만).
+// 검수(planReview)가 두 번 지적해도 AI가 못 고치고 넘어온 장만 모아, 그 장의 제목·짧은 글을 "A는 ~, B는 ~"로 다시 쓰게 한다.
+// 두 이름이 모두 들어가고 길이가 맞는 답만 받는다.
+const PairFixSchema=z.object({items:z.array(z.object({slide:z.number().int(),headline:z.string(),points:z.array(z.string()).max(4)})).max(12)});
+export function oneSidedSlides(plan:CarouselPlan,topic=""):{pair:{first:string;second:string};keys:[string,string];slides:number[]}|null {
+  const pair=comparedPair(plan.slides[0]?.headline??"")??comparedPair(topic);
+  if(!pair||/^다른/.test(pair.second))return null;
+  const keys=comparedKeys(pair);
+  const compact=(text:string)=>text.replace(/\s+/g,"");
+  const last=plan.slides.length-1;
+  const slides=plan.slides.flatMap((slide,i)=>{
+    if(i===0||i>last)return [];
+    const text=compact([slide.headline,...slide.points].join(" "));
+    const both=text.includes(keys[0])&&text.includes(keys[1]);
+    if(both)return [];
+    // 이유 장은 "둘 다 ~"라고 밝힌 공통점이면 봐준다. 결론 장은 두 이름이 꼭 있어야 한다.
+    if(i<last&&SAYS_SHARED.test(slide.headline))return [];
+    return [i+1];
+  });
+  return slides.length?{pair,keys,slides}:null;
+}
+
+export async function fixComparisonSlides(plan:CarouselPlan,track:CarouselTrack,ai:PolishAi,topic=""):Promise<{plan:CarouselPlan;fixed:number}> {
+  const found=oneSidedSlides(plan,topic);
+  if(!found)return {plan,fixed:0};
+  const rule=TRACK_COPY[track],last=plan.slides.length;
+  const [a,b]=found.keys;
+  const lines=found.slides.map(n=>{const slide=plan.slides[n-1];return `- ${n}장${n===last?"(결론)":""}: 제목 "${slide.headline}"${slide.points.length?` / 짧은 글 ${JSON.stringify(slide.points)}`:""}`;}).join("\n");
+  const grounds=comparisonPairRule(topic,plan.slides[0]?.headline);
+  const prompt=`Instagram 카드뉴스가 '${found.pair.first}'와 '${found.pair.second}'를 견주는데, 아래 장들은 한쪽 이야기만 합니다. 각 장을 한 장 안에서 양쪽을 함께 말하게 다시 쓰세요.
+- 제목: "${a}는 ~, ${b}는 ~"처럼 같은 기준에서 양쪽이 각각 어떤지 한 문장(띄어쓰기 포함 ${rule.headline}자 이내, 해요체). 두 이름(${a}·${b})을 반드시 넣으세요.
+- 짧은 글: ${track==="photo"?"1개":"1~2개"}, 각 ${rule.point}자 이내. 제목을 뒷받침하는 원인·근거나 눈·입으로 확인하는 방법 하나.
+- 결론 장이면 가장 큰 차이 하나를 두 이름과 함께 한 문장으로.
+- 확실히 알려진 차이만 쓰고, 상표·양조장의 원료 배합·누룩·발효 기간 같은 제조 정보는 지어내지 마세요. 모르면 마셔 보거나 보면 확인되는 차이(단맛·산미·탄산·색·목넘김)로 쓰세요.${grounds?`\n${grounds}`:""}
+${lines}
+JSON으로만 답하세요: {"items":[{"slide":장 번호,"headline":"제목","points":["짧은 글"]}]}`;
+  const result=PairFixSchema.parse(await ai.generate(prompt,PairFixSchema));
+  const compact=(text:string)=>text.replace(/\s+/g,"");
+  let fixed=0;
+  const slides=plan.slides.map((slide,i)=>{
+    if(!found.slides.includes(i+1))return slide;
+    const item=result.items.find(entry=>entry.slide===i+1);
+    if(!item)return slide;
+    const headline=item.headline.trim(),points=item.points.map(point=>point.trim()).filter(Boolean).slice(0,rule.points);
+    const text=compact([headline,...points].join(" "));
+    if(!headline||headline.length>rule.headline||!text.includes(a)||!text.includes(b)||points.some(point=>point.length>rule.point))return slide;
+    fixed++;
+    return {...slide,headline,points};
+  });
+  return {plan:{...plan,slides},fixed};
+}
+
+export async function polishPlan(plan:CarouselPlan,track:CarouselTrack,ai:PolishAi,topic=""):Promise<{plan:CarouselPlan;coverChanged:boolean;hookType?:string;shortened:number;pairFixed:number}> {
+  let current=plan,coverChanged=false,hookType:string|undefined,shortened=0,pairFixed=0;
   try{const cover=await rewriteCover(current,track,ai,topic);current=cover.plan;coverChanged=cover.changed;hookType=cover.hookType;}catch{/* 표지는 그대로 */}
+  try{const pairs=await fixComparisonSlides(current,track,ai,topic);current=pairs.plan;pairFixed=pairs.fixed;}catch{/* 한쪽만 말하는 장은 그대로 */}
   try{const fitted=await shortenHeadlines(current,track,ai);current=fitted.plan;shortened=fitted.shortened;}catch{/* 앱이 자른다 */}
-  return {plan:current,coverChanged,...(hookType?{hookType}:{}),shortened};
+  return {plan:current,coverChanged,...(hookType?{hookType}:{}),shortened,pairFixed};
 }

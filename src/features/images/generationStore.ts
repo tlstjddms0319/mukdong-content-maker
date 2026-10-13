@@ -329,7 +329,7 @@ async function finishSlides(){
       while(cursor<plan.slides.length&&failure===null){
         const i=cursor++;
         try{
-          const generated=await generateOnce(plan.slides[i],i+1);
+          const generated=await generateWithRetry(plan.slides[i],i+1);
           if(token!==run)return;
           ready.set(i,generated);
           const add:ApprovedImage[]=[];
@@ -958,6 +958,18 @@ async function drawAiDeck(plan:CarouselPlan,token:number){
   }
   if(token!==run)return;
   await finishSlides();
+}
+
+// 이미지 AI는 가끔 한 번 실패한다(시간 초과·일시 오류). 바로 "다 만들지 못했어요"로 멈추지 않고 몇 초 뒤 한 번 더 그려 본다(사장님 지적 2026-10-13).
+let RETRY_DELAY_MS=5_000;
+export function setImageRetryDelayForTests(ms:number){RETRY_DELAY_MS=ms;}
+async function generateWithRetry(slide:CarouselPlan["slides"][number],index:number):Promise<ApprovedImage> {
+  try{return await generateOnce(slide,index);}
+  catch(error){
+    console.warn(`[images] ${index}장 그리기 실패, ${RETRY_DELAY_MS/1000}초 뒤 한 번 더:`,error instanceof Error?error.message.slice(0,120):String(error));
+    await new Promise(resolve=>setTimeout(resolve,RETRY_DELAY_MS));
+    return generateOnce(slide,index);
+  }
 }
 
 // 이 초안 카드에 쓴 디자인 계열(성과를 계열별로 비교하는 데 쓴다). 구성안 없이 사진만 쓴 초안은 없다.

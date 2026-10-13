@@ -58,7 +58,11 @@ function foodDirection(input:ImageBrief):string {
   const samhap=/삼합|수육|묵은지/.test(menuText);
   if(!preparations.length||/홍어\s*회|삼합/.test(menuText))preparations.push(`홍어회는 이 가게처럼 손가락 두 마디 크기로 썬 삭힌 홍어 조각으로, 탁한 연보라빛 분홍 살에 비스듬한 흰 연골 결이 보이고 검은 접시에 줄지어 담긴다. Hand-cut pieces two finger-widths across, 5-8 mm thick with visible cut sides and uneven edges, in loose rows; never identical thin square tiles like a chocolate bar. The flesh is a muted, dusty mauve to lilac-pink with pale grey-white areas; fine translucent white cartilage lines cross each piece in parallel diagonal rows (a herringbone or chevron pattern), and the cut edges are serrated like a comb. Not the glossy orange of salmon or the deep red of tuna, and not bleached chalk-white.${samhap?" 삼합에 수육과 묵은지가 등장하면 세 재료가 구분되게 자연스럽게 겹친 한입 크기로 표현한다.":""}`);
   // 작은 이미지 모델은 '홍어'를 몰라 베이컨·햄처럼 그리기 쉬워서 영어로 무엇인지 한 번 설명한다.
-  preparations.push("Hongeo is Korean fermented skate, a flat ray fish: its flesh has fine parallel fibers and thin translucent cartilage lines, never marbled fat stripes. The skate must not look like bacon, ham, sausage or pork belly.");
+  // 익힌 요리(찜·전·탕·라면·무침)는 결·연골 묘사를 세게 주면 빗살·벌집처럼 기괴하게 나온다(사장님 지적 2026-10-13: 홍어찜이 "징그럽게"). 익힌 살은 결을 은은하게만.
+  const cookedDish=/홍어\s*(?:찜|전(?!문|통|체|날)|무침|라면)|애\s*탕|홍어\s*탕/.test(menuText);
+  preparations.push(cookedDish
+    ?"Hongeo is Korean fermented skate, a flat ray fish. In this cooked dish the flesh is opaque ivory with only a subtle, natural fiber texture, like an ordinary appetizing steamed or cooked fish; never exaggerate the fibers into combs, bristles, honeycomb or exposed bone rows, and never marbled fat stripes. Do not make it look like bacon, ham or pork belly."
+    :"Hongeo is Korean fermented skate, a flat ray fish: its flesh has fine parallel fibers and thin translucent cartilage lines, never marbled fat stripes. The skate must not look like bacon, ham, sausage or pork belly.");
   // 이미지 모델은 '홍어 한 점'을 꼬리·지느러미 달린 작은 생선 한 마리(가자미·박대 모양)로 그리기 쉽다.
   // 실제 홍어회는 넓은 날개 살을 썬 조각이므로, 통째 생선 모양을 명시적으로 금지한다. 국물 요리(애탕)는 썬 조각 묘사를 빼고 통째만 막는다.
   preparations.push(soup

@@ -3,7 +3,7 @@
 // 검수 뒤 마지막 다듬기 두 가지(표지 후킹 다시 쓰기, 긴 제목 줄이기)와 "결과만 말하는 이유" 검사를 본다.
 import { describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan, type CarouselPlan } from "@/features/images/carousel";
-import { overLongHeadlines, polishPlan, rewriteCover, shortenHeadlines } from "@/features/images/copyPolish";
+import { fixComparisonSlides, oneSidedSlides, overLongHeadlines, polishPlan, rewriteCover, shortenHeadlines } from "@/features/images/copyPolish";
 import { coverHookProblems, slideCopyIssues } from "@/features/images/planReview";
 
 function deck(copy:Array<{headline:string;subline?:string;points:string[]}>,topic="홍어회는 왜 붉은 살코기 생선과 식감이 다를까?"):CarouselPlan {
@@ -146,5 +146,48 @@ describe("ninth eval run covers",()=>{
     expect(problems("과메기가 반쯤 말려야만 하는 진짜 속사정")).toContain("속사정");
     expect(problems("신 묵은지는 상한 김치가 아니라고?")).not.toContain("예/아니오");
     expect(problems("홍어회는 톡 쏘는데 홍어무침은 왜 덜 쏠까?")).toBe("");
+  });
+});
+
+describe("one-sided comparison slides (owner's 지평 vs 배다리 post, 2026-10-13)",()=>{
+  const pairDeck=()=>deck([
+    {headline:"지평과 배다리 막걸리는 어떤 점이 다를까요?",subline:"맛과 향을 비교해 봐요",points:[]},
+    {headline:"탄산의 세기가 달라요",points:["지평은 잔잔한 탄산으로 부드러워요"]},
+    {headline:"배다리는 톡 쏘고 지평은 잔잔해요",points:["탄산이 혀끝을 다르게 건드려요"]},
+    {headline:"목넘김의 결이 달라요",points:["지평은 순하고 매끄럽게 넘어가요"]},
+    {headline:"지평은 은은한 단맛이 길게 이어져요",points:["막걸리를 묵동홍어마을에서 즐겨 보세요"]},
+  ],"지평과 배다리 막걸리는 어떤 점이 다를까요?");
+  it("finds the reason and conclusion slides that name only one side",()=>{
+    const found=oneSidedSlides(pairDeck());
+    expect(found?.keys).toEqual(["지평","배다리"]);
+    expect(found?.slides).toEqual([2,4,5]);
+    expect(oneSidedSlides(reported())).toBeNull();
+  });
+  it("rewrites those slides and keeps only answers that name both sides within the card limits",async()=>{
+    const ai={generate:vi.fn(async()=>({items:[
+      {slide:2,headline:"배다리는 톡 쏘고 지평은 잔잔해요",points:["탄산의 세기가 혀끝에서 갈려요"]},
+      {slide:4,headline:"지평은 매끄럽게 넘어가요",points:["배다리는 톡 쏘며 넘어가요"]},          // 제목에 한쪽뿐이지만 짧은 글에 다른 쪽 → 통과
+      {slide:5,headline:"배다리는 탄산, 지평은 단맛이 다르다고 할 수 있어요 정말로요",points:[]}, // 24자 초과 → 버림
+    ]}))};
+    const result=await fixComparisonSlides(pairDeck(),"photo",ai);
+    expect(result.fixed).toBe(2);
+    expect(result.plan.slides[1].headline).toBe("배다리는 톡 쏘고 지평은 잔잔해요");
+    expect(result.plan.slides[3].points).toEqual(["배다리는 톡 쏘며 넘어가요"]);
+    expect(result.plan.slides[4].headline).toBe("지평은 은은한 단맛이 길게 이어져요");
+    const prompt=String((ai.generate.mock.calls[0] as unknown[])[0]);
+    expect(prompt).toContain("2장");
+    expect(prompt).toContain("5장(결론)");
+    expect(prompt).toContain("지어내지 마세요");
+  });
+  it("reports pair fixes from polishPlan and leaves non-comparison decks alone",async()=>{
+    const ai={generate:vi.fn(async()=>({items:[]}))};
+    const result=await polishPlan(reported(),"photo",ai);
+    expect(result.pairFixed).toBe(0);
+  });
+});
+
+describe("vague '어떤 점이 다를까요' covers",()=>{
+  it("asks for a concrete contrast instead",()=>{
+    expect(coverHookProblems({headline:"지평과 배다리 막걸리는 어떤 점이 다를까요?",subline:""},"photo").join(" ")).toContain("막연");
   });
 });

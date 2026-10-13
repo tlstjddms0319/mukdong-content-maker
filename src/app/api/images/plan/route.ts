@@ -42,7 +42,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   if(fixes.length)console.info(`[plan] AI 구성안을 고쳐 썼어요: ${[...new Set(fixes)].join(", ")}`);
   // AI가 쓴 구성안은 한 번 더 검수해서 상투어·반복·끝맺음 문제를 고친다(준비된 기본 문안은 이미 다듬어져 있어 건너뛴다).
   let review:{applied:boolean;before:number;after:number}|null=null;
-  let polish:{coverChanged:boolean;hookType?:string;shortened:number}|null=null;
+  let polish:{coverChanged:boolean;hookType?:string;shortened:number;pairFixed?:number}|null=null;
   let finalPlan=plan;
   if(provider!=="fallback"){
     // 검수에도 구성안과 같은 주인공 메뉴·사진 설명·내용 메모를 준다. 검수가 글을 바꾸면 장면이 메뉴를 벗어나지 않았는지 한 번 더 맞춘다.
@@ -55,8 +55,8 @@ export async function POST(request:Request) { const denied=await ownerApiError()
     if(input.data.track){
       const polished=await polishPlan(finalPlan,input.data.track,{generate:(prompt,schema)=>client.generateJson(prompt,schema)},input.data.topic);
       finalPlan=polished.plan;
-      polish={coverChanged:polished.coverChanged,...(polished.hookType?{hookType:polished.hookType}:{}),shortened:polished.shortened};
-      if(polished.coverChanged||polished.shortened)console.info(`[plan-polish] 표지 ${polished.coverChanged?`다시 씀(${polished.hookType})`:"그대로"}, 줄인 제목 ${polished.shortened}개`);
+      polish={coverChanged:polished.coverChanged,...(polished.hookType?{hookType:polished.hookType}:{}),shortened:polished.shortened,pairFixed:polished.pairFixed};
+      if(polished.coverChanged||polished.shortened||polished.pairFixed)console.info(`[plan-polish] 표지 ${polished.coverChanged?`다시 씀(${polished.hookType})`:"그대로"}, 줄인 제목 ${polished.shortened}개${polished.pairFixed?`, 양쪽 비교로 고친 장 ${polished.pairFixed}개`:""}`);
     }
   }
   const fallback=provider==="fallback"?{fallbackReason:fallbackReason??"error",fallbackMessage:PLAN_FALLBACK_MESSAGES[fallbackReason??"error"]}:{};
