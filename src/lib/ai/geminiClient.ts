@@ -89,17 +89,29 @@ export function createGeminiClient(options: { apiKey?:string; model?:string; fal
         }
         return response;
       };
-      let response = await send(model);
-      if (response.status===503) response = await send(model);
+      // 시간 초과·연결 끊김(상태 0)은 503처럼 다룬다: 같은 모델 한 번 더, 그래도 안 되면 예비 모델. 예비 글 AI가 없는 서버(사장님 결정 2026-10-13:
+      // Groq·Cloudflare 키는 안 넣음)에서는 Gemini 안에서 버텨야 준비된 주제·기본 문안으로 떨어지지 않는다.
+      let timeoutError:TextAiHttpError|undefined;
+      const attempt = async (name:string) => {
+        try { return await send(name); }
+        catch (error) {
+          if (!(error instanceof TextAiHttpError) || error.status!==0) throw error;
+          timeoutError = error;
+          console.warn(`[text-ai] Gemini(${name}) ${error.message} 다시 요청합니다.`);
+          return new Response("", { status:503 });
+        }
+      };
+      let response = await attempt(model);
+      if (response.status===503) response = await attempt(model);
       // Free quotas are counted per model, so a second flash-lite model doubles the daily headroom.
       // 503(과부하)도 모델마다 따로 나므로(운영 로그 2026-10-13: 기본 모델 503 두 번 → 준비된 주제), 한 번 더 해도 503이면 예비 모델로 간다.
       if ((response.status===429 || response.status===503) && fallbackModel && fallbackModel!==model) {
         // 첫 모델의 무료 한도가 찬 것을 사용량 장부에 남긴다(두 번째 모델이 성공하면 textClient는 성공만 본다).
         if (response.status===429) recordUsage({ provider:"gemini", ok:false, status:429 });
         else console.warn(`[text-ai] Gemini(${model})가 바빠요(503). 예비 모델(${fallbackModel})로 다시 요청합니다.`);
-        response = await send(fallbackModel);
+        response = await attempt(fallbackModel);
       }
-      if (!response.ok) throw new TextAiHttpError("Gemini", response.status);
+      if (!response.ok) throw response.status===503&&timeoutError ? timeoutError : new TextAiHttpError("Gemini", response.status);
       const body = await response.json() as { candidates?:Array<{ content?:{ parts?:Array<{ text?:string }> } }> };
       const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("");
       if (!text) throw new Error("Gemini 응답이 비어 있습니다.");

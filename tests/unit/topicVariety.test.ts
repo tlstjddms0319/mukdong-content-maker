@@ -156,8 +156,8 @@ describe("topic variety", () => {
       current=topics.map(topic=>topic.title);recent=[...current,...recent].slice(0,15);
     }
     expect(menus).toContain("gwamegi");
-    // 8번 새로고침(24개) 가운데 홍어애탕이 나온 횟수(예전에는 새로고침마다 나왔다).
-    expect(menus.filter(id=>id==="hongeo-aetang").length).toBeLessThanOrEqual(3);
+    // 8번 새로고침(24개) 가운데 홍어애탕이 나온 횟수(예전에는 새로고침마다 나왔다). 원리 노트 기반 애탕 주제 2개를 더해(2026-10-13) 상한을 4로.
+    expect(menus.filter(id=>id==="hongeo-aetang").length).toBeLessThanOrEqual(4);
   });
 
   it("counts recently shown menus, including soup titles without the menu name", () => {
