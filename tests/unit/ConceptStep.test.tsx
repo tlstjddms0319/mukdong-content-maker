@@ -1,4 +1,4 @@
-// 2단계 중간 "어떤 그림으로 만들까요?": 콘셉트 카드 가운데 AI 추천이 미리 눌려 있고, 다른 카드를 누른 뒤 "이걸로 만들기"를 누르면 그 번호가 간다.
+// 2단계 중간 "어떤 그림으로 만들까요?": 실사가 미리 눌려 있고(일러스트는 사장님이 고를 때만, 2026-10-13) AI 추천에는 표시가 붙고, 다른 카드를 누른 뒤 "이걸로 만들기"를 누르면 그 번호가 간다.
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ConceptStep } from "@/components/wizard/ConceptStep";
@@ -10,11 +10,12 @@ const concepts:ConceptChoice={recommended:1,options:[
 ]};
 
 describe("concept step",()=>{
-  it("preselects the AI's recommendation and shows what is drawn",()=>{
+  it("preselects the real-photo concept, marks the AI's pick, and shows what is drawn",()=>{
     render(<ConceptStep topic="홍어와 가오리는 왜 다르게 먹을까?" concepts={concepts} onChoose={()=>{}}/>);
     const radios=screen.getAllByRole("radio");
     expect(radios).toHaveLength(2);
-    expect(radios[1]).toHaveAttribute("aria-checked","true");
+    expect(radios[0]).toHaveAttribute("aria-checked","true");
+    expect(radios[1]).toHaveAttribute("aria-checked","false");
     expect(screen.getByText("AI 추천")).toBeInTheDocument();
     expect(screen.getByText("그림 1장 · 사진 1장")).toBeInTheDocument();
     expect(screen.getByText("모든 장 실사 사진")).toBeInTheDocument();
@@ -23,8 +24,8 @@ describe("concept step",()=>{
   it("sends the chosen index when 이걸로 만들기 is pressed",()=>{
     const onChoose=vi.fn();
     render(<ConceptStep topic="홍어" concepts={concepts} onChoose={onChoose}/>);
-    fireEvent.click(screen.getAllByRole("radio")[0]);
+    fireEvent.click(screen.getAllByRole("radio")[1]);
     fireEvent.click(screen.getByRole("button",{name:"이걸로 만들기"}));
-    expect(onChoose).toHaveBeenCalledWith(0);
+    expect(onChoose).toHaveBeenCalledWith(1);
   });
 });

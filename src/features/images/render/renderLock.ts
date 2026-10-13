@@ -6,9 +6,23 @@
 let tail:Promise<unknown>=Promise.resolve();
 let waiting=0;
 
-export function withRenderLock<T>(work:()=>Promise<T>):Promise<T> {
+// 메모리 기록: 그리기 한 번이 끝날 때 rss·heap·external(MB)과 걸린 시간을 남긴다. 운영 로그로 실제 피크를 보고
+// 다음 가볍게 하기 단계를 고른다(계획서 2026-10-13-light-free-server). 시험 중에는 남기지 않는다.
+const mb=(bytes:number)=>Math.round(bytes/1048576);
+const logMemory=()=>process.env.NODE_ENV==="production"&&process.env.RENDER_MEMORY_LOG!=="off";
+export function memoryLine(label:string,startedAt:number):string {
+  const usage=process.memoryUsage();
+  return `[render-memory] ${label} rss=${mb(usage.rss)}MB heap=${mb(usage.heapUsed)}/${mb(usage.heapTotal)}MB external=${mb(usage.external)}MB took=${Date.now()-startedAt}ms queue=${waiting}`;
+}
+
+export function withRenderLock<T>(work:()=>Promise<T>,label="render"):Promise<T> {
   waiting++;
-  const run=tail.then(work,work);
+  const timed=async()=>{
+    const startedAt=Date.now();
+    try{return await work();}
+    finally{if(logMemory())console.info(memoryLine(label,startedAt));}
+  };
+  const run=tail.then(timed,timed);
   tail=run.then(()=>{waiting--;},()=>{waiting--;});
   return run;
 }

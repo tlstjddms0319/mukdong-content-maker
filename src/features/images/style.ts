@@ -44,7 +44,7 @@ export const IMAGE_STYLE_DIRECTIONS:Record<ImageStyle,StyleDirection>={
     medium:"캐릭터 일러스트",
     scene:"음식을 의인화한 캐릭터가 나오는 그림 장면(사진이 아닌 그림)",
     anchor:"둥글고 친근한 캐릭터 일러스트 화풍(굵은 외곽선, 단순한 명암)",
-    look:"Friendly character illustration: bold clean outlines, simple cel shading, expressive cartoon faces, a clear stage-like composition with one focal action. Each food character keeps the real food's silhouette, colors and texture so it is instantly recognizable (a skate character has a diamond-shaped body, pointed snout and dusty mauve-pink flesh). Not a photograph. No speech bubbles and no written words anywhere.",
+    look:"Friendly character illustration: bold clean outlines, simple cel shading, expressive cartoon faces only on whole-fish mascot characters, a clear stage-like composition with one focal action. Any plated, sliced or cooked food in the scene has no face and looks real, glossy and appetizing. Each food character keeps the real food's silhouette, colors and texture so it is instantly recognizable (a skate character has a diamond-shaped body, pointed snout and dusty mauve-pink flesh). Not a photograph. No speech bubbles and no written words anywhere.",
   },
 };
 
