@@ -193,6 +193,28 @@ describe("Higgsfield image generation",()=>{
     warn.mockRestore();
   });
 
+  // 운영 로그(2026-10-13): Nano Banana Pro가 503 {"detail":"model_disabled"} — 바쁜 게 아니라 이 계정에서 꺼진 모델. 5초 재시도 없이 바로 넘어간다.
+  it("does not retry a model the account has disabled, and skips it next time",async()=>{
+    vi.stubEnv("HF_IMAGE_MODEL","nano-banana-pro");
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const { generateHiggsfieldImages,resetHiggsfieldModelSkips,setHiggsfieldBusyRetryForTests }=await import("@/features/images/higgsfieldRequest");
+    resetHiggsfieldModelSkips();setHiggsfieldBusyRetryForTests(0);
+    let nano=0,grok=0;
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>{
+      if(url.endsWith("/nano-banana-pro")){nano++;return json({detail:"model_disabled"},503);}
+      if(url.endsWith("/xai/grok-imagine-image-2.0")){grok++;return json({status:"completed",request_id:"g3",images:[{url:"https://cdn.example.com/g3.png"}]});}
+      if(url==="https://cdn.example.com/g3.png")return new Response(new Uint8Array(png));
+      throw new Error(`unexpected ${url}`);
+    }));
+    await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"});
+    expect(nano).toBe(1);
+    await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"});
+    expect(nano).toBe(1);
+    expect(grok).toBe(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("model_disabled"));
+    warn.mockRestore();
+  });
+
   it("keeps the Higgsfield answer and the model in the error so the cause can be seen",async()=>{
     vi.stubEnv("HF_IMAGE_MODEL","nano-banana-pro");
     const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
