@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { GeminiConfigurationError, createGeminiClient } from "@/lib/ai/geminiClient";
+import { GeminiConfigurationError, createGeminiClient, toLegacyResponseSchema } from "@/lib/ai/geminiClient";
 
 vi.mock("server-only", () => ({}));
 
@@ -60,18 +60,33 @@ describe("Gemini client", () => {
     expect(body.generationConfig).toMatchObject({ responseMimeType:"application/json", responseJsonSchema:{ type:"object", additionalProperties:false, required:["title"] } });
   });
 
-  it("retries once without the schema when Gemini rejects it", async () => {
+  // 운영 로그(2026-10-13): 예비 모델이 responseJsonSchema를 400으로 거부 → 스키마 없이 보내자 배열을 돌려줘 구성안이 기본 문안으로 떨어졌다.
+  it("retries with the legacy responseSchema when Gemini rejects responseJsonSchema, and only then without any schema", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const request = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ error:{ status:"INVALID_ARGUMENT" } }), { status:400 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'{"ok":true}' }] } }] }), { status:200 }));
     await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ ok:z.boolean() }))).resolves.toEqual({ ok:true });
-    expect(JSON.parse(String(request.mock.calls[0][1].body)).generationConfig.responseJsonSchema).toBeDefined();
-    expect(JSON.parse(String(request.mock.calls[1][1].body)).generationConfig.responseJsonSchema).toBeUndefined();
+    const first=JSON.parse(String(request.mock.calls[0][1].body)).generationConfig, second=JSON.parse(String(request.mock.calls[1][1].body)).generationConfig;
+    expect(first.responseJsonSchema).toBeDefined();
+    expect(second.responseJsonSchema).toBeUndefined();
+    expect(second.responseSchema).toMatchObject({ type:"object", required:["ok"], properties:{ ok:{ type:"boolean" } } });
+    expect(second.responseSchema.additionalProperties).toBeUndefined();
     expect(request).toHaveBeenCalledTimes(2);
     expect(request.mock.calls[1][0]).toContain("gemini-3.5-flash-lite:generateContent");
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("responseJsonSchema"), expect.any(String));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("responseSchema"), expect.any(String));
     warn.mockRestore();
+  });
+
+  it("unwraps a single object the model wrapped in an array", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'[{"ok":true}]' }] } }] }), { status:200 }));
+    await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ ok:z.boolean() }))).resolves.toEqual({ ok:true });
+  });
+
+  it("strips keys the legacy responseSchema does not accept", () => {
+    const legacy=toLegacyResponseSchema({ type:"object", additionalProperties:false, $schema:"x", properties:{ n:{ type:"integer", minimum:0, maximum:3 }, s:{ type:["string","null"], default:"", pattern:"^a" }, list:{ type:"array", minItems:1, items:{ type:"string" } } }, required:["n","s","list"] }) as Record<string, unknown>;
+    expect(JSON.stringify(legacy)).not.toMatch(/additionalProperties|\$schema|minimum|maximum|default|pattern|minItems/);
+    expect(legacy).toMatchObject({ properties:{ s:{ type:"string" }, list:{ type:"array", items:{ type:"string" } } }, required:["n","s","list"] });
   });
 
   it("falls back to plain JSON mode when the schema has optional fields", async () => {
@@ -81,11 +96,12 @@ describe("Gemini client", () => {
   });
 
 
-  it("gives up after one schema-less retry on a persistent 400", async () => {
+  it("gives up after the legacy-schema and schema-less retries on a persistent 400", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error:{ status:"INVALID_ARGUMENT" } }), { status:400 }));
+    // 실제 fetch처럼 부를 때마다 새 Response(본문은 한 번만 읽을 수 있다).
+    const request = vi.fn(async () => new Response(JSON.stringify({ error:{ status:"INVALID_ARGUMENT" } }), { status:400 }));
     await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ ok:z.boolean() }))).rejects.toMatchObject({ name:"TextAiHttpError", status:400 });
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(3);
     warn.mockRestore();
   });
 

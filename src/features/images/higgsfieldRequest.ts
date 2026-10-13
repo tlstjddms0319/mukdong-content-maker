@@ -34,6 +34,7 @@ export function higgsfieldModels(env:Record<string,string|undefined>=process.env
 const unavailable=new Map<string,number>();
 const SKIP_MS=6*3_600_000;
 export const UNSUPPORTED_STATUSES=new Set([400,404,405,422]);
+const isModelDisabled=(error:HiggsfieldImageError)=>/model_disabled/.test(error.detail);
 // 서버가 잠깐 바쁘거나 문제가 있을 때의 답. 다른 모델로 넘어가거나(요청) 다시 묻는다(상태 확인).
 export const BUSY_STATUSES=new Set([500,502,503]);
 const BUSY_SKIP_MS=10*60_000;
@@ -179,6 +180,9 @@ async function generateOne(input:ImageBrief,auth:string,referenceUrl?:string,now
       try{return await submit(model,input,auth,referenceUrl);}
       catch(error){
         if(!(error instanceof HiggsfieldImageError)||!BUSY_STATUSES.has(error.status))throw error;
+        // "model_disabled"(운영 로그 2026-10-13: Nano Banana Pro 503 {"detail":"model_disabled"})는 바쁜 게 아니라 이 계정에서 꺼진 모델이다.
+        // 5초 기다려 다시 묻지 않고 바로 다음 모델로 넘긴다(아래에서 오래 건너뛴다).
+        if(isModelDisabled(error))throw error;
         console.warn(`[higgsfield] ${model.label} 서버가 바빠요(${error.status}). ${BUSY_RETRY_MS/1000}초 뒤 한 번 더 시도합니다. ${error.detail}`);
         await new Promise(resolve=>setTimeout(resolve,BUSY_RETRY_MS));
         return await submit(model,input,auth,referenceUrl);
@@ -191,9 +195,11 @@ async function generateOne(input:ImageBrief,auth:string,referenceUrl?:string,now
       const unsupported=error instanceof HiggsfieldImageError&&UNSUPPORTED_STATUSES.has(error.status);
       // 서버가 바쁘다(500·502·503)고 답한 모델도 다음 모델로 넘어간다(사장님 화면 2026-10-10: 코드 503 "작업 실패"가 이어졌는데,
       // 예전에는 Grok으로 넘어가지 않고 바로 실패했다). 바쁜 모델은 잠깐(10분)만 건너뛴다.
-      const busy=error instanceof HiggsfieldImageError&&BUSY_STATUSES.has(error.status);
-      if((!unsupported&&!busy)||index===models.length-1)throw error;
+      const disabled=error instanceof HiggsfieldImageError&&isModelDisabled(error);
+      const busy=error instanceof HiggsfieldImageError&&BUSY_STATUSES.has(error.status)&&!disabled;
+      if((!unsupported&&!busy&&!disabled)||index===models.length-1)throw error;
       unavailable.set(model.id,now()+(busy?BUSY_SKIP_MS:SKIP_MS));
+      if(disabled)console.warn(`[higgsfield] ${model.label}은(는) 이 계정에서 꺼진 모델이라(model_disabled) ${SKIP_MS/3_600_000}시간 건너뜁니다.`);
       console.warn(`[higgsfield] ${model.label} 요청이 ${busy?"서버가 바빠 실패해":"받아들여지지 않아"}(${(error as HiggsfieldImageError).status}) 다음 모델로 만듭니다.`);
     }
   }

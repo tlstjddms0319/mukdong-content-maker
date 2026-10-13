@@ -39,6 +39,16 @@ describe("plan repair", () => {
     expect(fixes).toEqual(expect.arrayContaining(["2장 points","3장 role","3장 layout","4장 같은 장면","design.palette","design.theme","slideCount"]));
   });
 
+  // 운영 로그(2026-10-13): 스키마 없이 답한 Gemini가 장 배열만 보내 "expected object, received array"로 기본 문안이 됐다.
+  it("wraps a bare slides array into a plan instead of dropping it", () => {
+    const raw=base();
+    const fixes:string[]=[];
+    const repaired=lenientPlanSchema(5,fixes).safeParse(raw.slides);
+    expect(repaired.success).toBe(true);
+    expect(fixes).toContain("장 배열을 구성안으로 감쌈");
+    expect(repairPlanJson([{nope:true}],5)).toEqual([{nope:true}]);
+  });
+
   it("leaves an already valid plan unchanged", () => {
     const raw=base(),fixes:string[]=[];
     expect(lenientPlanSchema(5,fixes).parse(raw)).toEqual(raw);

@@ -34,6 +34,9 @@ export type PlanSlideCount=number|{min:number;max:number};
 const countOf=(count:PlanSlideCount,sent:number)=>typeof count==="number"?count:Math.min(Math.max(sent,count.min),count.max);
 const countFits=(count:PlanSlideCount,value:number)=>typeof count==="number"?value===count:value>=count.min&&value<=count.max;
 export function repairPlanJson(raw:unknown,count:PlanSlideCount,fixes:string[]=[]):unknown {
+  // 스키마 없이 답한 모델이 구성안 객체 대신 장 배열만 보내기도 한다(운영 로그 2026-10-13: "expected object, received array" → 기본 문안).
+  // 장처럼 생긴 객체들의 배열이면 {slides:[…]}로 감싸고 나머지 칸은 아래에서 채운다.
+  if(Array.isArray(raw)&&raw.length>0&&raw.every(item=>isRecord(item)&&typeof item.headline==="string")){fixes.push("장 배열을 구성안으로 감쌈");raw={slides:raw};}
   if(!isRecord(raw)||!Array.isArray(raw.slides))return raw;
   const slideCount=countOf(count,raw.slides.length);
   const roles=rolesForCount(slideCount);
