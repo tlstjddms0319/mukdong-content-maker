@@ -2,12 +2,13 @@ import sharp, { type OverlayOptions } from "sharp";
 import { croppedPhoto, finishPhoto, svgLayer, textLayer } from "../render/primitives";
 import { shadowLayer, textureLayer } from "../decor";
 import { emphasisOf, snap, type StyleContent } from "./shared";
-import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines, storeCardBlock } from "./trackKit";
+import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, fitLines, folioMark, footerRow, logoMark, saveChip, shortLines, storeCardBlock } from "./trackKit";
 import type { TrackLook } from "./trackLooks";
 import { renderPhotoLookRetro } from "./photoLooksRetro";
 
 // 사진 중심의 추가 모양(사장님 지적 2026-10-12: 게시물마다 같은 템플릿). slide.variant로 고른다(0은 photoFocus.ts의 기본 모양).
 //   1 매거진 : 표지는 종이 위쪽에 큰 명조 제목, 아래로 사진이 화면 끝까지. 본문은 위쪽 사진(가장자리까지) + 아래 종이에 글.
+//              마지막 장도 본문과 같고 장 번호 자리에 "저장해 두고 다시 보세요" 알약(가게 명함 판 없이 사진 65% 이상).
 //   2 반반   : 사진과 주제 색 판을 위아래로 나눈다. 본문은 장마다 사진 위/아래를 바꿔 넘길 때 리듬이 생기게.
 //   3 숙성 라벨·도장 : 꽉 찬 사진 + 인주색 둥근 도장(키워드·가게 이름), 본문은 No.02 꼬리표.
 //   4 삼합 순서 카드 : 큰 원 번호 + 제목, 둥근 사진, 진행 점. 먹는 순서처럼 단계가 있는 이야기용.
@@ -25,12 +26,13 @@ const finish=(background:string,layers:OverlayOptions[])=>sharp({create:{width:W
 // ── 1 매거진 ──────────────────────────────────────────────────────────────────────────
 async function magazineCover(photo:Buffer,content:StyleContent,look:TrackLook):Promise<Buffer> {
   const paper=look.light;
-  const LOGO=96,TOP=MARGIN;
+  // 위쪽 로고는 빼고(바닥글에 로고가 있다) 제목을 바로 올려 사진이 화면의 65% 이상 되게 한다.
+  const TOP=MARGIN;
   const title=await titleOf(content,paper.ink,paper.accent,[100,92,86,80,74]);
   const sub=content.subline?await lineOf(content.subline,paper.dim,44):null;
-  const titleTop=TOP+LOGO+44;
+  const titleTop=TOP+8;
   const textBottom=titleTop+title.layer.info.height+(sub?22+sub.info.height:0);
-  const photoTop=Math.min(760,textBottom+56);
+  const photoTop=Math.min(600,textBottom+48);
   const shot=await finishPhoto(photo,W,H-photoTop,{zoom:1.04});
   const foot=await footerRow({color:"#FFFFFF",ring:paper.ring,cue:true,shadow:true});
   const footTop=H-MARGIN-foot.height;
@@ -40,7 +42,6 @@ async function magazineCover(photo:Buffer,content:StyleContent,look:TrackLook):P
   const texture=await textureLayer("linen",{opacity:.2});
   if(texture)layers.push(texture);
   layers.push(
-    {input:await logoMark(LOGO,paper.ring),left:MARGIN,top:TOP},
     {input:title.layer.data,left:MARGIN,top:titleTop},
     ...(sub?[{input:sub.data,left:MARGIN,top:titleTop+title.layer.info.height+22}]:[]),
     {input:shot,left:0,top:photoTop},
@@ -55,58 +56,65 @@ async function magazineBody(photo:Buffer,content:StyleContent,index:number,look:
   const title=await titleOf(content,paper.ink,paper.accent,[68,64,60,56,52]);
   const line=shortLines(content,1)[0];
   const sub=line?await lineOf(line,paper.dim):null;
-  const folio=await folioMark(index,paper.accent);
-  const card=content.last?await storeCardBlock({logoSize:110,wordmark:true,surface:paper}):null;
-  const foot=card?null:await footerRow({color:paper.dim,cueColor:paper.ink,cue:true});
-  const bottomH=card?card.height:foot!.height;
-  const bottomTop=H-(card?52:MARGIN)-bottomH;
-  const subTop=bottomTop-(card?40:56)-(sub?.info.height??0);
-  const titleTop=(sub?subTop-20:bottomTop-56)-title.layer.info.height;
-  const folioTop=titleTop-24-folio.layer.info.height;
-  const photoH=Math.max(480,folioTop-48);
+  const folio=content.last?null:await folioMark(index,paper.accent);
+  const chip=content.last?await saveChip(paper.chip,paper.chipInk):null;
+  const foot=await footerRow({color:paper.dim,cueColor:paper.ink,cue:!content.last});
+  const bottomTop=H-MARGIN+16-foot.height;
+  const subTop=bottomTop-48-(sub?.info.height??0);
+  const titleTop=(sub?subTop-18:bottomTop-48)-title.layer.info.height;
+  const markH=folio?folio.layer.info.height:chip!.height;
+  const markTop=titleTop-22-markH;
+  const photoH=Math.max(480,markTop-40);
   const shot=await finishPhoto(photo,W,photoH,{zoom:1.03});
   const layers:OverlayOptions[]=[];
   const texture=await textureLayer("linen",{opacity:.2});
   if(texture)layers.push(texture);
-  layers.push({input:shot,left:0,top:0},{input:folio.layer.data,left:MARGIN,top:folioTop},{input:title.layer.data,left:MARGIN,top:titleTop});
+  const placed=foot.place(bottomTop);
+  const markup=`<rect x="0" y="${photoH}" width="${W}" height="8" fill="${paper.accent}"/>`+(folio?folio.svg(MARGIN,markTop):chip!.svg(MARGIN,markTop))+placed.svg;
+  layers.push({input:shot,left:0,top:0},svgLayer(markup));
+  layers.push(folio?{input:folio.layer.data,left:MARGIN,top:markTop}:{input:chip!.layer.data,left:MARGIN+chip!.padX,top:markTop+chip!.padY});
+  layers.push({input:title.layer.data,left:MARGIN,top:titleTop});
   if(sub)layers.push({input:sub.data,left:MARGIN,top:subTop});
-  let markup=`<rect x="0" y="${photoH}" width="${W}" height="8" fill="${paper.accent}"/>`+folio.svg(MARGIN,folioTop);
-  if(card){const placed=card.place(540,bottomTop);markup+=placed.svg;layers.push(svgLayer(markup),...placed.layers);}
-  else{const placed=foot!.place(bottomTop);layers.push(svgLayer(markup+placed.svg),...placed.layers);}
+  layers.push(...placed.layers);
   return finish(paper.bg,layers);
 }
 
 // ── 2 반반 ────────────────────────────────────────────────────────────────────────────
-// photoTop: 사진이 위쪽이면 true. 판 색은 표지 dark, 본문은 mid/dark를 번갈아, 마지막 장은 light(명함이 또렷하게).
+// photoTop: 사진이 위쪽이면 true. 판 색은 표지 dark, 본문은 mid/dark를 번갈아, 마지막 장은 light.
+// 판은 글이 들어갈 만큼만(최소 화면의 30%) 써서 사진이 화면의 65% 안팎이 되게 한다(예전 최소 42% → 사진 56~60%).
+// 마지막 장은 가게 명함 판 대신 장 번호 자리에 "저장해 두고 다시 보세요" 알약 + 바닥글.
 async function splitCard(photo:Buffer,content:StyleContent,index:number,look:TrackLook,options:{photoTop:boolean;panel:TrackSurface}):Promise<Buffer> {
   const panel=options.panel;
   const cover=content.cover;
-  const title=await titleOf(content,panel.ink,panel.accent,cover?[96,88,82,76,72]:[72,68,64,60,56],SANS_BOLD);
+  const title=await titleOf(content,panel.ink,panel.accent,cover?[88,82,76,72,68]:[72,68,64,60,56],SANS_BOLD);
   const line=cover?content.subline:shortLines(content,1)[0];
   const sub=line?await lineOf(line,cover?panel.accent:panel.dim,cover?44:40):null;
-  const card=content.last?await storeCardBlock({logoSize:104,wordmark:false,surface:panel}):null;
-  const foot=card?null:await footerRow({color:panel.dim,cueColor:panel.ink,ring:panel.ring,cue:!content.last});
-  const folio=cover?null:await folioMark(index,panel.accent);
-  // 판 높이: 글 덩어리 + 여백(최소 화면의 42%). 사진은 나머지.
-  const PAD=64;
-  const textH=(folio?folio.layer.info.height+22:0)+title.layer.info.height+(sub?20+sub.info.height:0);
-  const bottomH=card?card.height:foot!.height;
-  const panelH=Math.max(Math.round(H*.42),PAD+textH+48+bottomH+PAD);
+  const foot=await footerRow({color:panel.dim,cueColor:panel.ink,ring:panel.ring,cue:!content.last});
+  const folio=cover||content.last?null:await folioMark(index,panel.accent);
+  const chip=content.last?await saveChip(panel.chip,panel.chipInk):null;
+  // 판 높이: 글 덩어리 + 여백(최소 화면의 30%). 사진은 나머지.
+  const PAD=48;
+  const markH=folio?folio.layer.info.height:chip?chip.height:0;
+  const textH=(markH?markH+20:0)+title.layer.info.height+(sub?18+sub.info.height:0);
+  const bottomH=foot.height;
+  const panelH=Math.max(Math.round(H*.3),PAD+textH+40+bottomH+PAD);
   const photoH=H-panelH;
   const panelTop=options.photoTop?photoH:0;
   const shot=await finishPhoto(photo,W,photoH,{zoom:1.03});
   const layers:OverlayOptions[]=[{input:shot,left:0,top:options.photoTop?0:panelH}];
   const bottomTop=panelTop+panelH-PAD-bottomH;
   // 글 덩어리는 판 위쪽 여백과 바닥글 사이 남는 높이의 가운데에(판이 넓을 때 아래가 비어 보이지 않게).
-  const room=bottomTop-48-(panelTop+PAD);
+  const room=bottomTop-40-(panelTop+PAD);
   let y=panelTop+PAD+Math.max(0,Math.round((room-textH)/2));
-  let markup="";
-  if(folio){markup+=folio.svg(MARGIN,y);layers.push({input:folio.layer.data,left:MARGIN,top:y});y+=folio.layer.info.height+22;}
-  layers.push({input:title.layer.data,left:MARGIN,top:y});y+=title.layer.info.height;
-  if(sub){y+=20;layers.push({input:sub.data,left:MARGIN,top:y});}
+  const placed=foot.place(bottomTop);
+  let markup=placed.svg;
+  const texts:OverlayOptions[]=[];
+  if(folio){markup+=folio.svg(MARGIN,y);texts.push({input:folio.layer.data,left:MARGIN,top:y});y+=folio.layer.info.height+20;}
+  if(chip){markup+=chip.svg(MARGIN,y);texts.push({input:chip.layer.data,left:MARGIN+chip.padX,top:y+chip.padY});y+=chip.height+20;}
+  texts.push({input:title.layer.data,left:MARGIN,top:y});y+=title.layer.info.height;
+  if(sub){y+=18;texts.push({input:sub.data,left:MARGIN,top:y});}
   if(cover)layers.push({input:await logoMark(104,panel.ring),left:W-MARGIN-104,top:options.photoTop?MARGIN:panelH+MARGIN});
-  if(card){const placed=card.place(540,bottomTop);markup+=placed.svg;layers.push(svgLayer(markup),...placed.layers);}
-  else{const placed=foot!.place(bottomTop);layers.push(svgLayer(markup+placed.svg),...placed.layers);}
+  layers.push(svgLayer(markup),...texts,...placed.layers);
   // 사진과 판 경계에 강조색 짧은 막대(어느 쪽이 위든 경계 위에).
   layers.push(svgLayer(`<rect x="${MARGIN}" y="${(options.photoTop?photoH:panelH)-6}" width="120" height="12" rx="6" fill="${panel.accent}"/>`));
   return finish(panel.bg,layers);
@@ -149,7 +157,7 @@ async function labelCard(photo:Buffer,content:StyleContent,index:number,look:Tra
   if(content.cover)layers.push({input:await logoMark(104,paper.ring),left:MARGIN,top:MARGIN});
   else{
     // 본문: 왼쪽 위 꼬리표(No.02)로 순서를 알린다.
-    const tag=await textLayer(`No.${String(index).padStart(2,"0")}`,{size:34,color:"#2B1F1A",width:300,height:80,font:SANS_BOLD,features:"tnum"});
+    const tag=await textLayer(`No.${String(index).padStart(2,"0")}`,{size:40,color:"#2B1F1A",width:300,height:80,font:SANS_BOLD,features:"tnum"});
     const tw=tag.info.width+44;
     layers.push(svgLayer(`<path d="M${MARGIN} ${MARGIN}H${MARGIN+tw}L${MARGIN+tw+22} ${MARGIN+30}L${MARGIN+tw} ${MARGIN+60}H${MARGIN}Z" fill="#F3E9DA"/><circle cx="${MARGIN+tw-2}" cy="${MARGIN+30}" r="6" fill="#2B1F1A"/>`),{input:tag.data,left:MARGIN+20,top:MARGIN+30-Math.round(tag.info.height/2)});
   }
@@ -166,49 +174,53 @@ async function labelCard(photo:Buffer,content:StyleContent,index:number,look:Tra
 }
 
 // ── 4 삼합 순서 카드 ──────────────────────────────────────────────────────────────────
-// 밝은 종이 위쪽에 큰 원 번호(1·2·3…)와 제목, 가운데 둥근 사진, 아래 짧은 글. 맨 위 진행 점(●●○○)으로 몇 번째 단계인지 보인다.
-// "처음 먹는 법"처럼 순서가 있는 이야기용(저장을 부르는 정보형). 표지는 "순서대로 넘겨 보세요" 알약을 단다.
+// 밝은 종이 위쪽에 원 번호(1·2·3…)와 제목, 그 아래 큰 둥근 사진, 아래 짧은 글. 사진 오른쪽 아래 진행 점(●●○○)으로 몇 번째 단계인지 보인다.
+// "처음 먹는 법"처럼 순서가 있는 이야기용(저장을 부르는 정보형). 표지는 "순서대로 넘겨 보세요", 마지막 장은 "저장해 두고 다시 보세요" 알약을 사진 위에 단다.
+// 사진이 화면의 65% 이상이 되게 여백(36px)·원 번호(104px)를 줄였다(예전 사진 44~52%).
 async function stepCard(photo:Buffer,content:StyleContent,index:number,total:number,look:TrackLook):Promise<Buffer> {
   const paper=look.light;
   const cover=content.cover;
   const step=index-1,steps=Math.max(1,total-2);
   const line=cover?content.subline:shortLines(content,1)[0];
   const sub=line?await lineOf(line,paper.dim,cover?44:40):null;
-  const store=content.last?await storeCardBlock({logoSize:100,wordmark:false,surface:paper}):null;
-  const foot=store?null:await footerRow({color:paper.dim,cueColor:paper.ink,cue:!content.last});
+  const foot=await footerRow({color:paper.dim,cueColor:paper.ink,cue:!content.last});
   const layers:OverlayOptions[]=[];
   const texture=await textureLayer("linen",{opacity:.2});
   if(texture)layers.push(texture);
-  let markup="";
-  let y=MARGIN;
-  if(!cover&&!content.last){
-    for(let i=0;i<steps;i++)markup+=`<circle cx="${MARGIN+12+i*36}" cy="${y+12}" r="10" fill="${i<step?paper.accent:paper.soft}"/>`;
-    y+=48;
-  }
-  const NUM=150;
-  const num=await textLayer(cover?"홍":content.last?"✓":String(step),{size:84,color:paper.chipInk,width:NUM,height:NUM,font:TITLE_SERIF,align:"centre",features:"tnum"});
+  const X=36,PW=W-X*2;
+  let y=48;
+  const NUM=104;
+  const num=await textLayer(cover?"홍":content.last?"✓":String(step),{size:60,color:paper.chipInk,width:NUM,height:NUM,font:TITLE_SERIF,align:"centre",features:"tnum"});
+  const head=await fitLines(content.headline,{sizes:cover?[68,64,60,56]:[60,56,52,48],width:W-MARGIN*2-NUM-32,font:SANS_BOLD,color:paper.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.12),letterSpacing:size=>-size*.015,emphasis:emphasisOf(content,paper.accent)});
+  const rowH=Math.max(NUM,head.layer.info.height);
   // 도형은 글보다 먼저 깐다(나중에 깔면 글을 덮는다).
-  layers.push(svgLayer(markup+`<circle cx="${MARGIN+NUM/2}" cy="${y+NUM/2}" r="${NUM/2}" fill="${paper.chip}"/>`));
-  markup="";
-  layers.push({input:num.data,left:Math.round(MARGIN+NUM/2-num.info.width/2),top:Math.round(y+NUM/2-num.info.height/2)});
-  const head=await fitLines(content.headline,{sizes:cover?[80,74,68,62,58]:[64,60,56,52,48],width:W-MARGIN*2-NUM-36,font:SANS_BOLD,color:paper.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.12),letterSpacing:size=>-size*.015,emphasis:emphasisOf(content,paper.accent)});
-  layers.push({input:head.layer.data,left:MARGIN+NUM+36,top:Math.round(y+NUM/2-head.layer.info.height/2)});
-  y+=Math.max(NUM,head.layer.info.height)+44;
-  // 아래에서 위로: 바닥글(명함) → 짧은 글 → 사진.
-  const bottomH=store?store.height:foot!.height;
-  const bottomTop=H-(store?52:MARGIN)-bottomH;
-  const subTop=bottomTop-44-(sub?.info.height??0);
-  const photoH=Math.max(380,(sub?subTop-36:bottomTop-44)-y);
-  layers.push(await shadowLayer({x:MARGIN,y:y+12,width:CONTENT_W,height:photoH,rx:28,blur:24,opacity:.18}),{input:await croppedPhoto(photo,CONTENT_W,photoH,28,{zoom:1.03}),left:MARGIN,top:y});
-  if(cover){
-    const chip=await textLayer("순서대로 넘겨 보세요 ›",{size:34,color:paper.chipInk,width:700,height:80,font:SANS_BOLD});
-    const ch=chip.info.height+28,cw=chip.info.width+56;
-    layers.push(svgLayer(`<rect x="${MARGIN+24}" y="${y+photoH-ch-24}" width="${cw}" height="${ch}" rx="${ch/2}" fill="${paper.chip}"/>`));
-    layers.push({input:chip.data,left:MARGIN+52,top:y+photoH-ch-24+14});
+  let markup=`<circle cx="${MARGIN+NUM/2}" cy="${y+rowH/2}" r="${NUM/2}" fill="${paper.chip}"/>`;
+  const texts:OverlayOptions[]=[
+    {input:num.data,left:Math.round(MARGIN+NUM/2-num.info.width/2),top:Math.round(y+rowH/2-num.info.height/2)},
+    {input:head.layer.data,left:MARGIN+NUM+32,top:Math.round(y+rowH/2-head.layer.info.height/2)},
+  ];
+  y+=rowH+28;
+  // 아래에서 위로: 바닥글 → 짧은 글 → 사진.
+  const bottomTop=H-52-foot.height;
+  const subTop=bottomTop-28-(sub?.info.height??0);
+  const photoH=Math.max(380,(sub?subTop-24:bottomTop-28)-y);
+  layers.push(await shadowLayer({x:X,y:y+12,width:PW,height:photoH,rx:28,blur:24,opacity:.18}),{input:await croppedPhoto(photo,PW,photoH,28,{zoom:1.03}),left:X,top:y});
+  // 진행 점: 사진 오른쪽 아래, 반투명 판 위.
+  if(!cover&&!content.last){
+    const dotsW=steps*36+20,dx=X+PW-24-dotsW,dy=y+photoH-24-44;
+    markup+=`<rect x="${dx}" y="${dy}" width="${dotsW}" height="44" rx="22" fill="#1C1310" fill-opacity=".55"/>`;
+    for(let i=0;i<steps;i++)markup+=`<circle cx="${dx+28+i*36}" cy="${dy+22}" r="10" fill="${i<step?paper.chip:"#FFFFFF"}" fill-opacity="${i<step?1:.75}"/>`;
   }
-  if(sub)layers.push({input:sub.data,left:MARGIN,top:subTop});
-  if(store){const placed=store.place(540,bottomTop);layers.push(svgLayer(markup+placed.svg),...placed.layers);}
-  else{const placed=foot!.place(bottomTop);layers.push(svgLayer(markup+placed.svg),...placed.layers);}
+  // 알약: 표지 "순서대로 넘겨 보세요", 마지막 장 "저장해 두고 다시 보세요"(사진 왼쪽 아래).
+  if(cover||content.last){
+    const chip=cover?await textLayer("순서대로 넘겨 보세요 ›",{size:40,color:paper.chipInk,width:700,height:80,font:SANS_BOLD}):(await saveChip(paper.chip,paper.chipInk)).layer;
+    const ch=chip.info.height+28,cw=chip.info.width+56;
+    markup+=`<rect x="${X+24}" y="${y+photoH-ch-24}" width="${cw}" height="${ch}" rx="${ch/2}" fill="${paper.chip}"/>`;
+    texts.push({input:chip.data,left:X+52,top:y+photoH-ch-24+14});
+  }
+  if(sub)texts.push({input:sub.data,left:MARGIN,top:subTop});
+  const placed=foot.place(bottomTop);
+  layers.push(svgLayer(markup+placed.svg),...texts,...placed.layers);
   return finish(paper.bg,layers);
 }
 

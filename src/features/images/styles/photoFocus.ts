@@ -3,7 +3,7 @@ import { croppedPhoto, finishPhoto, svgLayer, textLayer, type CardRenderer } fro
 import { registerPhoto } from "../render/audit";
 import { shadowLayer, textureLayer } from "../decor";
 import { contentOf, emphasisOf, snap, type StyleContent } from "./shared";
-import { MARGIN, ON_PHOTO, SANS, SHADE, TITLE_SERIF, TRACK_SURFACES, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines, storeCardBlock } from "./trackKit";
+import { MARGIN, ON_PHOTO, SANS, SANS_SEMI, SAVE_CHIP, SHADE, TITLE_SERIF, TRACK_SURFACES, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines } from "./trackKit";
 import { trackLookOf } from "./trackLooks";
 import { renderTextFocus } from "./textFocus";
 import { renderPhotoLook } from "./photoLooks";
@@ -13,7 +13,8 @@ import { renderPhotoLook } from "./photoLooks";
 //   본문 장   : 두 가지 구도를 장 번호로 번갈아 쓴다(이어지는 두 장이 같은 모양이 되지 않게).
 //               짝수 장 = "액자": 크림 종이 위에 넓은 여백을 두고 모서리가 둥근 큰 사진, 아래에 장 번호·한 줄 제목·짧은 글 한 줄.
 //               홀수 장 = "꽉 찬 사진": 표지처럼 사진을 가득 깔고 아래 그라데이션 위에 흰 글자.
-//   마지막 장 : 액자 구도의 사진(조금 작게) + 가게 명함(원형 로고·가게 이름·계정·"저장해 두고 다시 보세요").
+//   마지막 장 : 꽉 찬 사진 + 제목 위 "저장해 두고 다시 보세요" 알약 + 바닥글(로고·가게 이름·계정).
+// 사진이 주인공: 어느 장이든 사진이 화면의 65% 이상(보고서 "사진 중심 한식 카드뉴스 재분석", 2026-10-12). 예전에는 액자 장 61%, 마지막 장 40%였다.
 // 글은 제목 한 줄 + 짧은 글 한 줄까지만 쓴다(구성안이 그 길이로 쓰고, 길면 여기서 한 줄만 보인다).
 // 표지 명조(함렛)는 음식 잡지 같은 격을, 짧은 글은 프리텐다드로 폰에서 또렷하게 읽히게 한다.
 const PAPER=TRACK_SURFACES.cream;
@@ -73,7 +74,8 @@ async function cover(photo:Buffer,content:StyleContent):Promise<Buffer> {
   return sharp({create:{width:1080,height:1350,channels:3,background:SHADE}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();
 }
 
-// ── 꽉 찬 사진(홀수 본문 장) ───────────────────────────────────────────────────────────────
+// ── 꽉 찬 사진(홀수 본문 장·마지막 장) ─────────────────────────────────────────────────────
+// 마지막 장은 장 번호 자리에 "저장해 두고 다시 보세요" 알약을 두고, 바닥글(로고·가게 이름·계정)이 가게 명함 몫을 한다.
 async function bleed(photo:Buffer,content:StyleContent,index:number):Promise<Buffer> {
   const base=await warmed(await finishPhoto(photo,1080,1350));
   const foot=await footerRow({color:ON_PHOTO.ink,ring:PAPER.ring,cue:!content.last,shadow:true});
@@ -83,13 +85,21 @@ async function bleed(photo:Buffer,content:StyleContent,index:number):Promise<Buf
   const sub=line?await sublineOf(line,ON_PHOTO.dim):null;
   const subTop=footTop-56-(sub?.info.height??0);
   const titleTop=(sub?subTop-22:footTop-56)-title.layer.info.height;
-  const folio=await folioMark(index,ON_PHOTO.ink,{shadow:true});
-  const folioTop=titleTop-34-folio.layer.info.height;
   const placed=foot.place(footTop);
+  let mark:{svg:string;data:Buffer;top:number;left:number};
+  if(content.last){
+    const chip=await textLayer(SAVE_CHIP,{size:40,color:PAPER.ink,width:900,height:80,font:SANS_SEMI});
+    const padX=30,padY=12,h=chip.info.height+padY*2,top=titleTop-30-h;
+    mark={svg:`<rect x="${MARGIN}" y="${top}" width="${chip.info.width+padX*2}" height="${h}" rx="${h/2}" fill="${ON_PHOTO.ink}" fill-opacity=".94"/>`,data:chip.data,top:top+padY,left:MARGIN+padX};
+  }else{
+    const folio=await folioMark(index,ON_PHOTO.ink,{shadow:true});
+    const top=titleTop-34-folio.layer.info.height;
+    mark={svg:folio.svg(MARGIN,top),data:folio.layer.data,top,left:MARGIN};
+  }
   const layers:OverlayOptions[]=[
     {input:base,left:0,top:0},
-    svgLayer(photoShade(Math.max(420,folioTop-200),{top:false})+folio.svg(MARGIN,folioTop)+placed.svg),
-    {input:folio.layer.data,left:MARGIN,top:folioTop},
+    svgLayer(photoShade(Math.max(420,mark.top-200),{top:false})+mark.svg+placed.svg),
+    {input:mark.data,left:mark.left,top:mark.top},
     {input:title.layer.data,left:MARGIN,top:titleTop},
     ...(sub?[{input:sub.data,left:MARGIN,top:subTop}]:[]),
     ...placed.layers,
@@ -97,44 +107,36 @@ async function bleed(photo:Buffer,content:StyleContent,index:number):Promise<Buf
   return sharp({create:{width:1080,height:1350,channels:3,background:SHADE}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();
 }
 
-// ── 액자(짝수 본문 장·마지막 장) ──────────────────────────────────────────────────────────
+// ── 액자(짝수 본문 장) ───────────────────────────────────────────────────────────────────
 // 크림 종이에 리넨 결을 옅게 깔고, 위쪽에 둥근 모서리(28px) 큰 사진과 부드러운 그림자. 사진 높이는 아래 글이 차지하고 남는 높이.
-// 마지막 장은 사진 아래 글 + 명함 판(한 톤 짙은 크림 위에 로고·가게 이름·계정·저장 알약)을 둔다.
+// 장 번호는 사진 왼쪽 위에 얹고 여백을 줄여(64→36px) 사진이 화면의 65% 이상 되게 한다.
 async function framed(photo:Buffer,content:StyleContent,index:number,PAPER:TrackSurface):Promise<Buffer> {
-  const X=64,TOP=64,W=1080-X*2,R=28;
+  const X=36,TOP=36,W=1080-X*2,R=28;
   const title=await bodyTitle(content,PAPER.ink,PAPER.accent);
   const line=shortLines(content,1)[0];
   const sub=line?await sublineOf(line,PAPER.dim):null;
-  const folio=await folioMark(index,PAPER.accent);
-  const card=content.last?await storeCardBlock({logoSize:120,wordmark:true,surface:PAPER}):null;
-  const foot=card?null:await footerRow({color:PAPER.dim,cueColor:PAPER.ink,cue:true});
-  // 아래에서 위로 쌓는다: 바닥글(또는 명함 판) → 짧은 글 → 제목 → 장 번호 → 사진.
-  const CARD_PAD=40;
-  const bottomBlockH=card?card.height+CARD_PAD*2:foot!.height;
-  const bottomTop=1350-(card?48:MARGIN)-bottomBlockH;
-  const subTop=bottomTop-(card?44:60)-(sub?.info.height??0);
-  const titleTop=(sub?subTop-20:bottomTop-(card?44:60))-title.layer.info.height;
-  const folioTop=titleTop-26-folio.layer.info.height;
-  const photoH=Math.max(420,folioTop-44-TOP);
+  const folio=await folioMark(index,ON_PHOTO.ink,{shadow:true});
+  const foot=await footerRow({color:PAPER.dim,cueColor:PAPER.ink,cue:true});
+  // 아래에서 위로 쌓는다: 바닥글 → 짧은 글 → 제목 → 사진.
+  const bottomTop=1350-56-foot.height;
+  const subTop=bottomTop-44-(sub?.info.height??0);
+  const titleTop=(sub?subTop-18:bottomTop-44)-title.layer.info.height;
+  const photoH=Math.max(420,titleTop-36-TOP);
   const shot=await warmed(await croppedPhoto(photo,W,photoH,R,{zoom:1.03}));
   const shadow=await shadowLayer({x:X,y:TOP+14,width:W,height:photoH,rx:R,blur:26,opacity:.2});
   const layers:OverlayOptions[]=[];
   const paper=await textureLayer("linen",{opacity:.22});
   if(paper)layers.push(paper);
   layers.push(shadow,{input:shot,left:X,top:TOP});
-  let markup=folio.svg(MARGIN,folioTop);
-  layers.push({input:folio.layer.data,left:MARGIN,top:folioTop},{input:title.layer.data,left:MARGIN,top:titleTop});
+  // 장 번호: 사진 왼쪽 위, 짙은 반투명 알약 위(밝은 사진에서도 흰 숫자가 읽히게).
+  const folioTop=TOP+30;
+  const pillH=folio.layer.info.height+16;
+  const markup=`<rect x="${MARGIN-18}" y="${folioTop-8}" width="${folio.width+36}" height="${pillH}" rx="${pillH/2}" fill="${SHADE}" fill-opacity=".72"/>`+folio.svg(MARGIN,folioTop);
+  const placed=foot.place(bottomTop);
+  // 도형(알약·바닥글 화살표)을 먼저 깔고 글자를 그 위에 올린다.
+  layers.push(svgLayer(markup+placed.svg),{input:folio.layer.data,left:MARGIN,top:folioTop},{input:title.layer.data,left:MARGIN,top:titleTop});
   if(sub)layers.push({input:sub.data,left:MARGIN,top:subTop});
-  if(card){
-    // 명함 판: 종이보다 한 톤 짙은 크림의 둥근 판. 판 안 가운데에 명함을 세운다.
-    markup+=`<rect x="${X}" y="${bottomTop}" width="${W}" height="${bottomBlockH}" rx="24" fill="${PAPER.soft}"/>`;
-    const placed=card.place(540,bottomTop+CARD_PAD);
-    markup+=placed.svg;
-    layers.push(svgLayer(markup),...placed.layers);
-  }else{
-    const placed=foot!.place(bottomTop);
-    layers.push(svgLayer(markup+placed.svg),...placed.layers);
-  }
+  layers.push(...placed.layers);
   return sharp({create:{width:1080,height:1350,channels:3,background:PAPER.bg}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();
 }
 
@@ -147,9 +149,9 @@ export const renderPhotoFocus:CardRenderer=async(inputs,slide,index,total,palett
   if(looked)return looked;
   if(content.cover)return cover(inputs[0],content);
   // 액자 장의 종이 색은 구성안의 색 조합을 따른다(trackLooks.ts, 주제마다 바뀐다).
-  if(content.last||index%2===0)return framed(inputs[0],content,index,trackLookOf(palette).light);
+  if(!content.last&&index%2===0)return framed(inputs[0],content,index,trackLookOf(palette).light);
   return bleed(inputs[0],content,index);
 };
 
-// 검수·테스트에서 구도를 확인할 때 쓰는 이름(장 번호 → 구도).
-export const photoFocusComposition=(index:number,total:number):"cover"|"framed"|"bleed"=>index===1?"cover":index===total||index%2===0?"framed":"bleed";
+// 검수·테스트에서 구도를 확인할 때 쓰는 이름(장 번호 → 구도). 마지막 장은 꽉 찬 사진.
+export const photoFocusComposition=(index:number,total:number):"cover"|"framed"|"bleed"=>index===1?"cover":index!==total&&index%2===0?"framed":"bleed";

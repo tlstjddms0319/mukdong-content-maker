@@ -74,7 +74,7 @@ describe("track design families", () => {
       // 사진을 넘겨도(예전 초안의 사진 장) 본문 장에는 쓰지 않는다.
       const {image,report}=await composeSlideCard([dark],{...copy[index-1],layout:"frame"},index,5,"card",{palette:"warm",style:"text-focus"},{contrast:true});
       expect(report.metrics.photoArea).toBe(0);
-      // 제목(84px 이상)과 짧은 글(58px 이상)만 센다. 큰 장 번호(300px)와 바닥글(30px)은 글 줄이 아니다.
+      // 제목(84px 이상)과 짧은 글(58px 이상)만 센다. 큰 장 번호(300px)와 바닥글(40px)은 글 줄이 아니다.
       const copyBoxes=report.boxes.filter(box=>box.size>=44&&box.size<=120);
       const title=copyBoxes.find(box=>box.size>=84)!;
       expect(title).toBeTruthy();
@@ -82,7 +82,7 @@ describe("track design families", () => {
       for(const box of copyBoxes)expect(box.size).toBeGreaterThanOrEqual(58);
       // 큰 장 번호 + 글 덩어리가 바닥글 위 남는 높이의 가운데에 있다(예전에는 글 아래로 330px 넘는 빈 띠가 남았다).
       if(index<5){
-      const numeral=report.boxes.find(box=>box.size>=200)!,footer=report.boxes.filter(box=>box.size<=30).reduce((min,box)=>Math.min(min,box.top),1350);
+      const numeral=report.boxes.find(box=>box.size>=200)!,footer=report.boxes.filter(box=>box.size<=40).reduce((min,box)=>Math.min(min,box.top),1350);
       const textBottom=Math.max(...copyBoxes.map(box=>box.top+box.height));
       expect(Math.abs((numeral.top-96)-(footer-56-textBottom)),`${index}장 위아래 여백`).toBeLessThan(140);
       expect(footer-textBottom,`${index}장 글 아래 빈자리`).toBeLessThan(330);
@@ -106,10 +106,10 @@ describe("track design families", () => {
     const areas:number[]=[];
     for(const [i,slide] of copies.normal.entries())areas.push((await render("photo-focus",slide,i+1,dark)).report.metrics.photoArea);
     expect(areas[0]).toBeGreaterThanOrEqual(.95);              // 표지: 화면 가득
-    for(const area of areas.slice(1,4))expect(area).toBeGreaterThanOrEqual(.5); // 본문: 액자형도 절반 넘게
-    expect(areas[4]).toBeGreaterThanOrEqual(.3);               // 마지막 장: 사진 + 가게 명함
+    for(const area of areas.slice(1,4))expect(area).toBeGreaterThanOrEqual(.65); // 본문: 액자형도 65% 넘게
+    expect(areas[4]).toBeGreaterThanOrEqual(.95);              // 마지막 장: 꽉 찬 사진 + 저장 알약
     expect([2,3,4,5].map(index=>photoFocusComposition(index,6))).toEqual(["framed","bleed","framed","bleed"]);
-    expect(photoFocusComposition(5,5)).toBe("framed");
+    expect(photoFocusComposition(5,5)).toBe("bleed");
     // 사진이 없는 장(예전 초안)도 깨지지 않고 그린다.
     const empty=await composeSlideCard([],{...copies.normal[2],layout:"browser"},3,5,"card",{palette:"warm",style:"photo-focus"});
     expect(empty.report.issues).toEqual([]);

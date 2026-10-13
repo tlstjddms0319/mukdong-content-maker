@@ -90,13 +90,13 @@ export async function fitLines(rawValue:string,options:{sizes:number[];width:num
 // 마지막 장에는 넘겨 보기를 두지 않는다(cue:false). 돌려주는 height로 부르는 쪽이 위 내용의 바닥을 정한다.
 export async function footerRow(options:{color:string;cueColor?:string;ring?:string;cue:boolean;shadow?:boolean;left?:number;right?:number}):Promise<{height:number;place:(top:number)=>{layers:OverlayOptions[];svg:string}}> {
   const left=options.left??MARGIN,right=options.right??MARGIN;
-  const LOGO=56;
+  const LOGO=64;
   const logo=await logoMark(LOGO,options.ring);
   const handle=brandHandle();
-  const cue=options.cue?await nextCue(options.cueColor??options.color,30):null;
+  const cue=options.cue?await nextCue(options.cueColor??options.color,40):null;
   const nameWidth=1080-left-right-LOGO-16-(cue?cue.width+40:0);
   // 가게 이름 · 계정이 한 줄에 안 들어가면(긴 계정) 계정만 쓴다(옆 로고에 가게 이름이 있다). 그래도 길면 두 줄로 접는다(글자를 줄이지 않는다).
-  const line=(value:string)=>textLayer(value,{size:30,color:options.color,width:nameWidth,height:4000,font:SANS_SEMI,shadow:options.shadow});
+  const line=(value:string)=>textLayer(value,{size:40,color:options.color,width:nameWidth,height:4000,font:SANS_SEMI,shadow:options.shadow});
   let name=await line(handle?`${STORE_NAME} · ${handle}`:STORE_NAME);
   if(handle&&name.info.height>(options.shadow?80:56))name=await line(handle);
   const height=Math.max(LOGO,name.info.height,cue?.height??0);
@@ -115,7 +115,7 @@ export async function footerRow(options:{color:string;cueColor?:string;ring?:str
 
 // 장 번호: 두 자리 숫자(02) + 짧은 선. tnum으로 숫자 폭을 맞춘다. 작은 표시라 30px.
 export async function folioMark(index:number,color:string,options:{shadow?:boolean;rule?:boolean}={}):Promise<{layer:Layer;svg:(x:number,y:number)=>string;width:number}> {
-  const layer=await textLayer(String(index).padStart(2,"0"),{size:32,color,width:120,height:60,font:SANS_BOLD,features:"tnum",letterSpacing:1.5,shadow:options.shadow});
+  const layer=await textLayer(String(index).padStart(2,"0"),{size:40,color,width:140,height:70,font:SANS_BOLD,features:"tnum",letterSpacing:1.5,shadow:options.shadow});
   const rule=options.rule??true;
   return {layer,width:layer.info.width+(rule?76:0),svg:(x,y)=>rule?`<path d="M${x+layer.info.width+18} ${Math.round(y+layer.info.height/2)}H${x+layer.info.width+76}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`:""};
 }
@@ -124,6 +124,12 @@ export async function folioMark(index:number,color:string,options:{shadow?:boole
 // 원형 로고 → (워드마크) → 계정(설정에 있을 때) → "저장해 두고 다시 보세요" 알약. 가운데 정렬로 cx 기준에 놓는다.
 // 주소·영업시간은 넣지 않는다(확인 안 된 사실). 로고 안의 전화번호는 가게가 직접 쓰는 로고 그대로다.
 export const SAVE_CHIP="저장해 두고 다시 보세요";
+// 마지막 장 "저장해 두고 다시 보세요" 알약 하나(가게 명함 판 없이 사진을 크게 쓰는 모양용). svg(x,y)로 판을 그리고 layer를 (x+padX, y+padY)에 놓는다.
+export async function saveChip(fill:string,ink:string):Promise<{layer:Layer;width:number;height:number;padX:number;padY:number;svg:(x:number,y:number)=>string}> {
+  const layer=await textLayer(SAVE_CHIP,{size:40,color:ink,width:900,height:80,font:SANS_SEMI});
+  const padX=30,padY=12,width=layer.info.width+padX*2,height=layer.info.height+padY*2;
+  return {layer,width,height,padX,padY,svg:(x,y)=>`<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${height/2}" fill="${fill}"/>`};
+}
 // halo: 로고 뒤에 깔 한 톤 짙은 원(색·로고 밖으로 나오는 폭). 원이 계정 글자에 걸리지 않게 그 폭만큼 아래로 띄운다
 // (예전에는 원을 따로 그려 계정 글자 윗부분이 원 테두리에 잘려 보였다).
 export async function storeCardBlock(options:{logoSize:number;ring?:string;wordmark:boolean;surface:Pick<TrackSurface,"ink"|"dim"|"chip"|"chipInk">;width?:number;halo?:{color:string;pad:number}}):Promise<{height:number;place:(cx:number,top:number)=>{layers:OverlayOptions[];svg:string}}> {
@@ -131,8 +137,8 @@ export async function storeCardBlock(options:{logoSize:number;ring?:string;wordm
   const logo=await logoMark(options.logoSize,options.ring);
   const word=options.wordmark?await textLayer(STORE_NAME,{size:48,color:s.ink,width,height:120,font:TITLE_SERIF,align:"centre",letterSpacing:48*.06}):null;
   const account=brandHandle();
-  const handle=account?await textLayer(account,{size:32,color:s.dim,width,height:70,font:SANS_SEMI,align:"centre"}):null;
-  const chip=await textLayer(SAVE_CHIP,{size:32,color:s.chipInk,width,height:70,font:SANS_SEMI});
+  const handle=account?await textLayer(account,{size:40,color:s.dim,width,height:70,font:SANS_SEMI,align:"centre"}):null;
+  const chip=await textLayer(SAVE_CHIP,{size:40,color:s.chipInk,width,height:70,font:SANS_SEMI});
   const padX=34,padY=16,chipH=chip.info.height+padY*2,chipW=chip.info.width+padX*2;
   const GAP=22;
   const pad=halo?.pad??0;
