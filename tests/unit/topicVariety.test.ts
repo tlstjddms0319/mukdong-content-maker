@@ -44,7 +44,7 @@ describe("topic variety", () => {
   it("keeps three valid topics even when none names hongeo", () => {
     // 예전에는 홍어 질문 칸을 채우려고 하나를 준비된 홍어 주제로 바꿨다.
     const soup={...make("홍어애탕은 어떤 국물일까?"),summary:"회로만 알던 홍어를 뜨끈한 국물로 먹는 홍어애탕을 소개하고 재료는 사장님께 확인한 뒤 씁니다."};
-    const input=[makeMenu("과메기는 왜 겨울에 맛있을까?"),soup,makeJeon("미나리전은 왜 비 오는 날 생각날까?")];
+    const input=[makeMenu("과메기는 왜 냉동실이 아니라 찬바람에 말릴까?"),soup,makeJeon("미나리전은 왜 비 오는 날 생각날까?")];
     const {topics,filled}=assembleTopics(input,base);
     expect(filled).toBe(0);
     expect(topics.map(topic=>topic.title)).toEqual(input.map(topic=>topic.title));
@@ -66,9 +66,9 @@ describe("topic variety", () => {
   });
 
   it("fills only the topic that broke a rule instead of discarding all three", () => {
-    const {topics,filled}=assembleTopics([makeMenu("과메기는 왜 겨울에 맛있을까?"),make("묵동홍어마을 국밥은 왜 맛있을까?"),make("미나리전은 왜 비 오는 날 생각날까?")],base);
+    const {topics,filled}=assembleTopics([makeMenu("과메기는 왜 냉동실이 아니라 찬바람에 말릴까?"),make("묵동홍어마을 국밥은 왜 맛있을까?"),make("미나리전은 왜 비 오는 날 생각날까?")],base);
     expect(filled).toBe(1);
-    expect(topics.slice(0,2).map(topic=>topic.title)).toEqual(["과메기는 왜 겨울에 맛있을까?","미나리전은 왜 비 오는 날 생각날까?"]);
+    expect(topics.slice(0,2).map(topic=>topic.title)).toEqual(["과메기는 왜 냉동실이 아니라 찬바람에 말릴까?","미나리전은 왜 비 오는 날 생각날까?"]);
     expect(topics[2].id).toMatch(/^fallback-/);
   });
 
@@ -109,10 +109,10 @@ describe("topic variety", () => {
 
   it("reports a partial fill and only falls back fully when nothing usable came back", async () => {
     const onFallback=vi.fn(),onPartial=vi.fn();
-    const whole=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("과메기는 왜 겨울에 맛있을까?","1"),make("홍어엔 왜 깍두기도 어울릴까?","2"),makeJeon("미나리전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
+    const whole=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("과메기는 왜 냉동실이 아니라 찬바람에 말릴까?","1"),make("홍어엔 왜 깍두기도 어울릴까?","2"),makeJeon("미나리전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
     expect(onPartial).not.toHaveBeenCalled();
     expect(whole.map(topic=>topic.id)).toEqual(["1","2","3"]);
-    const partial=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("과메기는 왜 겨울에 맛있을까?","1"),{...make("홍어엔 왜 깍두기도 어울릴까?","2"),summary:"짧음"},make("미나리전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
+    const partial=await suggestTopics({storeName:"묵동홍어마을"},{suggest:async()=>[makeMenu("과메기는 왜 냉동실이 아니라 찬바람에 말릴까?","1"),{...make("홍어엔 왜 깍두기도 어울릴까?","2"),summary:"짧음"},make("미나리전은 왜 비 오는 날 생각날까?","3")]},onFallback,undefined,onPartial);
     expect(onFallback).not.toHaveBeenCalled();
     expect(onPartial).toHaveBeenCalledWith(1);
     expect(partial.slice(0,2).map(topic=>topic.id)).toEqual(["1","3"]);

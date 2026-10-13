@@ -48,12 +48,12 @@ describe("cover hook rewrite",()=>{
       {type:"의외의 정체",headline:"충격! 홍어회 식감의 비밀",subline:"왜 쫀득할까요?"},            // 과장 → 버린다
       {type:"오해 깨기",headline:"참치처럼 부드러울 줄 알았나요?",subline:"왜 쫀득할까요?"},       // 메뉴(홍어) 빠짐 → 버린다
       {type:"공감 장면",headline:"홍어회는 왜 이렇게 쫀득할까?",subline:"깊은 식감의"},             // 끝맺지 않은 부제 → 버린다
-      {type:"의외의 정체",headline:"홍어회 쫀득함, 범인은 콜라겐",subline:"왜 그럴까요?"},
+      {type:"오해 깨기",headline:"홍어회 쫀득함은 숙성 때문이 아니라고?",subline:""},
     ]}))};
     const {plan,changed,hookType}=await rewriteCover(reported(),"photo",ai);
     expect(changed).toBe(true);
-    expect(hookType).toBe("의외의 정체");
-    expect(plan.slides[0]).toMatchObject({headline:"홍어회 쫀득함, 범인은 콜라겐",subline:"왜 그럴까요?"});
+    expect(hookType).toBe("오해 깨기");
+    expect(plan.slides[0]).toMatchObject({headline:"홍어회 쫀득함은 숙성 때문이 아니라고?",subline:""});
     expect(String((ai.generate.mock.calls[0] as unknown[])[0])).toContain("오해 깨기");
   });
 
@@ -98,10 +98,10 @@ describe("cover hook rewrite",()=>{
 describe("polishing a plan",()=>{
   it("rewrites the cover, then shortens what is still too long, and survives AI failures",async()=>{
     const ai={generate:vi.fn()
-      .mockResolvedValueOnce({best:0,options:[{type:"의외의 정체",headline:"홍어회 쫀득함, 범인은 콜라겐",subline:"왜 그럴까요?"}]})
+      .mockResolvedValueOnce({best:0,options:[{type:"오해 깨기",headline:"홍어회 쫀득함은 숙성 때문이 아니라고?",subline:""}]})
       .mockRejectedValueOnce(new Error("429"))};
     const result=await polishPlan(reported(),"photo",ai);
-    expect(result.plan.slides[0].headline).toBe("홍어회 쫀득함, 범인은 콜라겐");
+    expect(result.plan.slides[0].headline).toBe("홍어회 쫀득함은 숙성 때문이 아니라고?");
     expect(result).toMatchObject({coverChanged:true,shortened:0});
   });
 });
@@ -120,5 +120,31 @@ describe("reasons that only state a result",()=>{
     expect(found).toContain("2:이 장은 결과(맛·느낌)만");
     expect(found).not.toContain("3:이 장은 결과(맛·느낌)만");
     expect(found).not.toContain("4:이 장은 결과(맛·느낌)만");
+  });
+});
+
+describe("covers that give the answer away (seventh eval run)",()=>{
+  it("rejects a cover naming the cause the body reveals, and a 'secret' tease",()=>{
+    const body=["해물은 감칠맛 성분이 우러나요","홍어는 암모니아 향이 퍼져요"];
+    expect(coverHookProblems({headline:"해물라면 감칠맛, 홍어라면 암모니아 때문이죠",subline:""},"photo",body).join(" ")).toContain("답('");
+    expect(coverHookProblems({headline:"과메기는 그냥 얼기만 할까요?",subline:"겨울 별미의 비밀을 알아봐요"},"photo",[]).join(" ")).toContain("'비밀'");
+    expect(coverHookProblems({headline:"홍어회는 썩은 게 아니라 삭히는 거라고?",subline:""},"photo",["요소가 암모니아로 바뀌어요"])).toEqual([]);
+  });
+  it("gives the cover rewrite common myths to overturn",async()=>{
+    const ai={generate:vi.fn(async()=>({best:0,options:[{type:"오해 깨기",headline:"홍어회는 썩은 게 아니라 삭히는 거라고?",subline:""}]}))};
+    await rewriteCover(reported(),"photo",ai,"홍어는 왜 상하지 않고 삭을까?");
+    const prompt=String((ai.generate.mock.calls[0] as unknown[])[0]);
+    expect(prompt).toContain("[오해 깨기 재료]");
+    expect(prompt).toContain("홍어는 썩혀 먹는 생선이다");
+  });
+});
+
+describe("ninth eval run covers",()=>{
+  it("flags yes/no cover questions and '속사정' teases, but not myth flips or why-questions",()=>{
+    const problems=(headline:string)=>coverHookProblems({headline,subline:""},"photo").join(" ");
+    expect(problems("배다리와 지평은 맛이 같을까요?")).toContain("예/아니오");
+    expect(problems("과메기가 반쯤 말려야만 하는 진짜 속사정")).toContain("속사정");
+    expect(problems("신 묵은지는 상한 김치가 아니라고?")).not.toContain("예/아니오");
+    expect(problems("홍어회는 톡 쏘는데 홍어무침은 왜 덜 쏠까?")).toBe("");
   });
 });

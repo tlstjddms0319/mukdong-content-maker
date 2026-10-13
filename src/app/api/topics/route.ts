@@ -1,3 +1,4 @@
+import { readTopicHistory, usedTopicTitles } from "@/features/topics/topicHistory";
 import { NextResponse } from "next/server";
 import { ownerApiError } from "@/features/auth/guard";
 import { z } from "zod";
@@ -35,8 +36,9 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     await purgeExpiredDraftsIfDue().catch(() => {});
     const drafts = await createDraftRepository().listDraftSummaries().catch(() => []);
     const recentDraftTopics = [...drafts].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 10).map((draft) => draft.topic).filter((title) => title.trim().length > 0 && title.length <= 120);
-    // 피할 주제 = 이 브라우저에서 최근에 보여 준 것 + 최근 초안 주제(중복 없이 최대 30개).
-    const avoidTitles = [...new Set([...(body.recentTitles ?? []), ...recentDraftTopics])].slice(0, 30);
+    // 다시 추천하지 않을 주제 = 이 브라우저에서 최근에 보여 준 것 + 모든 게시물(보관함 포함) + 30일이 지나 지운 게시물 기록(topicHistory.ts).
+    const history = await readTopicHistory().catch(() => []);
+    const avoidTitles = usedTopicTitles(drafts, history, body.recentTitles ?? []);
     const input = TopicInputSchema.parse({ storeName: body.storeProfile.name, intent: body.intent, recommendationRound:body.recommendationRound, excludeTitles:body.excludeTitles, avoidTitles, photoNotes:body.photoNotes });
     // 오늘(한국 시간) 기준 계절과 다가오는 행사. 프롬프트와 준비된 주제 양쪽에 쓰고 화면에도 알려 준다.
     const season = seasonContext();
@@ -57,8 +59,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     for (const id of photoMenus) recentMenus.delete(id);
     // 사진에서 가게 메뉴를 하나도 못 찾았으면(사진을 못 읽음·메뉴에 없는 음식) "사진 모드"로 보지 않는다: 메뉴 고르게 규칙을 그대로 지킨다
     // (예전에는 사진 메모만 있으면 규칙이 꺼져 삼합 주제만 둘 나오기도 했다. 검수 보고서 B-7).
-    const hints = { recentMenus, trends: freshTrends.map(({ keyword }) => keyword), ...(photoMenus.size ? { photoMenus } : {}) };
     const settings = await readSettings().catch((error) => { console.warn("[settings] 설정을 읽지 못해 기본값을 사용합니다:", error instanceof Error ? error.message : String(error)); return null; });
+    const hints = { recentMenus, trends: freshTrends.map(({ keyword }) => keyword), ...(photoMenus.size ? { photoMenus } : {}), storeNotes: settings?.storeNotes ?? "" };
     const client = createTextClient(settings?.textAiProvider, { onSwitch:(from, reason) => console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`, reason) });
     // 무료 문안 AI의 분당 한도를 넘기지 않게 "다른 주제 보기" 간격을 지킨다(refreshPace.ts). 너무 빨리 다시 누르면 AI를 부르지 않고
     // 몇 초 뒤에 다시 볼 수 있는지만 알려 준다(화면은 지금 추천을 그대로 두고 버튼에 남은 초를 띄운다).
@@ -74,7 +76,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // AI가 분당 한도(429)에 걸려 준비된 주제로 넘어갔으면 다음 추천까지 1분을 쉰다.
     let rateLimited = false;
     const topics = await suggestTopics(input, { suggest:async () => { if (paced) recordTopicRefresh(); return readTopicGeneration(await client.generateJson(
-      buildTopicPrompt(input, season, likedTitles, freshTrends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name)),
+      buildTopicPrompt(input, season, likedTitles, freshTrends.map(trendLabel), STORE_MENU.filter((item) => recentMenus.has(item.id)).map((item) => item.name), settings?.storeNotes ?? ""),
       topicGenerationSchema(),
     )); } }, (reason, error, rejected) => { source = "fallback"; rateLimited = error !== undefined && planFallbackReason(error) === "quota"; fallbackMessage = topicFallbackMessage(error, rejected); console.warn("[topics] using prepared topics:", reason); }, season,
     (filled) => { filledSlots = filled; console.warn(`[topics] AI 추천 중 ${filled}개가 규칙에 맞지 않아 준비된 주제로 바꿨어요.`); }, hints);

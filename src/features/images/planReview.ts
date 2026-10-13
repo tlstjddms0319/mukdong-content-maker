@@ -3,7 +3,9 @@ import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
-import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
+import { storeNotesRule } from "@/features/store/storeNotes";
+import { comparisonPairRule, principleNotesRule } from "@/features/store/principles";
+import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, obviousQuestion, coverSpoiler, SECRET_TEASE, yesNoCover, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
@@ -66,17 +68,18 @@ function comparisonIssues(plan:CarouselPlan,pair:{first:string;second:string}):S
 }
 
 // 원인을 말하는 말: 이유를 잇는 말(때문·덕분·라서·어서…)이나 원리를 가리키는 낱말(성분·온도·조리·감각).
-const SAYS_CAUSE=/때문|덕분|라서|해서|어서|아서|면서|니까|으로\s|로\s|원리|성분|분해|단백질|지방|기름|수분|온도|열을|열에|탄산|산미|효소|발효|숙성|삭히|삭혀|콜라겐|젤라틴|암모니아|요소|감칠맛|전분|당분|알코올|누룩|섬유|연골|향\s*성분|굳|녹|풀려|풀리/;
+// 원인 이름 목록은 explain.ts의 NAMES_CAUSE를 쓴다(올릴 글 검사와 같은 기준).
 
 // 표지가 묻는 것: 제목과 부제를 함께 본다. 단정형 표지("홍어는 썩은 게 아니라 삭은 거예요")는 질문을 부제("왜 안 상할까요?")에 둔다(HOOK_RULE).
 const coverQuestion=(plan:CarouselPlan)=>[plan.slides[0]?.headline??"",plan.slides[0]?.subline??""].join(" ").trim();
 
 // 표지 후킹 검사(HOOK_RULE): 과장, 도전형 말투, 막연한 질문, 질문이 없는 단정형 표지.
 // 표지 다시 쓰기(copyPolish.ts)도 같은 기준으로 후보를 거른다.
-export function coverHookProblems(slide:{headline:string;subline?:string},track?:CarouselTrack):string[] {
-  return coverHookIssues(slide,track).map(issue=>issue.message);
+// bodyHeadlines(본문 장 제목)을 주면 표지가 답(원인 성분 이름)을 먼저 말하는지도 본다.
+export function coverHookProblems(slide:{headline:string;subline?:string},track?:CarouselTrack,bodyHeadlines:readonly string[]=[]):string[] {
+  return coverHookIssues(slide,track,bodyHeadlines).map(issue=>issue.message);
 }
-function coverHookIssues(slide:{headline:string;subline?:string},track?:CarouselTrack):SlideCopyIssue[] {
+function coverHookIssues(slide:{headline:string;subline?:string},track?:CarouselTrack,bodyHeadlines:readonly string[]=[]):SlideCopyIssue[] {
   const issues:SlideCopyIssue[]=[];
   const add=(message:string)=>issues.push({slide:1,field:"headline",message});
   const text=`${slide.headline} ${slide.subline??""}`;
@@ -86,6 +89,14 @@ function coverHookIssues(slide:{headline:string;subline?:string},track?:Carousel
   if(dare)add(`표지가 독자를 시험하는 도전형 말투('${dare[0]}')예요. 광고처럼 읽히니, 의외의 사실이나 공감 장면으로 바꾸세요.`);
   const vague=slide.headline.match(VAGUE_COVER);
   if(vague)add(`표지 질문이 막연해요('${vague[0]}'). 답에 원리가 필요한 '왜' 질문이나 의외의 사실로 바꾸세요.`);
+  // 음식의 이름난 특징을 그대로 묻는 표지("애탕은 왜 진할까?")는 "원래 그래서"로 끝난다. 예상을 뒤집는 대비를 넣게 한다.
+  else if(obviousQuestion(slide.headline))add("표지 질문의 답이 뻔해요(원래 그런 음식이라서 끝나요). 독자의 예상을 뒤집는 대비나 의외의 사실로 바꾸세요(예: \"맑은 생선탕과 달리 애탕은 왜 묵직할까?\", \"홍어 뼈는 왜 씹어 먹을 수 있을까?\").");
+  // 결과물 점검 7회: 표지가 답(원인 성분)을 먼저 말하거나("…암모니아 때문이죠") "비밀을 알아봐요"처럼 무엇이 궁금한지 말하지 않으면 후킹 2점이었다.
+  const spoiler=coverSpoiler(text,bodyHeadlines);
+  if(spoiler)add(`표지가 답('${spoiler}')을 먼저 말해요. 원인 이름은 본문에서 밝히고, 표지는 흔한 오해를 뒤집거나 의외의 장면으로 궁금하게 만드세요(예: "홍어회는 썩은 게 아니라 삭히는 거라고?").`);
+  if(yesNoCover(slide.headline))add("표지가 예/아니오로 답하는 질문이에요. \"왜\"를 묻거나 오해를 뒤집은 사실(\"~가 아니라 ~라고?\")이나 구체적 대조(\"A는 ~한데 B는 왜 ~?\")로 바꾸세요.");
+  const tease=text.match(SECRET_TEASE);
+  if(tease)add(`'${tease[0]}'처럼 무엇이 궁금한지 말하지 않는 표지 말이에요. 독자가 믿던 것과 다른 사실 하나를 구체적으로 보여 주세요.`);
   // 단정형 표지는 본문이 답할 질문을 부제에 둔다(부제의 "이유 N가지"는 앱이 붙이므로 그 앞부분을 본다).
   const statement=!/[?？]\s*$/.test(slide.headline.trim());
   const subline=(slide.subline??"").replace(/·?\s*이유\s*\d+\s*가지/,"");
@@ -93,7 +104,7 @@ function coverHookIssues(slide:{headline:string;subline?:string},track?:Carousel
   return issues;
 }
 
-export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCopyIssue[] {
+export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack,storeNotes=""):SlideCopyIssue[] {
   const limits=copyLimitsOf(track);
   const issues:SlideCopyIssue[]=[];
   const add=(slide:number,field:SlideCopyIssue["field"],message:string)=>issues.push({slide,field,message});
@@ -115,7 +126,7 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
   // 두 대상의 차이를 묻는 비교 질문(COMPARISON_RULE): 이유 장마다 양쪽이 각각 어떤지, "다르다"만 하는 문장 없이, 결론은 양쪽 이름과 함께.
   // B가 "다른 발효 음식"처럼 넓은 말이면 본문은 가게 메뉴를 대표로 쓰므로 이 검사는 하지 않는다(위 검사만).
   if(pair&&!/^다른/.test(pair.second))issues.push(...comparisonIssues(plan,pair));
-  if(plan.slides[0]?.role==="cover")issues.push(...coverHookIssues(plan.slides[0],track));
+  if(plan.slides[0]?.role==="cover")issues.push(...coverHookIssues(plan.slides[0],track,plan.slides.slice(1).map(slide=>slide.headline)));
   plan.slides.forEach((slide,i)=>{
     const n=i+1,headline=slide.headline.trim();
     const length=headline.replace(/\s/g,"").length;
@@ -158,7 +169,7 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
       if(VAGUE_REASON.test(headline))add(n,"headline","'조화롭게 잡아줘요'·'정돈해줘요'처럼 결과만 말하는 막연한 제목이에요. 무엇이 무엇을 어떻게 바꾸는지(이유) 쓰세요.");
       // 결과물 점검(2026-10-12): "해물라면은 시원하고, 홍어라면은 깊어요"처럼 이유 장이 결과(맛·느낌)만 말하고 원인이 없었다(이유 깊이 3.0/5).
       // 결론 장이 아닌 이유 장의 제목·짧은 글 어디에도 원인을 말하는 말이 없으면 다시 쓰게 한다.
-      else if(i<plan.slides.length-1&&!SAYS_CAUSE.test([headline,...slide.points].join(" ")))add(n,"headline","이 장은 결과(맛·느낌)만 말해요. 무엇이 그렇게 만드는지 원인(성분·온도·조리법·감각의 원리)을 제목이나 짧은 글에 함께 쓰세요(예: \"삭히는 동안 요소가 암모니아로 바뀌어요\").");
+      else if(i<plan.slides.length-1&&!NAMES_CAUSE.test([headline,...slide.points].join(" ")))add(n,"headline","이 장은 결과(맛·느낌)만 말해요. 무엇이 그렇게 만드는지 원인이 되는 것의 이름(성분·구조·온도·조리 과정·감각 기관·풍습)을 제목이나 짧은 글에 함께 쓰세요. '~해서 맛있어요'처럼 이어 주는 말만으로는 이유가 아니에요(예: \"삭히는 동안 요소가 암모니아로 바뀌어요\").");
       for(const point of slide.points)if(VAGUE_REASON.test(point))add(n,"points",`요점 '${point.trim()}'이 결과만 말하고 이유가 없어요. 무엇이 어떻게 작용하는지 쓰세요.`);
       // 표지가 "왜"를 묻는데 요점이 먹는 법이면 제목과 따로 논다(사장님 지적 2026-10-10: 제목 "지방층이 묵은지의 산미를 감싸요" 아래
       // "홍어 한 점을 묵은지에 살짝 감싸요"). 먹는 법은 속 글(notes)·올릴 글로 보내고, 요점은 제목의 이유·근거로 쓴다.
@@ -169,7 +180,7 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack):SlideCop
       }
     }
     // 카드는 게시 뒤 고칠 수 없으니 확인 안 된 사실·보장·가게 제공 단정을 검수 단계에서 먼저 고치게 한다.
-    const claim=(text:string)=>{const result=checkTextClaims(text);return [...result.blocked,...result.verify,...servingClaimIssues(text)];};
+    const claim=(text:string)=>{const result=checkTextClaims(text,{storeNotes});return [...result.blocked,...result.verify,...servingClaimIssues(text)];};
     for(const message of claim(headline))add(n,"headline",`제목: ${message} 확인된 정보 없이 쓸 수 있는 말로 바꾸세요.`);
     for(const point of slide.points)for(const message of claim(point))add(n,"points",`요점 '${point.trim()}': ${message} 빼거나 바꾸세요.`);
     for(const point of slide.points){
@@ -210,7 +221,7 @@ function heroLine(topic:string,menu:StoreMenuItem|undefined=mainMenuOf(topic)):s
   return `주어와 첫 동작은 주제의 메뉴인 ${josa(menu.short,"으로","로")} 쓰고, 다른 음식은 곁들이는 말로만 넣으세요. 홍어·삼합을 억지로 끌어오지 마세요.`;
 }
 
-export type ReviewContext={menu?:StoreMenuItem;photoNotes?:readonly string[];contentBrief?:string;track?:CarouselTrack};
+export type ReviewContext={menu?:StoreMenuItem;photoNotes?:readonly string[];contentBrief?:string;track?:CarouselTrack;storeNotes?:string};
 
 export function buildPlanReviewPrompt(plan:CarouselPlan,topic:string,issues:SlideCopyIssue[],context:ReviewContext={}):string {
   const slides=plan.slides.map((slide,i)=>({slide:i+1,role:slide.role,headline:slide.headline,points:slide.points}));
@@ -231,7 +242,9 @@ ${found}
 ${STORY_ARC_RULE}
 ${QUESTION_FOCUS_RULE}
 ${EXPLAIN_REASONS_RULE}`:"눈이나 입으로 확인할 수 있는 관찰(색, 결, 식감, 먹는 순서)이나 널리 알려진 이유로 쓰세요."}
-5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.
+5. 확인되지 않은 가격·원산지·영업시간·숙성 기간·건강 효능, 향이 사라진다거나 누구나 좋아한다는 보장은 쓰지 마세요.${comparisonPairRule(topic,context.contentBrief)?`\n${comparisonPairRule(topic,context.contentBrief)}`:""}${principleNotesRule(topic,context.contentBrief)?`
+${principleNotesRule(topic,context.contentBrief)}`:""}${context.storeNotes?.trim()?`
+${storeNotesRule(context.storeNotes)}`:""}
 6. 문제가 없는 장은 그대로 두세요. 장 수, 장 순서, 장마다 요점 개수(표지는 빈 배열)는 바꾸지 마세요. 표지의 points는 빈 배열입니다.
 
 ${context.track?`[제목만 이어 읽기]
@@ -250,15 +263,15 @@ export type ReviewResult={plan:CarouselPlan;applied:boolean;before:number;after:
 // 원래대로 남았다(사장님 지적 2026-10-10). 이제는 장마다 비교해 문제가 줄어든 장만 받고, 남은 문제가 있으면 한 번 더 검수한다.
 // 자동 검사에서 문제가 하나도 없으면 AI를 다시 부르지 않는다(무료 한도를 아끼고, 멀쩡한 문안을 괜히 바꾸지 않게).
 const REVIEW_ROUNDS=2;
-const issuesOn=(plan:CarouselPlan,track:CarouselTrack|undefined,slide:number)=>slideCopyIssues(plan,track).filter(issue=>issue.slide===slide).length;
+const issuesOn=(plan:CarouselPlan,track:CarouselTrack|undefined,slide:number,storeNotes="")=>slideCopyIssues(plan,track,storeNotes).filter(issue=>issue.slide===slide).length;
 export async function reviewCarouselPlan(plan:CarouselPlan,topic:string,ai:{review:(prompt:string,schema:ReturnType<typeof reviewSchema>)=>Promise<PlanReview>},context:ReviewContext={}):Promise<ReviewResult> {
-  const before=slideCopyIssues(plan,context.track).length;
+  const before=slideCopyIssues(plan,context.track,context.storeNotes).length;
   if(!before)return {plan,applied:false,before:0,after:0};
   let current=plan,count=before;
   for(let round=0;round<REVIEW_ROUNDS&&count>0;round++){
     const next=await reviewRound(current,topic,ai,context);
     if(!next)break;
-    const after=slideCopyIssues(next,context.track).length;
+    const after=slideCopyIssues(next,context.track,context.storeNotes).length;
     if(after>=count)break;
     current=next;count=after;
   }
@@ -267,7 +280,7 @@ export async function reviewCarouselPlan(plan:CarouselPlan,topic:string,ai:{revi
 
 // 검수 한 번: AI 답을 받아, 장마다 문제가 줄어든 장만 바꾼 구성안을 돌려준다. 받을 장이 없거나 답이 잘못됐으면 undefined.
 async function reviewRound(plan:CarouselPlan,topic:string,ai:{review:(prompt:string,schema:ReturnType<typeof reviewSchema>)=>Promise<PlanReview>},context:ReviewContext):Promise<CarouselPlan|undefined> {
-  const issues=slideCopyIssues(plan,context.track);
+  const issues=slideCopyIssues(plan,context.track,context.storeNotes);
   try{
     const schema=reviewSchema(plan.slides.length);
     const reviewed=schema.parse(await ai.review(buildPlanReviewPrompt(plan,topic,issues,context),schema));
@@ -275,12 +288,12 @@ async function reviewRound(plan:CarouselPlan,topic:string,ai:{review:(prompt:str
     const sameShape=reviewed.slides.every((slide,i)=>slide.points.length===plan.slides[i].points.length||(plan.slides[i].role!=="cover"&&slide.points.length>=minPoints));
     if(!sameShape)return undefined;
     const candidate:CarouselPlan={...plan,slides:plan.slides.map((slide,i)=>({...slide,headline:reviewed.slides[i].headline,points:slide.role==="cover"?[]:reviewed.slides[i].points}))};
-    const blocked=(slide:CarouselPlan["slides"][number])=>[slide.headline,...slide.points].some(text=>checkTextClaims(text).blocked.length>0);
+    const blocked=(slide:CarouselPlan["slides"][number])=>[slide.headline,...slide.points].some(text=>checkTextClaims(text,{storeNotes:context.storeNotes}).blocked.length>0);
     // 장마다: 검수한 장의 문제 수가 원래 장보다 적으면 받는다. 장끼리 겹침 검사가 있어 받은 뒤 전체를 다시 센다(호출한 쪽).
     const slides=plan.slides.map((slide,i)=>{
       const fixed=candidate.slides[i];
       if(blocked(fixed))return slide;
-      return issuesOn(candidate,context.track,i+1)<issuesOn(plan,context.track,i+1)?fixed:slide;
+      return issuesOn(candidate,context.track,i+1,context.storeNotes)<issuesOn(plan,context.track,i+1,context.storeNotes)?fixed:slide;
     });
     return slides.some((slide,i)=>slide!==plan.slides[i])?{...plan,slides}:undefined;
   }catch{

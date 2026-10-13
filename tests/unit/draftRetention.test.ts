@@ -22,18 +22,22 @@ describe("draft retention", () => {
   });
   it("deletes expired posts, keeps the archive and new ones, and skips one being posted right now", async () => {
     const summaries=[
-      {id:"old",created_at:daysAgo(40)},
-      {id:"old-scheduled",created_at:daysAgo(31),planned_publish_at:"2026-10-20T09:00:00.000Z",final_review_complete:true},
+      {id:"old",created_at:daysAgo(40),topic:"홍어는 왜 상하지 않고 삭을까?"},
+      {id:"old-scheduled",topic:"과메기는 왜 찬바람에 말릴까?",created_at:daysAgo(31),planned_publish_at:"2026-10-20T09:00:00.000Z",final_review_complete:true},
       {id:"old-archived",created_at:daysAgo(90),archived:true},
       {id:"posting",created_at:daysAgo(45)},
       {id:"new",created_at:daysAgo(3)},
     ];
     const deleteDraft=vi.fn(async(_id:string)=>true);
+    const history=vi.fn(async(_titles:readonly string[])=>{});
     const removed=await purgeExpiredDrafts(NOW,{
       drafts:{listDraftSummaries:async()=>summaries,deleteDraft} as never,
       instagram:{readPublication:async(id:string)=>id==="posting"?{status:"preparing"}:null} as never,
+      history,
     });
     expect(removed).toBe(2);
     expect(deleteDraft.mock.calls.map(([id])=>id)).toEqual(["old","old-scheduled"]);
+    // 지운 게시물의 주제는 "했던 주제" 기록에 남긴다(다시 추천하지 않게).
+    expect(history).toHaveBeenCalledWith(["홍어는 왜 상하지 않고 삭을까?","과메기는 왜 찬바람에 말릴까?"]);
   });
 });

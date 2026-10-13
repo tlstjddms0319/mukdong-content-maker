@@ -1,3 +1,5 @@
+import { storeNotesRule } from "@/features/store/storeNotes";
+import { comparisonPairRule, principleNotesRule } from "@/features/store/principles";
 import { z } from "zod";
 import { IMAGE_STYLE_DIRECTIONS, ImageStyleSchema } from "./style";
 import { CardLayoutSchema, DesignSpecSchema, DEFAULT_DESIGN, defaultCardLayout, designCatalogText, normalizeCardLayout } from "./design";
@@ -220,7 +222,8 @@ function sceneExamples(menu:StoreMenuItem|undefined):string {
 }
 
 // Shared by the plan route and the provider comparison script so both send the same instruction.
-export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
+// storeNotes: 설정의 가게 이야기 메모(사장님이 적은 가게 사실). 있으면 [사실 기준] 바로 뒤에 근거로 쓸 수 있다고 알려 준다.
+export function buildCarouselPlanPrompt(input:CarouselPlanInput,{storeNotes=""}:{storeNotes?:string}={}):string {
   const parsed=parsePlanInput(input);
   const style=IMAGE_STYLE_DIRECTIONS[parsed.imageStyle??"photo"];
   const roles=rolesForCount(parsed.slideCount);
@@ -234,6 +237,10 @@ export function buildCarouselPlanPrompt(input:CarouselPlanInput):string {
     // 사람이 쓴 글처럼: 명사형 슬로건과 광고 상투어를 막고, 관찰 가능한 구체 정보로 쓴다.
     track?track.style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계", "~한 세트", "~의 역사"처럼 명사로 끝나는 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 각 headline은 짧은 한국어(12~30자)로 한 가지 정보만 전달하고 같은 뜻의 제목을 반복하지 마세요. 표지를 제외한 각 장에는 points 배열로 2~${SLIDE_POINT_MAX_COUNT}개의 요점을 넣으세요. 요점 하나는 한 줄(12~28자)로 headline을 반복하지 말고, "무엇이 어떻게 다른지" 눈이나 입으로 확인할 수 있는 구체적인 정보(차이점, 먹는 순서, 어울리는 조합, 확인할 점)를 쓰세요. 감각을 꾸미는 추상적 비유("입안의 리듬", "감촉을 선사") 대신 "얇게 썰면 결이 비쳐 보여요"처럼 관찰 그대로 쓰세요. 표지의 points는 빈 배열로 두세요. 표지 headline은 넘기고 싶게 만드는 짧은 훅(8~18자, 질문이나 한 문장)으로 쓰고, 그 설명은 subline(30자 이내 해요체 한 줄)에 넣으세요. 표지가 아닌 장의 subline은 빈 문자열로 두세요.`,
     `[사실 기준] 홍어의 향이 사라진다거나 누구나 좋아한다고 보장하지 마세요. 홍어회와 홍어무침·홍어애탕(그리고 홍어전·찜)의 조리법을 구분하세요. 선택 주제나 내용 메모에 삼합이 없으면 삼합 구성(홍어·수육·묵은지)을 쓰지 마세요. 삼합은 이 가게의 기본값이 아니라 여러 메뉴 가운데 하나입니다. 메뉴에 들어가는 재료와 곁들임 구성, 확인되지 않은 가격, 원산지, 영업시간, 매장 정보는 headline과 points 어디에도 만들지 마세요.${track?"":`\n${STORY_ARC_RULE}\n${EXPLAIN_REASONS_RULE}\n${NOTES_FIRST_RULE}`}`,
+    ...(storeNotesRule(storeNotes)?[storeNotesRule(storeNotes)]:[]),
+    // 원리 노트(store/principles.ts): 이유를 지어내지 않고 확인해 둔 원리에서 고르게 한다. 비교 주제면 기준별 차이도 준다.
+    ...(comparisonPairRule(parsed.topic,parsed.contentBrief)?[comparisonPairRule(parsed.topic,parsed.contentBrief)]:[]),
+    ...(principleNotesRule(parsed.topic,parsed.contentBrief,parsed.imageBrief,...(parsed.photoNotes??[]))?[principleNotesRule(parsed.topic,parsed.contentBrief,parsed.imageBrief,...(parsed.photoNotes??[]))]:[]),
     // 글도 주제의 메뉴가 주인공: 곁들임이 문장을 이끌면 그림보다 글에서 먼저 주인공이 바뀐다. 과메기 주제면 과메기, 홍어 주제일 때만 홍어.
     heroRule(menu,[parsed.topic,parsed.contentBrief].filter(Boolean).join(" ")),
     // A vs B 장은 글로 말한 차이가 두 사진에서 보여야 한다. 코 모양처럼 썬 회 사진에 안 나오는 차이는 쓰지 않는다.

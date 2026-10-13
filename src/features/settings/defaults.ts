@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS = {
   brandHandle: "",
   remoteCutout: false,
   remoteCutoutMonthlyCredits: 20,
+  storeNotes: "",
   aiModelMode: "automatic",
   preserveOriginals: true,
   blockUnverifiedClaims: true,
