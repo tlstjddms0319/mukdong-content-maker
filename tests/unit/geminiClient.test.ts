@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { GeminiConfigurationError, createGeminiClient, toLegacyResponseSchema } from "@/lib/ai/geminiClient";
+import { GeminiConfigurationError, createGeminiClient, toLegacyResponseSchema, withoutArrayBounds } from "@/lib/ai/geminiClient";
 
 vi.mock("server-only", () => ({}));
 
@@ -76,6 +76,19 @@ describe("Gemini client", () => {
     expect(request.mock.calls[1][0]).toContain("gemini-3.5-flash-lite:generateContent");
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("responseSchema"), expect.any(String));
     warn.mockRestore();
+  });
+
+  // 점검(2026-10-13): Gemini responseJsonSchema는 minItems·maxItems를 400으로 거부한다. 구성안 요청마다 400 → 재요청으로 호출이 두 배였다.
+  it("sends array schemas without minItems/maxItems and still validates the length with zod", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'{"items":["a","b"]}' }] } }] }), { status:200 }));
+    const schema = z.object({ items:z.array(z.string()).min(1).max(3) });
+    await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", schema)).resolves.toEqual({ items:["a","b"] });
+    const sent = JSON.parse(String(request.mock.calls[0][1].body)).generationConfig.responseJsonSchema;
+    expect(JSON.stringify(sent)).not.toMatch(/minItems|maxItems/);
+    expect(sent.properties.items).toMatchObject({ type:"array", items:{ type:"string" } });
+    expect(withoutArrayBounds({ type:"array", minItems:1, maxItems:3, items:{ type:"object", properties:{ tags:{ type:"array", minItems:2, items:{ type:"string" } } }, required:["tags"] } })).toEqual({ type:"array", items:{ type:"object", properties:{ tags:{ type:"array", items:{ type:"string" } } }, required:["tags"] } });
+    const tooMany = vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'{"items":["a","b","c","d"]}' }] } }] }), { status:200 }));
+    await expect(createGeminiClient({ apiKey:"secret", fetch:tooMany }).generateJson("test", schema)).rejects.toBeTruthy();
   });
 
   it("unwraps a single object the model wrapped in an array", async () => {
