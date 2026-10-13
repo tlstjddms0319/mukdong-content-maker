@@ -215,6 +215,25 @@ describe("Higgsfield image generation",()=>{
     warn.mockRestore();
   });
 
+  // 운영 로그(2026-10-13): "Grok Image 2.0 … 작업 상태 failed"만 남아 이유를 알 수 없었다. 상태 응답에 이유가 있으면 함께 남긴다.
+  it("keeps the failed job's reason from the status answer",async()=>{
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const { generateHiggsfieldImages,jobFailureReason,resetHiggsfieldModelSkips,setHiggsfieldBusyRetryForTests }=await import("@/features/images/higgsfieldRequest");
+    resetHiggsfieldModelSkips();setHiggsfieldBusyRetryForTests(0);
+    expect(jobFailureReason({status:"failed",error:{code:"content_policy",message:"prompt rejected"}})).toContain("content_policy");
+    expect(jobFailureReason({status:"failed"})).toBe("");
+    vi.stubGlobal("fetch",vi.fn(async(url:string)=>{
+      if(url.endsWith("/xai/grok-imagine-image-2.0"))return json({status:"queued",request_id:"f1",status_url:"https://api.higgsfield.ai/requests/f1/status"});
+      if(url.endsWith("/requests/f1/status"))return json({status:"failed",failure_reason:"generation timed out upstream"});
+      if(url.endsWith("/nano-banana-pro"))return json({detail:"model_disabled"},503);
+      throw new Error(`unexpected ${url}`);
+    }));
+    const failure=await generateHiggsfieldImages({topic:"과메기",count:1,aspectRatio:"4:5"}).catch(error=>error);
+    expect(String(failure.detail)).toContain("model_disabled");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("timed out upstream"));
+    warn.mockRestore();
+  });
+
   it("keeps the Higgsfield answer and the model in the error so the cause can be seen",async()=>{
     vi.stubEnv("HF_IMAGE_MODEL","nano-banana-pro");
     const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
