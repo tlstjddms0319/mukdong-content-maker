@@ -2,7 +2,7 @@ import sharp, { type OverlayOptions } from "sharp";
 import { croppedPhoto, finishPhoto, svgLayer, textLayer, type Font } from "../render/primitives";
 import { shadowLayer, textureLayer } from "../decor";
 import { STYLE_FONTS, emphasisOf, snap, type StyleContent } from "./shared";
-import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines, storeCardBlock } from "./trackKit";
+import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, fitLines, folioMark, footerRow, logoMark, saveChip, shortLines, storeCardBlock } from "./trackKit";
 import type { TrackLook } from "./trackLooks";
 
 // 사진 중심 추가 모양 2차(조사 보고서 "한식 카드뉴스 템플릿 레퍼런스" 후보 2·4·8, 2026-10-12). design.look 번호:
@@ -26,15 +26,16 @@ function starburst(cx:number,cy:number,R:number,points=14):string {
   return `<path d="${d}Z" fill="${SIGN.yellow}" stroke="${SIGN.navy}" stroke-width="4" transform="rotate(-10 ${cx} ${cy})"/>`;
 }
 async function signboard(photo:Buffer,content:StyleContent,index:number):Promise<Buffer> {
-  const head=await title(content,SIGN.cream,SIGN.yellow,content.cover?[92,86,80,74,68]:[72,68,64,60,56],STYLE_FONTS.comic);
-  const BAND_PAD=44;
-  const bandH=Math.max(content.cover?300:220,head.layer.info.height+BAND_PAD*2+(content.cover?54:0));
+  // 사진이 화면의 65% 이상 되게 간판 띠·아래 띠를 글이 들어갈 만큼만 쓴다(예전 표지 최소 300px → 사진 54~60%).
+  // 마지막 장은 가게 명함 대신 아래 띠에 "저장해 두고 다시 보세요" 알약 + 바닥글.
+  const head=await title(content,SIGN.cream,SIGN.yellow,content.cover?[88,82,76,72,68]:[68,64,60,56,52],STYLE_FONTS.comic);
+  const BAND_PAD=30;
+  const bandH=Math.max(content.cover?220:170,head.layer.info.height+BAND_PAD*2+(content.cover?50:0));
   const line=lineOf(content);
   const sub=line?await textLayer(line,{size:42,color:SIGN.navy,width:CONTENT_W,height:4000,font:SANS_BOLD,align:"centre",spacing:10}):null;
-  const surface={ink:SIGN.navy,dim:SIGN.navy,chip:SIGN.red,chipInk:SIGN.cream};
-  const store=content.last?await storeCardBlock({logoSize:96,wordmark:false,surface}):null;
-  const foot=store?null:await footerRow({color:SIGN.navy,cueColor:SIGN.navy,cue:!content.last});
-  const bottomH=(sub?sub.info.height+32:0)+(store?store.height:foot!.height)+MARGIN+24;
+  const chip=content.last?await saveChip(SIGN.red,SIGN.cream):null;
+  const foot=await footerRow({color:SIGN.navy,cueColor:SIGN.navy,cue:!content.last});
+  const bottomH=(sub?sub.info.height+22:0)+(chip?chip.height+20:0)+foot.height+48+20;
   const photoTop=bandH,photoH=H-bandH-bottomH;
   const layers:OverlayOptions[]=[{input:await finishPhoto(photo,W,photoH,{zoom:1.03}),left:0,top:photoTop}];
   let markup=`<rect x="0" y="0" width="${W}" height="${bandH}" fill="${SIGN.red}"/><rect x="18" y="18" width="${W-36}" height="${bandH-36}" rx="10" fill="none" stroke="${SIGN.cream}" stroke-width="3"/>`
@@ -42,22 +43,22 @@ async function signboard(photo:Buffer,content:StyleContent,index:number):Promise
   // 간판 양 끝 둥근 전구 장식(작은 점 세 개씩).
   for(const x of [52,W-52])for(let i=0;i<3;i++)markup+=`<circle cx="${x}" cy="${bandH/2-30+i*30}" r="7" fill="${SIGN.yellow}"/>`;
   // 별 딱지: 사진 오른쪽 위. 표지는 "명물", 본문은 장 번호.
-  const R=content.cover?112:86;
+  const R=content.cover?84:64;
   const cx=W-MARGIN-R+12,cy=photoTop+R+28;
   markup+=starburst(cx,cy,R);
   layers.push(svgLayer(markup));
-  const star=await textLayer(content.cover?"묵동\n명물":String(index).padStart(2,"0"),{size:content.cover?40:52,color:SIGN.navy,width:R*2,height:R*2,font:STYLE_FONTS.comic,align:"centre",spacing:2});
+  const star=await textLayer(content.cover?"묵동\n명물":String(index).padStart(2,"0"),{size:content.cover?40:44,color:SIGN.navy,width:R*2,height:R*2,font:STYLE_FONTS.comic,align:"centre",spacing:2});
   layers.push({input:star.data,left:centred(star,cx),top:Math.round(cy-star.info.height/2)});
-  let y=Math.round((bandH-head.layer.info.height-(content.cover?54:0))/2);
+  let y=Math.round((bandH-head.layer.info.height-(content.cover?50:0))/2);
   if(content.cover){
     const eyebrow=await textLayer("— 묵동홍어마을 —",{size:40,color:SIGN.cream,width:700,height:80,font:SANS_BOLD,align:"centre",letterSpacing:4});
-    layers.push({input:eyebrow.data,left:centred(eyebrow),top:y});y+=54;
+    layers.push({input:eyebrow.data,left:centred(eyebrow),top:y});y+=50;
   }
   layers.push({input:head.layer.data,left:centred(head.layer),top:y});
-  let by=H-bottomH+24;
-  if(sub){layers.push({input:sub.data,left:centred(sub),top:by});by+=sub.info.height+32;}
-  if(store){const placed=store.place(540,by);layers.push(svgLayer(placed.svg),...placed.layers);}
-  else{const placed=foot!.place(by);layers.push(svgLayer(placed.svg),...placed.layers);}
+  let by=H-bottomH+20;
+  if(sub){layers.push({input:sub.data,left:centred(sub),top:by});by+=sub.info.height+22;}
+  if(chip){const cx=Math.round(540-chip.width/2);layers.push(svgLayer(chip.svg(cx,by)),{input:chip.layer.data,left:cx+chip.padX,top:by+chip.padY});by+=chip.height+20;}
+  const placed=foot.place(by);layers.push(svgLayer(placed.svg),...placed.layers);
   return finish(SIGN.cream,layers);
 }
 
