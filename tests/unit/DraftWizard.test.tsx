@@ -297,14 +297,15 @@ describe("DraftWizard",()=>{
   it("draws a text card for a slide the image AI keeps failing on, and finishes the post with a notice",async()=>{
     setImageRetryDelayForTests(0);
     const base=makingRoutes("photo");
-    const request=api({...base,"/api/images/generate":body=>Number(body.slideIndex)===3&&body.slide?.layout!=="browser"?FAIL:base["/api/images/generate"](body)});
+    const request=api({...base,"/api/images/generate":body=>Number(body.slideIndex)===3&&(body.slide as {layout?:string}|undefined)?.layout!=="browser"?FAIL:base["/api/images/generate"](body)});
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);
     await goMake("photo");
     await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
     const third=calls(request,"/api/images/generate").filter(body=>Number(body.slideIndex)===3);
     expect(third.length).toBeGreaterThanOrEqual(3);                 // 두 번 실패 + 글자 카드
-    expect(third.at(-1)?.slide?.layout).toBe("browser");
-    expect(third.at(-1)?.photos).toBeUndefined();
+    const last=third.at(-1) as {slide?:{layout?:string};photos?:unknown}|undefined;
+    expect(last?.slide?.layout).toBe("browser");
+    expect(last?.photos).toBeUndefined();
     expect(calls(request,"/api/drafts","POST").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/AI 그림 1장\(3번 장\)을 못 그려서/)).toBeInTheDocument();
     expect(screen.queryByText(/사진을 다 만들지 못했어요/)).toBeNull();
