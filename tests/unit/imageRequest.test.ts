@@ -36,7 +36,7 @@ const visitSlide={
   textPosition:"bottom" as const,
   layout:"frame" as const,
   keywords:["방문 전"],
-  figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0,
+  figure:"",imageStyle:"photo" as const,titleFont:"auto" as const,bodyFont:"auto" as const,variant:0,
 };
 
 const carouselStyleAnchor="따뜻한 색온도, 흰 그릇, 짙은 나무 테이블, 작은 녹색 포인트";
@@ -455,7 +455,7 @@ describe("OpenAI image request", () => {
 
 describe("hongeo stays the hero", () => {
   it("tells the image model that the skate is largest and in front while pork and kimchi are sides", () => {
-    const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",subline:"",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0}});
+    const prompt=buildImagePrompt({topic:"홍어 삼합",count:1,aspectRatio:"4:5",slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도, 흰 그릇, 짙은 나무 테이블",slide:{role:"how-to",imageStyle:"photo" as const,subline:"",headline:"한 점은 이렇게",points:["묵은지 위에 수육과 홍어를 올려요"],visualPrompt:"젓가락으로 삼합 한 점을 만드는 손",textPosition:"top",layout:"step",keywords:["삼합"],figure:"",titleFont:"auto",bodyFont:"auto",variant:0}});
     expect(prompt).toContain("주인공은 홍어");
     expect(prompt).toContain("The fermented skate is the hero");
     expect(prompt).toContain("수육이 홍어를 가리지 않게");
@@ -471,7 +471,7 @@ describe("hongeo stays the hero", () => {
 
 describe("the topic's menu is the hero", () => {
   const brief=(topic:string,headline?:string,points:string[]=[])=>({topic,count:1,aspectRatio:"4:5" as const,slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 조명",
-    ...(headline?{slide:{role:"detail" as const,subline:"",headline,points,visualPrompt:"접시 위 음식을 낮은 각도에서 가까이",textPosition:"top" as const,layout:"frame" as const,keywords:[],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0}}:{})});
+    ...(headline?{slide:{role:"detail" as const,imageStyle:"photo" as const,subline:"",headline,points,visualPrompt:"접시 위 음식을 낮은 각도에서 가까이",textPosition:"top" as const,layout:"frame" as const,keywords:[],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0}}:{})});
   it("makes gwamegi the hero of a gwamegi topic and leaves the skate out", () => {
     const prompt=buildImagePrompt(brief("과메기는 왜 찬바람이 불면 찾을까?"));
     expect(prompt).toContain("주인공은 과메기다");
@@ -539,7 +539,7 @@ describe("appetizing photo direction (A9)", () => {
 });
 
 describe("each slide shows what its copy describes", () => {
-  const slide=(headline:string,points:string[])=>({role:"how-to" as const,subline:"",headline,points,visualPrompt:"젓가락으로 한 점을 집는 손",textPosition:"top" as const,layout:"frame" as const,keywords:["홍어"],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0});
+  const slide=(headline:string,points:string[])=>({role:"how-to" as const,imageStyle:"photo" as const,subline:"",headline,points,visualPrompt:"젓가락으로 한 점을 집는 손",textPosition:"top" as const,layout:"frame" as const,keywords:["홍어"],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0});
   const brief=(headline:string,points:string[])=>({topic:"홍어가 코를 찡하게 하는 이유",count:1,aspectRatio:"4:5" as const,slideIndex:4,slideTotal:5,styleAnchor:"따뜻한 조명",slide:slide(headline,points)});
   it("puts the kimchi wrap and the boiled pork from the copy into the image prompt", () => {
     // 사장님이 보내 준 실제 사례: "묵은지에 가볍게 감싸요"·"수육 한 조각을 곁들여요" 장인데 홍어만 든 사진이 나왔다.
@@ -562,7 +562,7 @@ describe("each slide shows what its copy describes", () => {
 
 describe("no chopstick lifting unless the scene asks for it", () => {
   const brief=(visualPrompt:string)=>({topic:"홍어회",count:1,aspectRatio:"4:5" as const,slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 조명",
-    slide:{role:"pairing" as const,subline:"",headline:"막걸리와 함께 놓아요",points:["사발에 막걸리를 따라요"],visualPrompt,textPosition:"top" as const,layout:"frame" as const,keywords:["막걸리"],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0}});
+    slide:{role:"pairing" as const,imageStyle:"photo" as const,subline:"",headline:"막걸리와 함께 놓아요",points:["사발에 막걸리를 따라요"],visualPrompt,textPosition:"top" as const,layout:"frame" as const,keywords:["막걸리"],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0}});
   it("tells the model to keep the food on the plate when the scene does not mention lifting", () => {
     expect(buildImagePrompt(brief("홍어 접시 옆 사발에 막걸리를 따르는 순간, 손·젓가락·얼굴 없음"))).toContain("Do NOT show chopsticks lifting a slice");
   });

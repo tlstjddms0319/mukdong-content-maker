@@ -1,7 +1,8 @@
 "use client";
 import { GenerationProgress } from "@/components/states/GenerationState";
 import { PhotoPicker } from "./PhotoPicker";
-import { AUTO_FAILED, autoProgress, setAiFill, type GenerationState } from "@/features/images/generationStore";
+import { AUTO_FAILED, autoProgress, chooseConcept, setAiFill, type GenerationState } from "@/features/images/generationStore";
+import { ConceptStep } from "./ConceptStep";
 import { TRACK_SLIDE_RANGE, type CarouselTrack } from "@/features/images/track";
 
 // 2단계 "어떻게 만들까요?": 큰 카드 두 개 중 하나 + 사진 올리기(선택) + "만들기" 한 번.
@@ -23,6 +24,8 @@ function timeNote(track:CarouselTrack,photos:number,aiFill:boolean):{time:string
 
 export function MakeStep({topic,track,onTrack,state,onMake,onBack}:{topic:string;track:CarouselTrack;onTrack:(track:CarouselTrack)=>void;state:GenerationState;onMake:()=>void;onBack:()=>void}) {
   const {auto}=state;
+  // 구성안이 나와 그림 콘셉트를 고르는 중(generationStore "choosing"): 고르면 이어서 만든다.
+  if(auto.stage==="choosing"&&auto.concepts)return <ConceptStep topic={topic} concepts={auto.concepts} onChoose={index=>{void chooseConcept(index);}}/>;
   const running=auto.stage==="working"||auto.stage==="saving"||auto.stage==="writing";
   if(running){
     const {message,progress}=autoProgress(state);

@@ -1111,3 +1111,16 @@ input[type="checkbox"], input[type="radio"] { accent-color:var(--accent); }
 .look-option:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
 .look-picker-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px 14px; margin-top:14px; }
 .look-picker-actions .field-help { margin:0; margin-right:auto; }
+/* 2단계 중간: 그림 콘셉트 카드(실사 + AI 제안). 갈래 카드와 같은 결, 세 장이면 세 칸. */
+.concept-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin:24px 0 8px; }
+.concept-card { display:grid; justify-items:start; gap:8px; padding:22px; text-align:left; border:2px solid var(--line); border-radius:var(--panel-radius); background:var(--surface); cursor:pointer; font:inherit; color:inherit; }
+.concept-card.selected { border:3px solid var(--accent); padding:21px; background:var(--accent-wash); box-shadow:0 8px 28px rgb(163 72 36 / 12%); }
+.concept-card strong { font-size:26px; line-height:1.25; }
+.concept-card.selected strong::after { content:" ✓"; color:var(--accent); }
+.concept-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.concept-icon { font-size:34px; line-height:1; }
+.concept-kind { font-size:17px; font-weight:700; color:var(--muted); }
+.concept-badge { font-size:15px; font-weight:800; padding:3px 10px; border-radius:999px; background:var(--accent); color:#fff; }
+.concept-summary { font-size:19px; line-height:1.5; }
+.concept-reason { font-size:17px; line-height:1.5; color:var(--muted); }
+.concept-mix { font-size:16px; font-weight:700; color:var(--accent); }

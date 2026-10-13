@@ -18,7 +18,7 @@ import { pickSkateReference, wantsSkateReference } from "@/features/images/skate
 import { prepareRemoteCutouts } from "@/features/images/remoteCutout";
 import { viewOf } from "@/features/images/render/photoView";
 import { photoWindowRatio } from "@/features/images/photoWindow";
-import { checkCoverCandidates, coverRank, expectedFoodFrom } from "@/features/images/coverCheck";
+import { checkCoverCandidates, coverRank, expectedCoverFrom } from "@/features/images/coverCheck";
 
 type ImageProvider="higgsfield"|"cloudflare"|"openai";
 const PROVIDER_LABELS:Record<ImageProvider,string>={higgsfield:"Higgsfield",cloudflare:"Cloudflare",openai:"OpenAI"};
@@ -177,7 +177,7 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     if (images.length !== parsed.data.count) throw new Error("incomplete image result");
     // 표지 후보가 여러 장이면 글자를 얹기 전 원본을 AI로 점검한다(이미지 속 글자, 홍어로 안 보임, 어색한 손).
     // 점검은 순서와 경고 배지에만 쓰고 다시 만들지는 않는다. 키가 없거나 실패하면 null(점검 없음).
-    const checks=parsed.data.slide?.role==="cover"&&images.length>1?await checkCoverCandidates(await Promise.all(images.map(imageBytes)),{expectedFood:expectedFoodFrom(parsed.data.topic,parsed.data.slide?.headline)}):null;
+    const checks=parsed.data.slide?.role==="cover"&&images.length>1?await checkCoverCandidates(await Promise.all(images.map(imageBytes)),{expectedFood:expectedCoverFrom(parsed.data.topic,parsed.data.slide)}):null;
     if(remoteCutout&&parsed.data.slide)await prepareCutouts(await Promise.all(images.map(imageBytes)));
     const referenceImages:string[]=[];
     // 결과 이미지마다 그 카드를 그린 밑바탕 사진들(콜라주는 여러 장).

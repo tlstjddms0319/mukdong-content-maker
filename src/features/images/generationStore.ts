@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { shrinkPhoto } from "@/lib/files/shrinkPhoto";
 import { CarouselPlanSchema, SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan, type CarouselRole, type CarouselSlideCount } from "./carousel";
 import { ImageStyleSchema, type ImageStyle } from "./style";
+import { applyConcept, type Concept, type ConceptChoice, type ConceptKindId } from "./concepts";
 import { DEFAULT_SLIDE_LAYOUT, SlideLayoutSchema, type SlideLayout } from "./slideLayout";
 import { StudioSnapshotSchema, type StudioSnapshotInput } from "@/features/drafts/studio";
 import { normalizeCardLayout, photosNeeded, type CardLayout } from "./design";
@@ -73,8 +74,9 @@ export type GenerationState={
 // working: 사진 만드는 중, saving: 초안 저장 중, writing: 글 쓰는 중, done: 끝(images·caption을 화면이 가져간다), error: 멈춤.
 // meta: 지금 만드는 게시물의 주제·대상·게시일 등. 다른 메뉴에 다녀와 화면이 새로 열려도 같은 게시물로 돌아오게 한다.
 export type SceneMiss={index:number;photo:number;layout:CardLayout;reason:string};
-export type AutoStage="idle"|"working"|"saving"|"writing"|"done"|"error";
-export type AutoState={stage:AutoStage;error:string;detail?:string;images?:ApprovedImage[];caption?:string;captionSaved?:boolean;copyError?:string;meta?:DraftMeta};
+// choosing: 구성안이 나와 그림 콘셉트 후보(concepts)를 사장님이 고르는 중(images/concepts.ts). 고르면 chooseConcept가 이어서 만든다.
+export type AutoStage="idle"|"working"|"choosing"|"saving"|"writing"|"done"|"error";
+export type AutoState={stage:AutoStage;error:string;detail?:string;images?:ApprovedImage[];caption?:string;captionSaved?:boolean;copyError?:string;meta?:DraftMeta;concepts?:ConceptChoice;concept?:{kind:ConceptKindId;title:string}};
 const AUTO_IDLE:AutoState={stage:"idle",error:""};
 
 const EMPTY_INPUT:GenerationInput={topic:"",slideCount:5};
@@ -767,7 +769,7 @@ function newSlidePlan(input:NewSlide&{visualPrompt?:string;keywords?:string[]},a
   const headline=input.headline.trim();
   const layout:CarouselPlan["slides"][number]["layout"]=input.source==="text"?"checklist":"frame";
   return {
-    role:"detail",notes:"",headline,subline:"",points:input.points.map(point=>point.trim()).filter(Boolean),
+    role:"detail",notes:"",imageStyle:"photo",headline,subline:"",points:input.points.map(point=>point.trim()).filter(Boolean),
     // 이미지 AI로 만들 때 쓰는 장면 설명. 제목과 주제로 짓는다(12자 이상).
     visualPrompt:(input.visualPrompt??`${headline} — ${state.input.topic} 장면, 묵동홍어마을의 한 상. 얼굴 없음`).slice(0,600),
     textPosition:"bottom",layout,keywords:input.keywords??[],figure:"",
@@ -889,7 +891,57 @@ async function buildAiCarousel(){
     if(token!==run)return;
     if(!response.ok)throw new Error(data.message||"글 순서를 정하지 못했어요.");
     const plan=withChosenLook(data.plan as CarouselPlan);
-    patch({plan,phase:"cover"});
+    // 그림 콘셉트(images/concepts.ts): 사진 없이 AI로만 그리는 게시물은 구성안 뒤에 콘셉트 후보를 받아 사장님이 고르게 한다.
+    // 후보가 실사 하나뿐이면(AI 없음·실패) 묻지 않고 그대로 간다.
+    const concepts=await fetchConcepts(plan);
+    if(token!==run)return;
+    if(concepts&&concepts.options.length>1){
+      patch({plan,phase:"idle"});
+      patchAuto({stage:"choosing",concepts});
+      return;
+    }
+    await drawAiDeck(plan,token);
+  }catch(error){
+    if(token===run)patch({error:error instanceof Error?error.message:"표지를 만들지 못했습니다.",phase:"idle"});
+    return;
+  }
+}
+
+// 콘셉트 후보: 실사(항상) + AI 제안. 못 받으면 null(그대로 실사로 만든다).
+async function fetchConcepts(plan:CarouselPlan):Promise<ConceptChoice|null> {
+  const track=state.input.track;
+  if(!track)return null;
+  try{
+    const response=await fetch("/api/images/concepts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic:state.input.topic,track,plan})});
+    const data=await readJsonResponse(response);
+    if(!response.ok||!Array.isArray(data.options))return null;
+    return {options:data.options as Concept[],recommended:typeof data.recommended==="number"?data.recommended:0};
+  }catch{return null;}
+}
+
+// 사장님이 콘셉트를 골랐다(components/wizard/ConceptStep.tsx): 구성안에 적용하고 표지부터 끝까지 이어서 만든다.
+export async function chooseConcept(index:number){
+  const {plan,auto}=state;
+  if(auto.stage!=="choosing"||!plan||!auto.concepts||!auto.meta)return;
+  const concept=auto.concepts.options[index];
+  if(!concept)return;
+  const meta=auto.meta,key=state.key,mine=++autoRun;
+  const alive=()=>state.key===key&&mine===autoRun;
+  const applied=applyConcept(plan,concept);
+  patch({plan:applied,error:""});
+  patchAuto({stage:"working",concepts:undefined,concept:{kind:concept.kind,title:concept.title}});
+  try{
+    const token=++run;
+    await drawAiDeck(applied,token);
+    if(!alive())return;
+    await completeAuto(meta,alive);
+  }catch(error){failAuto(error,alive);}
+}
+
+// 표지 한 장(글 중심은 후보 두 장)을 만들고 나머지 장을 이어서 만든다. 실패하면 error에 쉬운 말을 남긴다(자동 만들기가 읽는다).
+async function drawAiDeck(plan:CarouselPlan,token:number){
+  patch({plan,phase:"cover"});
+  try{
     const count=state.input.track==="text"?2:1;
     const coverAt=positionKey(state,0);
     const made=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slide:plan.slides[0],styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:1,count})});
@@ -968,7 +1020,7 @@ export async function createAutomatically(meta:DraftMeta){
   // 다시 해 보기(앞 번에 멈춤): 이미 만든 것은 버리지 않는다(멈춘 사진 묶음은 남은 장만, AI는 표지 뒤 남은 장만, 다 만들었으면 저장부터).
   // 갈래를 바꿨거나, 멈춘 적 없이 "만들기"를 다시 누른 것이면 처음부터 새로 만든다.
   const retry=state.auto.stage==="error"&&state.plan?.design?.style===TRACK_STYLES[state.input.track];
-  patchAuto({stage:"working",error:"",detail:undefined,copyError:undefined,meta});
+  patchAuto({stage:"working",error:"",detail:undefined,copyError:undefined,meta,concepts:undefined,concept:undefined});
   try{
     if(!retry)await (state.photos.length?buildPhotoCarousel():buildAiCarousel());
     else if(!deckComplete(state)){
@@ -976,6 +1028,14 @@ export async function createAutomatically(meta:DraftMeta){
       else await (state.mode==="ai"&&state.cover?finishSlides():buildAiCarousel());
     }
     if(!alive())return;
+    // 콘셉트를 고르는 중이면 여기서 멈춘다(chooseConcept가 이어서 한다).
+    if(state.auto.stage==="choosing")return;
+    await completeAuto(meta,alive);
+  }catch(error){failAuto(error,alive);}
+}
+
+// 사진이 다 만들어진 뒤: 홍보 카드 → 저장 → 올릴 글 → 끝.
+async function completeAuto(meta:DraftMeta,alive:()=>boolean){
     if(!deckComplete(state)||!state.plan){patchAuto({stage:"error",error:AUTO_FAILED,detail:state.error||undefined});return;}
     await storeCardSettled();
     if(!alive())return;
@@ -994,11 +1054,11 @@ export async function createAutomatically(meta:DraftMeta){
     }catch(error){copyError=error instanceof Error?error.message:"글을 쓰지 못했어요. '글 다시 쓰기'를 눌러 주세요.";}
     if(!alive())return;
     patchAuto({stage:"done",images,caption,captionSaved,...(copyError?{copyError}:{})});
-  }catch(error){
-    // 저장 실패처럼 우리가 쓴 쉬운 말이면 그대로, 브라우저가 낸 영어 오류(Failed to fetch 등)면 쉬운 말 + 자세한 이유로 접는다.
-    const text=error instanceof Error?error.message:"";
-    if(alive())patchAuto(/[가-힣]/.test(text)?{stage:"error",error:text}:{stage:"error",error:AUTO_FAILED,detail:text||undefined});
-  }
+}
+// 저장 실패처럼 우리가 쓴 쉬운 말이면 그대로, 브라우저가 낸 영어 오류(Failed to fetch 등)면 쉬운 말 + 자세한 이유로 접는다.
+function failAuto(error:unknown,alive:()=>boolean){
+  const text=error instanceof Error?error.message:"";
+  if(alive())patchAuto(/[가-힣]/.test(text)?{stage:"error",error:text}:{stage:"error",error:AUTO_FAILED,detail:text||undefined});
 }
 
 // 진행 안내 한 줄과 진행 막대(0~1). 구성안이 오기 전에는 요청한 장 수 기준.
