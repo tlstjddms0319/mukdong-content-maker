@@ -36,7 +36,7 @@ describe("concept proposals setting",()=>{
 
   it("asks the AI when turned on",async()=>{
     readSettings.mockResolvedValue({...DEFAULT_SETTINGS,conceptProposals:true});
-    generateJson.mockReset().mockResolvedValue({recommended:0,concepts:[{kind:"character",title:"홍어 vs 가오리 권투",summary:"링 위 대결",reason:"비교 주제",slides:plan.slides.map((_,i)=>({slide:i+1,drawn:i===0,visualPrompt:i===0?"홍어 캐릭터와 가오리 캐릭터가 링 위에서 마주 선 장면":""}))}]});
+    generateJson.mockReset().mockResolvedValue({recommended:0,concepts:[{kind:"character",title:"홍어 vs 가오리 권투",summary:"링 위 대결",reason:"비교 주제",styleNote:"홍어: 마름모 몸 / 가오리: 둥근 몸",slides:plan.slides.map((_,i)=>({slide:i+1,drawn:i===0,visualPrompt:i===0?"홍어 캐릭터와 가오리 캐릭터가 링 위에서 마주 선 장면":""}))}]});
     const {POST}=await import("@/app/api/images/concepts/route");
     const body=await (await POST(request({topic:plan.slides[0].headline,track:"photo",plan}))).json();
     expect(body.options.map((option:{kind:string})=>option.kind)).toEqual(["photo","character"]);

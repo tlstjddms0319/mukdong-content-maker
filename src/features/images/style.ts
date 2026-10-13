@@ -66,3 +66,15 @@ export function resolveImageStyle(input:{imageStyle?:ImageStyle;refinement?:stri
   if(input.imageStyle&&input.imageStyle!=="photo")return input.imageStyle;
   return inferImageStyle(input.refinement)??"photo";
 }
+
+// 그림(비실사) 공통 품질 지시(사장님 2026-10-13 "그림 화풍 더 강화"). 실사의 PROPS·촬영 힌트 대신 그림 장에 붙는다(openaiRequest.ts).
+// 모델이 "대충 그린 그림"으로 빠지기 쉬운 지점(선 품질·해부·여백·일관성·구도)을 하나씩 못 박는다. 글자 금지는 프롬프트 앞뒤에 따로 있다.
+export const DRAWN_QUALITY="Professional illustration quality, as if commissioned for a food brand's social media: every line deliberate and clean, no stray sketch marks or muddy color patches, edges crisp, colors fully rendered (no unfinished or washed-out areas). Correct anatomy and proportions on every character and hand; nothing melted, duplicated or cut off. The main subject fills the middle of the frame with calm empty space at the top and bottom; keep the composition balanced and readable at thumbnail size. Keep the same drawing style, line weight and palette across the whole carousel.";
+
+// 화풍별 연출(장면 묘사가 글에서 오므로, 여기서는 '어떻게 그릴지'만): 캐릭터는 같은 캐릭터가 장마다 같은 생김새, 장면 그림은 빛·깊이, 애니는 표정·연출.
+export const DRAWN_DIRECTION:Record<Exclude<ImageStyle,"photo">,string>={
+  anime:"Render it like a polished anime still: expressive but natural faces, dynamic yet readable staging, atmospheric lighting (warm rim light, soft bloom on steam or glossy food), background painted simply with depth. Food is drawn with real appetite appeal — glossy sauce, visible texture, steam where hot.",
+  illustration:"Render it like a premium editorial piece: shapes simplified with intent, textures suggested with a few confident strokes, soft directional light giving depth, a cohesive warm palette, and the dish rendered with enough detail (surface texture, highlights) that it looks delicious rather than iconic.",
+  character:"Render it like a brand mascot sheet come to life: each food character has one consistent design (same face, colors, markings and accessories in every slide), clear silhouettes that read instantly, appealing rounded forms, confident poses that tell the action, and a simple stage or table setting that keeps focus on the characters.",
+};
+export const drawnDirective=(style:ImageStyle):string=>style==="photo"?"":`${DRAWN_DIRECTION[style]} ${DRAWN_QUALITY}`;

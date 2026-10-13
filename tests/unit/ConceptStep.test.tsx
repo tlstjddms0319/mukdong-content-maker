@@ -5,8 +5,8 @@ import { ConceptStep } from "@/components/wizard/ConceptStep";
 import type { ConceptChoice } from "@/features/images/concepts";
 
 const concepts:ConceptChoice={recommended:1,options:[
-  {kind:"photo",title:"실사 사진",summary:"실제 음식 사진처럼",reason:"",slides:[{drawn:false,visualPrompt:"접시"},{drawn:false,visualPrompt:"접시"}]},
-  {kind:"character",title:"홍어 vs 가오리 권투",summary:"두 캐릭터가 링 위에서 맞붙어요",reason:"비교 주제라 대결이 어울려요",slides:[{drawn:true,visualPrompt:"링 위 두 캐릭터"},{drawn:false,visualPrompt:"접시"}]},
+  {kind:"photo",title:"실사 사진",summary:"실제 음식 사진처럼",reason:"",styleNote:"",slides:[{drawn:false,visualPrompt:"접시"},{drawn:false,visualPrompt:"접시"}]},
+  {kind:"character",title:"홍어 vs 가오리 권투",summary:"두 캐릭터가 링 위에서 맞붙어요",reason:"비교 주제라 대결이 어울려요",styleNote:"홍어: 마름모 몸, 빨간 글러브 / 가오리: 둥근 몸, 파란 글러브",slides:[{drawn:true,visualPrompt:"링 위 두 캐릭터"},{drawn:false,visualPrompt:"접시"}]},
 ]};
 
 describe("concept step",()=>{

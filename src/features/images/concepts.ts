@@ -28,6 +28,8 @@ export const ConceptSchema=z.object({
   title:z.string().trim().min(1).max(20),       // 카드 이름(예: "홍어 vs 가오리 권투")
   summary:z.string().trim().min(1).max(80),     // 한 줄 설명
   reason:z.string().trim().max(80).default(""), // 왜 이 글에 맞는지 한 줄
+  // 공통 그림 설정(캐릭터 생김새·옷·색·배경 톤): 모든 그림 장의 공통 스타일(styleAnchor)에 붙여 장마다 같은 캐릭터·같은 결로 그리게 한다.
+  styleNote:z.string().trim().max(200).default(""),
   // 장마다: 그림으로 그릴지(drawn)와 그 장의 장면. drawn=false면 실사 사진이고 구성안의 원래 장면을 쓴다.
   slides:z.array(z.object({drawn:z.boolean(),visualPrompt:z.string().trim().max(600)})),
 });
@@ -37,7 +39,7 @@ export type ConceptChoice={options:Concept[];recommended:number};
 // 기본 선택지: 지금 구성안 그대로(실사).
 export function photoConcept(plan:CarouselPlan):Concept {
   const pair=comparedPair(plan.slides[0]?.headline??"");
-  return {kind:"photo",title:"실사 사진",summary:pair?`${pair.first}와 ${pair.second}를 나란히 놓은 실제 음식 사진`:"실제 음식 사진처럼, 지금 장면 그대로",reason:"음식의 결과 윤기를 가장 먹음직스럽게 보여 줘요.",
+  return {kind:"photo",title:"실사 사진",summary:pair?`${pair.first}와 ${pair.second}를 나란히 놓은 실제 음식 사진`:"실제 음식 사진처럼, 지금 장면 그대로",reason:"음식의 결과 윤기를 가장 먹음직스럽게 보여 줘요.",styleNote:"",
     slides:plan.slides.map(slide=>({drawn:false,visualPrompt:slide.visualPrompt}))};
 }
 
@@ -46,7 +48,7 @@ export const ConceptProposalSchema=z.object({
   recommended:z.number().int().min(0).max(1),
   concepts:z.array(z.object({
     kind:z.enum(KIND_IDS.filter(id=>id!=="photo") as [ConceptKindId,...ConceptKindId[]]),
-    title:z.string(),summary:z.string(),reason:z.string(),
+    title:z.string(),summary:z.string(),reason:z.string(),styleNote:z.string(),
     slides:z.array(z.object({slide:z.number().int(),drawn:z.boolean(),visualPrompt:z.string()})),
   })).min(1).max(3),
 });
@@ -73,9 +75,10 @@ ${trackNote}
 각 콘셉트:
 - title: 사장님이 한눈에 알아볼 이름(띄어쓰기 포함 14자 이내, 예: "홍어 vs 가오리 권투", "비 오는 날 부엌").
 - summary: 어떤 그림인지 한 줄(40자 이내). reason: 왜 이 글에 맞는지 한 줄(40자 이내). 모두 해요체.
+- styleNote: 모든 그림 장에 똑같이 적용할 공통 설정(60~150자). 캐릭터면 각 캐릭터의 생김새·색·눈·표정 특징과 입은 것, 상황 그림이면 시간대·빛·색감·배경 톤을 구체적으로(예: "홍어 캐릭터: 마름모 몸에 뾰족한 주둥이, 연보라빛 분홍, 동그란 눈, 빨간 권투 글러브 / 가오리 캐릭터: 둥근 몸, 회갈색, 파란 글러브 / 배경: 나무 링, 따뜻한 조명"). 장마다 같은 캐릭터로 보이게 하는 열쇠입니다.
 - slides: 구성안의 모든 장을 순서대로(slide는 1부터). drawn:true인 장의 visualPrompt는 그 장의 글이 말하는 내용을 이 콘셉트로 보여 주는 장면을 한국어로 구체적으로(무엇이 어디에 어떻게, 60~200자). drawn:false인 장은 visualPrompt를 빈 문자열로 두세요.
 - 장면 규칙: 그림 안에 글자·숫자·말풍선·간판·이름표는 절대 없음("VS" 글자도 없음, 대결은 자세로). 음식 캐릭터는 어떤 음식인지 알아볼 수 있게 실제 모양·색을 지킴. 실제 사람 얼굴은 그리지 않음(만화 캐릭터 얼굴은 됨). 확인되지 않은 가게 사실·가격·원산지·건강 효능은 장면에도 넣지 않음. 같은 장면을 두 장에 되풀이하지 않음.
-JSON으로만 답하세요: {"recommended":0,"concepts":[{"kind":"character","title":"...","summary":"...","reason":"...","slides":[{"slide":1,"drawn":true,"visualPrompt":"..."}]}]}`;
+JSON으로만 답하세요: {"recommended":0,"concepts":[{"kind":"character","title":"...","summary":"...","reason":"...","styleNote":"...","slides":[{"slide":1,"drawn":true,"visualPrompt":"..."}]}]}`;
 }
 
 const MIN_SCENE=12;
@@ -97,7 +100,7 @@ export function readConceptProposal(raw:unknown,plan:CarouselPlan,track:Carousel
     if(!slides.some(slide=>slide.drawn))return;
     // 이름은 한국어로("홍어 vs 가오리"처럼 짧은 vs는 두고, 영어 낱말이나 한글 없는 제목은 버린다).
     if(!/[가-힣]/.test(concept.title)||/[A-Za-z]{3,}/.test(concept.title))return;
-    const result=ConceptSchema.safeParse({kind:concept.kind,title:concept.title.trim().slice(0,20),summary:concept.summary.trim().slice(0,80),reason:concept.reason.trim().slice(0,80),slides});
+    const result=ConceptSchema.safeParse({kind:concept.kind,title:concept.title.trim().slice(0,20),summary:concept.summary.trim().slice(0,80),reason:concept.reason.trim().slice(0,80),styleNote:concept.styleNote.replace(/\s+/g," ").trim().slice(0,200),slides});
     if(!result.success||slides.length!==count)return;
     concepts.push(result.data);kept.push(index);
   });
@@ -116,6 +119,9 @@ export function applyConcept(plan:CarouselPlan,concept:Concept):CarouselPlan {
     return {...slide,imageStyle:style,visualPrompt:chosen.visualPrompt};
   });
   const anchor=IMAGE_STYLE_DIRECTIONS[style].anchor;
-  const styleAnchor=plan.styleAnchor.includes(anchor)?plan.styleAnchor:`${plan.styleAnchor.replace(/,?\s*실제 음식 사진 질감/,"")}, 그림 장은 ${anchor}`.slice(0,500);
+  // 공통 스타일에 화풍 한 줄과 콘셉트의 공통 그림 설정(캐릭터 생김새 등)을 붙인다. 500자 한도 안에서 공통 설정이 잘리지 않게 앞의 색·그릇 묘사를 먼저 줄인다.
+  const base=plan.styleAnchor.includes(anchor)?plan.styleAnchor:`${plan.styleAnchor.replace(/,?\s*실제 음식 사진 질감/,"")}, 그림 장은 ${anchor}`;
+  const note=concept.styleNote?` 공통 그림 설정: ${concept.styleNote}`:"";
+  const styleAnchor=note?`${base.slice(0,Math.max(60,500-note.length))}${note}`.slice(0,500):base.slice(0,500);
   return {...plan,styleAnchor,slides};
 }
