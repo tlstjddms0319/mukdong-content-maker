@@ -8,6 +8,9 @@ services:
     startCommand: npm start
     healthCheckPath: /login
     envVars:
+      # 무료 인스턴스(512MB)에서 V8 힙이 커지다 메모리 초과로 죽지 않게 상한을 둔다(카드 그리기의 libvips 메모리는 힙 밖이라 여유를 남긴다).
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=320
       - key: DATA_DIR
         value: /tmp/mukdong-content-maker
       - key: AUTH_URL

@@ -1,6 +1,8 @@
 import { enhancePhoto, foodLookOf, type PhotoKind } from "./render/photoEnhance";
 import { registerDecor, registerPhoto, auditRender, describeIssue, type AuditReport } from "./render/audit";
 import sharp, { type OverlayOptions } from "sharp";
+import "./render/sharpSetup";
+import { withRenderLock } from "./render/renderLock";
 import { access } from "node:fs/promises";
 import type { CarouselSlidePlan } from "./carousel";
 import { DEFAULT_SLIDE_LAYOUT, STORE_NAME, slideEyebrow, type SlideLayout } from "./slideLayout";
@@ -715,7 +717,11 @@ const CARD_RENDERERS:Record<CardLayout,(inputs:Buffer[],slide:CarouselSlidePlan,
 // panorama: 표지+2장 파노라마의 어느 쪽인지(render/panorama.ts). 사진이 가로로 충분히 길 때만 쓰고, 아니면 평소 디자인으로 그린다.
 export type CardOptions={photoKind?:PhotoKind;enhance?:boolean;brandHandle?:string;remoteCutout?:boolean;storeCard?:boolean;panorama?:PanoramaSide};
 const photoKindOf=(options:CardOptions):PhotoKind=>options.photoKind??(options.enhance?"real":"none");
-export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions={}):Promise<Buffer> {
+// 그리기는 프로세스 안에서 한 번에 하나씩(render/renderLock.ts): 무료 서버 메모리 초과(520) 방지.
+export function composeSlideImage(...args:Parameters<typeof composeSlideImageNow>):ReturnType<typeof composeSlideImageNow> {
+  return withRenderLock(()=>composeSlideImageNow(...args));
+}
+async function composeSlideImageNow(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions={}):Promise<Buffer> {
   return (await composeSlideCard(input,slide,index,total,layout,design,options)).image;
 }
 

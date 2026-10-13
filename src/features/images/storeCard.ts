@@ -1,4 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
+import "./render/sharpSetup";
 import path from "node:path";
 import { readFile, stat } from "node:fs/promises";
 import { STORE_NAME } from "./slideLayout";
