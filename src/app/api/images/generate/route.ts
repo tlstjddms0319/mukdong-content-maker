@@ -68,8 +68,14 @@ async function imageBytes(source:string):Promise<Buffer> {
   if(!response.ok)throw new Error("image download failed");
   return Buffer.from(await response.arrayBuffer());
 }
+// 한 요청 안에서 같은 그림은 한 번만 버퍼로 만든다(표지 점검·누끼·합성이 같은 그림을 각각 다시 풀거나 내려받던 것, 무료 서버 메모리 절약).
+function byteCache(){
+  const cache=new Map<string,Promise<Buffer>>();
+  return (source:string)=>{let hit=cache.get(source);if(!hit){hit=imageBytes(source);cache.set(source,hit);}return hit;};
+}
 
 export async function POST(request: Request) { const denied=await ownerApiError(); if(denied)return denied;
+  const bytesOf=byteCache();
   const parsed = ImageBriefSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ message: "이미지 설정을 확인해 주세요." }, { status: 400 });
   try {
@@ -177,21 +183,21 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     if (images.length !== parsed.data.count) throw new Error("incomplete image result");
     // 표지 후보가 여러 장이면 글자를 얹기 전 원본을 AI로 점검한다(이미지 속 글자, 홍어로 안 보임, 어색한 손).
     // 점검은 순서와 경고 배지에만 쓰고 다시 만들지는 않는다. 키가 없거나 실패하면 null(점검 없음).
-    const checks=parsed.data.slide?.role==="cover"&&images.length>1?await checkCoverCandidates(await Promise.all(images.map(imageBytes)),{expectedFood:expectedCoverFrom(parsed.data.topic,parsed.data.slide)}):null;
-    if(remoteCutout&&parsed.data.slide)await prepareCutouts(await Promise.all(images.map(imageBytes)));
+    const checks=parsed.data.slide?.role==="cover"&&images.length>1?await checkCoverCandidates(await Promise.all(images.map(bytesOf)),{expectedFood:expectedCoverFrom(parsed.data.topic,parsed.data.slide)}):null;
+    if(remoteCutout&&parsed.data.slide)await prepareCutouts(await Promise.all(images.map(bytesOf)));
     const referenceImages:string[]=[];
     // 결과 이미지마다 그 카드를 그린 밑바탕 사진들(콜라주는 여러 장).
     let baseImages:string[][]=[];
     // 콜라주·비교처럼 사진 여러 장을 쓰는 레이아웃은 만든 사진을 모두 한 카드에 넣는다.
     if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&photosNeeded(normalizeCardLayout(parsed.data.slide))>1&&images.length>1){
-      const originals=await Promise.all(images.map(imageBytes));
+      const originals=await Promise.all(images.map(bytesOf));
       const composed=await composeSlideImage(originals,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design,aiCardOptions);
       images=[`data:image/jpeg;base64,${composed.toString("base64")}`];
       baseImages=[await Promise.all(originals.map(baseImage))];
     }else if(parsed.data.slide)images=await Promise.all(images.map(async (source,index)=>{
       const slideIndex=parsed.data.slideIndex ?? index+1;
       const slideTotal=parsed.data.slideTotal ?? parsed.data.count;
-      const original=await imageBytes(source);
+      const original=await bytesOf(source);
       if(parsed.data.slide?.role==="cover"){
         const reference=await sharp(original).rotate().resize({width:1024,height:1024,fit:"inside",withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
         referenceImages[index]=`data:image/jpeg;base64,${reference.toString("base64")}`;

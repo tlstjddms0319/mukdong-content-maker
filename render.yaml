@@ -6,10 +6,12 @@ services:
     plan: free
     # 빌드·실행 명령이 NODE_OPTIONS를 직접 정한다. #147이 환경 변수로 둔 힙 상한(320MB)은 빌드까지 막았고(타입 검사 중 heap OOM),
     # render.yaml에서 지워도 Render 서비스에 남은 환경 변수는 사라지지 않아 #150 뒤에도 같은 실패가 났다(2026-10-13).
-    # 대시보드에서 NODE_OPTIONS를 지우지 않아도 되게, 빌드는 넉넉한 힙으로, 실행은 상한 없이 돈다.
+    # 대시보드에서 NODE_OPTIONS를 지우지 않아도 되게, 빌드는 넉넉한 힙으로 돌고, 실행 상한은 startCommand 안에서만 건다(빌드에 영향 없음).
+    # 실행: JS 힙 상한 320MB(카드 그리기 중 힙은 20MB 안팎이고 나머지는 sharp 바깥 메모리라, 상한은 GC를 일찍 돌게 하는 몫),
+    # MALLOC_ARENA_MAX=2(glibc가 스레드마다 메모리 영역을 따로 잡아 sharp 사용 뒤 rss가 부풀던 것을 줄인다, sharp 문서 권장).
     # 메모리 보호는 카드 그리기 순서 대기와 sharp 제한(render/renderLock.ts·sharpSetup.ts)이 맡는다.
     buildCommand: export NODE_OPTIONS=--max-old-space-size=2048 && npm ci && npm run build
-    startCommand: NODE_OPTIONS= npm start
+    startCommand: NODE_OPTIONS=--max-old-space-size=320 MALLOC_ARENA_MAX=2 npm start
     # 가벼운 헬스 체크(페이지를 그리지 않고 200만, api/health/route.ts).
     healthCheckPath: /api/health
     envVars:
