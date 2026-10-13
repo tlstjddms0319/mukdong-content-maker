@@ -6,7 +6,7 @@ import { buildImagePrompt, candidateBriefs, photoFocusOf } from "@/features/imag
 import type { ImageBrief } from "@/features/images/schema";
 
 type Slide=NonNullable<ImageBrief["slide"]>;
-const slide=(layout:Slide["layout"],extra:Partial<Slide>={}):Slide=>({role:"detail",headline:"톡 쏘는 산미가 입맛을 돋워요",subline:"",points:["은은한 발효 향이 코끝을 스쳐요","산미가 입안을 개운하게 정리해요"],visualPrompt:"놋사발에 막걸리를 따르는 장면",textPosition:"bottom",layout,keywords:[],figure:"",titleFont:"auto",bodyFont:"auto",variant:0,...extra});
+const slide=(layout:Slide["layout"],extra:Partial<Slide>={}):Slide=>({role:"detail",imageStyle:"photo",headline:"톡 쏘는 산미가 입맛을 돋워요",subline:"",points:["은은한 발효 향이 코끝을 스쳐요","산미가 입안을 개운하게 정리해요"],visualPrompt:"놋사발에 막걸리를 따르는 장면",textPosition:"bottom",layout,keywords:[],figure:"",titleFont:"auto",bodyFont:"auto",variant:0,...extra});
 const brief=(s:Slide,count:number):ImageBrief=>({topic:"막걸리",count,slide:s,slideIndex:4,slideTotal:6,styleAnchor:"따뜻한 가을 색감, 놋그릇, 나무 테이블"} as ImageBrief);
 
 describe("per-photo subjects in multi-photo layouts", () => {

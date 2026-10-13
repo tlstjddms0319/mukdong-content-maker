@@ -14,7 +14,7 @@ function asset(name:string,tags:string[],extra:Partial<LibraryAsset>={}):Library
     ...extra,
   };
 }
-const slide={role:"detail" as const,headline:"결이 이렇게 살아 있어요",points:["얇게 썰면 결이 비쳐 보여요"],visualPrompt:"접시 위 홍어 살 단면을 가까이 담은 장면",textPosition:"top" as const,keywords:[],layout:"frame" as const,subline:"",figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0};
+const slide={role:"detail" as const,imageStyle:"photo" as const,headline:"결이 이렇게 살아 있어요",points:["얇게 썰면 결이 비쳐 보여요"],visualPrompt:"접시 위 홍어 살 단면을 가까이 담은 장면",textPosition:"top" as const,keywords:[],layout:"frame" as const,subline:"",figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0};
 const brief={topic:"홍어회는 왜 결이 보일까?",count:1,aspectRatio:"4:5" as const,slide,slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 색온도"};
 
 describe("store skate photo as the image reference", () => {

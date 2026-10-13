@@ -7,7 +7,7 @@ import { buildCarouselPlanPrompt, type CarouselPlan } from "@/features/images/ca
 import { composeSlideImage } from "@/features/images/composeSlide";
 import { themeCatalogText } from "@/features/images/themes";
 
-const slide:CarouselPlan["slides"][number]={role:"pairing",notes:"",subline:"",headline:"홍어 한 점은 씹을수록 진한 감칠맛이 올라와요",points:["홍어 살은 얇게 썰려 결이 비쳐 보여요","홍어를 묵은지에 싸 한입에 넣어요","막걸리 한 모금으로 마무리해요"],visualPrompt:"홍어회 접시 사진",textPosition:"bottom",layout:"frame",keywords:["홍어","가오리"],figure:"7일",titleFont:"auto",bodyFont:"auto",variant:0};
+const slide:CarouselPlan["slides"][number]={role:"pairing",notes:"",imageStyle:"photo",subline:"",headline:"홍어 한 점은 씹을수록 진한 감칠맛이 올라와요",points:["홍어 살은 얇게 썰려 결이 비쳐 보여요","홍어를 묵은지에 싸 한입에 넣어요","막걸리 한 모금으로 마무리해요"],visualPrompt:"홍어회 접시 사진",textPosition:"bottom",layout:"frame",keywords:["홍어","가오리"],figure:"7일",titleFont:"auto",bodyFont:"auto",variant:0};
 const photo=(color:string)=>sharp({create:{width:90,height:120,channels:3,background:color}}).png().toBuffer();
 
 describe("template gallery", () => {

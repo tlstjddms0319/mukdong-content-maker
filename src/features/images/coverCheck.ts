@@ -64,6 +64,13 @@ export function expectedFoodFrom(...texts:Array<string|undefined>):{name:string;
   return DEFAULT_FOOD;
 }
 
+// 표지 점검의 기대 내용. 그림 콘셉트(concepts.ts)로 그린 표지는 "홍어처럼 보이나"가 아니라 "홍어를 그린 그림·캐릭터처럼 보이나"로 본다.
+export function expectedCoverFrom(topic:string,slide?:{headline?:string;imageStyle?:string}):{name:string;description:string} {
+  const food=expectedFoodFrom(topic,slide?.headline);
+  if(!slide?.imageStyle||slide.imageStyle==="photo")return food;
+  return {name:food.name,description:`${food.name}을(를) 그린 그림이나 의인화한 캐릭터(사진이 아닌 그림이어도 됨. ${food.description}의 모양·색이 알아볼 수 있게 남아 있으면 됨)`};
+}
+
 function promptFor(food:string):string {
   return `이 사진은 식당 Instagram 카드뉴스 표지 후보입니다(글자는 나중에 얹습니다). 음식은 ${food}여야 합니다.
 다음을 JSON으로 답하세요.

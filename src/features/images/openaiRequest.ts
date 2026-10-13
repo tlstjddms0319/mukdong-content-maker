@@ -215,7 +215,10 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 카드의 사진 칸 비율에 맞춘 구도(가로 칸이면 접시 전체가 가장자리에서 잘리지 않게). 칸 비율을 모르면 넣지 않는다.
     framingDirection(input.windowRatio,input.slide?.role==="detail"),
     // 사람이 먹고 있는 느낌은 장면 설명이 요구할 때만, 얼굴이 식별되지 않는 범위에서 넣는다.
-    "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
+    // 그림 콘셉트(캐릭터·만화)는 만화 얼굴이 필요하다. 실사·일러스트는 예전처럼 실제 사람 얼굴을 그리지 않는다.
+    styleId==="character"||styleId==="anime"
+      ? "캐릭터·만화 얼굴은 그려도 되지만 실제 사람처럼 사실적인 얼굴은 그리지 말 것. Cartoon character faces are fine; never render a realistic, recognizable human face."
+      : "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
     foodDirection(input),
     comparisonCoverDirection(input),
     // 실사 홍어회 장면의 질감·빛. 결과 연골 줄이 홍어다움을 만든다. 무침·애탕이나 다른 메뉴가 주인공이면 붙이지 않는다. 클로즈업(detail)은 접시 비율을 주지 않는다.

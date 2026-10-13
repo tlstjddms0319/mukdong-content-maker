@@ -17,7 +17,7 @@ describe("review fixes", () => {
     expect(menuOf("홍어애국 한 그릇").map(item=>item.id)).toEqual(["hongeo-aetang"]);
   });
   it("the shop name is not a skate scene", () => {
-    const slide={role:"detail" as const,subline:"",headline:"묵동홍어마을 겨울 과메기",points:["김치에 싸서 드셔 보세요"],visualPrompt:"과메기 접시를 가까이",textPosition:"top" as const,layout:"frame" as const,keywords:[],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0};
+    const slide={role:"detail" as const,imageStyle:"photo" as const,subline:"",headline:"묵동홍어마을 겨울 과메기",points:["김치에 싸서 드셔 보세요"],visualPrompt:"과메기 접시를 가까이",textPosition:"top" as const,layout:"frame" as const,keywords:[],figure:"",titleFont:"auto" as const,bodyFont:"auto" as const,variant:0};
     const brief={topic:"겨울 과메기",count:1,aspectRatio:"4:5" as const,slideIndex:2,slideTotal:5,styleAnchor:"따뜻한 조명",slide};
     expect(sceneMustShow(brief)).not.toMatch(/skate|홍어를/);
     expect(buildImagePrompt({...brief,topic:"겨울 별미",slide:{...slide,headline:"묵동홍어마을 겨울 별미"}})).not.toContain("Hongeo is Korean fermented skate");

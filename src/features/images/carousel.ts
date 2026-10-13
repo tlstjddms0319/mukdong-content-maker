@@ -42,6 +42,8 @@ export const CarouselSlidePlanSchema=z.object({
   // 본문 장에 얹을 짧은 요점 2~4줄. 표지는 빈 배열. 엄격 JSON 스키마 제공자 때문에 선택 필드로 두지 않는다.
   points:z.array(z.string().trim().min(1).max(SLIDE_POINT_MAX_LENGTH)).max(SLIDE_POINT_MAX_COUNT),
   visualPrompt:z.string().trim().min(12).max(600),
+  // 이 장의 화풍. 그림 콘셉트(concepts.ts)가 장마다 정한다(예: 표지만 캐릭터, 본문은 실사). 예전 구성안에는 없으므로 기본값 "photo".
+  imageStyle:ImageStyleSchema.default("photo"),
   textPosition:z.enum(["top","bottom"]),
   // 이 장을 그릴 카드 레이아웃. 엄격 JSON 스키마 제공자 때문에 선택 필드로 두지 않는다.
   layout:CardLayoutSchema,
