@@ -19,7 +19,7 @@ const plan=createFallbackCarouselPlan({topic:"홍어와 가오리는 왜 다르�
 describe("concept proposals setting",()=>{
   it("defaults to on, and old settings without the field read as on",()=>{
     expect(DEFAULT_SETTINGS.conceptProposals).toBe(true);
-    const {conceptProposals:_ignored,...old}=DEFAULT_SETTINGS;
+    const old:Record<string,unknown>={...DEFAULT_SETTINGS};delete old.conceptProposals;
     expect(AppSettingsSchema.parse(old).conceptProposals).toBe(true);
   });
 

@@ -24,6 +24,21 @@ export function toLegacyResponseSchema(node:unknown):unknown {
   return copy;
 }
 
+// Gemini의 responseJsonSchema는 배열 길이 제한(minItems·maxItems)을 받지 않는다(점검 2026-10-13: 구성안 스키마가 기본 모델에서도 400,
+// minItems·maxItems만 떼면 200). 그 때문에 구성안 요청마다 400 → 예전 형식 재요청으로 호출이 두 배가 됐다. 길이는 받은 뒤 zod가 검사한다.
+export function withoutArrayBounds(node:unknown):unknown {
+  if(Array.isArray(node))return node.map(withoutArrayBounds);
+  if(!node||typeof node!=="object")return node;
+  const copy:Record<string,unknown>={};
+  for(const [key,value] of Object.entries(node as Record<string,unknown>)){
+    if(key==="minItems"||key==="maxItems")continue;
+    copy[key]=key==="properties"&&value&&typeof value==="object"&&!Array.isArray(value)
+      ?Object.fromEntries(Object.entries(value as Record<string,unknown>).map(([name,child])=>[name,withoutArrayBounds(child)]))
+      :withoutArrayBounds(value);
+  }
+  return copy;
+}
+
 // 모델이 객체 대신 배열을 보내면(스키마 없는 요청에서 가끔) 객체 하나를 감싼 배열은 풀고, 그 밖의 배열은 그대로 둔다(검사에서 떨어진다).
 export function unwrapSingleObject(value:unknown):unknown {
   return Array.isArray(value)&&value.length===1&&value[0]&&typeof value[0]==="object"&&!Array.isArray(value[0])?value[0]:value;
@@ -54,7 +69,7 @@ export function createGeminiClient(options: { apiKey?:string; model?:string; fal
     async generateJson<T>(prompt:string, schema:z.ZodType<T>):Promise<T> {
       // Schemas with optional fields cannot be expressed strictly; plain JSON mode still works for them.
       let jsonSchema:Record<string, unknown>|undefined;
-      try { jsonSchema = toStrictJsonSchema(schema); }
+      try { jsonSchema = withoutArrayBounds(toStrictJsonSchema(schema)) as Record<string, unknown>; }
       catch (error) { if (!(error instanceof OptionalFieldsError)) throw error; jsonSchema = undefined; }
       // Gemini's JSON Schema support is a moving subset: if a model rejects the new field, try the legacy field, then once without any schema.
       // 모델마다 받는 형식이 달라서 어느 형식이 통했는지는 모델별로 기억한다(예비 모델로 넘어가도 첫 모델의 거부가 번지지 않게).
