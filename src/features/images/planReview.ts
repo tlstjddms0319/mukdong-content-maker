@@ -5,7 +5,7 @@ import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, type CarouselTrack } from "./track";
 import { storeNotesRule } from "@/features/store/storeNotes";
 import { comparisonPairRule, principleNotesRule } from "@/features/store/principles";
-import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, obviousQuestion, coverSpoiler, SECRET_TEASE, yesNoCover, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
+import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, causeWordsOf, obviousQuestion, coverSpoiler, SECRET_TEASE, yesNoCover, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
@@ -50,6 +50,23 @@ const SIDE_SUBJECTS=["묵은지","수육","초장","막걸리","미나리","과�
 const SAYS_DIFFERENT=/달라|다르|다른\s|차이|갈라|갈려|갈린/;
 // 공통점을 밝힌 장("둘 다 ~", "모두 ~")은 한쪽만 말한 장으로 보지 않는다.
 const SAYS_SHARED=/둘\s*다|모두|공통|똑같|같은\s/;
+// 이유 장끼리 같은 원인을 되풀이하면(앞 장의 원인 말만 있고 새 원인이 없으면) 다른 이유로 바꾸게 한다(점검 7~10회 평가: "2장과 4장이 같은 원리").
+function repeatedCauseIssues(plan:CarouselPlan):SlideCopyIssue[] {
+  const issues:SlideCopyIssue[]=[];
+  const seen=new Map<string,number>();
+  plan.slides.forEach((slide,i)=>{
+    if(i===0||i===plan.slides.length-1)return;
+    const causes=causeWordsOf([slide.headline,...slide.points].join(" "));
+    if(!causes.length)return;
+    const fresh=causes.filter(cause=>!seen.has(cause));
+    if(!fresh.length){
+      const earlier=seen.get(causes[0])!;
+      issues.push({slide:i+1,field:"headline",message:`${i+1}장은 ${earlier}장과 같은 원인('${causes.join("·")}')을 되풀이해요. 다른 이유 하나로 바꾸거나 ${earlier}장과 합치세요.`});
+    }
+    for(const cause of fresh)seen.set(cause,i+1);
+  });
+  return issues;
+}
 function comparisonIssues(plan:CarouselPlan,pair:{first:string;second:string}):SlideCopyIssue[] {
   const [ka,kb]=comparedKeys(pair);
   const both=(text:string)=>text.replace(/\s+/g,"").includes(ka)&&text.replace(/\s+/g,"").includes(kb);
@@ -126,6 +143,7 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack,storeNote
   // 두 대상의 차이를 묻는 비교 질문(COMPARISON_RULE): 이유 장마다 양쪽이 각각 어떤지, "다르다"만 하는 문장 없이, 결론은 양쪽 이름과 함께.
   // B가 "다른 발효 음식"처럼 넓은 말이면 본문은 가게 메뉴를 대표로 쓰므로 이 검사는 하지 않는다(위 검사만).
   if(pair&&!/^다른/.test(pair.second))issues.push(...comparisonIssues(plan,pair));
+  if(track)issues.push(...repeatedCauseIssues(plan));
   if(plan.slides[0]?.role==="cover")issues.push(...coverHookIssues(plan.slides[0],track,plan.slides.slice(1).map(slide=>slide.headline)));
   plan.slides.forEach((slide,i)=>{
     const n=i+1,headline=slide.headline.trim();
@@ -157,6 +175,9 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack,storeNote
     if(track&&i===plan.slides.length-1&&i>0){
       const asked=menuOf(plan.slides[0]?.headline??"");
       if(asked.length&&!menuOf(headline).some(item=>asked.some(other=>other.id===item.id)))add(n,"headline",`마지막 장은 결론이에요. 표지 질문의 '${asked[0].short}'을(를) 다시 써서 질문에 대한 답을 한 문장으로 분명하게 말하세요.`);
+      // 점검 7~10회 평가: "마지막 장이 표지 질문에 명확히 답하지 않음"("따뜻한 홍어찜이 제맛이에요"). 결론은 가장 큰 이유(원인 이름)를 넣어 답한다.
+      // 비교 게시물의 결론은 두 대상의 차이를 말하는 규칙(comparisonIssues)이 따로 본다.
+      else if(!pair&&ASKS_WHY.test(coverQuestion(plan))&&!NAMES_CAUSE.test([headline,...slide.points].join(" ")))add(n,"headline","마지막 장은 표지 질문의 답이에요. 가장 큰 이유(원인 이름)를 넣어 한 문장으로 답하세요(예: \"홍어회는 콜라겐 덕에 쫀득해요\").");
     }
     if(track&&slide.role!=="cover"){
       const cover=coverQuestion(plan);
