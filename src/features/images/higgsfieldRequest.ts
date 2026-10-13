@@ -120,7 +120,14 @@ export async function uploadReference(dataUrl:string,auth:string):Promise<string
   return target.public_url;
 }
 
-export type Job={status?:string;status_url?:string;request_id?:string;images?:{url?:string}[];video?:{url?:string}};
+// error·detail·message·failure_reason: 작업이 failed로 끝났을 때 Higgsfield가 붙여 주는 이유(있으면). 운영 로그(2026-10-13)에
+// "Grok Image 2.0 … 작업 상태 failed"만 남아 왜 실패했는지 알 수 없었다. 어떤 이름으로 오든 한 줄로 남긴다.
+export type Job={status?:string;status_url?:string;request_id?:string;images?:{url?:string}[];video?:{url?:string};error?:unknown;detail?:unknown;message?:unknown;failure_reason?:unknown};
+export function jobFailureReason(job:Job):string {
+  const value=[job.error,job.failure_reason,job.detail,job.message].find(item=>item!==undefined&&item!==null&&item!=="");
+  if(value===undefined)return "";
+  return (typeof value==="string"?value:JSON.stringify(value)).replace(/\s+/g," ").slice(0,160);
+}
 
 // 작업이 끝날 때까지 상태를 물어 완료된 작업을 돌려준다(이미지·영상 공통). 영상은 한 편에 수 분 걸릴 수 있어 timeout을 받는다.
 export async function waitForCompletion(job:Job,auth:string,timeoutMs=JOB_TIMEOUT_MS):Promise<Job> {
@@ -130,7 +137,7 @@ export async function waitForCompletion(job:Job,auth:string,timeoutMs=JOB_TIMEOU
   let current=job;
   while(current.status!=="completed"){
     if(current.status==="nsfw")throw new HiggsfieldImageError(422,"nsfw");
-    if(current.status==="failed"||current.status==="canceled")throw new HiggsfieldImageError(502,"failed",`작업 상태 ${current.status}`);
+    if(current.status==="failed"||current.status==="canceled"){const reason=jobFailureReason(current);throw new HiggsfieldImageError(502,"failed",`작업 상태 ${current.status}${reason?` (${reason})`:""}`);}
     if(Date.now()>deadline)throw new HiggsfieldImageError(504,"timeout");
     await new Promise(resolve=>setTimeout(resolve,POLL_INTERVAL_MS));
     // 상태 확인 중 서버가 잠깐 바쁘다고(5xx) 답하면 작업은 살아 있으니 다시 묻는다. 예전에는 한 번의 503으로 만든 그림을 버렸다.
