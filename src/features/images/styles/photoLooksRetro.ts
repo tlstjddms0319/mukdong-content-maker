@@ -174,37 +174,41 @@ async function auctionTag(photo:Buffer,content:StyleContent,index:number,look:Tr
 }
 
 // ── 9 박물관 라벨 ────────────────────────────────────────────────────────────────────
-// 연회색 벽에 걸린 액자 사진(가는 그림자), 아래 오른쪽에 작은 흰 전시 라벨: 제목(명조) · 키워드 · 짧은 글 한 줄.
+// 연회색 벽에 걸린 큰 액자 사진(가는 그림자), 액자 아래 오른쪽 모서리에 걸친 흰 전시 라벨: 키워드 · 제목(명조) · 짧은 글 한 줄.
 // 정보 위계가 분명하고 20~30대 감성에 맞는 '전시' 느낌(2차 조사 후보 4).
+// 라벨을 액자 아래에 따로 두지 않고 모서리에 걸쳐 사진이 화면의 65% 이상 되게 한다(예전 36~47%).
+// 마지막 장은 가게 명함 대신 라벨 안에 "저장해 두고 다시 보세요" 알약.
 const MUSEUM={wall:"#E7E4DE",label:"#FFFFFF",ink:"#22201D",dim:"#55514A",rule:"#B9B2A6"};
 async function museum(photo:Buffer,content:StyleContent,index:number):Promise<Buffer> {
-  const surface={ink:MUSEUM.ink,dim:MUSEUM.dim,chip:MUSEUM.ink,chipInk:MUSEUM.label};
-  const store=content.last?await storeCardBlock({logoSize:96,wordmark:false,surface}):null;
-  const foot=store?null:await footerRow({color:MUSEUM.dim,cueColor:MUSEUM.ink,cue:!content.last});
-  const LW=620,LX=W-MARGIN-LW;
-  const head=await fitLines(content.headline,{sizes:content.cover?[68,64,60,56]:[64,60,56,52],width:LW-72,font:TITLE_SERIF,color:MUSEUM.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.08),emphasis:emphasisOf(content,"#8A3A1F")});
-  const meta=await textLayer(`${content.cover?"특별전":`전시 ${String(index).padStart(2,"0")}`} · ${(content.keywords??["홍어"]).slice(0,2).join(" · ")}`,{size:40,color:MUSEUM.dim,width:LW-72,height:80,font:SANS_BOLD,letterSpacing:1});
+  const foot=await footerRow({color:MUSEUM.dim,cueColor:MUSEUM.ink,cue:!content.last});
+  const LW=620,LX=W-MARGIN-LW,IN=36;
+  const head=await fitLines(content.headline,{sizes:content.cover?[68,64,60,56]:[64,60,56,52],width:LW-IN*2,font:TITLE_SERIF,color:MUSEUM.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.08),emphasis:emphasisOf(content,"#8A3A1F")});
+  const meta=await textLayer(`${content.cover?"특별전":`전시 ${String(index).padStart(2,"0")}`} · ${(content.keywords??["홍어"]).slice(0,2).join(" · ")}`,{size:40,color:MUSEUM.dim,width:LW-IN*2,height:80,font:SANS_BOLD,letterSpacing:1});
   const line=lineOf(content);
-  const sub=line?await textLayer(line,{size:40,color:MUSEUM.dim,width:LW-72,height:4000,font:SANS,spacing:8}):null;
-  const LH=36+meta.info.height+14+head.layer.info.height+(sub?22+sub.info.height:0)+36;
-  const bottomH=store?store.height:foot!.height;
-  const bottomTop=H-(store?52:MARGIN)-bottomH;
-  const labelTop=bottomTop-48-LH;
-  const FX=MARGIN+20,FY=MARGIN+(content.cover?40:20),FW=W-FX*2,FH=Math.max(480,labelTop-48-FY);
+  const sub=line?await textLayer(line,{size:40,color:MUSEUM.dim,width:LW-IN*2,height:4000,font:SANS,spacing:8}):null;
+  const chip=content.last?await saveChip(MUSEUM.ink,MUSEUM.label):null;
+  const LH=IN+meta.info.height+14+head.layer.info.height+(sub?18+sub.info.height:0)+(chip?22+chip.height:0)+IN;
+  const bottomTop=H-56-foot.height;
+  const labelTop=bottomTop-32-LH;
+  // 액자는 라벨 높이의 55%까지 내려온다(라벨이 액자 아래 모서리에 걸친다).
+  const FX=40,FY=40,FW=W-FX*2,FH=Math.max(560,Math.round(labelTop+LH*.55)-FY);
   const layers:OverlayOptions[]=[
     await shadowLayer({x:FX,y:FY+16,width:FW,height:FH,rx:2,blur:30,opacity:.28}),
-    svgLayer(`<rect x="${FX-14}" y="${FY-14}" width="${FW+28}" height="${FH+28}" fill="#FAF8F4"/>`),
+    svgLayer(`<rect x="${FX-12}" y="${FY-12}" width="${FW+24}" height="${FH+24}" fill="#FAF8F4"/>`),
     {input:await finishPhoto(photo,FW,FH,{zoom:1.03}),left:FX,top:FY},
-    await shadowLayer({x:LX,y:labelTop+6,width:LW,height:LH,rx:2,blur:12,opacity:.18}),
-    svgLayer(`<rect x="${LX}" y="${labelTop}" width="${LW}" height="${LH}" fill="${MUSEUM.label}"/><path d="M${LX+36} ${labelTop+36+meta.info.height+6}H${LX+LW-36}" stroke="${MUSEUM.rule}" stroke-width="1.5"/>`),
+    await shadowLayer({x:LX,y:labelTop+6,width:LW,height:LH,rx:2,blur:14,opacity:.24}),
   ];
-  let y=labelTop+36;
-  layers.push({input:meta.data,left:LX+36,top:y});y+=meta.info.height+14;
-  layers.push({input:head.layer.data,left:LX+36,top:y});y+=head.layer.info.height;
-  if(sub){y+=22;layers.push({input:sub.data,left:LX+36,top:y});}
-  if(content.cover)layers.push({input:await logoMark(96,"#FAF8F4"),left:MARGIN,top:labelTop+Math.round((LH-96)/2)});
-  if(store){const placed=store.place(540,bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
-  else{const placed=foot!.place(bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
+  let markup=`<rect x="${LX}" y="${labelTop}" width="${LW}" height="${LH}" fill="${MUSEUM.label}"/><path d="M${LX+IN} ${labelTop+IN+meta.info.height+6}H${LX+LW-IN}" stroke="${MUSEUM.rule}" stroke-width="1.5"/>`;
+  const texts:OverlayOptions[]=[];
+  let y=labelTop+IN;
+  texts.push({input:meta.data,left:LX+IN,top:y});y+=meta.info.height+14;
+  texts.push({input:head.layer.data,left:LX+IN,top:y});y+=head.layer.info.height;
+  if(sub){y+=18;texts.push({input:sub.data,left:LX+IN,top:y});y+=sub.info.height;}
+  if(chip){y+=22;markup+=chip.svg(LX+IN,y);texts.push({input:chip.layer.data,left:LX+IN+chip.padX,top:y+chip.padY});}
+  const frameBottom=FY+FH+12;
+  if(content.cover)texts.push({input:await logoMark(96,"#FAF8F4"),left:MARGIN,top:Math.round(frameBottom+(labelTop+LH-frameBottom-96)/2)});
+  const placed=foot.place(bottomTop);
+  layers.push(svgLayer(markup+placed.svg),...texts,...placed.layers);
   return finish(MUSEUM.wall,layers);
 }
 
