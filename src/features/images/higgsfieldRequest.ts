@@ -42,6 +42,7 @@ let BUSY_RETRY_MS=5_000;
 export function setHiggsfieldBusyRetryForTests(ms:number){BUSY_RETRY_MS=ms;}
 export function resetHiggsfieldModelSkips(){unavailable.clear();}
 const POLL_INTERVAL_MS=3_000;
+// 시간 초과는 어느 단계였는지(요청 보내기·사진 올리기·작업 기다리기·결과 내려받기) 오류에 적는다(운영 로그 2026-10-13: "Grok Image 2.0 504"만 남아 원인을 알 수 없었다).
 const JOB_TIMEOUT_MS=5*60_000;
 const REQUEST_TIMEOUT_MS=30_000;
 const OUTPUT={width:1080,height:1350};
@@ -99,7 +100,7 @@ export async function api<T>(path:string,init:{method:"GET"|"POST";body?:unknown
       ...(init.body===undefined?{}:{body:JSON.stringify(init.body)}),
       signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-  } catch { throw new HiggsfieldImageError(504,"timeout"); }
+  } catch { throw new HiggsfieldImageError(504,"timeout","요청 보내기 30초 초과"); }
   if(!response.ok)throw errorFor(response.status,`${init.method} ${path.replace(BASE_URL,"")}: ${await bodyText(response)}`);
   return await response.json() as T;
 }
@@ -115,7 +116,7 @@ export async function uploadReference(dataUrl:string,auth:string):Promise<string
   try {
     // 서명된 저장소 주소에는 Higgsfield 인증 헤더를 보내지 않는다.
     uploaded=await fetch(target.upload_url,{method:"PUT",headers:target.upload_headers??{"Content-Type":"image/jpeg"},body:new Uint8Array(jpeg),signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS)});
-  } catch { throw new HiggsfieldImageError(504,"timeout"); }
+  } catch { throw new HiggsfieldImageError(504,"timeout","참고 사진 올리기 30초 초과"); }
   if(!uploaded.ok)throw new HiggsfieldImageError(502);
   return target.public_url;
 }
@@ -138,7 +139,7 @@ export async function waitForCompletion(job:Job,auth:string,timeoutMs=JOB_TIMEOU
   while(current.status!=="completed"){
     if(current.status==="nsfw")throw new HiggsfieldImageError(422,"nsfw");
     if(current.status==="failed"||current.status==="canceled"){const reason=jobFailureReason(current);throw new HiggsfieldImageError(502,"failed",`작업 상태 ${current.status}${reason?` (${reason})`:""}`);}
-    if(Date.now()>deadline)throw new HiggsfieldImageError(504,"timeout");
+    if(Date.now()>deadline)throw new HiggsfieldImageError(504,"timeout","작업 완료 기다리기 5분 초과");
     await new Promise(resolve=>setTimeout(resolve,POLL_INTERVAL_MS));
     // 상태 확인 중 서버가 잠깐 바쁘다고(5xx) 답하면 작업은 살아 있으니 다시 묻는다. 예전에는 한 번의 503으로 만든 그림을 버렸다.
     try{current=await api<Job>(statusUrl,{method:"GET"},auth);}
@@ -161,7 +162,7 @@ async function waitForJob(job:Job,auth:string):Promise<string> {
 async function downloadAsPost(url:string,keepAspect=false):Promise<string> {
   let response:Response;
   try { response=await fetch(url,{signal:AbortSignal.timeout(60_000)}); }
-  catch { throw new HiggsfieldImageError(504,"timeout"); }
+  catch { throw new HiggsfieldImageError(504,"timeout","결과 내려받기 60초 초과"); }
   if(!response.ok)throw new HiggsfieldImageError(502);
   const image=sharp(Buffer.from(await response.arrayBuffer())).rotate();
   const jpeg=await (keepAspect?image.resize({width:2160,height:2160,fit:"inside",withoutEnlargement:true}):image.resize({...OUTPUT,fit:"cover",position:"attention"})).jpeg({quality:92}).toBuffer();
