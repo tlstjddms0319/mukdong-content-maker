@@ -253,8 +253,7 @@
 | ☐ | 이미지 AI 결제와 비용 아끼는 방법을 들었습니다 |
 | ☐ | 문제가 생겼을 때 연락할 곳을 알고 있습니다 |
 
-인수인계일: 2026년 10월 9일 &nbsp;&nbsp; 사장님: 박성연 (서명 __________) &nbsp;&nbsp; 청년팀: MeriTale (서명 __________)
-
+인수인계일: 2026년 10월 9일 &nbsp;&nbsp; 사장님: 박성연 &nbsp;&nbsp; 청년팀: MeriTale
 ---
 
 **더 자세한 내용** (관리 담당자용): [앱 사용법과 실제 동작](APP_OPERATION_GUIDE.ko.md) · [실제 서비스 점검표](LIVE_CHECKLIST.ko.md) · [인스타그램 자동 게시](INSTAGRAM_AUTOPUBLISH.ko.md) · [휴대폰 알림](NOTIFICATIONS.ko.md) · [성과 모으기 설정](PERFORMANCE_METRICS.ko.md)
