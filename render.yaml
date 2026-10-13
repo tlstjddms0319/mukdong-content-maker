@@ -5,12 +5,11 @@ services:
     region: singapore
     plan: free
     buildCommand: npm ci && npm run build
+    # 환경 변수 NODE_OPTIONS로 힙 상한을 두면 빌드(next build)에도 걸려 배포가 실패했다(2026-10-13, #147 뒤 두 번 실패).
+    # 메모리 보호는 카드 그리기 순서 대기와 sharp 제한(render/renderLock.ts·sharpSetup.ts)이 맡고, 힙 상한은 두지 않는다.
     startCommand: npm start
     healthCheckPath: /login
     envVars:
-      # 무료 인스턴스(512MB)에서 V8 힙이 커지다 메모리 초과로 죽지 않게 상한을 둔다(카드 그리기의 libvips 메모리는 힙 밖이라 여유를 남긴다).
-      - key: NODE_OPTIONS
-        value: --max-old-space-size=320
       - key: DATA_DIR
         value: /tmp/mukdong-content-maker
       - key: AUTH_URL
