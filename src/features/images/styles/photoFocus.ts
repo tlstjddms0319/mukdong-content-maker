@@ -7,6 +7,7 @@ import { MARGIN, ON_PHOTO, SANS, SANS_SEMI, SAVE_CHIP, SHADE, TITLE_SERIF, TRACK
 import { trackLookOf } from "./trackLooks";
 import { renderTextFocus } from "./textFocus";
 import { renderPhotoLook } from "./photoLooks";
+import { quietSide } from "./textSide";
 
 // 사진 중심(갈래 "사진"). 사진을 그냥 붙이지 않고 한 가지 고급 모양으로 다듬는다.
 //   표지      : 사진을 화면 가득(블리드) 깔고 아래로 짙어지는 밤색 그라데이션 위에 큰 명조 제목(최대 두 줄)과 부제, 왼쪽 위 원형 로고.
@@ -14,6 +15,7 @@ import { renderPhotoLook } from "./photoLooks";
 //               짝수 장 = "액자": 크림 종이 위에 넓은 여백을 두고 모서리가 둥근 큰 사진, 아래에 장 번호·한 줄 제목·짧은 글 한 줄.
 //               홀수 장 = "꽉 찬 사진": 표지처럼 사진을 가득 깔고 아래 그라데이션 위에 흰 글자.
 //   마지막 장 : 꽉 찬 사진 + 제목 위 "저장해 두고 다시 보세요" 알약 + 바닥글(로고·가게 이름·계정).
+// 꽉 찬 사진 장(표지·홀수 본문·마지막)은 사진 위쪽이 뚜렷이 단순하면 제목을 위로 올린다(textSide.ts, 장마다 따로 고른다).
 // 사진이 주인공: 어느 장이든 사진이 화면의 65% 이상(보고서 "사진 중심 한식 카드뉴스 재분석", 2026-10-12). 예전에는 액자 장 61%, 마지막 장 40%였다.
 // 글은 제목 한 줄 + 짧은 글 한 줄까지만 쓴다(구성안이 그 길이로 쓰고, 길면 여기서 한 줄만 보인다).
 // 표지 명조(함렛)는 음식 잡지 같은 격을, 짧은 글은 프리텐다드로 폰에서 또렷하게 읽히게 한다.
@@ -41,6 +43,14 @@ function photoShade(from:number,options:{top?:boolean}={}):string {
     +`<rect x="0" y="${from}" width="1080" height="${span}" fill="url(#pfB)"/>`;
 }
 
+// 제목을 위에 둘 때(사진 위쪽이 단순할 때, textSide.ts): 위에서 to까지 옅어지는 그늘 + 바닥글이 읽히게 아래 260px 옅은 그늘 + 비네트.
+function topTextShade(to:number):string {
+  return `<defs><linearGradient id="ptT" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${SHADE}" stop-opacity=".88"/><stop offset="${((to-220)/to).toFixed(3)}" stop-color="${SHADE}" stop-opacity=".72"/><stop offset="1" stop-color="${SHADE}" stop-opacity="0"/></linearGradient>`
+    +`<linearGradient id="ptB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${SHADE}" stop-opacity="0"/><stop offset="1" stop-color="${SHADE}" stop-opacity=".72"/></linearGradient>`
+    +`<radialGradient id="pfV" cx="50%" cy="55%" r="75%"><stop offset=".62" stop-color="${SHADE}" stop-opacity="0"/><stop offset="1" stop-color="${SHADE}" stop-opacity=".28"/></radialGradient></defs>`
+    +`<rect width="1080" height="1350" fill="url(#pfV)"/><rect x="0" y="0" width="1080" height="${to}" fill="url(#ptT)"/><rect x="0" y="1090" width="1080" height="260" fill="url(#ptB)"/>`;
+}
+
 // 제목: 함렛 명조. 본문은 한 줄이 원칙(68→52px 중 한 줄에 드는 가장 큰 크기), 정 안 되면 두 줄.
 const bodyTitle=(content:StyleContent,color:string,accent:string,width=1080-MARGIN*2)=>fitLines(content.headline,{sizes:[68,64,60,56,52],width,font:TITLE_SERIF,color,maxLines:2,prefer:"lines",spacing:size=>Math.round(size*.06),letterSpacing:size=>-size*.01,emphasis:emphasisOf(content,accent)});
 // 짧은 글 한 줄: 프리텐다드 40px(두 줄까지 허용, 넘치면 검수가 잡는다).
@@ -57,15 +67,23 @@ async function cover(photo:Buffer,content:StyleContent):Promise<Buffer> {
   // 표지 부제는 피드에서도 읽히게 본문 짧은 글(40px)보다 크게(일반 사용자 비판 C1).
   const sub=content.subline?await sublineOf(content.subline,ON_PHOTO.dim,false,46):null;
   const SUB_GAP=26,FOOT_GAP=64,RULE=36;
-  const subTop=footTop-FOOT_GAP-(sub?.info.height??0);
-  const titleTop=(sub?subTop-SUB_GAP:footTop-FOOT_GAP)-title.layer.info.height;
-  const ruleY=titleTop-RULE;
   const LOGO=128;
+  // 사진 위쪽이 뚜렷이 단순하면(음식이 아래) 제목 덩어리를 로고 아래로 올린다. 아니면 기존처럼 바닥글 위.
+  const top=await quietSide(base)==="top";
+  let ruleY:number,titleTop:number,subTop:number;
+  if(top){
+    ruleY=MARGIN+LOGO+48;titleTop=ruleY+RULE;subTop=titleTop+title.layer.info.height+SUB_GAP;
+  }else{
+    subTop=footTop-FOOT_GAP-(sub?.info.height??0);
+    titleTop=(sub?subTop-SUB_GAP:footTop-FOOT_GAP)-title.layer.info.height;
+    ruleY=titleTop-RULE;
+  }
+  const blockBottom=sub?subTop+sub.info.height:titleTop+title.layer.info.height;
   const logo=await logoMark(LOGO,PAPER.ring);
   const placed=foot.place(footTop);
   const layers:OverlayOptions[]=[
     {input:base,left:0,top:0},
-    svgLayer(photoShade(Math.max(300,ruleY-260))+`<path d="M${MARGIN} ${ruleY}H${MARGIN+64}" stroke="${ON_PHOTO.accent}" stroke-width="4" stroke-linecap="round"/>`+placed.svg),
+    svgLayer((top?topTextShade(blockBottom+220):photoShade(Math.max(300,ruleY-260)))+`<path d="M${MARGIN} ${ruleY}H${MARGIN+64}" stroke="${ON_PHOTO.accent}" stroke-width="4" stroke-linecap="round"/>`+placed.svg),
     {input:logo,left:MARGIN,top:MARGIN},
     {input:title.layer.data,left:MARGIN,top:titleTop},
     ...(sub?[{input:sub.data,left:MARGIN,top:subTop}]:[]),
@@ -83,22 +101,28 @@ async function bleed(photo:Buffer,content:StyleContent,index:number):Promise<Buf
   const title=await bodyTitle(content,ON_PHOTO.ink,ON_PHOTO.accent);
   const line=shortLines(content,1)[0];
   const sub=line?await sublineOf(line,ON_PHOTO.dim):null;
-  const subTop=footTop-56-(sub?.info.height??0);
-  const titleTop=(sub?subTop-22:footTop-56)-title.layer.info.height;
   const placed=foot.place(footTop);
-  let mark:{svg:string;data:Buffer;top:number;left:number};
-  if(content.last){
-    const chip=await textLayer(SAVE_CHIP,{size:40,color:PAPER.ink,width:900,height:80,font:SANS_SEMI});
-    const padX=30,padY=12,h=chip.info.height+padY*2,top=titleTop-30-h;
-    mark={svg:`<rect x="${MARGIN}" y="${top}" width="${chip.info.width+padX*2}" height="${h}" rx="${h/2}" fill="${ON_PHOTO.ink}" fill-opacity=".94"/>`,data:chip.data,top:top+padY,left:MARGIN+padX};
+  // 장 번호(마지막 장은 저장 알약) 판: 높이를 먼저 알아야 위·아래 어느 쪽에 쌓든 자리를 잡는다.
+  const chip=content.last?await textLayer(SAVE_CHIP,{size:40,color:PAPER.ink,width:900,height:80,font:SANS_SEMI}):null;
+  const folio=chip?null:await folioMark(index,ON_PHOTO.ink,{shadow:true});
+  const padX=30,padY=12,markH=chip?chip.info.height+padY*2:folio!.layer.info.height,markGap=chip?30:34;
+  // 사진 위쪽이 뚜렷이 단순하면(음식이 아래) 장 번호·제목·짧은 글을 위에서부터 쌓는다. 아니면 기존처럼 바닥글 위.
+  const top=await quietSide(base)==="top";
+  let markTop:number,titleTop:number,subTop:number;
+  if(top){
+    markTop=MARGIN;titleTop=markTop+markH+markGap;subTop=titleTop+title.layer.info.height+22;
   }else{
-    const folio=await folioMark(index,ON_PHOTO.ink,{shadow:true});
-    const top=titleTop-34-folio.layer.info.height;
-    mark={svg:folio.svg(MARGIN,top),data:folio.layer.data,top,left:MARGIN};
+    subTop=footTop-56-(sub?.info.height??0);
+    titleTop=(sub?subTop-22:footTop-56)-title.layer.info.height;
+    markTop=titleTop-markGap-markH;
   }
+  const mark:{svg:string;data:Buffer;top:number;left:number}=chip
+    ?{svg:`<rect x="${MARGIN}" y="${markTop}" width="${chip.info.width+padX*2}" height="${markH}" rx="${markH/2}" fill="${ON_PHOTO.ink}" fill-opacity=".94"/>`,data:chip.data,top:markTop+padY,left:MARGIN+padX}
+    :{svg:folio!.svg(MARGIN,markTop),data:folio!.layer.data,top:markTop,left:MARGIN};
+  const blockBottom=sub?subTop+sub.info.height:titleTop+title.layer.info.height;
   const layers:OverlayOptions[]=[
     {input:base,left:0,top:0},
-    svgLayer(photoShade(Math.max(420,mark.top-200),{top:false})+mark.svg+placed.svg),
+    svgLayer((top?topTextShade(blockBottom+220):photoShade(Math.max(420,markTop-200),{top:false}))+mark.svg+placed.svg),
     {input:mark.data,left:mark.left,top:mark.top},
     {input:title.layer.data,left:MARGIN,top:titleTop},
     ...(sub?[{input:sub.data,left:MARGIN,top:subTop}]:[]),
