@@ -292,26 +292,22 @@ describe("DraftWizard",()=>{
     await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
   });
 
-  it("stops with a plain sentence when a slide fails and continues from that slide on '다시 해 보기'",async()=>{
-    // 장이 실패하면 앱이 몇 초 뒤 한 번 더 그려 본다(2026-10-13). 테스트에서는 바로 다시 시도하게 해 두 번째도 실패시킨다.
+  // 장이 실패하면 앱이 몇 초 뒤 한 번 더 그려 보고, 그래도 안 되면 그 장만 글자 카드로 대신해 끝까지 만든다(사장님 지적 2026-10-13:
+  // "이미지 생성을 할 때 계속 못 만든다"). 예전에는 "다 만들지 못했어요"로 멈췄다.
+  it("draws a text card for a slide the image AI keeps failing on, and finishes the post with a notice",async()=>{
     setImageRetryDelayForTests(0);
-    let failSlide3=true;
     const base=makingRoutes("photo");
-    const request=api({...base,"/api/images/generate":body=>Number(body.slideIndex)===3&&failSlide3?FAIL:base["/api/images/generate"](body)});
+    const request=api({...base,"/api/images/generate":body=>Number(body.slideIndex)===3&&body.slide?.layout!=="browser"?FAIL:base["/api/images/generate"](body)});
     vi.stubGlobal("fetch",request);render(<DraftWizard/>);
     await goMake("photo");
-    expect(await screen.findByText(/사진을 다 만들지 못했어요. '다시 해 보기'를 눌러 주세요/,undefined,{timeout:5000})).toBeInTheDocument();
-    expect(calls(request,"/api/drafts","POST")).toHaveLength(0);
-    // 사진 없이 AI 그림이 멈췄을 때는 사장님이 할 수 있는 다른 길(가게 사진 올리기)도 한 줄로 알려 준다.
-    expect(screen.getByText(/가게 사진을 올리고 다시 눌러 보세요/)).toBeInTheDocument();
-    failSlide3=false;
-    const before=calls(request,"/api/images/generate").length;
-    fireEvent.click(screen.getByRole("button",{name:"다시 해 보기"}));
     await screen.findByRole("heading",{name:"확인하고 올리기"},{timeout:5000});
-    // 구성안·표지는 다시 만들지 않고, 멈춘 장부터 남은 장만 만든다.
-    expect(calls(request,"/api/images/plan")).toHaveLength(1);
-    expect(calls(request,"/api/images/generate").slice(before).map(body=>body.slideIndex).sort()).toEqual(expect.arrayContaining([3]));
-    expect(calls(request,"/api/images/generate").slice(before).some(body=>body.slideIndex===1)).toBe(false);
+    const third=calls(request,"/api/images/generate").filter(body=>Number(body.slideIndex)===3);
+    expect(third.length).toBeGreaterThanOrEqual(3);                 // 두 번 실패 + 글자 카드
+    expect(third.at(-1)?.slide?.layout).toBe("browser");
+    expect(third.at(-1)?.photos).toBeUndefined();
+    expect(calls(request,"/api/drafts","POST").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/AI 그림 1장\(3번 장\)을 못 그려서/)).toBeInTheDocument();
+    expect(screen.queryByText(/사진을 다 만들지 못했어요/)).toBeNull();
   });
 
   it("retries only the save when saving failed after every slide was made",async()=>{

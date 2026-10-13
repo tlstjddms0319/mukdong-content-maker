@@ -3,7 +3,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
-import { chooseConcept, createAutomatically, ensureGeneration, resetGenerationStore, setImageRetryDelayForTests, useGenerationState } from "@/features/images/generationStore";
+import { chooseConcept, createAutomatically, ensureGeneration, redoSlideKind, resetGenerationStore, setActiveSlide, setImageRetryDelayForTests, useGenerationState } from "@/features/images/generationStore";
 import { photoConcept } from "@/features/images/concepts";
 
 const card=(n:number)=>`data:image/jpeg;base64,CARD${n}`;
@@ -69,6 +69,34 @@ describe("choosing a picture concept while making a post",()=>{
     expect(failedOnce).toBe(true);
     expect(thirdSlideCalls).toBe(2);
     expect(hook.result.current.error).not.toContain("너무 오래");
+    warn.mockRestore();
+  });
+
+  it("falls back to a text card when a slide fails twice, and offers to redraw it with AI",async()=>{
+    setImageRetryDelayForTests(0);
+    const plan=createFallbackCarouselPlan({topic:meta.topic,slideCount:5,track:"photo"});
+    let n=0;const third:Array<Record<string,unknown>>=[];
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
+      if(url==="/api/images/concepts")return {ok:true,json:async()=>({options:[photoConcept(plan)],recommended:0})};
+      if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
+      if(url==="/api/images/generate"){
+        const body=JSON.parse(String(init?.body)) as Record<string,unknown>&{slide?:{layout?:string}};
+        if(body.slideIndex===3){third.push(body);if(body.slide?.layout!=="browser")return {ok:false,json:async()=>({message:"이미지 생성이 너무 오래 걸려 멈췄어요."})};}
+        return {ok:true,json:async()=>({images:[card(++n)],source:body.slide?.layout==="browser"?"design":"ai"})};
+      }
+      return {ok:false,json:async()=>({})};
+    }));
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const hook=renderHook(()=>useGenerationState());
+    act(()=>{ensureGeneration("d1|5",{topic:meta.topic,slideCount:5,track:"photo"});});
+    await act(async()=>{await createAutomatically(meta);});
+    await waitFor(()=>expect(hook.result.current.slides.length).toBe(5));
+    expect(third.map(body=>(body.slide as {layout?:string}).layout)).toEqual([expect.not.stringMatching(/^browser$/),expect.not.stringMatching(/^browser$/),"browser"]);
+    expect(hook.result.current.sceneMisses).toEqual([expect.objectContaining({index:2,photo:-1})]);
+    expect(hook.result.current.plan?.slides[2].layout).toBe("browser");
+    act(()=>{setActiveSlide(2);});
+    expect(redoSlideKind(hook.result.current)).toBe("ai");
     warn.mockRestore();
   });
 
