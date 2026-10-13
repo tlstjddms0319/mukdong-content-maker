@@ -3,7 +3,7 @@ import { croppedPhoto, svgLayer, textLayer, type Font } from "../render/primitiv
 import { textureLayer } from "../decor";
 import { registerDecor } from "../render/audit";
 import { STYLE_FONTS, emphasisOf, snap, type StyleContent } from "./shared";
-import { SANS, SANS_BOLD, countLines, fitLines, footerRow, logoMark, storeCardBlock, type TrackSurface } from "./trackKit";
+import { SANS, SANS_BOLD, countLines, fitLines, footerRow, logoMark, reasonMark, storeCardBlock, type TrackSurface } from "./trackKit";
 import type { TrackLook } from "./trackLooks";
 
 // 글 중심 추가 모양 2차(조사 보고서 1차 후보 7·10, 2차 후보 2·6, 2026-10-12). design.look 번호:
@@ -44,7 +44,7 @@ async function newspaper(photo:Buffer|undefined,content:StyleContent,index:numbe
   const kraft=await textureLayer("kraft",{opacity:.12});
   if(kraft)layers.push(kraft);
   const mast=await textLayer("묵동 호외",{size:96,color:NEWS.ink,width:CW,height:200,font:STYLE_FONTS.serifHeavy,align:"centre",letterSpacing:12});
-  const date=await textLayer(`제 ${index} 면 · 묵동홍어마을 소식`,{size:30,color:NEWS.dim,width:CW,height:80,font:SANS_BOLD,align:"centre"});
+  const date=await textLayer(content.reason?"묵동홍어마을 소식":`제 ${index} 면 · 묵동홍어마을 소식`,{size:30,color:NEWS.dim,width:CW,height:80,font:SANS_BOLD,align:"centre"});
   let y=M;
   layers.push({input:mast.data,left:centred(mast),top:y});
   y+=mast.info.height+18;
@@ -70,8 +70,13 @@ async function newspaper(photo:Buffer|undefined,content:StyleContent,index:numbe
     y+=PH+28;
   }
   const text=await block(content,{width:CW,font:STYLE_FONTS.serifHeavy,color:NEWS.ink,dim:NEWS.dim,accent:NEWS.red,sizes:content.cover?[92,86,80,74,70]:[100,94,88,82,76],lineSize:content.cover?42:50,lineFont:STYLE_FONTS.serif,maxTitle:content.cover?2:3});
-  const top=content.cover?y:Math.round(Math.max(y+70,y+70+(bottomTop-60-y-70-text.height)/2));
-  if(!content.cover){
+  // 이유 장: 號外 딱지 대신 제목 바로 위에 큰 이유 번호(시안 A).
+  const reason=content.reason?await reasonMark("numeral",content.reason,{accent:NEWS.red,ink:NEWS.dim,dim:NEWS.dim}):null;
+  const markH=reason?reason.height+24:0;
+  const blockTop=content.cover?y:Math.round(Math.max(y+(reason?0:70),y+(reason?0:70)+(bottomTop-60-y-(reason?0:70)-markH-text.height)/2));
+  if(reason){const placed=reason.place(M,blockTop);markup+=placed.svg;layers.push(...placed.layers);}
+  const top=blockTop+markH;
+  if(!content.cover&&!reason){
     markup+=`<rect x="${M}" y="${y}" width="150" height="62" fill="${NEWS.red}" transform="rotate(-4 ${M+75} ${y+31})"/>`;
     layers.push(svgLayer(markup),{input:tag.data,left:M+75-Math.round(tag.info.width/2),top:y+31-Math.round(tag.info.height/2)});
     markup="";
@@ -92,7 +97,7 @@ async function notice(photo:Buffer|undefined,content:StyleContent,index:number,l
   let markup=`<rect x="${PX}" y="${PY}" width="${PW}" height="${PH}" rx="26" fill="${paper.bg}" stroke="${frame.bg}" stroke-width="10"/>`;
   const headH=120;
   markup+=`<path d="M${PX} ${PY+headH}H${PX+PW}" stroke="${frame.bg}" stroke-width="6"/><rect x="${PX}" y="${PY}" width="${PW}" height="${headH}" rx="26" fill="${frame.bg}"/><rect x="${PX}" y="${PY+headH-30}" width="${PW}" height="30" fill="${frame.bg}"/>`;
-  const head=await textLayer(content.cover?"묵동홍어마을 안내":content.last?"알려 드려요":`안내 ${index}`,{size:52,color:frame.ink,width:CW,height:120,font:SANS_BOLD,align:"centre",letterSpacing:4});
+  const head=await textLayer(content.cover?"묵동홍어마을 안내":content.last?"알려 드려요":content.reason?"안내":`안내 ${index}`,{size:52,color:frame.ink,width:CW,height:120,font:SANS_BOLD,align:"centre",letterSpacing:4});
   layers.push(svgLayer(markup),{input:head.data,left:centred(head),top:PY+Math.round((headH-head.info.height)/2)});
   let y=PY+headH+48;
   const store=content.last?await storeCardBlock({logoSize:150,wordmark:false,surface:paper}):null;
@@ -117,8 +122,13 @@ async function notice(photo:Buffer|undefined,content:StyleContent,index:number,l
     rows.push({data:layer.data,height:layer.info.height,width:layer.info.width});
   }
   const ROW=28;
-  const blockH=title.layer.info.height+rows.reduce((sum,row)=>sum+row.height+ROW*2,0);
-  const top=content.cover?y:Math.round(Math.max(y,y+(bottomTop-40-y-blockH)/2));
+  // 이유 장: 제목 바로 위 가운데에 큰 이유 번호(시안 A).
+  const reason=content.reason?await reasonMark("numeral",content.reason,{accent:paper.accent,ink:paper.dim,dim:paper.dim}):null;
+  const markH=reason?reason.height+24:0;
+  const blockH=markH+title.layer.info.height+rows.reduce((sum,row)=>sum+row.height+ROW*2,0);
+  const blockTop=content.cover?y:Math.round(Math.max(y,y+(bottomTop-40-y-blockH)/2));
+  if(reason){const placed=reason.place(Math.round(540-reason.width/2),blockTop);layers.push(svgLayer(placed.svg),...placed.layers);}
+  const top=blockTop+markH;
   layers.push({input:title.layer.data,left:centred(title.layer),top});
   let ry=top+title.layer.info.height;
   let lineMarkup="";
@@ -157,8 +167,15 @@ async function bigLetter(photo:Buffer|undefined,content:StyleContent,index:numbe
   }
   const text=await block(content,{width:CW,font:STYLE_FONTS.heavy,color:surface.ink,dim:surface.dim,accent:surface.accent,sizes:content.cover?[104,96,90,84,78]:[100,94,88,82,76],lineSize:content.cover?46:52});
   const top=bottomTop-64-text.height;
-  // 글 덩어리 바로 위 강조 막대
-  layers.push(svgLayer(`<rect x="${M}" y="${top-40}" width="88" height="10" rx="5" fill="${surface.accent}"/>`));
+  if(content.reason){
+    // 이유 장: 강조 막대 대신 글 덩어리 바로 위에 큰 이유 번호(시안 A).
+    const mark=await reasonMark("numeral",content.reason,{accent:surface.accent,ink:surface.dim,dim:surface.dim});
+    const placed=mark.place(M,top-28-mark.height);
+    layers.push(svgLayer(placed.svg),...placed.layers);
+  }else{
+    // 글 덩어리 바로 위 강조 막대
+    layers.push(svgLayer(`<rect x="${M}" y="${top-40}" width="88" height="10" rx="5" fill="${surface.accent}"/>`));
+  }
   for(const item of text.items)layers.push({input:item.data,left:M,top:top+item.top});
   if(store){const placed=store.place(540,bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
   else{const placed=foot!.place(bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
@@ -180,7 +197,7 @@ async function ticket(photo:Buffer|undefined,content:StyleContent,index:number,t
   const dest=(content.keywords?.[0]??"홍어").slice(0,6);
   const from=await textLayer("묵동",{size:76,color:paper.ink,width:400,height:150,font:STYLE_FONTS.heavy});
   const to=await textLayer(dest,{size:76,color:paper.accent,width:400,height:150,font:STYLE_FONTS.heavy});
-  const label=await textLayer(content.cover?"처음 오시는 손님용":content.last?"도착 · 묵동홍어마을":`${index-1} / ${Math.max(1,total-2)} 구간`,{size:30,color:paper.dim,width:600,height:80,font:SANS_BOLD});
+  const label=await textLayer(content.cover?"처음 오시는 손님용":content.last?"도착 · 묵동홍어마을":content.reason?`${content.reason.n} / ${content.reason.of} 구간`:`${index-1} / ${Math.max(1,total-2)} 구간`,{size:30,color:paper.dim,width:600,height:80,font:SANS_BOLD});
   let y=TY+56;
   const PAD=64;
   layers.push(svgLayer(markup),{input:label.data,left:TX+PAD,top:y});
@@ -197,7 +214,12 @@ async function ticket(photo:Buffer|undefined,content:StyleContent,index:number,t
     y+=PH+36;
   }
   const text=await block(content,{width:CW,font:SANS_BOLD,color:paper.ink,dim:paper.dim,accent:paper.accent,sizes:content.cover?[72,68,64,60,56]:[80,74,70,66,62],lineSize:content.cover?40:46});
-  const top=content.cover?y:Math.round(Math.max(y,y+(cutY-40-y-text.height)/2));
+  // 이유 장: 제목 바로 위에 큰 이유 번호(시안 A).
+  const reason=content.reason?await reasonMark("numeral",content.reason,{accent:paper.accent,ink:paper.dim,dim:paper.dim}):null;
+  const markH=reason?reason.height+20:0;
+  const blockTop=content.cover?y:Math.round(Math.max(y,y+(cutY-40-y-markH-text.height)/2));
+  if(reason){const placed=reason.place(TX+PAD,blockTop);layers.push(svgLayer(placed.svg),...placed.layers);}
+  const top=blockTop+markH;
   for(const item of text.items)layers.push({input:item.data,left:TX+PAD,top:top+item.top});
   const stubLabel=await textLayer(content.last?"좋은 여행 되세요":"다음 장으로 넘겨 주세요 ›",{size:34,color:paper.ink,width:560,height:80,font:SANS_BOLD});
   layers.push({input:stubLabel.data,left:TX+PAD,top:cutY+Math.round(STUB/2-stubLabel.info.height/2)});

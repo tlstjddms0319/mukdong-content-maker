@@ -2,7 +2,7 @@ import sharp, { type OverlayOptions } from "sharp";
 import { croppedPhoto, finishPhoto, svgLayer, textLayer, type Font } from "../render/primitives";
 import { shadowLayer, textureLayer } from "../decor";
 import { STYLE_FONTS, emphasisOf, snap, type StyleContent } from "./shared";
-import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, fitLines, folioMark, footerRow, logoMark, saveChip, shortLines, storeCardBlock } from "./trackKit";
+import { MARGIN, SANS, SANS_BOLD, TITLE_SERIF, type TrackSurface, besideMark, fitLines, folioMark, footerRow, logoMark, reasonMark, saveChip, shortLines, storeCardBlock, textWidthBeside } from "./trackKit";
 import type { TrackLook } from "./trackLooks";
 
 // 사진 중심 추가 모양 2차(조사 보고서 "한식 카드뉴스 템플릿 레퍼런스" 후보 2·4·8, 2026-10-12). design.look 번호:
@@ -14,8 +14,8 @@ import type { TrackLook } from "./trackLooks";
 const W=1080,H=1350,CONTENT_W=W-MARGIN*2;
 const finish=(background:string,layers:OverlayOptions[])=>sharp({create:{width:W,height:H,channels:3,background}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();
 const centred=(layer:{info:{width:number}},cx=540)=>Math.round(cx-layer.info.width/2);
-const title=(content:StyleContent,color:string,accent:string,sizes:number[],font:Font,maxLines=2,align:"left"|"centre"="centre")=>
-  fitLines(content.headline,{sizes,width:CONTENT_W,font,color,maxLines,prefer:"size",align,spacing:size=>Math.round(size*.1),letterSpacing:size=>-size*.01,emphasis:emphasisOf(content,accent)});
+const title=(content:StyleContent,color:string,accent:string,sizes:number[],font:Font,maxLines=2,align:"left"|"centre"="centre",width=CONTENT_W)=>
+  fitLines(content.headline,{sizes,width,font,color,maxLines,prefer:"size",align,spacing:size=>Math.round(size*.1),letterSpacing:size=>-size*.01,emphasis:emphasisOf(content,accent)});
 const lineOf=(content:StyleContent)=>content.cover?content.subline:shortLines(content,1)[0];
 
 // ── 5 레트로 간판 ─────────────────────────────────────────────────────────────────────
@@ -28,9 +28,11 @@ function starburst(cx:number,cy:number,R:number,points=14):string {
 async function signboard(photo:Buffer,content:StyleContent,index:number):Promise<Buffer> {
   // 사진이 화면의 65% 이상 되게 간판 띠·아래 띠를 글이 들어갈 만큼만 쓴다(예전 표지 최소 300px → 사진 54~60%).
   // 마지막 장은 가게 명함 대신 아래 띠에 "저장해 두고 다시 보세요" 알약 + 바닥글.
-  const head=await title(content,SIGN.cream,SIGN.yellow,content.cover?[88,82,76,72,68]:[68,64,60,56,52],STYLE_FONTS.comic);
+  // 이유 장: 간판 띠 안 제목 왼쪽에 남색 이유 도장(시안 B), 별 딱지에는 장 번호를 쓰지 않는다.
+  const reason=content.reason?await reasonMark("stamp",content.reason,{accent:SIGN.yellow,ink:SIGN.cream,dim:SIGN.cream,stamp:SIGN.navy}):null;
+  const head=await title(content,SIGN.cream,SIGN.yellow,content.cover?[88,82,76,72,68]:[68,64,60,56,52],STYLE_FONTS.comic,2,reason?"left":"centre",textWidthBeside(reason,CONTENT_W-48));
   const BAND_PAD=30;
-  const bandH=Math.max(content.cover?220:170,head.layer.info.height+BAND_PAD*2+(content.cover?50:0));
+  const bandH=Math.max(content.cover?220:170,Math.max(head.layer.info.height,reason?.height??0)+BAND_PAD*2+(content.cover?50:0));
   const line=lineOf(content);
   const sub=line?await textLayer(line,{size:42,color:SIGN.navy,width:CONTENT_W,height:4000,font:SANS_BOLD,align:"centre",spacing:10}):null;
   const chip=content.last?await saveChip(SIGN.red,SIGN.cream):null;
@@ -47,14 +49,18 @@ async function signboard(photo:Buffer,content:StyleContent,index:number):Promise
   const cx=W-MARGIN-R+12,cy=photoTop+R+28;
   markup+=starburst(cx,cy,R);
   layers.push(svgLayer(markup));
-  const star=await textLayer(content.cover?"묵동\n명물":String(index).padStart(2,"0"),{size:content.cover?40:44,color:SIGN.navy,width:R*2,height:R*2,font:STYLE_FONTS.comic,align:"centre",spacing:2});
+  const star=await textLayer(content.cover?"묵동\n명물":reason?"묵동":String(index).padStart(2,"0"),{size:content.cover?40:44,color:SIGN.navy,width:R*2,height:R*2,font:STYLE_FONTS.comic,align:"centre",spacing:2});
   layers.push({input:star.data,left:centred(star,cx),top:Math.round(cy-star.info.height/2)});
   let y=Math.round((bandH-head.layer.info.height-(content.cover?50:0))/2);
   if(content.cover){
     const eyebrow=await textLayer("— 묵동홍어마을 —",{size:40,color:SIGN.cream,width:700,height:80,font:SANS_BOLD,align:"centre",letterSpacing:4});
     layers.push({input:eyebrow.data,left:centred(eyebrow),top:y});y+=50;
   }
-  layers.push({input:head.layer.data,left:centred(head.layer),top:y});
+  if(reason){
+    const row=besideMark(reason,head.layer,null);
+    const placed=row.place(Math.round(540-row.width/2),Math.round((bandH-row.height)/2));
+    layers.push(svgLayer(placed.svg),...placed.layers);
+  }else layers.push({input:head.layer.data,left:centred(head.layer),top:y});
   let by=H-bottomH+20;
   if(sub){layers.push({input:sub.data,left:centred(sub),top:by});by+=sub.info.height+22;}
   if(chip){const cx=Math.round(540-chip.width/2);layers.push(svgLayer(chip.svg(cx,by)),{input:chip.layer.data,left:cx+chip.padX,top:by+chip.padY});by+=chip.height+20;}
@@ -65,14 +71,18 @@ async function signboard(photo:Buffer,content:StyleContent,index:number):Promise
 // ── 6 원형 그릇 ──────────────────────────────────────────────────────────────────────
 async function plate(photo:Buffer,content:StyleContent,index:number,look:TrackLook):Promise<Buffer> {
   const panel:TrackSurface=content.last?look.light:look.dark;
-  const head=await title(content,panel.ink,panel.accent,content.cover?[88,82,76,72,68]:[68,64,60,56,52],content.cover?TITLE_SERIF:SANS_BOLD);
+  // 이유 장: 제목 왼쪽에 이유 도장(시안 B), 위 장 번호는 뺀다.
+  const reason=content.reason?await reasonMark("stamp",content.reason,{accent:panel.accent,ink:panel.ink,dim:panel.dim}):null;
+  const textW=textWidthBeside(reason,CONTENT_W);
+  const head=await title(content,panel.ink,panel.accent,content.cover?[88,82,76,72,68]:[68,64,60,56,52],content.cover?TITLE_SERIF:SANS_BOLD,2,reason?"left":"centre",textW);
   const line=lineOf(content);
-  const sub=line?await textLayer(line,{size:content.cover?44:40,color:content.cover?panel.accent:panel.dim,width:CONTENT_W,height:4000,font:SANS,align:"centre",spacing:10}):null;
+  const sub=line?await textLayer(line,{size:content.cover?44:40,color:content.cover?panel.accent:panel.dim,width:textW,height:4000,font:SANS,align:reason?"left":"centre",spacing:10}):null;
   const store=content.last?await storeCardBlock({logoSize:96,wordmark:false,surface:panel}):null;
   const foot=store?null:await footerRow({color:panel.dim,cueColor:panel.ink,ring:panel.ring,cue:!content.last});
   const bottomH=store?store.height:foot!.height;
   const bottomTop=H-(store?52:MARGIN)-bottomH;
-  const textH=head.layer.info.height+(sub?22+sub.info.height:0);
+  const row=besideMark(reason,head.layer,sub,22);
+  const textH=row.height;
   const topRoom=content.cover?MARGIN+110:MARGIN+64;
   const D=Math.max(480,Math.min(content.last?520:720,bottomTop-56-textH-48-topRoom));
   const cx=540,cy=topRoom+D/2;
@@ -82,10 +92,10 @@ async function plate(photo:Buffer,content:StyleContent,index:number,look:TrackLo
   markup+=`<circle cx="${cx}" cy="${cy}" r="${D/2+10}" fill="${panel.soft}"/>`;
   const layers:OverlayOptions[]=[svgLayer(markup),{input:await croppedPhoto(photo,D,D,D/2,{circle:true,zoom:1.06}),left:Math.round(cx-D/2),top:Math.round(cy-D/2)}];
   if(content.cover)layers.push({input:await logoMark(96,panel.ring),left:centred({info:{width:96}}),top:MARGIN-8});
-  else{const folio=await folioMark(index,panel.accent,{rule:false});layers.push({input:folio.layer.data,left:centred(folio.layer),top:MARGIN});}
+  else if(!reason){const folio=await folioMark(index,panel.accent,{rule:false});layers.push({input:folio.layer.data,left:centred(folio.layer),top:MARGIN});}
   const textTop=Math.round(cy+D/2+48+Math.max(0,(bottomTop-56-(cy+D/2+48)-textH)/2));
-  layers.push({input:head.layer.data,left:centred(head.layer),top:textTop});
-  if(sub)layers.push({input:sub.data,left:centred(sub),top:textTop+head.layer.info.height+22});
+  const copy=reason?row.place(Math.round(540-row.width/2),textTop):row.place(MARGIN,textTop,"centre");
+  layers.push(svgLayer(copy.svg),...copy.layers);
   if(store){const placed=store.place(540,bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
   else{const placed=foot!.place(bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
   return finish(panel.bg,layers);
@@ -95,7 +105,10 @@ async function plate(photo:Buffer,content:StyleContent,index:number,look:TrackLo
 const INK={bg:"#16120F",gold:"#C9A35B",cream:"#F3E9DA",dim:"#D8CBB6"};
 const archPath=(x:number,y:number,w:number,h:number)=>{const r=w/2;return `M${x} ${y+r}A${r} ${r} 0 0 1 ${x+w} ${y+r}V${y+h}H${x}Z`;};
 async function inkFrame(photo:Buffer,content:StyleContent,index:number):Promise<Buffer> {
-  const head=await title(content,INK.cream,INK.gold,content.cover?[88,82,76,72,68]:[66,62,58,54,50],TITLE_SERIF);
+  // 이유 장: 제목 왼쪽에 이유 도장(시안 B), 위 "— 02 —"는 뺀다.
+  const reason=content.reason?await reasonMark("stamp",content.reason,{accent:INK.gold,ink:INK.cream,dim:INK.dim}):null;
+  const head=await title(content,INK.cream,INK.gold,content.cover?[88,82,76,72,68]:[66,62,58,54,50],TITLE_SERIF,2,reason?"left":"centre",textWidthBeside(reason,CONTENT_W-48));
+  const headRow=besideMark(reason,head.layer,null);
   const line=lineOf(content);
   const sub=line?await textLayer(line,{size:40,color:INK.dim,width:CONTENT_W,height:4000,font:SANS,align:"centre",spacing:10}):null;
   const surface={ink:INK.cream,dim:INK.dim,chip:INK.gold,chipInk:INK.bg};
@@ -103,7 +116,7 @@ async function inkFrame(photo:Buffer,content:StyleContent,index:number):Promise<
   const foot=store?null:await footerRow({color:INK.dim,cueColor:INK.cream,ring:INK.cream,cue:!content.last,left:96,right:96});
   const bottomH=store?store.height:foot!.height;
   const bottomTop=H-(store?84:100)-bottomH;
-  const textH=head.layer.info.height+52+(sub?sub.info.height+26:0);
+  const textH=headRow.height+52+(sub?sub.info.height+26:0);
   const AW=content.last?560:720,top=content.cover?150:130;
   const AH=Math.max(460,bottomTop-48-textH-40-top);
   const ax=Math.round(540-AW/2);
@@ -114,12 +127,13 @@ async function inkFrame(photo:Buffer,content:StyleContent,index:number):Promise<
   let markup=`<rect x="40" y="40" width="${W-80}" height="${H-80}" fill="none" stroke="${INK.gold}" stroke-width="3"/><rect x="56" y="56" width="${W-112}" height="${H-112}" fill="none" stroke="${INK.gold}" stroke-opacity=".6" stroke-width="1.5"/>`
     +`<path d="${archPath(ax-14,top-14,AW+28,AH+28)}" fill="none" stroke="${INK.gold}" stroke-width="2.5"/>`;
   const textTop=top+AH+48;
-  const sepY=textTop+head.layer.info.height+34;
+  const sepY=textTop+headRow.height+34;
   markup+=`<path d="M${540-110} ${sepY}H${540-22}M${540+22} ${sepY}H${540+110}" stroke="${INK.gold}" stroke-width="2"/><path d="M540 ${sepY-9}L549 ${sepY}L540 ${sepY+9}L531 ${sepY}Z" fill="${INK.gold}"/>`;
   const layers:OverlayOptions[]=[svgLayer(markup),{input:arched,left:ax,top}];
   if(content.cover)layers.push({input:await logoMark(92,INK.cream),left:centred({info:{width:92}}),top:top+AH-92-24});
-  else{const folio=await textLayer(`— ${String(index).padStart(2,"0")} —`,{size:40,color:INK.gold,width:300,height:70,font:SANS_BOLD,align:"centre",features:"tnum"});layers.push({input:folio.data,left:centred(folio),top:78});}
-  layers.push({input:head.layer.data,left:centred(head.layer),top:textTop});
+  else if(!reason){const folio=await textLayer(`— ${String(index).padStart(2,"0")} —`,{size:40,color:INK.gold,width:300,height:70,font:SANS_BOLD,align:"centre",features:"tnum"});layers.push({input:folio.data,left:centred(folio),top:78});}
+  const headPlaced=headRow.place(reason?Math.round(540-headRow.width/2):centred(head.layer),textTop);
+  layers.push(svgLayer(headPlaced.svg),...headPlaced.layers);
   if(sub)layers.push({input:sub.data,left:centred(sub),top:sepY+26});
   if(store){const placed=store.place(540,bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
   else{const placed=foot!.place(bottomTop);layers.push(svgLayer(placed.svg),...placed.layers);}
@@ -138,21 +152,24 @@ async function auctionTag(photo:Buffer,content:StyleContent,index:number,look:Tr
   const panelH=store?store.height+96:0;
   const photoH=H-panelH;
   // 제목·짧은 글은 아래 그늘 위 큰 흰 글씨(꼬리표 안 작은 손글씨는 50대 손님이 읽기 어려웠다).
-  const head=await title(content,"#FFFFFF","#F0C66A",content.cover?[96,88,82,76,70]:[72,68,64,60,56],TITLE_SERIF,2,"left");
+  // 이유 장: 제목 왼쪽에 이유 도장(시안 B), 꼬리표에는 장 번호 대신 품목(키워드).
+  const reason=content.reason?await reasonMark("stamp",content.reason,{accent:"#F0C66A",ink:"#FFFFFF",dim:"#FFFFFF",shadow:true}):null;
+  const textW=textWidthBeside(reason,CONTENT_W);
+  const head=await title(content,"#FFFFFF","#F0C66A",content.cover?[96,88,82,76,70]:[72,68,64,60,56],TITLE_SERIF,2,"left",textW);
   const line=lineOf(content);
-  const sub=line?await textLayer(line,{size:content.cover?44:40,color:"#F3E9DA",width:CONTENT_W,height:4000,font:SANS,spacing:10}):null;
+  const sub=line?await textLayer(line,{size:content.cover?44:40,color:"#F3E9DA",width:textW,height:4000,font:SANS,spacing:10}):null;
   const footTop=store?photoH:H-MARGIN-foot.height;
-  const subTop=footTop-(store?40:56)-(sub?.info.height??0);
-  const titleTop=(sub?subTop-20:footTop-56)-head.layer.info.height;
-  const shadeFrom=Math.max(380,titleTop-240);
+  const row=besideMark(reason,head.layer,sub,20);
+  const rowTop=footTop-(store?40:56)-row.height;
+  const shadeFrom=Math.max(380,rowTop-240);
   const layers:OverlayOptions[]=[
     {input:await finishPhoto(photo,W,photoH,{zoom:1.03}),left:0,top:0},
     svgLayer(`<defs><linearGradient id="atB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1C1310" stop-opacity="0"/><stop offset=".45" stop-color="#1C1310" stop-opacity=".62"/><stop offset="1" stop-color="#1C1310" stop-opacity=".9"/></linearGradient></defs><rect x="0" y="${shadeFrom}" width="${W}" height="${photoH-shadeFrom}" fill="url(#atB)"/>`),
   ];
   // 꼬리표: 오른쪽 위, 번호와 품목만(산지·중량·숙성일 같은 확인 안 된 사실은 적지 않는다).
   const TW=360,TX=W-MARGIN-TW+10,TY=MARGIN+20;
-  const no=await textLayer(content.cover?"No. 묵동":`No. ${String(index).padStart(3,"0")}`,{size:48,color:TAG.ink,width:TW-80,height:100,font:STYLE_FONTS.heavy,features:"tnum"});
-  const item=await textLayer(`품목 · ${(content.keywords?.[0]??"홍어").slice(0,6)}`,{size:40,color:TAG.dim,width:TW-80,height:80,font:SANS_BOLD});
+  const no=await textLayer(content.cover?"No. 묵동":reason?(content.keywords?.[0]??"홍어").slice(0,6):`No. ${String(index).padStart(3,"0")}`,{size:48,color:TAG.ink,width:TW-80,height:100,font:STYLE_FONTS.heavy,features:"tnum"});
+  const item=await textLayer(reason?"묵동홍어마을":`품목 · ${(content.keywords?.[0]??"홍어").slice(0,6)}`,{size:40,color:TAG.dim,width:TW-80,height:80,font:SANS_BOLD});
   const TH=40+no.info.height+18+item.info.height+40;
   const cut=40;
   layers.push(svgLayer(`<path d="M${TX+cut} ${TY+cut}C${TX-30} ${TY-10} ${TX-60} ${TY-40} ${TX-120} ${TY-60}" fill="none" stroke="#F3E9DA" stroke-width="4" stroke-linecap="round"/>`
@@ -161,8 +178,8 @@ async function auctionTag(photo:Buffer,content:StyleContent,index:number,look:Tr
     +`<path d="M${TX+40} ${TY+40+no.info.height+8}H${TX+TW-40}" stroke="${TAG.red}" stroke-width="4"/>`));
   layers.push({input:no.data,left:TX+cut+30,top:TY+40},{input:item.data,left:TX+cut+30,top:TY+40+no.info.height+18});
   if(content.cover)layers.push({input:await logoMark(104,paper.ring),left:MARGIN,top:MARGIN});
-  layers.push({input:head.layer.data,left:MARGIN,top:titleTop});
-  if(sub)layers.push({input:sub.data,left:MARGIN,top:subTop});
+  const copy=row.place(MARGIN,rowTop);
+  layers.push(svgLayer(copy.svg),...copy.layers);
   if(store){
     const placed=store.place(540,photoH+48);
     layers.push(svgLayer(`<rect x="0" y="${photoH}" width="${W}" height="${panelH}" fill="${paper.bg}"/>`+placed.svg),...placed.layers);
@@ -182,12 +199,15 @@ const MUSEUM={wall:"#E7E4DE",label:"#FFFFFF",ink:"#22201D",dim:"#55514A",rule:"#
 async function museum(photo:Buffer,content:StyleContent,index:number):Promise<Buffer> {
   const foot=await footerRow({color:MUSEUM.dim,cueColor:MUSEUM.ink,cue:!content.last});
   const LW=620,LX=W-MARGIN-LW,IN=36;
-  const head=await fitLines(content.headline,{sizes:content.cover?[68,64,60,56]:[64,60,56,52],width:LW-IN*2,font:TITLE_SERIF,color:MUSEUM.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.08),emphasis:emphasisOf(content,"#8A3A1F")});
-  const meta=await textLayer(`${content.cover?"특별전":`전시 ${String(index).padStart(2,"0")}`} · ${(content.keywords??["홍어"]).slice(0,2).join(" · ")}`,{size:40,color:MUSEUM.dim,width:LW-IN*2,height:80,font:SANS_BOLD,letterSpacing:1});
+  // 이유 장: 라벨 안 제목 왼쪽에 이유 도장(시안 B), 메타 줄의 "전시 02"는 "전시"만.
+  const reason=content.reason?await reasonMark("stamp",content.reason,{accent:"#8A3A1F",ink:MUSEUM.ink,dim:MUSEUM.rule}):null;
+  const head=await fitLines(content.headline,{sizes:content.cover?[68,64,60,56]:[64,60,56,52],width:textWidthBeside(reason,LW-IN*2),font:TITLE_SERIF,color:MUSEUM.ink,maxLines:2,prefer:"size",spacing:size=>Math.round(size*.08),emphasis:emphasisOf(content,"#8A3A1F")});
+  const meta=await textLayer(`${content.cover?"특별전":reason?"전시":`전시 ${String(index).padStart(2,"0")}`} · ${(content.keywords??["홍어"]).slice(0,2).join(" · ")}`,{size:40,color:MUSEUM.dim,width:LW-IN*2,height:80,font:SANS_BOLD,letterSpacing:1});
   const line=lineOf(content);
-  const sub=line?await textLayer(line,{size:40,color:MUSEUM.dim,width:LW-IN*2,height:4000,font:SANS,spacing:8}):null;
+  const sub=line?await textLayer(line,{size:40,color:MUSEUM.dim,width:textWidthBeside(reason,LW-IN*2),height:4000,font:SANS,spacing:8}):null;
+  const row=besideMark(reason,head.layer,sub);
   const chip=content.last?await saveChip(MUSEUM.ink,MUSEUM.label):null;
-  const LH=IN+meta.info.height+14+head.layer.info.height+(sub?18+sub.info.height:0)+(chip?22+chip.height:0)+IN;
+  const LH=IN+meta.info.height+14+row.height+(chip?22+chip.height:0)+IN;
   const bottomTop=H-56-foot.height;
   const labelTop=bottomTop-32-LH;
   // 액자는 라벨 높이의 55%까지 내려온다(라벨이 액자 아래 모서리에 걸친다).
@@ -202,8 +222,7 @@ async function museum(photo:Buffer,content:StyleContent,index:number):Promise<Bu
   const texts:OverlayOptions[]=[];
   let y=labelTop+IN;
   texts.push({input:meta.data,left:LX+IN,top:y});y+=meta.info.height+14;
-  texts.push({input:head.layer.data,left:LX+IN,top:y});y+=head.layer.info.height;
-  if(sub){y+=18;texts.push({input:sub.data,left:LX+IN,top:y});y+=sub.info.height;}
+  const copy=row.place(LX+IN,y);markup+=copy.svg;texts.push(...copy.layers);y+=row.height;
   if(chip){y+=22;markup+=chip.svg(LX+IN,y);texts.push({input:chip.layer.data,left:LX+IN+chip.padX,top:y+chip.padY});}
   const frameBottom=FY+FH+12;
   if(content.cover)texts.push({input:await logoMark(96,"#FAF8F4"),left:MARGIN,top:Math.round(frameBottom+(labelTop+LH-frameBottom-96)/2)});

@@ -2,7 +2,7 @@ import sharp, { type OverlayOptions } from "sharp";
 import { croppedPhoto, svgLayer, textLayer } from "../render/primitives";
 import { shadowLayer, textureLayer } from "../decor";
 import { STYLE_FONTS, brandSeal, emphasisOf, snap, type StyleContent } from "./shared";
-import { countLines, fitLines, footerRow, logoMark, storeCardBlock, type TrackSurface } from "./trackKit";
+import { countLines, fitLines, footerRow, logoMark, reasonMark, storeCardBlock, type TrackSurface } from "./trackKit";
 import type { TrackLook } from "./trackLooks";
 import { renderTextLookPrint } from "./textLooksPrint";
 
@@ -80,7 +80,10 @@ async function memoBody(content:StyleContent,index:number,look:TrackLook):Promis
   // 바탕은 밝은 종이와 중간 색을 번갈아(넘길 때 색이 바뀌게), 마지막 장은 밝은 종이.
   const paper=content.last||index%2===0?look.light:look.mid;
   const block=await handBlock(content,paper,[136,128,120,112,104,96]);
-  const numeral=await textLayer(`${index}.`,{size:130,color:paper.accent,width:300,height:300,font:HAND});
+  // 이유 장: 손글씨 "2." 대신 감빛 이유 도장(시안 B: 몇 번째 / 모두 몇 개).
+  const reason=content.reason?await reasonMark("stamp",content.reason,{accent:paper.accent,ink:paper.ink,dim:paper.dim}):null;
+  const hand=reason?null:await textLayer(`${index}.`,{size:130,color:paper.accent,width:300,height:300,font:HAND});
+  const numeral={info:{height:reason?reason.height:hand!.info.height}};
   const card=content.last?await storeCardBlock({logoSize:200,wordmark:false,surface:paper}):null;
   const foot=card?null:await footerRow({color:paper.dim,cueColor:paper.ink,cue:true,left:X,right:80});
   const bottomH=card?card.height:foot!.height;
@@ -88,7 +91,9 @@ async function memoBody(content:StyleContent,index:number,look:TrackLook):Promis
   const groupH=numeral.info.height+24+block.height;
   const room={top:120,bottom:bottomTop-(card?80:60)};
   const top=Math.round(Math.max(room.top,room.top+(room.bottom-room.top-groupH)/2));
-  const layers:OverlayOptions[]=[svgLayer(notebook(paper)),{input:numeral.data,left:X,top}];
+  const layers:OverlayOptions[]=[svgLayer(notebook(paper))];
+  if(reason){const placed=reason.place(X,top);layers.push(svgLayer(placed.svg),...placed.layers);}
+  else layers.push({input:hand!.data,left:X,top});
   const textTop=top+numeral.info.height+24;
   for(const item of block.items)layers.push({input:item.data,left:X,top:textTop+item.top});
   // 제목 아래 형광펜 같은 강조 밑줄(첫 줄 아래).
@@ -122,7 +127,9 @@ async function menuBoard(photo:Buffer|undefined,content:StyleContent,index:numbe
   const accent=look.dark.accent;
   const BX=110,BW=W-BX*2;
   const layers=await boardFrame(look);
-  const header=await boardHeader(content.cover?"묵동홍어마을 차림표":content.last?"오늘의 마무리":`차림표 · ${index}`,accent,110);
+  const header=await boardHeader(content.cover?"묵동홍어마을 차림표":content.last?"오늘의 마무리":content.reason?"차림표":`차림표 · ${index}`,accent,110);
+  // 이유 장: 제목 바로 위 가운데에 감빛 이유 도장(시안 B).
+  const reason=content.reason?await reasonMark("stamp",content.reason,{accent,ink:BOARD.ink,dim:BOARD.dim}):null;
   layers.push(...header.layers);
   let y=110+header.height+56;
   const surface={ink:BOARD.ink,dim:BOARD.dim,chip:accent,chipInk:BOARD.bg};
@@ -145,8 +152,11 @@ async function menuBoard(photo:Buffer|undefined,content:StyleContent,index:numbe
     rows.push({data:layer.data,height:layer.info.height,width:layer.info.width});
   }
   const ROW_GAP=34;
-  const blockH=title.layer.info.height+rows.reduce((sum,row)=>sum+ROW_GAP*2+row.height,0);
-  const top=content.cover?y:Math.round(Math.max(y,y+(bottomTop-56-y-blockH)/2));
+  const markH=reason?reason.height+28:0;
+  const blockH=markH+title.layer.info.height+rows.reduce((sum,row)=>sum+ROW_GAP*2+row.height,0);
+  const blockTop=content.cover?y:Math.round(Math.max(y,y+(bottomTop-56-y-blockH)/2));
+  if(reason){const placed=reason.place(Math.round(540-reason.width/2),blockTop);layers.push(svgLayer(placed.svg),...placed.layers);}
+  const top=blockTop+markH;
   layers.push({input:title.layer.data,left:Math.round(540-title.layer.info.width/2),top});
   let ry=top+title.layer.info.height;
   let markup="";
@@ -192,7 +202,7 @@ async function hanjiCard(photo:Buffer|undefined,content:StyleContent,index:numbe
     const PH=Math.min(700,bottomTop-M-420);
     layers.push(await shadowLayer({x:M,y:M+10,width:LEFT_W,height:PH,rx:12,blur:20,opacity:.16}),{input:await croppedPhoto(photo,LEFT_W,PH,12,{zoom:1.04}),left:M,top:M});
     y=M+PH+56;
-  }else if(!content.cover){
+  }else if(!content.cover&&!content.reason){
     // 나눔붓글씨에는 한자가 없어 다른 글꼴로 대신 찍힌다(四가 어색했다). 한자가 있는 나눔명조 굵은체로 쓴다.
     const num=await textLayer(HANJA[(index-1)%HANJA.length],{size:120,color:HANJI.seal,width:300,height:240,font:STYLE_FONTS.serifHeavy});
     layers.push({input:num.data,left:M,top:M});
@@ -201,8 +211,13 @@ async function hanjiCard(photo:Buffer|undefined,content:StyleContent,index:numbe
   const title=await fitLines(content.headline,{sizes:content.cover?[128,120,112,104,96]:[140,130,120,112,104],width:LEFT_W,font:STYLE_FONTS.brush,color:HANJI.ink,maxLines:content.cover?2:3,prefer:"size",spacing:size=>Math.round(size*.02),emphasis:emphasisOf(content,HANJI.seal)});
   const lines=content.cover?(content.subline?[content.subline]:[]):content.points.slice(0,1);
   const subs=await Promise.all(lines.map(text=>textLayer(text,{size:content.cover?46:48,color:content.cover?HANJI.seal:HANJI.dim,width:LEFT_W,height:4000,font:STYLE_FONTS.serif,spacing:12})));
-  const blockH=title.layer.info.height+subs.reduce((sum,sub)=>sum+28+sub.info.height,0);
-  const top=content.cover?y:Math.round(Math.max(y,y+(bottomTop-60-y-blockH)/2));
+  // 이유 장: 一·二·三 대신 제목 바로 위에 감빛 이유 도장(시안 B: 몇 번째 / 모두 몇 개).
+  const reason=content.reason?await reasonMark("stamp",content.reason,{accent:HANJI.seal,ink:HANJI.ink,dim:HANJI.dim}):null;
+  const markH=reason?reason.height+32:0;
+  const blockH=markH+title.layer.info.height+subs.reduce((sum,sub)=>sum+28+sub.info.height,0);
+  const blockTop=content.cover?y:Math.round(Math.max(y,y+(bottomTop-60-y-blockH)/2));
+  if(reason){const placed=reason.place(M,blockTop);layers.push(svgLayer(placed.svg),...placed.layers);}
+  const top=blockTop+markH;
   layers.push({input:title.layer.data,left:M,top});
   let sy=top+title.layer.info.height;
   for(const sub of subs){sy+=28;layers.push({input:sub.data,left:M,top:sy});sy+=sub.info.height;}
