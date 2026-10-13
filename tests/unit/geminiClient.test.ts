@@ -137,6 +137,23 @@ describe("Gemini client", () => {
     warn.mockRestore();
   });
 
+  // 예비 글 AI(Groq·Cloudflare)를 넣지 않기로 해서(사장님 2026-10-13), Gemini가 멈추면 Gemini 안에서 버텨야 한다: 시간 초과도 503처럼 한 번 더 → 예비 모델.
+  it("treats a timeout like 503: retries once, then uses the fallback model, and keeps the timeout message if all fail", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const timeout = () => Promise.reject(Object.assign(new Error("aborted"), { name:"TimeoutError" }));
+    const request = vi.fn()
+      .mockImplementationOnce(timeout)
+      .mockImplementationOnce(timeout)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'{"ok":true}' }] } }] }), { status:200 }));
+    await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ ok:z.boolean() }))).resolves.toEqual({ ok:true });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls[2][0]).toContain("gemini-3.1-flash-lite:generateContent");
+    const always = vi.fn().mockImplementation(timeout);
+    await expect(createGeminiClient({ apiKey:"secret", fetch:always }).generateJson("test", z.object({ ok:z.boolean() }))).rejects.toMatchObject({ status:0, message:expect.stringContaining("45초") });
+    expect(always).toHaveBeenCalledTimes(3);
+    warn.mockRestore();
+  });
+
   it("keeps the schema on the 503 retry and on the fallback model", async () => {
     const request = vi.fn()
       .mockResolvedValueOnce(new Response("{}", { status:503 }))
