@@ -17,6 +17,8 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   const {topic,track,plan}=parsed.data;
   const photo=photoConcept(plan);
   const settings=await readSettings().catch(()=>null);
+  // 설정에서 그림 콘셉트 제안을 껐으면 실사만 돌려준다(화면은 후보가 하나면 고르는 단계를 건너뛴다).
+  if(settings?.conceptProposals===false)return NextResponse.json({options:[photo],recommended:0,provider:"off"});
   const client=createTextClient(settings?.textAiProvider,{onSwitch:(from,reason)=>console.warn(`[text-ai] ${from} 실패, 다음 제공자로:`,reason)});
   try{
     const raw=await client.generateJson(buildConceptPrompt(plan,topic,track),ConceptProposalSchema);

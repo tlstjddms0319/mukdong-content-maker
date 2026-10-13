@@ -31,20 +31,21 @@ export const IMAGE_STYLE_DIRECTIONS:Record<ImageStyle,StyleDirection>={
     medium:"애니메이션 일러스트",
     scene:"애니메이션 일러스트로 그릴 음식 장면(사진이 아닌 그림)",
     anchor:"셀 셰이딩과 깔끔한 선의 애니메이션 일러스트 화풍",
-    look:"Japanese anime-style illustration: clean line art, cel shading, soft painterly background, vibrant but harmonious colors, one clear focal point. Not a photograph and not photorealistic. The food must stay recognizable with the same ingredients and look appetizing. Follow the scene's camera angle.",
+    // 사장님 지적(2026-10-13): 애니·일러스트 결과가 평범한 클립아트처럼 나왔다. 실사 지시문만큼 구체적으로: 선·명암·색 수·배경·구도·금지 사항.
+    look:"High-quality anime-style key-visual illustration, like a frame from a well-produced food anime: confident clean line art with varied line weight, two-tone cel shading plus one soft highlight, a limited harmonious palette of 5-6 colors, a simple softly blurred background that keeps all attention on the food, cinematic composition with the main subject large in frame, warm rim light. The food keeps its real shape, colors and texture and looks appetizing (glossy, steaming, moist where it should be). Not a photograph, not 3D render, not chibi, not sketchy or scribbly, no watermark, no text.",
   },
   illustration:{
     medium:"일러스트",
     scene:"편집 일러스트로 그릴 음식 장면(사진이 아닌 그림)",
     anchor:"단순한 형태와 절제된 따뜻한 색의 편집 일러스트 화풍",
-    look:"Flat editorial illustration: simplified shapes, limited warm palette, subtle paper texture, poster-like composition, one clear focal point. Not a photograph and not photorealistic. The food must stay recognizable with the same ingredients. Follow the scene's camera angle.",
+    look:"Polished editorial illustration in the style of a premium food magazine or picture book: clean simplified shapes with crisp edges, flat colors with gentle grain and a few soft shadows, a warm limited palette of 4-6 colors, generous negative space, balanced poster-like composition with one clear focal point. The food keeps its real shape and colors and is drawn with care (visible texture lines, appetizing highlights). Not a photograph, not clip art, not a doodle, no outlines thicker than the shapes need, no watermark, no text.",
   },
   // 그림 콘셉트(images/concepts.ts): 음식을 캐릭터로 그릴 때. 캐릭터여도 어떤 음식인지 알아볼 수 있어야 한다(홍어: 마름모 몸·뾰족한 주둥이·연보라빛 분홍).
   character:{
     medium:"캐릭터 일러스트",
     scene:"음식을 의인화한 캐릭터가 나오는 그림 장면(사진이 아닌 그림)",
     anchor:"둥글고 친근한 캐릭터 일러스트 화풍(굵은 외곽선, 단순한 명암)",
-    look:"Friendly character illustration: bold clean outlines, simple cel shading, expressive cartoon faces, a clear stage-like composition with one focal action. Each food character keeps the real food's silhouette, colors and texture so it is instantly recognizable (a skate character has a diamond-shaped body, pointed snout and dusty mauve-pink flesh). Not a photograph. No speech bubbles and no written words anywhere.",
+    look:"Charming mascot-character illustration of professional brand quality (like a well-designed food brand mascot): smooth confident outlines of even weight, clean cel shading with one soft highlight, large expressive eyes and a clear emotion, a simple stage-like composition with one focal action and an uncluttered background, a limited harmonious palette. Each food character keeps the real food's silhouette, colors and texture so it is instantly recognizable (a skate character has a diamond-shaped body, pointed snout and dusty mauve-pink flesh with faint cartilage lines). Correct anatomy: the right number of limbs and fingers, no deformed faces, consistent proportions between characters. Not a photograph, not 3D render, not sketchy, no speech bubbles and no written words anywhere.",
   },
 };
 

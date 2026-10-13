@@ -65,7 +65,8 @@ describe("drawn slides reach the image prompt",()=>{
     const {concepts}=readConceptProposal(proposal(),plan,"photo");
     const applied=applyConcept(plan,concepts[0]);
     const drawn=buildImagePrompt({topic:"홍어와 가오리는 왜 다르게 먹을까?",count:1,aspectRatio:"4:5",slide:applied.slides[0],slideIndex:1,slideTotal:5,styleAnchor:applied.styleAnchor} as never);
-    expect(drawn).toContain("Friendly character illustration");
+    expect(drawn).toContain("mascot-character illustration");
+    expect(drawn).toContain("right number of limbs and fingers");
     expect(drawn).toContain("Cartoon character faces are fine");
     expect(drawn).not.toContain("Skate texture: muted dusty mauve-pink flesh");
     const photo=buildImagePrompt({topic:"홍어와 가오리는 왜 다르게 먹을까?",count:1,aspectRatio:"4:5",slide:applied.slides[4],slideIndex:5,slideTotal:5,styleAnchor:applied.styleAnchor} as never);

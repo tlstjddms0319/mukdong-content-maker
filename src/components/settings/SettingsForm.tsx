@@ -32,7 +32,11 @@ export function SettingsForm({ onSave = saveSettings, connections = { gemini:fal
     <section className="settings-section"><div><h2>가게 이야기 메모</h2><p>사장님만 아는 가게 사실을 적어 두면 AI가 글의 근거로 써요. 여기 없는 가게 이야기는 AI가 지어내지 않아요.</p></div><div className="field-grid">
       <label className="field-wide">메모<textarea aria-label="가게 이야기 메모" rows={7} maxLength={1500} placeholder={"한 줄에 사실 하나씩 적어 주세요. 예)\n홍어는 들어오는 날 직접 손질해요.\n묵은지는 가게에서 직접 담가 오래 익혀요."} value={settings.storeNotes??""} onChange={e=>update("storeNotes",e.target.value)}/><small className="field-help">{(settings.storeNotes??"").length.toLocaleString("ko-KR")} / 1,500자 · 가격·원산지처럼 바뀔 수 있는 정보는 바뀌면 꼭 고쳐 주세요.</small></label>
     </div></section>
-    <div className="settings-actions"><span/><button type="submit" className="button secondary">메모 저장</button>{saved==="notes"&&<span role="status">저장했어요.</span>}{error?.part==="notes"&&<span role="alert">{error.message}</span>}</div>
+    {/* 그림 콘셉트 제안(2026-10-13): 애니·일러스트 결과가 아쉬우면 끄고 늘 실사로 만든다. 메모와 같은 저장 버튼을 쓴다. */}
+    <section className="settings-section"><div><h2>그림 콘셉트 제안</h2><p>사진 없이 AI로 그릴 때, 글에 맞는 그림(캐릭터 대결·상황 일러스트 등)을 AI가 제안하고 고르는 화면이에요.</p></div><div className="field-grid">
+      <label><span><input type="checkbox" aria-label="그림 콘셉트 제안 사용" checked={settings.conceptProposals??true} onChange={e=>update("conceptProposals",e.target.checked)}/> 그림 콘셉트 제안 사용</span><small className="field-help">끄면 고르는 화면 없이 늘 실사 사진으로 만들어요.</small></label>
+    </div></section>
+    <div className="settings-actions"><span/><button type="submit" className="button secondary">저장</button>{saved==="notes"&&<span role="status">저장했어요.</span>}{error?.part==="notes"&&<span role="alert">{error.message}</span>}</div>
   </form>
   <details className="admin-settings">
     <summary>관리자용 설정</summary>
