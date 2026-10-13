@@ -76,8 +76,10 @@ export const QUESTION_FOCUS_RULE=`[질문의 술어에 답하기] 표지 질문�
 const COMPARISON=/^\s*(.{1,12}?)[은는]\s+[^?？]*?(?:한데|인데|는데|은데|지만|면서)\s*,?\s*(.{1,14}?)[은는이가]\s+(?:왜|어째서)/;
 // "A와(과·랑·이랑·하고) B의 (맛의) 차이" / "A와 B는 무엇이(뭐가·어떻게·어디가) 다를까"
 const DIFFERENCE=/^\s*(.{1,14}?)(?:와|과|이랑|랑|하고)\s+(.{1,14}?)(?:의\s*(?:[가-힣]{1,4}의?\s*)?차이|[은는이가]?\s*(?:무엇이|뭐가|어떻게|어디가|어디서|왜)?\s*(?:다를|달라|다르|차이))/;
+// "A와 달리 B는 왜 ~?" / "A와 다르게 B는 어째서 ~?" (점검 10회: "맑은 생선탕과 달리 홍어애탕은 왜 국물이 묵직할까?"를 비교로 못 읽어 본문이 한쪽만 다뤘다)
+const CONTRAST=/^\s*(.{1,14}?)(?:와|과|이랑|랑|하고)\s*(?:달리|다르게)\s*,?\s*(.{1,14}?)[은는이가]\s+(?:왜|어째서)/;
 export function comparedPair(question:string):{first:string;second:string}|undefined {
-  const match=question.match(COMPARISON)??question.match(DIFFERENCE);
+  const match=question.match(COMPARISON)??question.match(CONTRAST)??question.match(DIFFERENCE);
   if(!match)return undefined;
   // 이름 앞뒤의 문장부호는 뗀다("해물라면과 홍어라면, 무엇이 다를까?" → "홍어라면").
   const clean=(name:string)=>name.trim().replace(/^[\s,，.·:;"'“”‘’(\[]+|[\s,，.·:;!?"'“”‘’)\]]+$/g,"");
@@ -157,4 +159,14 @@ export const SECRET_TEASE=/비밀|숨은\s*이유|숨겨진|진짜\s*이유|속�
 export function yesNoCover(headline:string):boolean {
   const text=headline.trim();
   return /(?:까요?|나요|가요)\s*[?？]$/.test(text)&&!/왜|어째서|어떻게|어떤|무엇|뭐|무슨|누가|어디|언제|얼마나/.test(text);
+}
+
+// 글이 말하는 원인의 이름들(NAMES_CAUSE에 걸린 낱말을 어간으로 묶어서). 이유 장끼리 같은 원인을 되풀이하는지 볼 때 쓴다(점검 7~10회 평가:
+// "2장과 4장이 같은 원리를 되풀이", "장들이 화학 원리를 중복 설명"). 성분·원료·재료처럼 무엇이든 가리키는 말은 세지 않는다.
+const CAUSE_STEMS:ReadonlyArray<[RegExp,string]>=[[/^삭/,"삭힘"],[/^녹/,"녹음"],[/^얼/,"얼림"],[/^익/,"익힘"],[/^열/,"열"],[/^코/,"코"],[/^풀/,"풀림"],[/^식으/,"식음"],[/^굳/,"굳음"],[/^끓/,"끓임"],[/^말/,"말림"]];
+const GENERIC_CAUSE=new Set(["성분","원료","재료","지역","경험","처음","자극","결이","결을","결대로","살결"]);
+export function causeWordsOf(text:string):string[] {
+  const found=text.match(new RegExp(NAMES_CAUSE.source,"g"))??[];
+  const stems=found.map(word=>{const trimmed=word.trim();const stem=CAUSE_STEMS.find(([pattern])=>pattern.test(trimmed));return stem?stem[1]:trimmed.replace(/\s+/g,"");}).filter(word=>!GENERIC_CAUSE.has(word));
+  return [...new Set(stems)];
 }
