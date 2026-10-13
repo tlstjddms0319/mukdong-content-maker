@@ -58,7 +58,7 @@ describe("reasons must name a cause",()=>{
 
 describe("store notes (가게 이야기 메모)",()=>{
   it("reads old settings without the field as an empty memo",()=>{
-    const {storeNotes:_ignored,...old}=DEFAULT_SETTINGS;
+    const old:Record<string,unknown>={...DEFAULT_SETTINGS};delete old.storeNotes;
     expect(AppSettingsSchema.parse(old).storeNotes).toBe("");
   });
 
