@@ -49,7 +49,7 @@ const SIDE_SUBJECTS=["묵은지","수육","초장","막걸리","미나리","과�
 // 비교 장에서 "다르다"는 말(어떻게 다른지는 없이). 양쪽 이름이 함께 있으면 "A는 ~, B는 ~"로 설명한 것으로 본다.
 const SAYS_DIFFERENT=/달라|다르|다른\s|차이|갈라|갈려|갈린/;
 // 공통점을 밝힌 장("둘 다 ~", "모두 ~")은 한쪽만 말한 장으로 보지 않는다.
-const SAYS_SHARED=/둘\s*다|모두|공통|똑같|같은\s/;
+export const SAYS_SHARED=/둘\s*다|모두|공통|똑같|같은\s/;
 // 이유 장끼리 같은 원인을 되풀이하면(앞 장의 원인 말만 있고 새 원인이 없으면) 다른 이유로 바꾸게 한다(점검 7~10회 평가: "2장과 4장이 같은 원리").
 function repeatedCauseIssues(plan:CarouselPlan):SlideCopyIssue[] {
   const issues:SlideCopyIssue[]=[];

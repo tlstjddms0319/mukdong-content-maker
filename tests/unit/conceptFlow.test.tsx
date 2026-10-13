@@ -3,7 +3,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFallbackCarouselPlan } from "@/features/images/carousel";
-import { chooseConcept, createAutomatically, ensureGeneration, resetGenerationStore, useGenerationState } from "@/features/images/generationStore";
+import { chooseConcept, createAutomatically, ensureGeneration, resetGenerationStore, setImageRetryDelayForTests, useGenerationState } from "@/features/images/generationStore";
 import { photoConcept } from "@/features/images/concepts";
 
 const card=(n:number)=>`data:image/jpeg;base64,CARD${n}`;
@@ -41,6 +41,35 @@ describe("choosing a picture concept while making a post",()=>{
     expect(generated[0].slide).toMatchObject({imageStyle:"character",visualPrompt:"홍어 캐릭터와 가오리 캐릭터가 링 위에서 마주 선 장면"});
     expect(hook.result.current.plan?.slides[1].imageStyle).toBe("photo");
     expect(hook.result.current.plan?.slides[1].visualPrompt).toBe(plan.slides[1].visualPrompt);
+  });
+
+  // 이미지 AI가 한 번 실패해도(시간 초과 등) 바로 멈추지 않고 그 장을 한 번 더 그린다(사장님 지적 2026-10-13).
+  it("retries a slide once before giving up",async()=>{
+    setImageRetryDelayForTests(0);
+    const plan=createFallbackCarouselPlan({topic:meta.topic,slideCount:5,track:"photo"});
+    let n=0,failedOnce=false,thirdSlideCalls=0;
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url==="/api/images/plan")return {ok:true,json:async()=>({plan,provider:"gemini"})};
+      if(url==="/api/images/concepts")return {ok:true,json:async()=>({options:[photoConcept(plan)],recommended:0})};
+      if(url==="/api/images/store-card")return {ok:true,json:async()=>({image:card(900)})};
+      if(url==="/api/images/generate"){
+        const body=JSON.parse(String(init?.body));
+        if(body.slideIndex===3)thirdSlideCalls++;
+        if(body.slideIndex===3&&!failedOnce){failedOnce=true;return {ok:false,json:async()=>({message:"이미지 생성이 너무 오래 걸려 멈췄어요."})};}
+        return {ok:true,json:async()=>({images:[card(++n)],source:"ai"})};
+      }
+      return {ok:false,json:async()=>({})};
+    }));
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    const hook=renderHook(()=>useGenerationState());
+    act(()=>{ensureGeneration("d1|5",{topic:meta.topic,slideCount:5,track:"photo"});});
+    await act(async()=>{await createAutomatically(meta);});
+    await waitFor(()=>expect(hook.result.current.slides.length).toBe(5));
+    // 3장은 한 번 실패한 뒤 자동으로 한 번 더 그려졌다(저장 단계는 이 테스트에서 흉내 내지 않아 그 뒤는 보지 않는다).
+    expect(failedOnce).toBe(true);
+    expect(thirdSlideCalls).toBe(2);
+    expect(hook.result.current.error).not.toContain("너무 오래");
+    warn.mockRestore();
   });
 
   it("does not ask when only the photo concept came back",async()=>{

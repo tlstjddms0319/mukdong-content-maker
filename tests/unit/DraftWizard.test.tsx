@@ -4,7 +4,7 @@ import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DraftWizard } from "@/components/wizard/DraftWizard";
-import { addLibraryPhoto, resetGenerationStore } from "@/features/images/generationStore";
+import { addLibraryPhoto, resetGenerationStore, setImageRetryDelayForTests } from "@/features/images/generationStore";
 
 // 새 3단계 화면(1 무엇을 올릴까요 → 2 만들기 → 3 확인하고 올리기)과 자동 만들기 흐름.
 // fetch는 주소별 처리기로 흉내 낸다. 처리기가 FAIL을 돌려주면 ok:false 응답이 된다.
@@ -293,6 +293,8 @@ describe("DraftWizard",()=>{
   });
 
   it("stops with a plain sentence when a slide fails and continues from that slide on '다시 해 보기'",async()=>{
+    // 장이 실패하면 앱이 몇 초 뒤 한 번 더 그려 본다(2026-10-13). 테스트에서는 바로 다시 시도하게 해 두 번째도 실패시킨다.
+    setImageRetryDelayForTests(0);
     let failSlide3=true;
     const base=makingRoutes("photo");
     const request=api({...base,"/api/images/generate":body=>Number(body.slideIndex)===3&&failSlide3?FAIL:base["/api/images/generate"](body)});

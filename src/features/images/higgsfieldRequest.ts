@@ -148,8 +148,10 @@ export async function waitForCompletion(job:Job,auth:string,timeoutMs=JOB_TIMEOU
   return current;
 }
 
+// 그림은 보통 1분 안에 끝난다. 5분까지 기다리면 느린 날엔 장마다 5분씩 멈춰 "다 만들지 못했어요"가 잦았다(2026-10-13). 3분 넘으면 다음 이미지 AI로.
+const IMAGE_JOB_TIMEOUT_MS=3*60_000;
 async function waitForJob(job:Job,auth:string):Promise<string> {
-  const url=(await waitForCompletion(job,auth)).images?.[0]?.url;
+  const url=(await waitForCompletion(job,auth,IMAGE_JOB_TIMEOUT_MS)).images?.[0]?.url;
   if(!url)throw new HiggsfieldImageError(502);
   return url;
 }
