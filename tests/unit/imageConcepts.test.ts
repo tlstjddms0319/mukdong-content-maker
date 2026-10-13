@@ -12,7 +12,8 @@ import { expectedCoverFrom } from "@/features/images/coverCheck";
 
 const plan=createFallbackCarouselPlan({topic:"홍어와 가오리는 왜 다르게 먹을까?",slideCount:5,track:"photo"});
 const scene=(n:number)=>`${n}장: 홍어 캐릭터와 가오리 캐릭터가 링 위에서 마주 선 장면, 관중석은 흐릿하게`;
-const proposal=(over:Record<string,unknown>={})=>({recommended:0,concepts:[{kind:"character",title:"홍어 vs 가오리 권투",summary:"두 생선 캐릭터가 링 위에서 맞붙어요",reason:"비교 주제라 대결이 잘 어울려요",
+const STYLE_NOTE="홍어 캐릭터: 마름모 몸에 뾰족한 주둥이, 연보라빛 분홍, 빨간 글러브 / 가오리 캐릭터: 둥근 회갈색 몸, 파란 글러브 / 배경: 나무 링";
+const proposal=(over:Record<string,unknown>={})=>({recommended:0,concepts:[{kind:"character",title:"홍어 vs 가오리 권투",summary:"두 생선 캐릭터가 링 위에서 맞붙어요",reason:"비교 주제라 대결이 잘 어울려요",styleNote:STYLE_NOTE,
   slides:plan.slides.map((_,i)=>({slide:i+1,drawn:i<4,visualPrompt:i<4?scene(i+1):""})),...over}]});
 
 describe("concept proposals",()=>{
@@ -53,6 +54,7 @@ describe("concept proposals",()=>{
     expect(applied.slides[0]).toMatchObject({imageStyle:"character",visualPrompt:scene(1)});
     expect(applied.slides[4]).toMatchObject({imageStyle:"photo",visualPrompt:plan.slides[4].visualPrompt});
     expect(applied.styleAnchor).toContain("캐릭터 일러스트");
+    expect(applied.styleAnchor).toContain("공통 그림 설정: 홍어 캐릭터: 마름모 몸");
     expect(applied.styleAnchor.length).toBeLessThanOrEqual(500);
     expect(applyConcept(plan,photoConcept(plan))).toBe(plan);
   });
@@ -65,7 +67,13 @@ describe("drawn slides reach the image prompt",()=>{
     const {concepts}=readConceptProposal(proposal(),plan,"photo");
     const applied=applyConcept(plan,concepts[0]);
     const drawn=buildImagePrompt({topic:"홍어와 가오리는 왜 다르게 먹을까?",count:1,aspectRatio:"4:5",slide:applied.slides[0],slideIndex:1,slideTotal:5,styleAnchor:applied.styleAnchor} as never);
-    expect(drawn).toContain("Friendly character illustration");
+    expect(drawn).toContain("mascot-character illustration");
+    expect(drawn).toContain("right number of limbs and fingers");
+    // 그림 장에는 공통 품질 지시와 캐릭터 연출이 붙고, 사진용 소품·촬영 힌트는 붙지 않는다.
+    expect(drawn).toContain("Professional illustration quality");
+    expect(drawn).toContain("brand mascot sheet");
+    expect(drawn).not.toContain("Props, if any, are Korean");
+    expect(drawn).not.toMatch(/film grain|soft sunlight/);
     // 먹는 음식(접시·그릇에 담긴 회·찜·무침)에는 얼굴을 그리지 않고, 표정은 통째 생선 마스코트에만(사장님 지적 2026-10-13: 맛없어 보임).
     expect(drawn).toContain("Never put faces, eyes or limbs on plated, sliced or cooked food");
     expect(drawn).toContain("No purple or green smell clouds");
@@ -74,6 +82,8 @@ describe("drawn slides reach the image prompt",()=>{
     expect(photo).toContain("Editorial food photography");
     expect(photo).toContain("never render a recognizable face");
     expect(photo).toContain("No purple or green smell clouds");
+    expect(photo).toContain("Props, if any, are Korean");
+    expect(photo).not.toContain("Professional illustration quality");
   });
 
   it("checks a drawn cover as a drawing of the food, not as a photo",()=>{

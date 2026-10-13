@@ -3,7 +3,7 @@ import { croppedPhoto, finishPhoto, svgLayer, textLayer, type CardRenderer } fro
 import { registerPhoto } from "../render/audit";
 import { shadowLayer, textureLayer } from "../decor";
 import { contentOf, emphasisOf, snap, type StyleContent } from "./shared";
-import { MARGIN, ON_PHOTO, SANS, SANS_SEMI, SAVE_CHIP, SHADE, TITLE_SERIF, TRACK_SURFACES, type TrackSurface, fitLines, folioMark, footerRow, logoMark, shortLines } from "./trackKit";
+import { MARGIN, ON_PHOTO, SANS, SANS_SEMI, SAVE_CHIP, SHADE, TITLE_SERIF, TRACK_SURFACES, type TrackSurface, fitLines, folioMark, footerRow, logoMark, reasonMark, shortLines } from "./trackKit";
 import { trackLookOf } from "./trackLooks";
 import { renderTextFocus } from "./textFocus";
 import { renderPhotoLook } from "./photoLooks";
@@ -98,34 +98,38 @@ async function bleed(photo:Buffer,content:StyleContent,index:number):Promise<Buf
   const base=await warmed(await finishPhoto(photo,1080,1350));
   const foot=await footerRow({color:ON_PHOTO.ink,ring:PAPER.ring,cue:!content.last,shadow:true});
   const footTop=1350-MARGIN-foot.height;
-  const title=await bodyTitle(content,ON_PHOTO.ink,ON_PHOTO.accent);
-  const line=shortLines(content,1)[0];
-  const sub=line?await sublineOf(line,ON_PHOTO.dim):null;
   const placed=foot.place(footTop);
-  // 장 번호(마지막 장은 저장 알약) 판: 높이를 먼저 알아야 위·아래 어느 쪽에 쌓든 자리를 잡는다.
+  // 이유 장: 큰 이유 번호를 제목 왼쪽에(번호가 제목 앞에 오게), 제목·짧은 글은 그 오른쪽에.
+  // 그 밖: 제목 위에 표시 하나(마지막 장은 저장 알약, 나머지는 장 번호).
   const chip=content.last?await textLayer(SAVE_CHIP,{size:40,color:PAPER.ink,width:900,height:80,font:SANS_SEMI}):null;
-  const folio=chip?null:await folioMark(index,ON_PHOTO.ink,{shadow:true});
-  const padX=30,padY=12,markH=chip?chip.info.height+padY*2:folio!.layer.info.height,markGap=chip?30:34;
-  // 사진 위쪽이 뚜렷이 단순하면(음식이 아래) 장 번호·제목·짧은 글을 위에서부터 쌓는다. 아니면 기존처럼 바닥글 위.
+  const reason=!chip&&content.reason?await reasonMark("numeral",content.reason,{accent:ON_PHOTO.accent,ink:ON_PHOTO.ink,dim:"#FFFFFF",shadow:true}):null;
+  const folio=chip||reason?null:await folioMark(index,ON_PHOTO.ink,{shadow:true});
+  const textX=reason?MARGIN+reason.width+32:MARGIN;
+  const title=await bodyTitle(content,ON_PHOTO.ink,ON_PHOTO.accent,1080-MARGIN-textX);
+  const line=shortLines(content,1)[0];
+  const sub=line?await textLayer(line,{size:40,color:ON_PHOTO.dim,width:1080-MARGIN-textX,height:4000,font:SANS,spacing:10}):null;
+  const padX=30,padY=12;
+  const markH=chip?chip.info.height+padY*2:folio?folio.layer.info.height:0,markGap=chip?30:folio?34:0;
+  const copyH=title.layer.info.height+(sub?22+sub.info.height:0);
+  // 글 덩어리: 위 표시 + (이유 번호 | 제목·짧은 글).
+  const rowH=Math.max(copyH,reason?.height??0);
+  const blockH=(markH?markH+markGap:0)+rowH;
+  // 사진 위쪽이 뚜렷이 단순하면(음식이 아래) 위에서부터 쌓는다. 아니면 기존처럼 바닥글 위.
   const top=await quietSide(base)==="top";
-  let markTop:number,titleTop:number,subTop:number;
-  if(top){
-    markTop=MARGIN;titleTop=markTop+markH+markGap;subTop=titleTop+title.layer.info.height+22;
-  }else{
-    subTop=footTop-56-(sub?.info.height??0);
-    titleTop=(sub?subTop-22:footTop-56)-title.layer.info.height;
-    markTop=titleTop-markGap-markH;
-  }
-  const mark:{svg:string;data:Buffer;top:number;left:number}=chip
-    ?{svg:`<rect x="${MARGIN}" y="${markTop}" width="${chip.info.width+padX*2}" height="${markH}" rx="${markH/2}" fill="${ON_PHOTO.ink}" fill-opacity=".94"/>`,data:chip.data,top:markTop+padY,left:MARGIN+padX}
-    :{svg:folio!.svg(MARGIN,markTop),data:folio!.layer.data,top:markTop,left:MARGIN};
-  const blockBottom=sub?subTop+sub.info.height:titleTop+title.layer.info.height;
+  const blockTop=top?MARGIN:footTop-56-blockH;
+  const markTop=blockTop,rowTop=blockTop+(markH?markH+markGap:0);
+  const titleTop=rowTop+Math.round((rowH-copyH)/2),subTop=titleTop+title.layer.info.height+22;
+  let svg="";const marks:OverlayOptions[]=[];
+  if(chip){svg=`<rect x="${MARGIN}" y="${markTop}" width="${chip.info.width+padX*2}" height="${markH}" rx="${markH/2}" fill="${ON_PHOTO.ink}" fill-opacity=".94"/>`;marks.push({input:chip.data,left:MARGIN+padX,top:markTop+padY});}
+  else if(folio){svg=folio.svg(MARGIN,markTop);marks.push({input:folio.layer.data,left:MARGIN,top:markTop});}
+  else if(reason){const p=reason.place(MARGIN,rowTop+Math.round((rowH-reason.height)/2));svg=p.svg;marks.push(...p.layers);}
+  const blockBottom=blockTop+blockH;
   const layers:OverlayOptions[]=[
     {input:base,left:0,top:0},
-    svgLayer((top?topTextShade(blockBottom+220):photoShade(Math.max(420,markTop-200),{top:false}))+mark.svg+placed.svg),
-    {input:mark.data,left:mark.left,top:mark.top},
-    {input:title.layer.data,left:MARGIN,top:titleTop},
-    ...(sub?[{input:sub.data,left:MARGIN,top:subTop}]:[]),
+    svgLayer((top?topTextShade(blockBottom+220):photoShade(Math.max(420,blockTop-200),{top:false}))+svg+placed.svg),
+    ...marks,
+    {input:title.layer.data,left:textX,top:titleTop},
+    ...(sub?[{input:sub.data,left:textX,top:subTop}]:[]),
     ...placed.layers,
   ];
   return sharp({create:{width:1080,height:1350,channels:3,background:SHADE}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();
@@ -136,30 +140,41 @@ async function bleed(photo:Buffer,content:StyleContent,index:number):Promise<Buf
 // 장 번호는 사진 왼쪽 위에 얹고 여백을 줄여(64→36px) 사진이 화면의 65% 이상 되게 한다.
 async function framed(photo:Buffer,content:StyleContent,index:number,PAPER:TrackSurface):Promise<Buffer> {
   const X=36,TOP=36,W=1080-X*2,R=28;
-  const title=await bodyTitle(content,PAPER.ink,PAPER.accent);
+  // 이유 장: 큰 이유 번호(종이 위, 강조색)를 제목 왼쪽에 두고 제목·짧은 글은 그 오른쪽에(번호가 제목 앞에 오게).
+  const reason=content.reason?await reasonMark("numeral",content.reason,{accent:PAPER.accent,ink:PAPER.dim,dim:PAPER.dim}):null;
+  const textX=reason?MARGIN+reason.width+32:MARGIN;
+  const title=await bodyTitle(content,PAPER.ink,PAPER.accent,1080-MARGIN-textX);
   const line=shortLines(content,1)[0];
-  const sub=line?await sublineOf(line,PAPER.dim):null;
-  const folio=await folioMark(index,ON_PHOTO.ink,{shadow:true});
+  const sub=line?await textLayer(line,{size:40,color:PAPER.dim,width:1080-MARGIN-textX,height:4000,font:SANS,spacing:10}):null;
+  const folio=reason?null:await folioMark(index,ON_PHOTO.ink,{shadow:true});
   const foot=await footerRow({color:PAPER.dim,cueColor:PAPER.ink,cue:true});
-  // 아래에서 위로 쌓는다: 바닥글 → 짧은 글 → 제목 → 사진.
+  // 아래에서 위로 쌓는다: 바닥글 → (이유 번호 | 제목·짧은 글) → 사진.
   const bottomTop=1350-56-foot.height;
-  const subTop=bottomTop-44-(sub?.info.height??0);
-  const titleTop=(sub?subTop-18:bottomTop-44)-title.layer.info.height;
-  const photoH=Math.max(420,titleTop-36-TOP);
+  const copyH=title.layer.info.height+(sub?18+sub.info.height:0);
+  const blockH=Math.max(copyH,reason?.height??0);
+  const blockTop=bottomTop-44-blockH;
+  const titleTop=blockTop+Math.round((blockH-copyH)/2),subTop=titleTop+title.layer.info.height+18;
+  const photoH=Math.max(420,blockTop-36-TOP);
   const shot=await warmed(await croppedPhoto(photo,W,photoH,R,{zoom:1.03}));
   const shadow=await shadowLayer({x:X,y:TOP+14,width:W,height:photoH,rx:R,blur:26,opacity:.2});
   const layers:OverlayOptions[]=[];
   const paper=await textureLayer("linen",{opacity:.22});
   if(paper)layers.push(paper);
   layers.push(shadow,{input:shot,left:X,top:TOP});
-  // 장 번호: 사진 왼쪽 위, 짙은 반투명 알약 위(밝은 사진에서도 흰 숫자가 읽히게).
-  const folioTop=TOP+30;
-  const pillH=folio.layer.info.height+16;
-  const markup=`<rect x="${MARGIN-18}" y="${folioTop-8}" width="${folio.width+36}" height="${pillH}" rx="${pillH/2}" fill="${SHADE}" fill-opacity=".72"/>`+folio.svg(MARGIN,folioTop);
+  let markup:string,marks:OverlayOptions[];
+  if(reason){
+    const placedReason=reason.place(MARGIN,blockTop+Math.round((blockH-reason.height)/2));
+    markup=placedReason.svg;marks=placedReason.layers;
+  }else{
+    // 장 번호: 사진 왼쪽 위, 짙은 반투명 알약 위(밝은 사진에서도 흰 숫자가 읽히게).
+    const folioTop=TOP+30,pillH=folio!.layer.info.height+16;
+    markup=`<rect x="${MARGIN-18}" y="${folioTop-8}" width="${folio!.width+36}" height="${pillH}" rx="${pillH/2}" fill="${SHADE}" fill-opacity=".72"/>`+folio!.svg(MARGIN,folioTop);
+    marks=[{input:folio!.layer.data,left:MARGIN,top:folioTop}];
+  }
   const placed=foot.place(bottomTop);
-  // 도형(알약·바닥글 화살표)을 먼저 깔고 글자를 그 위에 올린다.
-  layers.push(svgLayer(markup+placed.svg),{input:folio.layer.data,left:MARGIN,top:folioTop},{input:title.layer.data,left:MARGIN,top:titleTop});
-  if(sub)layers.push({input:sub.data,left:MARGIN,top:subTop});
+  // 도형(알약·막대·바닥글 화살표)을 먼저 깔고 글자를 그 위에 올린다.
+  layers.push(svgLayer(markup+placed.svg),...marks,{input:title.layer.data,left:textX,top:titleTop});
+  if(sub)layers.push({input:sub.data,left:textX,top:subTop});
   layers.push(...placed.layers);
   return sharp({create:{width:1080,height:1350,channels:3,background:PAPER.bg}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();
 }

@@ -51,7 +51,10 @@ async function textBlock(content:StyleContent,surface:TrackSurface,options:{alig
 async function body(content:StyleContent,index:number,look:TrackLook):Promise<Buffer> {
   const surface=textSurfaceOf(index,look);
   const block=await textBlock(content,surface,{align:"left",sizes:[112,108,104,100,96,92,88,84]});
-  const numeral=await textLayer(String(index).padStart(2,"0"),{size:220,color:surface.accent,width:600,height:400,font:TITLE_SERIF,features:"tnum",letterSpacing:-6,spacing:0});
+  // 이유 장: 장 번호(02) 대신 이유 번호(1) + 작은 "/ 3" + 진행 막대(시안 A, 사장님 요청 2026-10-13).
+  const reason=content.reason;
+  const numeral=await textLayer(reason?String(reason.n):String(index).padStart(2,"0"),{size:220,color:surface.accent,width:600,height:400,font:TITLE_SERIF,features:"tnum",letterSpacing:-6,spacing:0});
+  const ofLabel=reason?await textLayer(`/ ${reason.of}`,{size:42,color:surface.dim,width:300,height:120,font:SANS_SEMI,features:"tnum"}):null;
   const foot=await footerRow({color:surface.dim,cueColor:surface.ink,ring:surface.name==="brown"?surface.ring:undefined,cue:!content.last,left:X,right:X});
   const footTop=1350-80-foot.height;
   const NUM_GAP=52,RULE_GAP=76;
@@ -61,10 +64,14 @@ async function body(content:StyleContent,index:number,look:TrackLook):Promise<Bu
   const ruleY=top+numeral.info.height+NUM_GAP;
   const textTop=ruleY+RULE_GAP;
   const placed=foot.place(footTop);
-  const markup=`<path d="M${X+4} ${ruleY}H${X+88}" stroke="${surface.ink}" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>`+placed.svg;
+  const rule=reason
+    ?Array.from({length:reason.of},(_,i)=>`<rect x="${X+4+i*64}" y="${ruleY-4}" width="52" height="9" rx="4.5" fill="${i<reason.n?surface.accent:surface.dim}" fill-opacity="${i<reason.n?1:.45}"/>`).join("")
+    :`<path d="M${X+4} ${ruleY}H${X+88}" stroke="${surface.ink}" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>`;
+  const markup=rule+placed.svg;
   const layers:OverlayOptions[]=[];
   if(surface.name==="cream"){const paper=await textureLayer("linen",{opacity:.2});if(paper)layers.push(paper);}
   layers.push(svgLayer(markup),{input:numeral.data,left:X-6,top});
+  if(ofLabel)layers.push({input:ofLabel.data,left:X-6+numeral.info.width+16,top:top+numeral.info.height-ofLabel.info.height-24});
   for(const item of block.items)layers.push({input:item.layer.data,left:X,top:textTop+item.top});
   layers.push(...placed.layers);
   return sharp({create:{width:1080,height:1350,channels:3,background:surface.bg}}).composite(snap(layers)).jpeg({quality:93}).toBuffer();

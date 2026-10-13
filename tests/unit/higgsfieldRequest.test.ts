@@ -234,6 +234,15 @@ describe("Higgsfield image generation",()=>{
     warn.mockRestore();
   });
 
+  // 운영 로그(2026-10-13): "Grok Image 2.0 504"만 남아 어느 단계에서 시간이 초과됐는지 몰랐다.
+  it("says which stage timed out",async()=>{
+    const { waitForCompletion }=await import("@/features/images/higgsfieldRequest");
+    vi.stubGlobal("fetch",vi.fn(async()=>json({status:"queued"})));
+    const failure=await waitForCompletion({status:"queued",status_url:"https://api.higgsfield.ai/requests/t1/status"},"Key a:b",-1).catch(error=>error);
+    expect(failure).toMatchObject({status:504,reason:"timeout"});
+    expect(failure.detail).toContain("작업 완료 기다리기");
+  });
+
   it("keeps the Higgsfield answer and the model in the error so the cause can be seen",async()=>{
     vi.stubEnv("HF_IMAGE_MODEL","nano-banana-pro");
     const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});

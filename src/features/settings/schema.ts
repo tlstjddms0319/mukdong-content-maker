@@ -19,6 +19,8 @@ export const AppSettingsSchema = z.object({
   // 가게 이야기 메모: 사장님이 직접 적은 가게 사실(예: "홍어는 매일 아침 직접 손질해요"). AI가 이유의 근거로 쓸 수 있고,
   // 사실 검사도 메모에 있는 말은 확인된 사실로 본다(store/storeNotes.ts). 예전 설정에는 없으므로 빈 값으로 읽는다.
   storeNotes: z.string().max(1500, "가게 이야기 메모는 1,500자까지 쓸 수 있어요.").default(""),
+  // 그림 콘셉트 제안(images/concepts.ts): 끄면 "어떤 그림으로 만들까요?" 화면 없이 늘 실사로 만든다(사장님 2026-10-13: 애니·일러스트 품질이 아쉬우면 끌 수 있게).
+  conceptProposals: z.boolean().default(true),
   aiModelMode: z.enum(["automatic", "manual"]),
   preserveOriginals: z.boolean(),
   blockUnverifiedClaims: z.boolean(),

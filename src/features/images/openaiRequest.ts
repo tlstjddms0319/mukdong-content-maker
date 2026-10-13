@@ -1,6 +1,6 @@
 import { framingDirection, openaiSize } from "./imageAspect";
 import type { ImageBrief } from "./schema";
-import { IMAGE_STYLE_DIRECTIONS, resolveImageStyle } from "./style";
+import { IMAGE_STYLE_DIRECTIONS, drawnDirective, resolveImageStyle } from "./style";
 import { CARD_LAYOUTS, normalizeCardLayout, photosNeeded } from "./design";
 import { STYLES } from "./styleCatalog";
 import { CHOPSTICK_SCENE } from "./carousel";
@@ -208,6 +208,8 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 공통 스타일은 모든 장에 붙으므로 음식 이름을 걷어 내고 색·빛·그릇·테이블만 보낸다(예전에 저장된 구성안 포함).
     input.styleAnchor ? `전체 캐러셀 공통 스타일: ${foodFreeAnchor(input.styleAnchor)}.` : "",
     style.look,
+    // 그림 장: 화풍별 연출 + 공통 품질 지시(style.ts). 실사 장은 아래 소품·촬영 힌트가 맡는다.
+    drawnDirective(styleId),
     // 장면 설명이나 공통 스타일에 "사진"이 남아 있어도 화풍 지시가 이기도록 한 번 더 못 박는다.
     styleId==="photo" ? "" : `화풍: ${style.anchor}. 장면 설명이나 공통 스타일에 '사진'이라는 말이 있어도 사진처럼 만들지 말고 이 화풍으로 그릴 것.`,
     input.slide?.role==="detail"?"Macro detail: emphasize the actual texture of one bite with a gently blurred background. Keep the focal food in the upper two thirds of the frame; the plate may extend beyond the frame.":input.slide?.role==="overview"?"Top-down overview: keep the whole plate inside the central 75% crop-safe area, with sufficient depth of field to read the arrangement.":"Keep the main food inside the central 75% crop-safe area; use depth of field appropriate to this scene, without losing the food's recognizable shape.",
@@ -228,11 +230,12 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 사장님이 보낸 실제 매장 사진의 홍어회는 탁한 연보라빛 분홍(모브)에 회백색, 비스듬한 흰 연골 결이다.
     styleId==="photo"&&showsRawSkate(input)
       ? `Skate texture: muted dusty mauve-pink flesh with pale grey-white areas, parallel diagonal rows of fine translucent white cartilage lines, comb-like serrated edges, translucent edges backlit by the side light; keep the white balance neutral so the mauve-pink reads true.${input.slide?.role==="detail"?"":" The plate fills about 60% of the frame."}` : "",
-    PROPS_DIRECTIVE,
+    styleId==="photo" ? PROPS_DIRECTIVE : "",
     // 레이아웃마다 사진이 쓰이는 방식이 달라서, 그 레이아웃의 사진 분위기와 여백 요청을 붙인다.
-    input.slide ? CARD_LAYOUTS[input.slideLayout==="overlay"?"fullscreen":input.slide.layout].photoHint : "",
+    // 레이아웃·디자인 계열의 촬영 힌트는 사진 이야기("film grain", "soft sunlight")라 그림 장에는 붙이지 않는다.
+    input.slide && styleId==="photo" ? CARD_LAYOUTS[input.slideLayout==="overlay"?"fullscreen":input.slide.layout].photoHint : "",
     // 디자인 계열(컬러 블록·신문 등)은 사진을 누끼·흑백·픽셀처럼 따로 가공하므로, 그 가공에 맞는 촬영 조건을 덧붙인다.
-    input.slide && input.slideLayout!=="overlay" && input.design?.style && input.design.style!=="template" ? STYLES[input.design.style].photoHint : "",
+    input.slide && styleId==="photo" && input.slideLayout!=="overlay" && input.design?.style && input.design.style!=="template" ? STYLES[input.design.style].photoHint : "",
     reference ? referenceDirection(input) : "",
     // 수정 요청은 위의 화풍·구도 지침보다 우선한다고 명시해야 "애니메이션 풍으로" 같은 요청이 사진 지시에 묻히지 않는다.
     input.refinement ? `사용자의 수정 요청(가장 우선): ${JSON.stringify(input.refinement)}. 위의 화풍·구도·조명 지침과 충돌하면 이 요청을 따른다. 음식의 종류와 사실 기준은 유지한다.` : "",
