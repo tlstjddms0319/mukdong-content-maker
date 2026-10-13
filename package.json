@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "check": "tsc --noEmit -p . && vitest run && eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "check:higgsfield": "node scripts/check-higgsfield.mjs",
