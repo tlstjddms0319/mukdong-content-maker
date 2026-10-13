@@ -365,8 +365,19 @@ export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallbac
   const fallback=(reason="no AI client",error?:unknown,rejected?:Partial<Record<TopicRejectReason,number>>)=>{onFallback?.(reason,error,rejected);return fallbackTopics(parsed.recommendationRound,parsed.excludeTitles,season,parsed.avoidTitles,hints);};
   if(!ai)return fallback();
   try{
-    const suggestions=normalizeTrendLabels(normalizeSeasonLabels(readSuggestions(await ai.suggest(parsed)),season),hints.trends);
-    const {topics,filled,rejected}=assembleTopics(suggestions,{storeName:parsed.storeName,round:parsed.recommendationRound,excludeTitles:parsed.excludeTitles,avoidTitles:parsed.avoidTitles,season,hints});
+    const ask=async(input:typeof parsed)=>{
+      const suggestions=normalizeTrendLabels(normalizeSeasonLabels(readSuggestions(await ai.suggest(input)),season),hints.trends);
+      return {suggestions,...assembleTopics(suggestions,{storeName:parsed.storeName,round:parsed.recommendationRound,excludeTitles:parsed.excludeTitles,avoidTitles:parsed.avoidTitles,season,hints})};
+    };
+    let result=await ask(parsed);
+    // 셋 다 "이미 보여 준·했던 주제"로 거절되면(사장님 지적 2026-10-13: 앱을 열자마자 준비된 주제만 돌아 반복처럼 보임), 준비된 주제로 넘어가기 전에
+    // 거절된 제목을 피할 목록 맨 앞에 두고 한 번만 다시 묻는다. AI는 피할 목록 앞쪽 30개만 보므로, 방금 낸 제목을 또 내는 일이 잦았다.
+    if(result.filled>=3&&((result.rejected.recent??0)+(result.rejected.current??0))>0){
+      const rejectedTitles=result.suggestions.map(topic=>topic.title);
+      console.warn(`[topics] AI 추천 3개가 모두 했던 주제라 거절된 제목을 피해 한 번 더 물어요: ${rejectedTitles.join(" / ").slice(0,200)}`);
+      result=await ask({...parsed,avoidTitles:[...new Set([...rejectedTitles,...parsed.avoidTitles])].slice(0,300)});
+    }
+    const {topics,filled,rejected,suggestions}=result;
     if(filled>=3)return fallback(`suggestions broke the topic rules (${Object.entries(rejected).map(([reason,count])=>`${reason}×${count}`).join(", ")}): ${suggestions.map(topic=>topic.title).join(" / ").slice(0,200)}`,undefined,rejected);
     if(filled>0)onPartial?.(filled);
     return topics;

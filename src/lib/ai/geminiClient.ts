@@ -92,9 +92,11 @@ export function createGeminiClient(options: { apiKey?:string; model?:string; fal
       let response = await send(model);
       if (response.status===503) response = await send(model);
       // Free quotas are counted per model, so a second flash-lite model doubles the daily headroom.
-      if (response.status===429 && fallbackModel && fallbackModel!==model) {
+      // 503(과부하)도 모델마다 따로 나므로(운영 로그 2026-10-13: 기본 모델 503 두 번 → 준비된 주제), 한 번 더 해도 503이면 예비 모델로 간다.
+      if ((response.status===429 || response.status===503) && fallbackModel && fallbackModel!==model) {
         // 첫 모델의 무료 한도가 찬 것을 사용량 장부에 남긴다(두 번째 모델이 성공하면 textClient는 성공만 본다).
-        recordUsage({ provider:"gemini", ok:false, status:429 });
+        if (response.status===429) recordUsage({ provider:"gemini", ok:false, status:429 });
+        else console.warn(`[text-ai] Gemini(${model})가 바빠요(503). 예비 모델(${fallbackModel})로 다시 요청합니다.`);
         response = await send(fallbackModel);
       }
       if (!response.ok) throw new TextAiHttpError("Gemini", response.status);
