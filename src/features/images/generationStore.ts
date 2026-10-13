@@ -329,7 +329,7 @@ async function finishSlides(){
       while(cursor<plan.slides.length&&failure===null){
         const i=cursor++;
         try{
-          const generated=await generateWithRetry(plan.slides[i],i+1);
+          const generated=await drawAiSlideOrTextCard(plan,i);
           if(token!==run)return;
           ready.set(i,generated);
           const add:ApprovedImage[]=[];
@@ -356,9 +356,13 @@ async function regenerateSlide(refinement?:string){
   try{
     // 사장님 사진을 참고해 그린 장(사진 중심)은 다시 만들 때도 같은 사진을 참고한다.
     const refPhoto=state.slides[index]?.refPhoto;
-    const replacement=await generate(plan.slides[index],index+1,refPhoto!==undefined&&state.photos[refPhoto]?{photo:refPhoto}:undefined,refinement);
+    // 글자 카드로 대신한 장(sceneMisses, photo:-1)은 원래 모양으로 되돌려 그리고, 되면 기록을 지운다.
+    const miss=state.sceneMisses.find(item=>item.index===index&&item.photo<0);
+    const slide=miss?{...plan.slides[index],layout:miss.layout}:plan.slides[index];
+    const replacement=await generate(slide,index+1,refPhoto!==undefined&&state.photos[refPhoto]?{photo:refPhoto}:undefined,refinement);
     if(token!==run)return;
-    patch({slides:state.slides.map((item,i)=>i===index?replacement:item),...(index===0?{cover:replacement}:{}),approved:false});
+    patch({slides:state.slides.map((item,i)=>i===index?replacement:item),...(index===0?{cover:replacement}:{}),approved:false,
+      ...(miss?{plan:{...state.plan!,slides:state.plan!.slides.map((item,i)=>i===index?slide:item)},sceneMisses:state.sceneMisses.filter(item=>item.index!==index)}:{})});
   }catch(error){
     if(token===run)patch({error:error instanceof Error?error.message:"이 장을 다시 만들지 못했어요."});
   }finally{
@@ -972,6 +976,24 @@ async function generateWithRetry(slide:CarouselPlan["slides"][number],index:numb
   }
 }
 
+// AI로만 그리는 묶음의 본문 장: 두 번 시도해도 못 그리면 전체를 멈추지 않고 그 장만 글자 카드로 그린다(사진 묶음과 같은 길, 사장님 지적 2026-10-13:
+// "이미지 생성을 할 때 계속 못 만든다"). 못 그린 장은 sceneMisses(photo:-1)에 적어 확인 화면이 알리고, "장 고치기 → 그림"으로 AI가 다시 그린다.
+async function drawAiSlideOrTextCard(plan:CarouselPlan,i:number):Promise<ApprovedImage>{
+  try{return await generateWithRetry(plan.slides[i],i+1);}
+  catch(error){
+    if(i===0||state.photos.length)throw error;
+    const reason=error instanceof Error?error.message:String(error);
+    console.warn(`[images] ${i+1}장을 AI가 두 번 다 못 그려 글자 카드로 대신해요:`,reason.slice(0,120));
+    const slide=sceneFallbackSlide(plan.slides[i]);
+    const textPlan={...plan,slides:plan.slides.map((item,k)=>k===i?slide:item)};
+    patch({
+      plan:{...state.plan!,slides:state.plan!.slides.map((item,k)=>k===i?slide:item)},
+      sceneMisses:[...state.sceneMisses.filter(miss=>miss.index!==i),{index:i,photo:-1,layout:normalizeCardLayout(plan.slides[i]),reason}].sort((a,b)=>a.index-b.index),
+    });
+    return composePhotoSlide(textPlan,i,[]);
+  }
+}
+
 // 이 초안 카드에 쓴 디자인 계열(성과를 계열별로 비교하는 데 쓴다). 구성안 없이 사진만 쓴 초안은 없다.
 export const designStyleOf=(current:GenerationState):StyleId|undefined=>current.plan?.design?.style;
 
@@ -1091,7 +1113,8 @@ export function autoProgress(current:GenerationState):{message:string;progress:n
 export function redoSlideKind(current:GenerationState):"ai"|"photo"|"scene"|null {
   const index=activeSlideIndex(current),slide=current.slides[index];
   if(!slide||!current.plan||current.phase!=="idle"||index>=current.plan.slides.length)return null;
-  // AI 장면을 못 그려 대신 그린 장은 같은 사진을 참고해 AI로 다시 그린다.
+  // AI 장면을 못 그려 대신 그린 장은 같은 사진을 참고해 AI로 다시 그린다. 사진 없는 묶음의 글자 카드(photo:-1)는 AI로 다시 그린다.
+  if(current.sceneMisses.some(miss=>miss.index===index&&miss.photo<0)&&current.cover)return "ai";
   if(current.sceneMisses.some(miss=>miss.index===index)&&current.photos.length)return "scene";
   // 사장님 사진 장(AI로 다듬은 장 포함: 원래 사진 배치를 남겨 두어 되돌릴 수 있다). 예전에는 사진이 한 장뿐이면
   // 바꿀 사진이 없어 그림을 고칠 수 없었다.
