@@ -120,6 +120,51 @@ export async function folioMark(index:number,color:string,options:{shadow?:boole
   return {layer,width:layer.info.width+(rule?76:0),svg:(x,y)=>rule?`<path d="M${x+layer.info.width+18} ${Math.round(y+layer.info.height/2)}H${x+layer.info.width+76}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`:""};
 }
 
+// 이유 번호(장 번호 대신 제목 앞에): 몇 번째 이유인지와 이유가 모두 몇 개인지 한눈에(사장님 요청 2026-10-13, 시안 A·B).
+//   "numeral" : 큰 명조 숫자(150px, 강조색) + 작은 "/ 3" + 아래 진행 막대(이유 수만큼, 지금까지 강조색). 현대·잡지 느낌 모양용.
+//   "stamp"   : 감빛 사각 도장(104px) 안 숫자 + 아래 작은 점(●○○, 이유 수만큼). 한식 느낌 모양용.
+// 제목 위나 제목 왼쪽에 한 덩어리로 놓는다(width·height만큼 자리를 차지). shadow는 사진 위에 놓을 때.
+export const STAMP_RED="#C8553D";
+export type ReasonMark={width:number;height:number;place:(x:number,y:number)=>{svg:string;layers:OverlayOptions[]}};
+export async function reasonMark(kind:"numeral"|"stamp",reason:{n:number;of:number},colors:{accent:string;ink:string;dim:string;shadow?:boolean;stamp?:string}):Promise<ReasonMark> {
+  const of=Math.max(reason.of,reason.n);
+  const STAMP=colors.stamp??STAMP_RED;
+  if(kind==="numeral"){
+    const num=await textLayer(String(reason.n),{size:150,color:colors.accent,width:240,height:240,font:TITLE_SERIF,features:"tnum",shadow:colors.shadow});
+    const total=await textLayer(`/ ${of}`,{size:44,color:colors.ink,width:200,height:90,font:SANS_SEMI,features:"tnum",shadow:colors.shadow});
+    const BAR=44,GAP=12,barTop=num.info.height+6;
+    const width=Math.max(num.info.width+10+total.info.width,of*(BAR+GAP)-GAP),height=barTop+8;
+    return {width,height,place:(x,y)=>({
+      svg:Array.from({length:of},(_,i)=>`<rect x="${x+i*(BAR+GAP)}" y="${y+barTop}" width="${BAR}" height="7" rx="3.5" fill="${i<reason.n?colors.accent:colors.dim}" fill-opacity="${i<reason.n?1:.5}"/>`).join(""),
+      layers:[{input:num.data,left:x,top:y},{input:total.data,left:x+num.info.width+10,top:y+num.info.height-total.info.height-18}],
+    })};
+  }
+  const S=104,R=8,DG=10;
+  const num=await textLayer(String(reason.n),{size:64,color:"#FBF3E4",width:S,height:S,font:TITLE_SERIF,align:"centre",features:"tnum"});
+  const dotsW=of*(R*2+DG)-DG,width=Math.max(S,dotsW),height=S+14+R*2;
+  return {width,height,place:(x,y)=>({
+    svg:`<rect x="${x}" y="${y}" width="${S}" height="${S}" rx="14" fill="${STAMP}"/><rect x="${x+7}" y="${y+7}" width="${S-14}" height="${S-14}" rx="9" fill="none" stroke="#FBF3E4" stroke-opacity=".7" stroke-width="2"/>`
+      +Array.from({length:of},(_,i)=>`<circle cx="${x+S/2-dotsW/2+R+i*(R*2+DG)}" cy="${y+S+14+R}" r="${R}" fill="${i<reason.n?STAMP:colors.dim}" fill-opacity="${i<reason.n?1:.55}"${colors.shadow?` stroke="#1C1310" stroke-opacity=".35" stroke-width="2"`:""}/>`).join(""),
+    layers:[{input:num.data,left:x+Math.round((S-num.info.width)/2),top:y+Math.round((S-num.info.height)/2)}],
+  })};
+}
+
+// 이유 번호 옆에 제목·짧은 글을 나란히(번호가 제목 앞에 오게). mark가 없으면 제목·짧은 글만 쌓는다.
+// textWidth(baseWidth): 제목 글 폭(번호 자리를 뺀 폭). place는 왼쪽 정렬, placeCentred는 번호+글 덩어리를 가운데에.
+export const REASON_GAP=32;
+export const textWidthBeside=(mark:ReasonMark|null,baseWidth:number)=>mark?baseWidth-mark.width-REASON_GAP:baseWidth;
+export function besideMark(mark:ReasonMark|null,title:Layer,sub:Layer|null,subGap=18):{height:number;width:number;place:(x:number,y:number,align?:"left"|"centre")=>{svg:string;layers:OverlayOptions[]}} {
+  const copyH=title.info.height+(sub?subGap+sub.info.height:0),copyW=Math.max(title.info.width,sub?.info.width??0);
+  const height=Math.max(copyH,mark?.height??0),width=(mark?mark.width+REASON_GAP:0)+copyW;
+  return {height,width,place:(x,y,align="left")=>{
+    const text=(mark?mark.width+REASON_GAP:0);
+    const titleTop=y+Math.round((height-copyH)/2);
+    const tx=(w:number)=>align==="centre"&&!mark?Math.round(x+(copyW-w)/2):x+text;
+    const placed=mark?.place(x,y+Math.round((height-mark.height)/2));
+    return {svg:placed?.svg??"",layers:[...(placed?.layers??[]),{input:title.data,left:tx(title.info.width),top:titleTop},...(sub?[{input:sub.data,left:tx(sub.info.width),top:titleTop+title.info.height+subGap}]:[])]};
+  }};
+}
+
 // ── 가게 명함(마지막 장) ─────────────────────────────────────────────────────────────────
 // 원형 로고 → (워드마크) → 계정(설정에 있을 때) → "저장해 두고 다시 보세요" 알약. 가운데 정렬로 cx 기준에 놓는다.
 // 주소·영업시간은 넣지 않는다(확인 안 된 사실). 로고 안의 전화번호는 가게가 직접 쓰는 로고 그대로다.

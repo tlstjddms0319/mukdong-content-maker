@@ -50,7 +50,18 @@ export type StyleContent={
   // 두 사진을 견주는 비교 장(layout versus)인지. 사진이 두 장이어도 비교 장이 아니면 "vs" 같은 비교 표시를 하지 않는다
   // (실제 사진 캐러셀은 남는 사진을 두 장짜리 장으로 넣는데, 그 장의 글은 비교가 아니다).
   compare:boolean;
+  // 이유 장 번호(사장님 요청 2026-10-13): 갈래 게시물은 표지 질문 → 이유 장들 → 결론 장이라, 이유 장에는 장 번호 대신
+  // "몇 번째 이유 / 이유가 모두 몇 개"를 제목 앞에 크게 보인다. 표지·결론 장(내용 마지막 장)·홍보 카드는 null.
+  reason?:{n:number;of:number}|null;
 };
+// 내용 장 수(맨 뒤 홍보 카드는 빼고) 안에서 표지(1)와 결론(마지막 내용 장) 사이가 이유 장이다.
+export function reasonOf(index:number,total:number,cover=index===1):{n:number;of:number}|null {
+  const content=currentStoreCard()?total-1:total;
+  const of=content-2;
+  if(cover||of<1||index<2||index>=content)return null;
+  return {n:index-1,of};
+}
+
 export function contentOf(slide:CarouselSlidePlan,inputs:Buffer[],index:number,total:number):StyleContent {
   const cover=slide.role==="cover";
   return {
@@ -58,6 +69,7 @@ export function contentOf(slide:CarouselSlidePlan,inputs:Buffer[],index:number,t
     points:cleanPoints(slide.points),keywords:slide.keywords,index,total,cover,last:index===total,
     kind:cover?"cover":inputs.length>=2?"photos":inputs.length===1?"photo":"text",
     compare:slide.layout==="versus"&&inputs.length>=2,
+    reason:reasonOf(index,total,cover),
   };
 }
 
