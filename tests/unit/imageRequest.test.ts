@@ -529,8 +529,8 @@ describe("appetizing photo direction (A9)", () => {
     expect(prompt).toContain("plate fills about 60%");
     expect(prompt).toContain("brass yugi bowls");
     expect(prompt).toContain("No Japanese props");
-    // 빈 자리에 글자를 그리지 말라는 문장(2026-10-12)만큼 늘렸다.
-    expect(prompt.length).toBeLessThan(3300);
+    // 빈 자리에 글자를 그리지 말라는 문장(2026-10-12), 냄새를 혐오스럽게 그리지 말라는 문장(2026-10-13)만큼 늘렸다.
+    expect(prompt.length).toBeLessThan(3450);
   });
   it("keeps skate texture out of other foods and illustration styles", () => {
     expect(buildImagePrompt({...brief,topic:"김치찌개"})).not.toContain("Skate texture:");

@@ -110,10 +110,11 @@ export function fontDescription(family:string,size:number):string {
 }
 
 // 대체 글꼴(Pretendard)이 fontconfig에 등록돼 있어야 위 목록이 동작한다. sharp는 fontfile로 그린 글꼴만 등록하므로
-// 프로세스에서 처음 글자를 그릴 때 assets/fonts의 모든 글꼴로 한 글자씩 그려 한꺼번에 등록한다(약 80ms, 한 번만).
+// 프로세스에서 처음 글자를 그릴 때 Pretendard 글꼴로 한 글자씩 그려 등록한다(한 번만). 다른 글꼴은 쓰일 때 fontfile로 등록된다.
+// 예전에는 assets/fonts의 29개(약 90MB)를 모두 미리 읽었다(로컬 측정: rss +18MB → Pretendard만 +11MB, 2026-10-13).
 let fontsReady:Promise<void>|null=null;
 export function preloadFonts():Promise<void> {
-  fontsReady??=readdir(FONT_DIR).then(files=>Promise.all(files.filter(file=>/\.(ttf|otf)$/i.test(file)).map(file=>
+  fontsReady??=readdir(FONT_DIR).then(files=>Promise.all(files.filter(file=>/^Pretendard.*\.(ttf|otf)$/i.test(file)).map(file=>
     sharp({text:{text:"홍",font:"sans 8",fontfile:path.join(FONT_DIR,file)}}).png().toBuffer().catch(()=>undefined)))).then(()=>undefined);
   return fontsReady;
 }

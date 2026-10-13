@@ -717,17 +717,20 @@ const CARD_RENDERERS:Record<CardLayout,(inputs:Buffer[],slide:CarouselSlidePlan,
 // panorama: 표지+2장 파노라마의 어느 쪽인지(render/panorama.ts). 사진이 가로로 충분히 길 때만 쓰고, 아니면 평소 디자인으로 그린다.
 export type CardOptions={photoKind?:PhotoKind;enhance?:boolean;brandHandle?:string;remoteCutout?:boolean;storeCard?:boolean;panorama?:PanoramaSide};
 const photoKindOf=(options:CardOptions):PhotoKind=>options.photoKind??(options.enhance?"real":"none");
-// 그리기는 프로세스 안에서 한 번에 하나씩(render/renderLock.ts): 무료 서버 메모리 초과(520) 방지.
-export function composeSlideImage(...args:Parameters<typeof composeSlideImageNow>):ReturnType<typeof composeSlideImageNow> {
-  return withRenderLock(()=>composeSlideImageNow(...args));
-}
-async function composeSlideImageNow(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions={}):Promise<Buffer> {
+export async function composeSlideImage(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions={}):Promise<Buffer> {
   return (await composeSlideCard(input,slide,index,total,layout,design,options)).image;
+}
+
+// 그리기는 프로세스 안에서 한 번에 하나씩(render/renderLock.ts): 무료 서버 메모리 초과(520) 방지.
+// 예전에는 대기가 composeSlideImage에만 있어, 이 함수를 바로 부르는 생성 API(api/images/generate)는 두 장을 동시에 그렸다(2026-10-13 확인).
+// 안쪽에서 다시 대기를 잡지 않는다(같은 줄에 자기를 다시 세우면 영영 기다린다).
+export function composeSlideCard(...args:Parameters<typeof composeSlideCardNow>):ReturnType<typeof composeSlideCardNow> {
+  return withRenderLock(()=>composeSlideCardNow(...args),"card");
 }
 
 // 카드와 자동 검수 결과를 함께 돌려준다. options.contrast를 켜면 글자 대비까지 잰다(검수 스크립트·테스트용).
 // droppedPoints: 구성안 요점 가운데 카드에 들어가지 못한 수(레이아웃 자리가 3개뿐이거나, 넘쳐서 자동으로 뺀 경우). 화면이 알려 준다.
-export async function composeSlideCard(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions&{contrast?:boolean}={}):Promise<{image:Buffer;report:AuditReport;droppedPoints:number}> {
+async function composeSlideCardNow(input:Buffer|Buffer[],slide:CarouselSlidePlan,index:number,total:number,layout:SlideLayout=DEFAULT_SLIDE_LAYOUT,design?:DesignSpecInput,options:CardOptions&{contrast?:boolean}={}):Promise<{image:Buffer;report:AuditReport;droppedPoints:number}> {
   await access(FONTS.bold.file);
   const raw=Array.isArray(input)?input:[input];
   const kind=photoKindOf(options);

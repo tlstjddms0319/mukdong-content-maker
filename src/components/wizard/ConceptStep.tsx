@@ -3,11 +3,12 @@ import { useState } from "react";
 import { kindOf, type ConceptChoice } from "@/features/images/concepts";
 
 // 2단계 중간 "어떤 그림으로 만들까요?": 구성안이 나오면 그림 콘셉트 후보(실사 + AI 제안)를 큰 카드로 보여 주고 하나를 고른다.
-// AI가 추천하는 것이 미리 눌려 있어 그대로 "이걸로 만들기"만 눌러도 된다. 고르면 generationStore.chooseConcept가 이어서 만든다.
+// 실사가 미리 눌려 있다(일러스트는 음식이 맛없어 보일 수 있어 사장님이 고를 때만, 2026-10-13). AI 추천 콘셉트에는 'AI 추천' 표시가 붙는다.
+// 고르면 generationStore.chooseConcept가 이어서 만든다.
 const KIND_ICONS:Record<string,string>={photo:"📷",character:"🥊",scene:"🏠",diagram:"🔬",comic:"💬"};
 
 export function ConceptStep({topic,concepts,onChoose}:{topic:string;concepts:ConceptChoice;onChoose:(index:number)=>void}) {
-  const [picked,setPicked]=useState(Math.min(concepts.recommended,concepts.options.length-1));
+  const [picked,setPicked]=useState(Math.max(0,concepts.options.findIndex(concept=>concept.kind==="photo")));
   return <section aria-labelledby="concept-title">
     <h1 id="concept-title">어떤 그림으로 만들까요?</h1>
     <p className="lead">주제: {topic}</p>
