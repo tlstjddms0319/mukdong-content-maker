@@ -223,9 +223,11 @@ export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
     // 사람이 먹고 있는 느낌은 장면 설명이 요구할 때만, 얼굴이 식별되지 않는 범위에서 넣는다.
     // 그림 콘셉트(캐릭터·만화)는 만화 얼굴이 필요하다. 실사·일러스트는 예전처럼 실제 사람 얼굴을 그리지 않는다.
     styleId==="character"||styleId==="anime"
-      ? "캐릭터·만화 얼굴은 그려도 되지만 실제 사람처럼 사실적인 얼굴은 그리지 말 것. Cartoon character faces are fine; never render a realistic, recognizable human face."
+      ? "캐릭터·만화 얼굴은 통째 생선 마스코트와 만화 사람에게만 그리고, 실제 사람처럼 사실적인 얼굴은 그리지 말 것. Cartoon faces only on whole-fish mascots and cartoon people; never render a realistic, recognizable human face. Never put faces, eyes or limbs on plated, sliced or cooked food (sashimi, braised or mixed dishes, soups): edible food stays faceless, realistic and appetizing."
       : "장면 설명에 손, 젓가락, 잔, 뒷모습 같은 사람 요소가 있으면 자연스럽게 넣되, 얼굴은 프레임 밖에 두거나 식별되지 않게 할 것. Hands and chopsticks are welcome when the scene calls for them; never render a recognizable face.",
     foodDirection(input),
+    // 모든 화풍 공통: 먹는 음식을 혐오스럽게 그리지 않는다(사장님 지적 2026-10-13: 보라 연기·찡그린 얼굴 홍어찜이 맛없어 보임).
+    "No purple or green smell clouds, disgusted faces or nose-pinching; aroma only as soft white steam. Food always looks delicious.",
     comparisonCoverDirection(input),
     // 실사 홍어회 장면의 질감·빛. 결과 연골 줄이 홍어다움을 만든다. 무침·애탕이나 다른 메뉴가 주인공이면 붙이지 않는다. 클로즈업(detail)은 접시 비율을 주지 않는다.
     // 색: 하얗게만 나온다는 지적(2026-10-10)에 산호빛·선홍빛으로 고쳤더니 참치·연어회처럼 나왔다(2026-10-11).

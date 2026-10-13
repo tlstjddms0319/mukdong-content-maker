@@ -74,11 +74,14 @@ describe("drawn slides reach the image prompt",()=>{
     expect(drawn).toContain("brand mascot sheet");
     expect(drawn).not.toContain("Props, if any, are Korean");
     expect(drawn).not.toMatch(/film grain|soft sunlight/);
-    expect(drawn).toContain("Cartoon character faces are fine");
+    // 먹는 음식(접시·그릇에 담긴 회·찜·무침)에는 얼굴을 그리지 않고, 표정은 통째 생선 마스코트에만(사장님 지적 2026-10-13: 맛없어 보임).
+    expect(drawn).toContain("Never put faces, eyes or limbs on plated, sliced or cooked food");
+    expect(drawn).toContain("No purple or green smell clouds");
     expect(drawn).not.toContain("Skate texture: muted dusty mauve-pink flesh");
     const photo=buildImagePrompt({topic:"홍어와 가오리는 왜 다르게 먹을까?",count:1,aspectRatio:"4:5",slide:applied.slides[4],slideIndex:5,slideTotal:5,styleAnchor:applied.styleAnchor} as never);
     expect(photo).toContain("Editorial food photography");
     expect(photo).toContain("never render a recognizable face");
+    expect(photo).toContain("No purple or green smell clouds");
     expect(photo).toContain("Props, if any, are Korean");
     expect(photo).not.toContain("Professional illustration quality");
   });

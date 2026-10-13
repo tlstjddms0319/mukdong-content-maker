@@ -26,3 +26,14 @@ describe("sharp limits on the server",()=>{
     expect(limits.cacheMemoryMb).toBeLessThanOrEqual(64);
   });
 });
+
+describe("card drawing entry",()=>{
+  it("runs composeSlideCard itself through the render lock (the generate API calls it directly)",async()=>{
+    const { composeSlideCard }=await import("@/features/images/composeSlide");
+    const slide={role:"how-to",layout:"browser",headline:"한 점은 이렇게 드세요",subline:"",points:["결 방향으로 한 점 집어요"],visualPrompt:"",textPosition:"bottom",figure:"",titleFont:"auto",bodyFont:"auto",variant:0,keywords:["홍어"]} as never;
+    const jobs=[composeSlideCard([],slide,2,5,"card",{palette:"warm",style:"text-focus"}),composeSlideCard([],slide,3,5,"card",{palette:"warm",style:"text-focus"})];
+    expect(renderQueueSize()).toBe(2);
+    await Promise.all(jobs);
+    expect(renderQueueSize()).toBe(0);
+  },60_000);
+});
