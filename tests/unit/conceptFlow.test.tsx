@@ -27,7 +27,7 @@ describe("choosing a picture concept while making a post",()=>{
   afterEach(()=>{vi.unstubAllGlobals();resetGenerationStore();});
 
   it("pauses after the plan when the AI proposed concepts, then draws with the chosen one",async()=>{
-    const {plan,generated}=stub(current=>[photoConcept(current),{kind:"character",title:"홍어 vs 가오리 권투",summary:"링 위 대결",reason:"비교 주제",
+    const {plan,generated}=stub(current=>[photoConcept(current),{kind:"character",title:"홍어 vs 가오리 권투",summary:"링 위 대결",reason:"비교 주제",styleNote:"홍어: 마름모 몸 / 가오리: 둥근 몸",
       slides:current.slides.map((slide,i)=>({drawn:i===0,visualPrompt:i===0?"홍어 캐릭터와 가오리 캐릭터가 링 위에서 마주 선 장면":slide.visualPrompt}))}]);
     const hook=renderHook(()=>useGenerationState());
     act(()=>{ensureGeneration("d1|5",{topic:meta.topic,slideCount:5,track:"photo"});});

@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = {
   remoteCutout: false,
   remoteCutoutMonthlyCredits: 20,
   storeNotes: "",
+  conceptProposals: true,
   aiModelMode: "automatic",
   preserveOriginals: true,
   blockUnverifiedClaims: true,
