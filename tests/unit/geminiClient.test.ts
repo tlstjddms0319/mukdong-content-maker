@@ -124,6 +124,19 @@ describe("Gemini client", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  // 운영 로그(2026-10-13): 기본 모델이 503을 두 번 내자 예비 모델을 써 보지도 않고 준비된 주제로 떨어졌다.
+  it("moves to the fallback model when the primary stays overloaded (503 twice)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const request = vi.fn()
+      .mockResolvedValueOnce(new Response("{}", { status:503 }))
+      .mockResolvedValueOnce(new Response("{}", { status:503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ candidates:[{ content:{ parts:[{ text:'{"ok":true}' }] } }] }), { status:200 }));
+    await expect(createGeminiClient({ apiKey:"secret", fetch:request }).generateJson("test", z.object({ ok:z.boolean() }))).resolves.toEqual({ ok:true });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls[2][0]).toContain("gemini-3.1-flash-lite:generateContent");
+    warn.mockRestore();
+  });
+
   it("keeps the schema on the 503 retry and on the fallback model", async () => {
     const request = vi.fn()
       .mockResolvedValueOnce(new Response("{}", { status:503 }))
