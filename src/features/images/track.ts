@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CarouselPlan, CarouselRole, CarouselSlidePlan } from "./carousel";
 import { DEFAULT_DESIGN, type CardLayout, type DesignSpec, type PaletteId } from "./design";
 import type { StyleId } from "./styleCatalog";
-import { CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, HOOK_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, QUESTION_FOCUS_RULE, STORY_ARC_RULE, closingInvite } from "@/features/copy/explain";
+import { EXPLAIN_REASONS_RULE, HOOK_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, QUESTION_FOCUS_RULE, STORY_ARC_RULE } from "@/features/copy/explain";
 import { COPY_EXEMPLARS, EDITOR_ROLE, SCENE_THEN_CAUSE_RULE, SENSE_RULE } from "@/features/copy/senses";
 import { menuOf } from "@/features/store/menu";
 
@@ -248,7 +248,8 @@ export function applyTrack(plan:CarouselPlan,track:CarouselTrack,options:{copy?:
   const copy=options.copy??true;
   const last=plan.slides.length-1;
   const slides:CarouselPlan["slides"]=plan.slides.map((slide,i)=>({
-    ...slide,...(copy?fitTrackCopy(slide,track,{conclusion:i===last&&i>0}):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
+    // 결론 장의 가게 줄(예전 맺음말, AI가 쓴 방문 권유)은 길이를 맞추기 전에 걷어 낸다(맞춘 뒤 걷어 내면 이유 줄이 밀려난다).
+    ...slide,...(copy?fitTrackCopy(i===last&&i>0?{...slide,points:slide.points.filter(point=>!PROMO_IN_CARD.test(point))}:slide,track,{conclusion:i===last&&i>0}):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
   }));
   const cover=plan.slides[0];
   // 이미 고른 모양(design.look)은 그대로 둔다(갈래 맞추기를 여러 번 불러도 모양이 0으로 돌아가지 않게).
@@ -269,19 +270,17 @@ function withReasonCount<T extends CarouselSlidePlan>(slides:T[]):T[] {
   return slides.map((slide,i)=>i===0?{...slide,subline}:slide);
 }
 
-// 마지막(결론) 장의 짧은 글 맨 끝을 "미나리전과 막걸리를 묵동홍어마을에서 즐겨 보세요"로 맺는다(사장님 요청 2026-10-09).
-// 본문 장은 홍보 없이 이유만, 결론 장 한 줄만 가볍게 권한다. 메뉴 이름은 표지 질문에서 찾고, 자리가 모자라면 이유 줄을 빼서라도 메뉴 이름을 살린다.
-// 이미 붙어 있으면 바꿔 붙이므로 여러 번 불러도 결과가 같다.
+// 마지막(결론) 장은 표지 질문의 답만 둔다. 예전에는 맨 끝에 "~을 묵동홍어마을에서 즐겨 보세요"를 붙였는데(2026-10-09 요청),
+// 결과물 점검마다 "결론이 광고로 끝나 흐름이 깨진다"고 깎여서 빼기로 했다(사장님 결정 2026-10-20). 가게 홍보는 맨 뒤 가게 카드가 맡는다.
+// AI가 넣은 가게 이름·방문 권유 줄도 여기서 걷어 낸다.
 function withClosingInvite<T extends CarouselSlidePlan>(slides:T[],track:CarouselTrack):T[] {
   const last=slides.length-1;
   if(last<1)return slides;
   const end=slides[last];
-  const dishes=menuOf(slides[0].headline).map(item=>item.short);
-  const reasons=(end.points??[]).filter(point=>!point.includes(CLOSING_INVITE_TAIL)&&!PROMO_IN_CARD.test(point));
+  const reasons=(end.points??[]).filter(point=>!PROMO_IN_CARD.test(point));
   const count=trackPointCount(track,end.headline);
-  const make=(keep:string[])=>{const room=trackPointRoom(track,end.headline,keep.length+1);return [...keep,closingInvite(dishes,room)];};
-  let points=make(reasons.slice(0,Math.max(0,count-1)));
-  if(points.length>1&&dishes.length&&points.at(-1)===CLOSING_INVITE_TAIL)points=make([]);
+  const room=trackPointRoom(track,end.headline,count);
+  const points=reasons.slice(0,count).map(point=>cleanCut(point,room)).filter((point):point is string=>!!point);
   return slides.map((slide,i)=>i===last?{...slide,points}:slide);
 }
 

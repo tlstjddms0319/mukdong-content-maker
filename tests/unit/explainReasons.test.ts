@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildCarouselPlanPrompt, createFallbackCarouselPlan, type CarouselPlan } from "@/features/images/carousel";
 import { slideCopyIssues } from "@/features/images/planReview";
 import { buildCopyPrompt } from "@/features/copy/writing";
-import { PROMO_IN_CARD, VAGUE_REASON, closingInvite } from "@/features/copy/explain";
+import { PROMO_IN_CARD, VAGUE_REASON } from "@/features/copy/explain";
 import { applyTrack } from "@/features/images/track";
 
 vi.mock("server-only", () => ({}));
@@ -87,20 +87,17 @@ describe("explain reasons instead of promoting", () => {
     expect(buildCarouselPlanPrompt({topic:"비 오는 날 미나리전엔 왜 막걸리가 생각날까?",slideCount:5,track:"text"})).toContain("그 상황과 음식이 왜 이어지는지를 가장 먼저");
   });
 
-  it("ends the last card with a light invitation naming the dishes, without flagging it as promotion", () => {
-    expect(closingInvite(["미나리전","막걸리"],46)).toBe("미나리전과 막걸리를 묵동홍어마을에서 즐겨 보세요");
-    expect(closingInvite(["미나리전","막걸리"],22)).toBe("미나리전을 묵동홍어마을에서 즐겨 보세요".length<=22?"미나리전을 묵동홍어마을에서 즐겨 보세요":"묵동홍어마을에서 즐겨 보세요");
-    expect(closingInvite([],46)).toBe("묵동홍어마을에서 즐겨 보세요");
+  // 사장님 결정(2026-10-20): 결론 장 맨 끝 "~을 묵동홍어마을에서 즐겨 보세요"를 뺀다(점검마다 "결론이 광고로 끝난다"고 깎였다). 가게 홍보는 맨 뒤 가게 카드만.
+  it("keeps the last card to the answer: no store line is appended, and an AI-written store line is removed", () => {
     for(const track of ["text","photo"] as const){
-      const plan=applyTrack(rainy([["빗소리가 전 부치는 소리 같아요",["그래서 전이 떠오른다고 해요"]],["막걸리 산미가 기름기를 씻어요",["신맛이 입안을 개운하게 해요"]],["쌀술이 입안을 부드럽게 해요",["단맛이 짠맛을 눌러 줘요"]],["비 오면 미나리전엔 막걸리예요",["빗소리에 전, 전엔 막걸리예요"]]]),track);
+      const plan=applyTrack(rainy([["빗소리가 전 부치는 소리 같아요",["그래서 전이 떠오른다고 해요"]],["막걸리 산미가 기름기를 씻어요",["신맛이 입안을 개운하게 해요"]],["쌀술이 입안을 가볍게 해요",["탄산이 기름을 끊어 줘요"]],["빗소리와 기름 소리가 닮아서예요",["전과 막걸리를 묵동홍어마을에서 즐겨 보세요","탄산이 기름기를 끊어서예요"]]]),track);
       const end=plan.slides.at(-1)!;
-      // 사진 중심은 자리가 넉넉해 메뉴 이름까지, 글 중심 두 줄 제목 아래(18자)는 결론 제목에 메뉴가 있으니 "묵동홍어마을에서 즐겨 보세요"만.
-      expect(end.points.at(-1),track).toBe(track==="photo"?"미나리전과 막걸리를 묵동홍어마을에서 즐겨 보세요":"묵동홍어마을에서 즐겨 보세요");
-      // 한 번 더 맞춰도 한 줄만 남는다.
-      expect(applyTrack(plan,track).slides.at(-1)!.points.filter(point=>point.includes("즐겨 보세요"))).toHaveLength(1);
-      expect(slideCopyIssues(plan,track).filter(issue=>issue.slide===plan.slides.length).map(issue=>issue.message).join("\n")).not.toMatch(/가게 이름·방문 권유|가게가|제공/);
-      // 본문 장에는 붙이지 않는다.
-      expect(plan.slides.slice(1,-1).some(slide=>slide.points.some(point=>point.includes("묵동홍어마을")))).toBe(false);
+      expect(end.points.some(point=>point.includes("묵동홍어마을")),track).toBe(false);
+      expect(end.points,track).toEqual(["탄산이 기름기를 끊어서예요"]);
+      // 결론 장의 가게 줄도 홍보로 잡는다.
+      const promo={...plan,slides:plan.slides.map((slide,i)=>i===plan.slides.length-1?{...slide,points:["막걸리를 묵동홍어마을에서 즐겨 보세요"]}:slide)};
+      expect(slideCopyIssues(promo,track).some(issue=>issue.slide===plan.slides.length&&issue.message.includes("가게 이름·방문 권유"))).toBe(true);
+      expect(plan.slides.slice(1).some(slide=>slide.points.some(point=>point.includes("묵동홍어마을")))).toBe(false);
     }
   });
 

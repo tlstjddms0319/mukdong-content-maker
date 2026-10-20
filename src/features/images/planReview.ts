@@ -5,7 +5,7 @@ import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, TRACK_FIT, type CarouselTrack } from "./track";
 import { storeNotesRule } from "@/features/store/storeNotes";
 import { comparisonPairRule, principleNotesRule } from "@/features/store/principles";
-import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, causeWordsOf, obviousQuestion, coverSpoiler, SECRET_TEASE, yesNoCover, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
+import { ASKS_UNFAMILIAR, NAMES_CAUSE, causeWordsOf, obviousQuestion, coverSpoiler, SECRET_TEASE, yesNoCover, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 import { copiesExemplar, hasSenseWord, restatesHeadline } from "@/features/copy/senses";
 
@@ -171,8 +171,8 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack,storeNote
     // (사장님 요청 2026-10-09: 장마다 "묵동홍어마을로 오세요"가 나오면 사람도 알고리즘도 광고로 보고 넘긴다).
     if(track){
       if(PROMO_IN_CARD.test(headline))add(n,"headline","카드 제목에 가게 이름·방문 권유가 있어요. 홍보는 맨 뒤 홍보 카드가 맡으니, 표지 질문의 이유를 말하는 제목으로 바꾸세요.");
-      // 결론 장 맨 끝 "~을 묵동홍어마을에서 즐겨 보세요" 한 줄은 앱이 붙이는 맺음말이라 홍보로 세지 않는다.
-      for(const point of slide.points)if(PROMO_IN_CARD.test(point)&&!(i===plan.slides.length-1&&point.includes(CLOSING_INVITE_TAIL)))add(n,"points",`요점 '${point.trim()}'에 가게 이름·방문 권유가 있어요. 제목을 뒷받침하는 이유나 원리로 바꾸세요.`);
+      // 결론 장도 마찬가지(2026-10-20: 맺음말 "~을 묵동홍어마을에서 즐겨 보세요"를 결론 장에서 뺐다).
+      for(const point of slide.points)if(PROMO_IN_CARD.test(point))add(n,"points",`요점 '${point.trim()}'에 가게 이름·방문 권유가 있어요. 제목을 뒷받침하는 이유나 원리로 바꾸세요.`);
     }
     // 결론 장: 표지 질문의 핵심 말(음식 이름)을 다시 짚어야 질문 → 답이 한눈에 이어진다(맥락 잇기).
     if(track&&i===plan.slides.length-1&&i>0){

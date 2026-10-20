@@ -16,7 +16,7 @@ export const HOOK_DARE=/고수|모르면\s*손해|안\s*보면\s*후회|알면\s
 export const VAGUE_COVER=/어떤\s*(?:맛|음식|국물|안주|요리|점|게|차이)|무슨\s*(?:점|차이)|어떻게\s*달라질까|따뜻하게\s*먹을까|고민되(?:시|지|죠|나)|궁금하(?:시|지)죠|아시나요|알고\s*계신가요|진짜\s*차이를?\s*알려/;
 
 // 카드 본문 장에는 가게 홍보를 넣지 않는다(맨 뒤에 가게 홍보 카드가 따로 붙는다).
-export const NO_PROMO_IN_CARDS="headline·points에는 가게 이름(묵동홍어마을)·방문 권유(\"오세요\", \"들러 보세요\")·예약 안내를 쓰지 마세요. 마지막 장 맨 끝의 \"~을 묵동홍어마을에서 즐겨 보세요\" 한 줄은 앱이 붙이니 따로 쓰지 말고, 본문은 끝까지 궁금증을 풀어 주는 이야기로만 채우세요.";
+export const NO_PROMO_IN_CARDS="headline·points에는 가게 이름(묵동홍어마을)·방문 권유(\"오세요\", \"들러 보세요\")·예약 안내를 쓰지 마세요. 결론 장도 표지 질문의 답만 쓰고 가게 이름을 넣지 마세요(가게 홍보는 맨 뒤 가게 카드가 맡아요). 본문은 끝까지 궁금증을 풀어 주는 이야기로만 채우세요.";
 // 카드 글에서 홍보로 읽히는 말(자동 검사용).
 export const PROMO_IN_CARD=/묵동\s*홍어\s*마을|오세요|들러\s*보|방문해\s*보|찾아와|예약하세요|예약해\s*보/;
 
@@ -38,22 +38,7 @@ export const QUESTION_CONDITIONS:ReadonlyArray<{label:string;asked:RegExp;answer
   {label:"명절",asked:/명절|추석|설날|잔칫/,answered:/명절|추석|설날|잔치|잔칫/},
   {label:"연말 모임",asked:/송년|연말|신년/,answered:/송년|연말|신년|모임|여럿/},
 ];
-// 마지막 장 맨 끝 한 줄(사장님 요청 2026-10-09: "마지막에 ~을 묵동홍어마을에서 즐겨보세요로 끝나면 좋겠다").
-// 본문 장에는 여전히 홍보를 넣지 않고, 결론 장의 짧은 글 한 줄만 이 말로 맺는다. 자리에 맞게 메뉴 이름을 넣거나 뺀다.
-export const CLOSING_INVITE_TAIL="묵동홍어마을에서 즐겨 보세요";
-export function closingInvite(dishes:readonly string[],room:number):string {
-  const names=[...new Set(dishes)].slice(0,2);
-  const object=(list:readonly string[])=>{const joined=list.length>1?`${withAnd(list[0])} ${list[1]}`:list[0];return objectJosa(joined);};
-  for(const list of [names,names.slice(0,1)]){
-    if(!list.length)continue;
-    const line=`${object(list)} ${CLOSING_INVITE_TAIL}`;
-    if(line.length<=room)return line;
-  }
-  return CLOSING_INVITE_TAIL;
-}
-const hasFinal=(word:string)=>{const code=word.charCodeAt(word.length-1)-0xac00;return code>=0&&code<=11171&&code%28!==0;};
-const withAnd=(word:string)=>word+(hasFinal(word)?"과":"와");
-const objectJosa=(word:string)=>word+(hasFinal(word)?"을":"를");
+// 결론 장 맨 끝의 "~을 묵동홍어마을에서 즐겨 보세요"는 2026-10-20에 뺐다(결과물 점검마다 "결론이 광고로 끝난다"고 깎여서). 가게 홍보는 맨 뒤 가게 카드만.
 
 // 속 글 규칙(구성안 지시문). 카드에는 짧게 보여 주되, AI는 먼저 자세히 생각하고 쓰게 한다.
 export const NOTES_FIRST_RULE=`[속 글 먼저] 각 slide의 notes에는 카드에 보이지 않는 자세한 설명을 먼저 쓰세요(3~5문장, 150~400자). 표지 notes에는 ① 표지 질문 ② 한 문장 결론 ③ 이유 목록을, 본문 장 notes에는 그 장 이유를 원리 사슬로 — ① 원인이 되는 것의 이름(성분·구조·온도·조리 과정·감각 기관·풍습) ② 그것이 무엇을 어떻게 바꾸는지 ③ 그래서 혀·코·이에서 어떻게 느껴지는지 순서로(예: "홍어 살에 많은 요소가 삭는 동안 암모니아로 분해돼요. 이 기체는 쉽게 날아올라 입에 넣기 전부터 코를 찔러요. 그래서 맛보다 향을 먼저 느껴요") —, 사람이 왜 그렇게 느끼는지, 확실하지 않으면 "~로 알려져 있어요", 읽고 바로 써먹을 정보(먹는 순서·고르는 법·조합)를, 마지막 장 notes에는 결론과 그 근거 요약을 쓰세요. headline과 points는 notes에서 가장 중요한 한 가지만 골라 짧게 줄인 것입니다(인스타그램은 빠르게 넘기므로 카드에는 핵심만). notes에도 가격·원산지·숙성 기간 같은 가게만의 사실, 지어낸 수치·효능은 쓰지 마세요.`;
