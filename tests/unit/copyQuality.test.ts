@@ -46,7 +46,7 @@ describe("sense words and restatement",()=>{
     expect(restatesHeadline("삭히는 동안 생기는 향이 코끝을 먼저 자극해요","휘발성 성분이 코끝을 먼저 자극해요")).toBe(false);
   });
   it("catches an exemplar sentence copied into a deck",()=>{
-    expect(copiesExemplar("무침은 새콤함이 먼저 오고 찡함은 뒤에 와요")).toBe(true);
+    expect(copiesExemplar("껍질 가까이 자를수록 냄새가 확 올라와요")).toBe(true);
     expect(copiesExemplar("무침은 양념의 산미가 향을 덮어요")).toBe(false);
   });
 });
