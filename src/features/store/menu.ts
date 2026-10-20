@@ -20,6 +20,9 @@ export type StoreMenuItem={
   look:string;
   // 한국어 한 줄 겉모습(구성안 장면·표지 점검용).
   lookKo:string;
+  // 5칸 구조 지시문(images/promptSlots.ts)용 영어 낱말 은행(2026-10-20 계획서). 담음새·식기·곁들임(plating)과 질감(texture)만, 맛·재료 단정 없이.
+  plating:string;
+  texture:string;
   // 어울리는 계절(일반 상식 수준). 빈 배열이면 사계절.
   seasons:readonly MenuSeason[];
   // 제철 달(있으면 계절보다 먼저 본다). 과메기처럼 제철이 계절 경계에 걸친 메뉴용: 계절만 보면 11월(가을)에 과메기가 빠졌다.
@@ -37,6 +40,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/홍어\s*(?:회|사시미)|삼합|홍어(?!\s*(?:무침|애\s*(?:탕|국)|탕|전(?!문|통|체|날)|찜|라면|마을))/,
     look:"Korean hongeo-hoe: hand-cut squarish slices of fermented skate wing about two finger-widths across and 5-8 mm thick, muted dusty mauve-pink flesh with pale grey-white areas, crossed by diagonal rows of fine translucent white cartilage lines, set in loose rows on a black slate board.",
     lookKo:"손가락 두 마디 크기로 도톰히(5~8mm) 썬 삭힌 홍어 조각(탁한 연보라빛 분홍 살에 회백색, 비스듬한 흰 연골 결, 검은 접시에 줄지어 담김)",
+    plating:"set in loose rows on a black slate board or dark onggi plate; a small dish of chogochujang (red vinegar-chili dip) and coarse salt beside it; when the scene says samhap, a slice of boiled pork belly (suyuk) and a leaf of deep-red aged kimchi (mugeunji) sit next to the skate, never on top of it",
+    texture:"muted dusty mauve-pink flesh with pale grey-white areas, fine translucent white cartilage lines in parallel diagonal rows, cut sides visible, a faint moist sheen; never glossy orange like salmon, never chalk-white",
     seasons:[],moments:"모임·잔칫상·김장철 수육과 함께",
   },
   {
@@ -45,6 +50,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/홍어\s*무침/,
     look:"Korean hongeo-muchim: bite-sized pieces of skate coated in a glossy red chili dressing, piled in a shallow bowl.",
     lookKo:"한입 크기 홍어 조각을 윤기 도는 붉은 양념에 무쳐 얕은 그릇에 담은 모습",
+    plating:"piled loosely in a shallow dark ceramic bowl; thin slices of Korean pear and cucumber and a few sesame seeds show between the pieces only if the scene mentions them",
+    texture:"glossy red chili dressing clinging to opaque, slightly translucent skate pieces; wet sheen on the dressing, matte pieces underneath",
     seasons:["봄","여름"],moments:"입맛 없을 때 새콤한 안주, 막걸리와 함께",
   },
   {
@@ -53,6 +60,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/홍어\s*애\s*(?:탕|국)|애\s*탕|홍어\s*탕/,
     look:"Korean hongeo-aetang: a hot, steaming soup in an earthenware pot or deep bowl, cloudy reddish-brown broth with soft pieces and green leafy greens.",
     lookKo:"뚝배기나 깊은 그릇에 김이 오르는 탁한 붉은 갈색 국물과 푸른 잎채소가 보이는 탕",
+    plating:"served bubbling in a black ttukbaegi earthenware pot on a wooden trivet, a brass spoon resting beside it",
+    texture:"cloudy reddish-brown broth with soft white steam rising, tender ivory pieces and green leafy greens half submerged; natural, not neon, red",
     seasons:["가을","겨울"],moments:"찬바람 불 때, 따뜻한 국물이 당길 때",
   },
   {
@@ -60,6 +69,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/홍어\s*찜/,
     look:"Korean hongeo-jjim: steamed pieces of skate wing on a plate, the cooked flesh opaque ivory-white with visible parallel fibers, glistening with moisture.",
     lookKo:"쪄서 익힌 홍어 날개 살 조각을 접시에 담은 모습(살이 불투명한 아이보리빛, 결이 보임)",
+    plating:"steamed pieces on a wide white or dark plate, a scattering of chopped scallion and red chili threads on top, a small dish of seasoned soy beside it",
+    texture:"opaque ivory cooked flesh with only a subtle natural fiber texture and a moist glistening surface, like ordinary appetizing steamed fish; soft steam",
     seasons:[],moments:"잔치·모임 상, 따뜻한 요리가 당길 때",
   },
   {
@@ -68,6 +79,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/홍어\s*전(?!문|통|체|날)/,
     look:"Korean hongeo-jeon: pieces of skate coated in a thin egg batter and pan-fried until golden, with browned edges, laid overlapping on a plate.",
     lookKo:"홍어 살에 얇은 달걀 옷을 입혀 노릇하게 부친 전을 접시에 겹쳐 담은 모습",
+    plating:"golden pan-fried pieces laid overlapping on a round plate, a small dish of soy-vinegar dip at the side",
+    texture:"thin egg batter browned at the edges, soft pale flesh inside, light sheen of oil",
     seasons:[],moments:"비 오는 날, 막걸리 한 잔과 함께",
   },
   {
@@ -75,6 +88,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/홍어\s*라면/,
     look:"Korean hongeo-ramyeon: a steaming bowl of ramen noodles in a red broth with a few pieces of skate.",
     lookKo:"김이 오르는 붉은 국물 라면에 홍어 조각이 들어간 한 그릇",
+    plating:"a steaming bowl of ramyeon in a dented yangeun (aluminum) pot or deep bowl, chopsticks resting on the rim",
+    texture:"springy noodles in a bright red broth, soft white steam, a few pieces of skate and scallion on top",
     seasons:[],moments:"술자리 마무리 한 그릇",
   },
   {
@@ -82,6 +97,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/과메기/,
     look:"Korean gwamegi: half-dried fish fillets cut into long glossy strips, dark reddish-brown flesh with a thin silvery-blue skin edge, laid neatly on a plate.",
     lookKo:"반건조한 생선 살을 길게 썰어 접시에 가지런히 놓은 윤기 도는 검붉은 과메기",
+    plating:"glossy fillets arranged in a fan on a bamboo basket platter (sokuri) or dark stoneware, surrounded by fresh napa cabbage leaves, sheets of gim seaweed, wet green sea mustard, scallion, raw garlic slices and green chili; a small bowl of shiny red chogochujang",
+    texture:"ultra-glistening oily surface on dark reddish-brown flesh with a thin silvery-blue skin edge, chewy semi-dried texture, crisp bright-green vegetables for contrast",
     seasons:["겨울"],months:[11,12,1,2],moments:"찬바람 부는 늦가을부터 겨울 제철(보통 11월부터), 연말·신년 모임",
   },
   {
@@ -89,6 +106,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/미나리/,
     look:"Korean minari-jeon: a thin, flat pan-fried pancake with long green water-parsley stems visible through a golden batter with crisp edges.",
     lookKo:"노릇한 반죽 사이로 길쭉한 초록 미나리 줄기가 비치는 얇고 바삭한 전",
+    plating:"a thin round pancake on a flat ceramic or brass plate, cut into pieces, a small dish of soy-vinegar dip; a bowl of makgeolli often beside it",
+    texture:"long green water-parsley stems visible through a thin golden batter, crisp lacy edges, light oil sheen",
     seasons:["봄","여름"],moments:"비 오는 날, 봄 미나리철, 막걸리와 함께",
   },
   {
@@ -97,6 +116,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/(?:묵은지\s*)?김치\s*전|묵은지\s*전/,
     look:"Korean kimchi-jeon: a thin pan-fried pancake with chopped aged kimchi through an orange-red batter, crisp golden-brown edges.",
     lookKo:"잘게 썬 묵은지가 섞인 주황빛 반죽을 얇게 부쳐 가장자리가 노릇하고 바삭한 김치전",
+    plating:"a thin round pancake on a dark plate, cut into wedges, a small dish of soy-vinegar dip",
+    texture:"orange-red batter with chopped aged kimchi showing through, crisp golden-brown edges, slight oil sheen",
     seasons:[],moments:"비 오는 날, 막걸리와 함께",
   },
   {
@@ -104,6 +125,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/해물\s*라면/,
     look:"Korean haemul-ramyeon: a steaming bowl of ramen noodles in a spicy red broth with assorted seafood pieces on top.",
     lookKo:"김이 오르는 얼큰한 붉은 국물에 면과 해물이 담긴 라면 한 그릇",
+    plating:"a steaming bowl in a dented yangeun pot or deep bowl, chopsticks on the rim",
+    texture:"springy noodles in a spicy red broth, shrimp, mussels and squid pieces on top, soft white steam",
     seasons:[],moments:"술자리 마무리 한 그릇, 쌀쌀한 날",
   },
   {
@@ -111,6 +134,8 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     match:/배다리|지평\s*막걸리|막걸리/,
     look:"Korean makgeolli: milky off-white rice wine in a ceramic or brass sabal bowl; any bottle appears without a readable label.",
     lookKo:"사발에 따른 뽀얀 우윳빛 막걸리(병이 보여도 글자 없이)",
+    plating:"milky rice wine poured from a dented yangeun kettle into a ceramic or brass sabal bowl; any bottle appears without a readable label",
+    texture:"opaque milky off-white liquid with a thin ring of fine bubbles at the rim, condensation on the kettle",
     seasons:[],moments:"비 오는 날, 막걸리의 날(10월 마지막 목요일), 전·무침과 함께",
   },
 ];
