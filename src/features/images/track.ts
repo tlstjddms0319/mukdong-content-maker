@@ -3,6 +3,7 @@ import type { CarouselPlan, CarouselRole, CarouselSlidePlan } from "./carousel";
 import { DEFAULT_DESIGN, type CardLayout, type DesignSpec, type PaletteId } from "./design";
 import type { StyleId } from "./styleCatalog";
 import { CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, HOOK_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, QUESTION_FOCUS_RULE, STORY_ARC_RULE, closingInvite } from "@/features/copy/explain";
+import { COPY_EXEMPLARS, EDITOR_ROLE, SCENE_THEN_CAUSE_RULE, SENSE_RULE } from "@/features/copy/senses";
 import { menuOf } from "@/features/store/menu";
 
 // 갈래(계획서 SIMPLIFY_PLAN): 사장님은 "사진 중심 / 글 중심" 둘 중 하나만 고르고, 나머지는 갈래가 정한다.
@@ -297,7 +298,11 @@ ${STORY_ARC_RULE}
 ${QUESTION_FOCUS_RULE}
 ${EXPLAIN_REASONS_RULE}
 ${NOTES_FIRST_RULE}`,
-    style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. ${HOOK_RULE} 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내)으로, 질문형이나 의외의 사실을 단정하는 문장으로 쓰고, subline(${cover.subline}자 이내 해요체 한 줄)에는 결론(답)을 미리 말하지 말고 궁금증을 키우는 한 줄을 쓰세요(예: "알고 보면 소리 이야기예요". "답은 탄산에 있어요"처럼 답을 밝히면 넘겨 볼 이유가 사라져요). 단정형 표지면 부제에 본문이 답할 질문을 쓰세요. "유혹", "매력", "풍미", "향연", "특별한" 같은 광고 말은 쓰지 마세요(이유 개수는 앱이 덧붙여요). 짧은 글은 그 장 제목을 뒷받침하는 이유·근거만 쓰세요. 먹는 법·고르는 법 같은 써먹을 정보는 notes에 쓰면 올릴 글(캡션)에 들어가요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.`,
+    style:`${EDITOR_ROLE}
+[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. ${HOOK_RULE} 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내)으로, 질문형이나 의외의 사실을 단정하는 문장으로 쓰고, subline(${cover.subline}자 이내 해요체 한 줄)에는 결론(답)을 미리 말하지 말고 궁금증을 키우는 한 줄을 쓰세요(예: "알고 보면 소리 이야기예요". "답은 탄산에 있어요"처럼 답을 밝히면 넘겨 볼 이유가 사라져요). 단정형 표지면 부제에 본문이 답할 질문을 쓰세요. "유혹", "매력", "풍미", "향연", "특별한" 같은 광고 말은 쓰지 마세요(이유 개수는 앱이 덧붙여요). 짧은 글은 그 장 제목을 뒷받침하는 이유·근거만 쓰세요. 먹는 법·고르는 법 같은 써먹을 정보는 notes에 쓰면 올릴 글(캡션)에 들어가요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.
+${SCENE_THEN_CAUSE_RULE}
+${SENSE_RULE}
+${COPY_EXEMPLARS}`,
     design:`[디자인] 디자인과 장마다 layout은 앱이 정합니다. design은 {"palette":"warm","style":"${TRACK_STYLES[track]}","theme":"classic","titleFont":"pretendard","bodyFont":"pretendard","tone":"loud","season":"none","look":0} 그대로 두고, 표지 layout은 fullscreen, 나머지 장은 ${track==="photo"?"frame":"browser"}로 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣고, figure는 빈 문자열로 두세요.`,
     track:track==="photo"
       ?`[갈래: ${TRACK_LABELS.photo}] 모든 장이 사진 한 장으로 꽉 차는 게시물입니다. 사진이 주인공이므로 글은 사진을 보며 바로 읽히는 한 줄이면 충분합니다. 각 장의 visualPrompt는 그 장의 글이 말하는 장면을 먹음직스럽게, 장마다 서로 다른 구도로 쓰세요.`

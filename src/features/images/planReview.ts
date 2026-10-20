@@ -2,11 +2,12 @@ import { z } from "zod";
 import { josa, mainMenuOf, type StoreMenuItem } from "@/features/store/menu";
 import { SLIDE_POINT_MAX_COUNT, SLIDE_POINT_MAX_LENGTH, type CarouselPlan } from "./carousel";
 import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
-import { TRACK_COPY, type CarouselTrack } from "./track";
+import { TRACK_COPY, TRACK_FIT, type CarouselTrack } from "./track";
 import { storeNotesRule } from "@/features/store/storeNotes";
 import { comparisonPairRule, principleNotesRule } from "@/features/store/principles";
 import { ASKS_UNFAMILIAR, CLOSING_INVITE_TAIL, NAMES_CAUSE, causeWordsOf, obviousQuestion, coverSpoiler, SECRET_TEASE, yesNoCover, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
+import { copiesExemplar, hasSenseWord, restatesHeadline } from "@/features/copy/senses";
 
 // 카드 문안(장마다 제목·요점) 2차 검수.
 // 1) slideCopyIssues: 코드로 잡을 수 있는 문제를 장 번호와 함께 찾는다(광고 상투어, 반복, 끝맺음, 길이 등).
@@ -150,7 +151,9 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack,storeNote
     const length=headline.replace(/\s/g,"").length;
     // 표지는 짧고 굵은 제목도 괜찮아서 4자, 본문 장은 6자를 최소로 본다.
     if(length<(slide.role==="cover"?4:6))add(n,"headline","제목이 너무 짧아요. 무엇에 대한 장인지 알 수 있게 쓰세요.");
-    const max=slide.role==="cover"?limits.coverHeadline:limits.headline;
+    // 비교 게시물의 글 중심 제목은 두 이름이 들어가야 해서 한 줄(14자)에 안 들어간다. 카드가 두 줄(28자)까지 그리니 그만큼 허용한다
+    // (2026-10-20 점검: 14자에 맞추려다 "맑은은 맑고 홍어애탕은 묵직해요"처럼 반쪽 이름이 나왔다).
+    const max=slide.role==="cover"?limits.coverHeadline:pair&&track==="text"?TRACK_FIT.text.headline:limits.headline;
     // 결론 장이 길면 대개 이유를 다시 붙인 것이라, 답만 남기라고 콕 집어 말한다(넘치면 카드에서 "…"로 잘린다).
     if(headline.length>max)add(n,"headline",track&&i===plan.slides.length-1&&i>0?`결론 장 제목이 ${max}자를 넘어요. 앞 장의 이유는 빼고 표지 질문에 대한 답만 한 문장으로 짧게 쓰세요.`:`제목이 ${max}자를 넘어요. 한 가지 정보만 남겨 줄이세요.`);
     for(const word of CLICHES)if(headline.includes(word))add(n,"headline",`광고 상투어 '${word}'를 빼고 구체적인 정보로 바꾸세요.`);
@@ -192,6 +195,13 @@ export function slideCopyIssues(plan:CarouselPlan,track?:CarouselTrack,storeNote
       // 결론 장이 아닌 이유 장의 제목·짧은 글 어디에도 원인을 말하는 말이 없으면 다시 쓰게 한다.
       else if(i<plan.slides.length-1&&!NAMES_CAUSE.test([headline,...slide.points].join(" ")))add(n,"headline","이 장은 결과(맛·느낌)만 말해요. 무엇이 그렇게 만드는지 원인이 되는 것의 이름(성분·구조·온도·조리 과정·감각 기관·풍습)을 제목이나 짧은 글에 함께 쓰세요. '~해서 맛있어요'처럼 이어 주는 말만으로는 이유가 아니에요(예: \"삭히는 동안 요소가 암모니아로 바뀌어요\").");
       for(const point of slide.points)if(VAGUE_REASON.test(point))add(n,"points",`요점 '${point.trim()}'이 결과만 말하고 이유가 없어요. 무엇이 어떻게 작용하는지 쓰세요.`);
+      // 글 품질(2026-10-20): 짧은 글이 제목을 말만 바꿔 되풀이하면 그 장은 정보가 하나뿐이다(평가 10개 중 6개). 원인 한 줄로 다시 쓰게 한다.
+      if(copiesExemplar(headline)||slide.points.some(copiesExemplar))add(n,"headline","안내의 예시 문장을 그대로 썼어요. 이번 주제의 장면과 원인으로 새로 쓰세요.");
+      // 비교 제목의 반쪽 이름("맑은은 ~"): 꾸밈말에 조사만 붙은 이름.
+      if(pair&&/(?:^|\s)(?:맑은|진한|삭힌|생|찬|뜨거운|기름진)[은는이가]\s/.test(headline))add(n,"headline","'맑은은'처럼 꾸밈말만 남긴 반쪽 이름이에요. 비교 대상 이름을 알아볼 수 있게 쓰세요(예: '생선탕은 ~, 홍어애탕은 ~').");
+      for(const point of slide.points)if(restatesHeadline(headline,point))add(n,"points",`요점 '${point.trim()}'이 제목을 되풀이해요. 제목이 말하는 현상의 원인(무엇이 어떻게 해서)을 한 줄로 쓰세요.`);
+      // 이유 장에 감각 말이 하나도 없으면 설명문처럼 읽힌다. 독자가 겪는 장면으로 제목을 다시 쓰게 한다.
+      if(i<plan.slides.length-1&&!hasSenseWord([headline,...slide.points].join(" ")))add(n,"headline","이 장에는 독자가 느끼는 말(톡 쏘는·쫀득·김이 오르는·새콤·아삭 같은 식감·감각 말)이 없어요. 제목을 독자가 먹을 때 겪는 장면으로 쓰세요.");
       // 표지가 "왜"를 묻는데 요점이 먹는 법이면 제목과 따로 논다(사장님 지적 2026-10-10: 제목 "지방층이 묵은지의 산미를 감싸요" 아래
       // "홍어 한 점을 묵은지에 살짝 감싸요"). 먹는 법은 속 글(notes)·올릴 글로 보내고, 요점은 제목의 이유·근거로 쓴다.
       for(const point of slide.points)if(ASKS_WHY.test(cover)&&HOW_TO.test(point)&&!GIVES_REASON.test(point)&&i<plan.slides.length-1)add(n,"points",`요점 '${point.trim()}'은 먹는 법이라 제목과 따로 놀아요. 제목을 뒷받침하는 이유·근거로 바꾸세요.`);
