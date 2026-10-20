@@ -49,7 +49,8 @@ export function buildStructuredImagePrompt(input:ImageBrief):string {
   const scene=input.slide?`Scene for this slide (${input.slide.role}): ${input.slide.visualPrompt}.`:`Scene: ${input.topic}.`;
   const chopsticks=input.slide&&!CHOPSTICK_SCENE.test(input.slide.visualPrompt);
   const skateTexture=hero.id==="hongeo-hoe"
-    ?" Hongeo is Korean fermented skate, a flat ray fish, hand-cut into pieces two finger-widths across and 5-8 mm thick with visible cut sides; never identical thin tiles, never bacon, ham or pork belly, never a whole small fish with fins or tail."
+    // A/B 1·3번(2026-10-20): 구조 조립에서 홍어회 살이 갈색·돼지고기 블록처럼 나왔다. 색(연보라빛, 화이트밸런스)과 얇은 조각을 질감 칸에 그대로 못 박는다.
+    ?" Hongeo is Korean fermented skate, a flat ray fish, hand-cut into flat pieces two finger-widths across and only 5-8 mm thick with visible cut sides; the flesh is a muted dusty mauve to lilac-pink with pale grey-white areas, crossed by fine translucent white cartilage lines in parallel diagonal rows; keep the white balance neutral so the mauve-pink reads true. Not the glossy orange of salmon, not the deep red of tuna, not brown or beige, not chalk-white; never thick blocks, never bacon, ham or pork belly, never a whole small fish with fins or tail."
     :COOKED_SKATE.test(hero.id)?" Hongeo is Korean fermented skate; in this cooked dish never exaggerate the fibers into combs or honeycomb, and never show a whole small fish with fins or tail.":"";
   const layoutHint=input.slide?CARD_LAYOUTS[input.slideLayout==="overlay"?"fullscreen":input.slide.layout].photoHint:"";
   const designHint=input.slide&&input.slideLayout!=="overlay"&&input.design?.style&&input.design.style!=="template"?STYLES[input.design.style].photoHint:"";
