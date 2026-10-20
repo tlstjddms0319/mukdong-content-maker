@@ -14,7 +14,8 @@
     "check:higgsfield": "node scripts/check-higgsfield.mjs",
     "bench:appetite": "node --conditions=react-server --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/appetite-bench.mjs",
     "compare:text": "node --conditions=react-server --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/compare-text-providers.mjs",
-    "eval:posts": "node --conditions=react-server --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs --import ./scripts/eval/register-eval.mjs scripts/eval-posts.mjs"
+    "eval:posts": "node --conditions=react-server --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs --import ./scripts/eval/register-eval.mjs scripts/eval-posts.mjs",
+    "compare:prompt": "node --conditions=react-server --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/compare-prompt-structure.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",

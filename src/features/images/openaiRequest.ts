@@ -8,6 +8,7 @@ import { heroMenu, josa, menuOf, type StoreMenuItem } from "@/features/store/men
 import { copyMentionsSkate, foodFreeAnchor } from "./sceneFoods";
 import { comparedPair } from "@/features/copy/explain";
 import { toFile } from "openai";
+import { buildStructuredImagePrompt } from "./promptSlots";
 
 // 이번 장의 글(제목·요점·장면 설명)과 주제 글. 주인공 메뉴를 고를 때 쓴다.
 const slideTextOf=(input:ImageBrief)=>input.slide?[input.slide.headline,...input.slide.points,input.slide.visualPrompt].join(" "):"";
@@ -195,6 +196,8 @@ export function comparisonCoverDirection(input:Pick<ImageBrief,"slide"|"topic">)
 
 export const buildImagePrompt=(input:ImageBrief,reference=false)=>{
   const styleId=resolveImageStyle(input);
+  // 5칸 구조 조립(promptSlots.ts, 2026-10-20 계획서). 실사 사진이고 참고 이미지가 없을 때만. A/B 비교 뒤 기본으로 바꿀지 정한다.
+  if(input.promptLayout==="structured"&&styleId==="photo"&&!reference)return buildStructuredImagePrompt(input);
   const style=IMAGE_STYLE_DIRECTIONS[styleId];
   // 사장님 사진을 구도 그대로 다듬는 요청(source)에는 새 장면을 요구하는 지시(필수 장면·후보 구도·칸별 피사체)를 넣지 않는다.
   const retouch=reference&&(input.referenceMode??"source")==="source";

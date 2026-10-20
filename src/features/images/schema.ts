@@ -46,6 +46,8 @@ export const ImageBriefSchema = z.object({
   candidateOffset:z.number().int().min(0).max(3).optional(),
   // 이 한 장만의 구도 지시. 후보마다 다른 각도·거리로 만들기 위해 서버가 채운다.
   variant:z.string().trim().min(1).max(200).optional(),
+  // 지시문 조립 방식(2026-10-20 계획서 0단계). "structured"면 5칸 영어 구조(images/promptSlots.ts), 없으면 예전 방식. A/B 비교가 끝나기 전까지 기본은 예전 방식.
+  promptLayout:z.enum(["legacy","structured"]).optional(),
   // 사진 여러 칸 레이아웃(비교·폴라로이드·콜라주)에서 이 한 장이 보여 줄 피사체. 서버가 채운다(candidateBriefs).
   photoFocus:z.string().trim().min(1).max(300).optional(),
 }).superRefine((brief,ctx)=>{
