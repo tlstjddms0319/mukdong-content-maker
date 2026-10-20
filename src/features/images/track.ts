@@ -4,7 +4,6 @@ import { DEFAULT_DESIGN, type CardLayout, type DesignSpec, type PaletteId } from
 import type { StyleId } from "./styleCatalog";
 import { EXPLAIN_REASONS_RULE, HOOK_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, QUESTION_FOCUS_RULE, STORY_ARC_RULE } from "@/features/copy/explain";
 import { COPY_EXEMPLARS, EDITOR_ROLE, SCENE_THEN_CAUSE_RULE, SENSE_RULE } from "@/features/copy/senses";
-import { menuOf } from "@/features/store/menu";
 
 // 갈래(계획서 SIMPLIFY_PLAN): 사장님은 "사진 중심 / 글 중심" 둘 중 하나만 고르고, 나머지는 갈래가 정한다.
 //   - 장 수: 구성안 AI가 내용에 맞춰 4~9장 중에서 정한다(표지 + 이유 장 + 결론). 맨 뒤 가게 홍보 카드는 생성 흐름이 따로 붙여
