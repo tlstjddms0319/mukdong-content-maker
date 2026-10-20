@@ -53,3 +53,19 @@ describe("text-track headlines may take two lines",()=>{
     expect(slideCopyIssues(plan,"text").filter(issue=>issue.slide===2).map(issue=>issue.message).join("\n")).not.toContain("제목이 14자를 넘어요");
   });
 });
+
+// 4차 점검(2026-10-20 밤): 비교 이름이 "같"·"맑은"으로 잡혀 "같에 비해 찜은", "맑은은 ~"이 나왔고, 모범 답안 문장이 다른 주제에 그대로 들어갔다.
+describe("fourth-eval regressions",()=>{
+  it("never reads '같은 홍어인데' as a compared name and keeps a modifier-only key whole",async()=>{
+    const { comparedPair, comparedKeys }=await import("@/features/copy/explain");
+    const same=comparedPair("같은 홍어인데 찜은 왜 회보다 향이 더 세게 느껴질까?");
+    if(same)expect(same.first).not.toBe("같");
+    expect(comparedKeys({first:"맑은 생선탕",second:"홍어애탕"})).toEqual(["맑은생선탕","홍어애탕"]);
+    expect(comparedKeys({first:"배다리",second:"지평 막걸리"})).toEqual(["배다리","지평"]);
+  });
+  it("exemplars are about foods the store does not sell, so copying them cannot pass the menu checks",async()=>{
+    const { COPY_EXEMPLARS }=await import("@/features/copy/senses");
+    expect(COPY_EXEMPLARS).not.toMatch(/홍어|과메기|막걸리|미나리|묵은지|삼합/);
+    expect(COPY_EXEMPLARS).toContain("베끼지 말고 틀만");
+  });
+});

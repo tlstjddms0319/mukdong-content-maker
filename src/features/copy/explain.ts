@@ -15,7 +15,7 @@ export const HOOK_DARE=/고수|모르면\s*손해|안\s*보면\s*후회|알면\s
 // 다섯 번째 점검(2026-10-12): 표지 다시 쓰기가 "지평과 배다리 막걸리를 고를 때 고민되시죠?"처럼 독자 마음만 묻는 표지를 골랐다.
 // 막연한 표지 부제(3차 점검 2026-10-20: "정말 그럴까요?", "냄새의 정체가 궁금해요", "~의 비밀"처럼 무엇이 의외인지 말하지 않는 부제가
 // 후킹을 3점에 묶었다). 부제는 의외의 사실 한 조각이나 구체적인 질문이어야 한다.
-export const VAGUE_SUBLINE=/^(?:정말|진짜)\s*그럴까요|그럴까요\?*$|궁금(?:해요|하죠|하시죠|하지\s*않나요)|비밀|정체가\s*궁금|알아볼까요|알아봐요|살펴볼까요|^어떻게\s*(?:다를까요|어우러질까요|될까요)|^무엇이\s*다를까요|^왜\s*그럴까요\?*$|^왜\s*다를까요\?*$|놀라운\s*이야기|숨은\s*이야기/;
+export const VAGUE_SUBLINE=/숨은\s*(?:과학|이야기|원리)|숨겨진|과학\s*이야기|원리가\s*(?:있|궁금)|어떻게\s*가능|가능한\s*걸까요|바뀝니다\.?$|달라집니다\.?$|^(?:정말|진짜)\s*그럴까요|그럴까요\?*$|궁금(?:해요|하죠|하시죠|하지\s*않나요)|비밀|정체가\s*궁금|알아볼까요|알아봐요|살펴볼까요|^어떻게\s*(?:다를까요|어우러질까요|될까요)|^무엇이\s*다를까요|^왜\s*그럴까요\?*$|^왜\s*다를까요\?*$|놀라운\s*이야기|숨은\s*이야기/;
 export const VAGUE_COVER=/어떤\s*(?:맛|음식|국물|안주|요리|점|게|차이)|무슨\s*(?:점|차이)|어떻게\s*달라질까|따뜻하게\s*먹을까|고민되(?:시|지|죠|나)|궁금하(?:시|지)죠|아시나요|알고\s*계신가요|진짜\s*차이를?\s*알려/;
 
 // 카드 본문 장에는 가게 홍보를 넣지 않는다(맨 뒤에 가게 홍보 카드가 따로 붙는다).
@@ -67,15 +67,19 @@ const DIFFERENCE=/^\s*(.{1,14}?)(?:와|과|이랑|랑|하고)\s+(.{1,14}?)(?:의
 // "A와 달리 B는 왜 ~?" / "A와 다르게 B는 어째서 ~?" (점검 10회: "맑은 생선탕과 달리 홍어애탕은 왜 국물이 묵직할까?"를 비교로 못 읽어 본문이 한쪽만 다뤘다)
 const CONTRAST=/^\s*(.{1,14}?)(?:와|과|이랑|랑|하고)\s*(?:달리|다르게)\s*,?\s*(.{1,14}?)[은는이가]\s+(?:왜|어째서)/;
 export function comparedPair(question:string):{first:string;second:string}|undefined {
-  const match=question.match(COMPARISON)??question.match(CONTRAST)??question.match(DIFFERENCE);
+  // "같은 홍어인데 찜은 왜 회보다 …": 앞의 "같은 ~인데"는 비교 대상이 아니라 떼고 읽는다(4차 점검: "같"이 이름으로 잡혀 "같에 비해 찜은"이 나왔다).
+  const text=question.replace(/^같은\s+\S+\s*(?:인데|이지만|지만)\s*/,"");
+  const match=text.match(COMPARISON)??text.match(CONTRAST)??text.match(DIFFERENCE);
   if(!match)return undefined;
   // 이름 앞뒤의 문장부호는 뗀다("해물라면과 홍어라면, 무엇이 다를까?" → "홍어라면").
   const clean=(name:string)=>name.trim().replace(/^[\s,，.·:;"'“”‘’(\[]+|[\s,，.·:;!?"'“”‘’)\]]+$/g,"");
   // 앞에 붙은 상황·때 말("비 오는 날 배다리", "찬바람 불 때 해물라면")은 비교 대상이 아니라 뗀다.
   const withoutScene=(name:string)=>name.replace(/^.*?(?:날|때|철|밤|저녁|무렵|요즘|오늘|날엔|때엔)\s+/,"");
+  // "같은 홍어인데 찜은 왜 회보다 …"(4차 점검: 첫 이름이 "같"으로 읽혀 "같에 비해 찜은"이 나왔다): 앞의 "같은 ~인데"는 비교 대상이 아니다.
+  const withoutSame=(name:string)=>name.replace(/^같은\s+\S+\s*(?:인데|이지만|지만)\s*/,"");
   // 뒤에 붙은 물음 말("배다리와 지평은 어떤 맛의 차이가 날까?" → "지평은 어떤 맛")도 뗀다(네 번째 점검에서 '지평은어떤'으로 읽었다).
   const withoutAsk=(name:string)=>name.replace(/[은는이가]?\s+(?:어떤|무슨|어느|무엇|뭐가|어떻게|얼마나|왜|어째서)(?:\s.*)?$/,"");
-  const [first,second]=[withoutScene(withoutAsk(clean(match[1]))),withoutScene(withoutAsk(clean(match[2])))];
+  const [first,second]=[withoutSame(withoutScene(withoutAsk(clean(match[1])))),withoutSame(withoutScene(withoutAsk(clean(match[2]))))];
   return first&&second&&first!==second?{first,second}:undefined;
 }
 
@@ -88,7 +92,9 @@ export function comparedKeys(pair:{first:string;second:string}):[string,string] 
   const shared=tail(pair.first)??tail(pair.second);
   if(shared){
     const strip=(name:string)=>{const compact=name.replace(/\s+/g,"");return compact.endsWith(shared)&&compact.length-shared.length>=2?compact.slice(0,-shared.length):compact;};
-    return [strip(pair.first),strip(pair.second)];
+    // 공통 끝말을 떼고 꾸밈말만 남으면("맑은 생선탕"→"맑은") 그 이름은 떼지 않고 그대로 쓴다(3차 점검의 "맑은은 ~").
+    const keep=(name:string)=>{const short=strip(name);return /(?:은|는|한|인|운|진)$/.test(short)&&short!==name.replace(/\s+/g,"")?name.replace(/\s+/g,""):short;};
+    return [keep(pair.first),keep(pair.second)];
   }
   const [a,b]=[pair.first.replace(/\s+/g,""),pair.second.replace(/\s+/g,"")];
   let prefix=0;while(prefix<Math.min(a.length,b.length)-1&&a[prefix]===b[prefix])prefix++;
