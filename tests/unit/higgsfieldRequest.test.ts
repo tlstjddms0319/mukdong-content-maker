@@ -117,6 +117,25 @@ describe("Higgsfield image generation",()=>{
     expect((await response.json()).message).toContain("크레딧이 부족");
   });
 
+  // 2026-10-20 사장님 결정: 이미지 지시문은 기본으로 5칸 구조(promptSlots.ts). 설정에서 끄면 예전 한 줄 조립.
+  it("sends the structured 5-slot prompt by default and the legacy prompt when the setting is off",async()=>{
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"higgsfield"});
+    const prompts:string[]=[];
+    vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>{
+      if(url.endsWith("/xai/grok-imagine-image-2.0")){prompts.push(JSON.parse(String(init?.body)).prompt);return json({detail:"Not enough credits"},403);}
+      throw new Error(`unexpected ${url}`);
+    }));
+    const { POST }=await import("@/app/api/images/generate/route");
+    const body=()=>JSON.stringify({topic:"과메기는 왜 김과 미역에 싸서 먹을까?",count:1,aspectRatio:"4:5"});
+    await POST(new Request("http://localhost/api/images/generate",{method:"POST",body:body()}));
+    expect(prompts.at(-1)).toContain("[Main dish]");
+    expect(prompts.at(-1)).toContain("bamboo basket platter (sokuri)");
+    readSettings.mockResolvedValue({...DEFAULT_SETTINGS,imageAiProvider:"higgsfield",structuredImagePrompt:false});
+    await POST(new Request("http://localhost/api/images/generate",{method:"POST",body:body()}));
+    expect(prompts.at(-1)).not.toContain("[Main dish]");
+    expect(prompts.at(-1)).toContain("Editorial food photography");
+  });
+
   it("uses Grok Image 2.0 first by default (the only model this API account has actually processed)",async()=>{
     const { higgsfieldModels }=await import("@/features/images/higgsfieldRequest");
     expect(higgsfieldModels({}).map(model=>model.id)).toEqual(["grok-image-2","nano-banana-pro"]);

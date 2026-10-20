@@ -35,6 +35,7 @@ export function SettingsForm({ onSave = saveSettings, connections = { gemini:fal
     {/* 그림 콘셉트 제안(2026-10-13): 애니·일러스트 결과가 아쉬우면 끄고 늘 실사로 만든다. 메모와 같은 저장 버튼을 쓴다. */}
     <section className="settings-section"><div><h2>그림 콘셉트 제안</h2><p>사진 없이 AI로 그릴 때, 글에 맞는 그림(캐릭터 대결·상황 일러스트 등)을 AI가 제안하고 고르는 화면이에요.</p></div><div className="field-grid">
       <label><span><input type="checkbox" aria-label="그림 콘셉트 제안 사용" checked={settings.conceptProposals??true} onChange={e=>update("conceptProposals",e.target.checked)}/> 그림 콘셉트 제안 사용</span><small className="field-help">끄면 고르는 화면 없이 늘 실사 사진으로 만들어요.</small></label>
+      <label><span><input type="checkbox" aria-label="이미지 지시문 5칸 구조 사용" checked={settings.structuredImagePrompt??true} onChange={e=>update("structuredImagePrompt",e.target.checked)}/> 이미지 지시문 5칸 구조 사용</span><small className="field-help">AI에게 그림을 시킬 때 주인공 음식 → 담음새·식기 → 분위기 → 질감 → 촬영 순서로 짧게 지시해요(2026-10-20 비교에서 상차림·분위기가 더 좋았어요). 끄면 예전 방식으로 돌아가요.</small></label>
     </div></section>
     <div className="settings-actions"><span/><button type="submit" className="button secondary">저장</button>{saved==="notes"&&<span role="status">저장했어요.</span>}{error?.part==="notes"&&<span role="alert">{error.message}</span>}</div>
   </form>

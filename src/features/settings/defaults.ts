@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS = {
   remoteCutoutMonthlyCredits: 20,
   storeNotes: "",
   conceptProposals: true,
+  structuredImagePrompt: true,
   aiModelMode: "automatic",
   preserveOriginals: true,
   blockUnverifiedClaims: true,

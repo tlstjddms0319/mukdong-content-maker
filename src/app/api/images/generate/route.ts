@@ -86,6 +86,8 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     // 브랜드 키트: 카드 바닥글에 가게 이름과 함께 찍을 Instagram 계정(설정 화면).
     // 원격 누끼(설정, 기본 꺼짐): 누끼 계열이면 렌더 전에 로컬 누끼가 어려운 사진만 Higgsfield 배경 제거로 받아 둔다.
     // 렌더는 받아 둔 것을 조회만 하고, 없거나 실패하면 로컬 누끼로 그린다(features/images/remoteCutout.ts).
+    // 이미지 지시문 조립 방식: 요청이 정하지 않았으면 설정대로(기본 5칸 구조, 설정에서 끄면 예전 방식). A/B 스크립트는 직접 정해 보낸다.
+    parsed.data.promptLayout??=settings.structuredImagePrompt===false?"legacy":"structured";
     const remoteCutout=settings.remoteCutout===true&&parsed.data.slideLayout!=="overlay";
     const prepareCutouts=(photos:Buffer[])=>prepareRemoteCutouts(photos,{enabled:remoteCutout,style:parsed.data.design?.style,monthlyCredits:settings.remoteCutoutMonthlyCredits??20}).catch(()=>0);
     const cardOptions={brandHandle:settings.brandHandle??"",remoteCutout,storeCard:parsed.data.storeCard===true,...(parsed.data.panorama?{panorama:parsed.data.panorama}:{})};

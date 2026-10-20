@@ -21,6 +21,8 @@ export const AppSettingsSchema = z.object({
   storeNotes: z.string().max(1500, "가게 이야기 메모는 1,500자까지 쓸 수 있어요.").default(""),
   // 그림 콘셉트 제안(images/concepts.ts): 끄면 "어떤 그림으로 만들까요?" 화면 없이 늘 실사로 만든다(사장님 2026-10-13: 애니·일러스트 품질이 아쉬우면 끌 수 있게).
   conceptProposals: z.boolean().default(true),
+  // 이미지 지시문 5칸 구조(images/promptSlots.ts, 2026-10-20 A/B 뒤 사장님 결정으로 기본 켬). 끄면 예전 한 줄 조립으로 돌아간다.
+  structuredImagePrompt: z.boolean().default(true),
   aiModelMode: z.enum(["automatic", "manual"]),
   preserveOriginals: z.boolean(),
   blockUnverifiedClaims: z.boolean(),
