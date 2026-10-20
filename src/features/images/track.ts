@@ -24,12 +24,14 @@ export const TRACK_STYLES:Record<CarouselTrack,StyleId>={photo:"photo-focus",tex
 export const TRACK_LABELS:Record<CarouselTrack,string>={photo:"사진 중심",text:"글 중심"};
 
 // 글 길이 상한(글자 수, 띄어쓰기 포함). 카드에서 제목 한 줄·짧은 글 한 줄로 읽히는 길이다.
-//   표지: 제목 24자(두 줄까지), 부제 20자.  사진 중심 본문: 제목 18자 + 짧은 글 1개(24자).  글 중심 본문: 제목 14자 + 짧은 글 2개(각 18자).
+//   표지: 제목 24자(두 줄까지), 부제 20자.  사진 중심 본문: 제목 18자 + 짧은 글 1개(24자).  글 중심 본문: 제목 28자(두 줄) + 짧은 글 1~2개(각 18자, 두 줄 제목이면 1개).
 //   글 중심은 제목 84px 이상·짧은 글 58px로 크게 그리므로, 제목이 한 줄·짧은 글이 각각 한 줄에 들어가는 길이로 줄였다(B 단계).
 export const TRACK_COPY={
   cover:{headline:24,subline:20},
   photo:{headline:18,points:1,point:24},
-  text:{headline:14,points:2,point:18},
+  // 글 중심 제목은 두 줄(28자)까지(3차 점검 2026-10-20: 14자에 맞추려다 "살결 속 요소 성분"처럼 토막 제목이 나왔다).
+  // 두 줄 제목 아래에는 짧은 글 하나(18자)만 들어간다(trackPointCount).
+  text:{headline:28,points:2,point:18},
 } as const;
 
 export function trackLayout(track:CarouselTrack,role:CarouselRole):CardLayout {
@@ -286,7 +288,7 @@ function withClosingInvite<T extends CarouselSlidePlan>(slides:T[],track:Carouse
 // 구성안 프롬프트에 넣는 갈래 안내(글 길이·장 구성·디자인). carousel.ts의 buildCarouselPlanPrompt가 쓴다.
 export function trackPromptRules(track:CarouselTrack):{story:string;style:string;design:string;track:string} {
   const rule=TRACK_COPY[track],cover=TRACK_COPY.cover;
-  const points=track==="photo"?`짧은 글(points) 1개(${rule.point}자 이내)`:`짧은 글(points) 1~2개(각 ${rule.point}자 이내)`;
+  const points=track==="photo"?`짧은 글(points) 1개(${rule.point}자 이내)`:`짧은 글(points) 1~2개(각 ${rule.point}자 이내. 제목이 두 줄(15~28자)이면 1개만 들어가요)`;
   return {
     // 인스타그램 독자는 큰 글씨(제목)만 훑고 넘긴다. 예전에는 "앞 장이 남긴 궁금증에 답하기" + 장 역할(먹는 법·곁들임·방문)대로
     // 써서, "홍어랑 삼합은 왜 같이 먹을까?" 표지 뒤에 "묵은지에 가볍게 감싸요"(먹는 법) 같은 제목이 끼어 흐름이 끊겼다(사장님 지적).
@@ -297,7 +299,7 @@ ${QUESTION_FOCUS_RULE}
 ${EXPLAIN_REASONS_RULE}
 ${NOTES_FIRST_RULE}`,
     style:`${EDITOR_ROLE}
-[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. ${HOOK_RULE} 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내)으로, 질문형이나 의외의 사실을 단정하는 문장으로 쓰고, subline(${cover.subline}자 이내 해요체 한 줄)에는 결론(답)을 미리 말하지 말고 궁금증을 키우는 한 줄을 쓰세요(예: "알고 보면 소리 이야기예요". "답은 탄산에 있어요"처럼 답을 밝히면 넘겨 볼 이유가 사라져요). 단정형 표지면 부제에 본문이 답할 질문을 쓰세요. "유혹", "매력", "풍미", "향연", "특별한" 같은 광고 말은 쓰지 마세요(이유 개수는 앱이 덧붙여요). 짧은 글은 그 장 제목을 뒷받침하는 이유·근거만 쓰세요. 먹는 법·고르는 법 같은 써먹을 정보는 notes에 쓰면 올릴 글(캡션)에 들어가요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.
+[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. ${HOOK_RULE} 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내)으로, 질문형이나 의외의 사실을 단정하는 문장으로 쓰고, subline(${cover.subline}자 이내 해요체 한 줄)은 의외의 사실 한 조각(예: "알고 보면 소리 이야기예요", "숨 한 번이 차이를 만들어요", "두 번째 점부터 달라져요")이거나, 단정형 표지라면 본문이 답할 구체적인 질문(예: "찌면 왜 더 강해질까요?")이어야 합니다. "정말 그럴까요?", "궁금해요", "~의 비밀", "어떻게 다를까요?"처럼 무엇이 의외인지 말하지 않는 부제는 금지입니다. 결론(답)을 미리 말하지도 마세요("답은 탄산에 있어요"처럼 답을 밝히면 넘겨 볼 이유가 사라져요). "유혹", "매력", "풍미", "향연", "특별한" 같은 광고 말은 쓰지 마세요(이유 개수는 앱이 덧붙여요). 짧은 글은 그 장 제목을 뒷받침하는 이유·근거만 쓰세요. 먹는 법·고르는 법 같은 써먹을 정보는 notes에 쓰면 올릴 글(캡션)에 들어가요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.
 ${SCENE_THEN_CAUSE_RULE}
 ${SENSE_RULE}
 ${COPY_EXEMPLARS}`,

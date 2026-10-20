@@ -201,7 +201,7 @@ export function createFallbackCarouselPlan(input:CarouselPlanInput):CarouselPlan
       // 긴 주제는 낱말 가운데를 자르지 않고 "…"으로 줄인다.
       headline:role==="cover" ? ellipsize(parsed.topic,42) : slides[role].headline,
       // 준비된 표지 부제는 사실을 단정하지 않는 안내 한 줄만 쓴다.
-      subline:role==="cover" ? "한 장씩 넘기며 알아봐요" : "",
+      subline:role==="cover" ? "이유를 하나씩 짚어요" : "",
       // 준비된 장면 설명은 사진 기준으로 쓰여 있어, 그림 화풍이면 "사진"을 "그림"으로 바꿔 모델이 실사로 가지 않게 한다.
       visualPrompt:`${drawn?slides[role].visualPrompt.replace(/사진/g,"그림"):slides[role].visualPrompt}.${context}`.slice(0,600),
     })),
