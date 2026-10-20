@@ -47,3 +47,30 @@ describe("structured prompt",()=>{
     }
   });
 });
+
+// 1단계(2026-10-20): 장마다 촬영 문법이 다르게 배정된다(shots.ts).
+describe("shot grammar per slide",()=>{
+  it("assigns cover → hero, reasons → different action shots, conclusion → flat-lay, store → pouring; soup decks get a steam shot",async()=>{
+    const { shotFor }=await import("@/features/images/shots");
+    const body=(role:string,index:number,total:number,headline="과메기 한 점은 기름이 좌르르 돌아요")=>({slide:slide({role,headline,visualPrompt:"대나무 소쿠리에 담긴 과메기와 쌈 채소",keywords:["과메기"]}) as never,slideIndex:index,slideTotal:total,topic:"과메기는 왜 김과 미역에 싸서 먹을까?"});
+    expect(shotFor(body("cover",1,6))).toBe("hero-45");
+    const reasons=[2,3,4].map(index=>shotFor(body("pairing",index,6)));
+    expect(new Set(reasons).size).toBe(3);
+    expect(reasons).not.toContain("hero-45");
+    expect(shotFor(body("pairing",5,5))).toBe("flatlay");
+    expect(shotFor(body("visit",6,6))).toBe("pour-ending");
+    expect(shotFor(body("detail",3,6))).toBe("macro-dip");
+    const soup=[2,3,4].map(index=>shotFor({...body("pairing",index,6,"홍어애탕 국물이 한 숟갈에 묵직해요"),topic:"홍어애탕은 왜 국물이 묵직할까?"}));
+    expect(soup[0]).toBe("steam-action");
+    expect(new Set(soup).size).toBe(3);
+  });
+  it("puts the shot text in the [Shot] slot and drops the chopstick ban on the hand-action slide",()=>{
+    const hand=buildStructuredImagePrompt(brief({deckEdited:true,slideIndex:2,slideTotal:6,slide:slide({role:"pairing",headline:"과메기 한 점은 기름이 좌르르 돌아요",visualPrompt:"배추 잎에 과메기와 김을 올린 쌈 한 입"})}));
+    expect(hand).toContain("[Shot] Vertical portrait framing");
+    expect(hand).toContain("holding one bite or a wrap (ssam)");
+    expect(hand).not.toContain("Do not show chopsticks");
+    const macro=buildStructuredImagePrompt(brief({deckEdited:true,slideIndex:3,slideTotal:6,slide:slide({role:"pairing",headline:"초장에 찍으면 새콤함이 먼저 와요",visualPrompt:"초장 종지에 과메기 한 점을 찍는 순간"})}));
+    expect(macro).toContain("dipped into its small sauce dish");
+    expect(macro).toContain("Do not show chopsticks");
+  });
+});
