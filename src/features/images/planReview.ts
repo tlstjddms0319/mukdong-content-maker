@@ -5,7 +5,7 @@ import { checkTextClaims, servingClaimIssues } from "@/features/guard/service";
 import { TRACK_COPY, TRACK_FIT, type CarouselTrack } from "./track";
 import { storeNotesRule } from "@/features/store/storeNotes";
 import { comparisonPairRule, mythAssertedBy, principleNotesRule } from "@/features/store/principles";
-import { ASKS_UNFAMILIAR, NAMES_CAUSE, causeWordsOf, obviousQuestion, coverSpoiler, SECRET_TEASE, yesNoCover, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
+import { ASKS_UNFAMILIAR, NAMES_CAUSE, causeWordsOf, obviousQuestion, coverSpoiler, SECRET_TEASE, yesNoCover, EXPLAIN_REASONS_RULE, PROMO_IN_CARD, QUESTION_CONDITIONS, QUESTION_FOCUS_RULE, STORY_ARC_RULE, VAGUE_REASON, HOOK_DARE, HOOK_HYPE, VAGUE_COVER, VAGUE_SUBLINE, comparedKeys, comparedPair, praisesInsteadOfExplaining } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 import { copiesExemplar, hasSenseWord, restatesHeadline } from "@/features/copy/senses";
 
@@ -121,7 +121,10 @@ function coverHookIssues(slide:{headline:string;subline?:string},track?:Carousel
   // 단정형 표지는 본문이 답할 질문을 부제에 둔다(부제의 "이유 N가지"는 앱이 붙이므로 그 앞부분을 본다).
   const statement=!/[?？]\s*$/.test(slide.headline.trim());
   const subline=(slide.subline??"").replace(/·?\s*이유\s*\d+\s*가지/,"");
-  if(track&&statement&&!/[?？]|왜/.test(subline))add("단정형 표지예요. 부제에 '왜 그럴까요?'처럼 본문이 답할 질문을 쓰세요.");
+  if(track&&statement&&!/[?？]|왜/.test(subline))add("단정형 표지예요. 부제에 '찌면 왜 더 강해질까요?'처럼 본문이 답할 구체적인 질문을 쓰세요.");
+  // 막연한 부제(3차 점검 2026-10-20): 무엇이 의외인지 말하지 않으면 넘겨 볼 이유가 없다.
+  const vagueSub=subline.trim().match(VAGUE_SUBLINE);
+  if(track&&vagueSub)add(`표지 부제가 막연해요('${vagueSub[0]}'). 의외의 사실 한 조각("알고 보면 소리 이야기예요", "숨 한 번이 차이를 만들어요")이나 구체적인 질문("찌면 왜 더 강해질까요?")으로 쓰세요.`);
   return issues;
 }
 

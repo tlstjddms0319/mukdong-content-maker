@@ -3,7 +3,7 @@ import type { CarouselPlan } from "./carousel";
 import { TRACK_COPY, type CarouselTrack } from "./track";
 import { SAYS_SHARED, coverHookProblems } from "./planReview";
 import { comparisonPairRule } from "@/features/store/principles";
-import { HOOK_RULE, comparedKeys, comparedPair } from "@/features/copy/explain";
+import { HOOK_RULE, VAGUE_SUBLINE, comparedKeys, comparedPair } from "@/features/copy/explain";
 import { menuOf } from "@/features/store/menu";
 import { coverMythRule } from "@/features/store/principles";
 
@@ -59,6 +59,7 @@ function coverProblem(option:{headline:string;subline:string},original:Slide,tra
   if(subline.length>TRACK_COPY.cover.subline)return "subline-length";
   // 네 번째 점검(2026-10-12): AI가 부제를 "깊은 맛의"처럼 끝맺지 않고 보내 카드에 끊긴 말이 찍혔다. 부제는 비우거나 완결된 문장·질문으로.
   if(subline&&!/[요까다죠네?？!]$/.test(subline.replace(/[.\s]+$/,"")))return "subline-unfinished";
+  if(subline&&VAGUE_SUBLINE.test(subline))return "vague-subline";
   if(coverHookProblems({headline,subline},track,bodyHeadlines).length)return "hook";
   const before=`${original.headline} ${original.subline??""}`,after=`${headline} ${subline}`;
   // 원래 표지나 주제에 나온 음식 이름을 새 표지도 말해야 한다(예전에는 "열이 식감과 향을 어떻게 바꿀까?"처럼 대상이 빠졌다).
@@ -91,7 +92,10 @@ ${myths?`${myths}\n`:""}서로 다른 후킹 유형(오해 깨기, 의외의 정
 - 본문에 없는 사실, 수치, 가게만의 사실은 만들지 마세요. 해요체로 쓰세요.
 JSON으로만 답하세요: {"best":0,"options":[{"type":"유형","headline":"제목","subline":"부제"}]}`;
   const result=CoverSchema.parse(await ai.generate(prompt,CoverSchema));
-  const order=[result.best,...result.options.keys()].filter((index,i,all)=>index<result.options.length&&all.indexOf(index)===i);
+  // 오해 재료가 있고 지금 표지가 평범한 "왜" 질문이면 오해 깨기 후보를 먼저 본다(3차 점검: 노트의 표지 예가 있는데도 "왜 가라앉을까?"로 밋밋하게 골랐다).
+  const plainWhy=/왜/.test(cover.headline)&&!/아니|않|못/.test(cover.headline);
+  const mythFirst=myths&&plainWhy?[...result.options.keys()].filter(index=>/오해/.test(result.options[index].type)):[];
+  const order=[...mythFirst,result.best,...result.options.keys()].filter((index,i,all)=>index<result.options.length&&all.indexOf(index)===i);
   const pick=(options:typeof result.options)=>{
     for(const index of order){
       const option=options[index];

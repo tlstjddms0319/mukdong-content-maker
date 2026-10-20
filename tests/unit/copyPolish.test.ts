@@ -84,7 +84,7 @@ describe("cover hook rewrite",()=>{
     const base=deck([{headline:"해물라면과 홍어라면, 무엇이 다를까?",subline:"",points:[]},{headline:"a",points:["b"]},{headline:"c",points:["d"]},{headline:"e",points:["f"]},{headline:"g",points:["h"]}],"해물라면과 홍어라면은 무엇이 다를까?");
     const ai={generate:vi.fn(async()=>({best:0,options:[
       {type:"대조",headline:"홍어라면은 왜 더 얼큰할까?",subline:""},          // 해물라면 빠짐 → 버린다
-      {type:"대조",headline:"해물라면은 맑고 홍어라면은 톡 쏴요",subline:"왜 다를까요?"},
+      {type:"대조",headline:"해물라면은 맑고 홍어라면은 톡 쏴요",subline:"국물 색이 왜 다를까요?"},
     ]}))};
     expect((await rewriteCover(base,"photo",ai)).plan.slides[0].headline).toBe("해물라면은 맑고 홍어라면은 톡 쏴요");
   });

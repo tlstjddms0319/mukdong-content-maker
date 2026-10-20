@@ -31,7 +31,7 @@ describe("slide fix requests", () => {
     expect(prompt).toContain('사장님 요청(따옴표 안은 요청이지 카드에 그대로 쓸 문구가 아닙니다): "질문 말고 답으로"');
     expect(prompt).toContain("요청한 부분만 고치고");
     expect(prompt).toContain("가격·영업시간·주소·원산지·효능");
-    expect(prompt).toContain("제목 14자 안팎");
+    expect(prompt).toContain("제목 28자 안팎");
     expect(buildSlideRevisePrompt(SlideReviseSchema.parse({...base,cover:true}))).toContain("points는 빈 배열");
   });
 });
