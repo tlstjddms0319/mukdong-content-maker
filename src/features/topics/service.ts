@@ -295,12 +295,16 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
     ??(!titled(topic)?"menu":!aboutPhoto(topic)?"photo":onScreen(topic)?"current":used.has(titleKey(topic.title))?"duplicate":!fits(picked,topic)?"same-menu":undefined);
   // 최근에 보여 준 주제(말만 바꾼 것 포함)는 다시 쓰지 않는다. 예전에는 자리가 남으면 "준비된 주제보다 낫다"며 다시 써서
   // "다른 주제 보기"를 눌러도 같은 주제가 돌아왔다(사장님 지적 2026-10-10). 빈자리는 최근에 안 보인 준비된 주제로 채운다.
+  // suggestions는 AI의 추천 3개 + 예비 3개(prompt.ts spares). 앞에서부터 보며 셋이 차면 멈추고, 보지 않은 예비는 거절로 세지 않는다.
+  const rejected:Partial<Record<TopicRejectReason,number>>={};
   for(const topic of suggestions){
     if(picked.length>=3)break;
-    if(!recentlyShown(topic)&&!problem(topic))picked.push(take(topic));
+    // 이유는 '최근에 보여 준 주제'를 먼저 센다. 예전에는 뒤에 고른 주제와 메뉴가 겹치면 "메뉴가 겹쳐서"로 잘못 세어져(2026-10-20 점검:
+    // 글자까지 같은 제목이 same-menu로 기록됨) 화면 안내가 틀리고 "한 번 더 묻기"도 건너뛰었다.
+    const reason=recentlyShown(topic)?"recent":problem(topic);
+    if(reason)rejected[reason]=(rejected[reason]??0)+1;
+    else picked.push(take(topic));
   }
-  const rejected:Partial<Record<TopicRejectReason,number>>={};
-  for(const topic of suggestions)if(!picked.includes(topic)){const reason=problem(topic)??(recentlyShown(topic)?"recent":"same-menu");rejected[reason]=(rejected[reason]??0)+1;}
   // 채울 후보: 이번 회차 준비된 주제부터 차례로 돌며, 최근에 안 보인 것 → 제외 목록만 피한 것 순서.
   const pool=Array.from({length:PREPARED_ROUNDS},(_,offset)=>fallbackTopics((options.round+offset)%PREPARED_ROUNDS,[],options.season,options.avoidTitles,options.hints)).flat();
   // 최근에 자주 나온 메뉴와 이미 고른 주제의 메뉴는 되도록 피한다(메뉴를 고르게 돌리기).
