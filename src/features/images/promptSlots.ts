@@ -13,21 +13,12 @@ import { foodFreeAnchor } from "./sceneFoods";
 import { comparedPair } from "@/features/copy/explain";
 import { framingDirection } from "./imageAspect";
 import { sceneHero, sceneMustShow } from "./openaiRequest";
+import { SHOTS, shotFor } from "./shots";
 
 const SKATE=STORE_MENU.find(item=>item.id==="hongeo-hoe")!;
 
 // 홍어 요리(회가 아닌 찜·전·탕·라면·무침)는 결을 세게 그리면 빗살·벌집처럼 기괴해진다(2026-10-13). 익힌 살은 질감 칸의 한 줄로만.
 const COOKED_SKATE=/^hongeo-(?!hoe)/;
-
-// 역할별 촬영 문법. 참고 자료의 5장 구성(한 상 45도 → 한 입 조합 → 매크로 → 항공샷 → 엔딩)을 역할에 맞춘다. 1단계(장마다 배정)는 따로 한다.
-function shotFor(input:ImageBrief):string {
-  const role=input.slide?.role;
-  const base="Vertical portrait framing, the subject inside the central 80% of the frame";
-  if(role==="detail")return `${base}. Extreme close-up macro of one bite, shallow depth of field, background gently blurred.`;
-  if(role==="overview")return `${base}. Top-down flat-lay of the whole table setting, clean organized layout.`;
-  if(role==="cover"||!role)return `${base}. 45-degree angle close-up, shallow depth of field, the hero plate fills about 60% of the frame, appetizing food-magazine quality.`;
-  return `${base}. Eye-level or 45-degree angle, one clear focal point, shallow depth of field.`;
-}
 
 // 글이 요구하는 곁들임·동작(sceneMustShow)의 영어 쪽만 꺼낸다.
 function mustShowEnglish(input:ImageBrief):string {
@@ -47,7 +38,9 @@ export function buildStructuredImagePrompt(input:ImageBrief):string {
   const hero=sceneHero(input)??SKATE;
   const style=IMAGE_STYLE_DIRECTIONS.photo;
   const scene=input.slide?`Scene for this slide (${input.slide.role}): ${input.slide.visualPrompt}.`:`Scene: ${input.topic}.`;
-  const chopsticks=input.slide&&!CHOPSTICK_SCENE.test(input.slide.visualPrompt);
+  // 장마다 촬영 문법(shots.ts, 1단계). 젓가락 금지는 손으로 한 입 장면이 아니고 장면 설명도 젓가락을 말하지 않을 때만.
+  const shot=shotFor(input);
+  const chopsticks=input.slide&&shot!=="hand-action"&&!CHOPSTICK_SCENE.test(input.slide.visualPrompt);
   const skateTexture=hero.id==="hongeo-hoe"
     // A/B 1·3번(2026-10-20): 구조 조립에서 홍어회 살이 갈색·돼지고기 블록처럼 나왔다. 색(연보라빛, 화이트밸런스)과 얇은 조각을 질감 칸에 그대로 못 박는다.
     ?" Hongeo is Korean fermented skate, a flat ray fish, hand-cut into flat pieces two finger-widths across and only 5-8 mm thick with visible cut sides; the flesh is a muted dusty mauve to lilac-pink with pale grey-white areas, crossed by fine translucent white cartilage lines in parallel diagonal rows; keep the white balance neutral so the mauve-pink reads true. Not the glossy orange of salmon, not the deep red of tuna, not brown or beige, not chalk-white; never thick blocks, never bacon, ham or pork belly, never a whole small fish with fins or tail."
@@ -63,7 +56,7 @@ export function buildStructuredImagePrompt(input:ImageBrief):string {
     `[Plating & tableware] ${hero.plating}. Korean tableware only: brass yugi bowls, onggi or ttukbaegi earthenware, a dented yangeun kettle, a makgeolli sabal bowl.`,
     `[Environment & mood] ${input.styleAnchor?foodFreeAnchor(input.styleAnchor):"warm natural color temperature, dark wooden table"}; a cozy Korean tavern (jumak) feel; ${style.look}`,
     `[Texture details] ${hero.texture}.${skateTexture} Soft white steam only where the dish is hot. Food always looks delicious.`,
-    `[Shot] ${shotFor(input)} ${candidate} ${framingDirection(input.windowRatio,input.slide?.role==="detail")} ${layoutHint} ${designHint}`.replace(/\s+/g," ").trim(),
+    `[Shot] ${SHOTS[shot].prompt} ${candidate} ${framingDirection(input.windowRatio,input.slide?.role==="detail")} ${layoutHint} ${designHint}`.replace(/\s+/g," ").trim(),
     "[Series consistency] Keep the same color palette, tableware and lighting across every slide of this carousel; only the composition and action change.",
     `[Do not] No text, letters, numbers, logos or signs anywhere; leave empty areas plain. No readable human faces (hands and backs only). No Japanese props (sushi geta, wasabi, pickled ginger, sake set). No purple or green smell clouds, no disgusted faces. No foods other than those named.${chopsticks?" Do not show chopsticks lifting a slice; the food rests on the plate.":""}`,
     input.refinement?`User revision request (highest priority): ${JSON.stringify(input.refinement)}.`:"",
