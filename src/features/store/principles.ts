@@ -12,49 +12,51 @@ import { STORE_MENU, menuOf } from "./menu";
 // 노트를 더하려면: 아래 목록에 한 줄을 넣고 menus(메뉴 id, 비우면 공통), when(공통 노트가 붙을 주제 낱말), hint(주제 추천용 짧은 실마리), fact(원리)를 채운다.
 // myth: 독자가 흔히 믿는 오해(표지 "오해 깨기" 재료, copyPolish.ts). 결과물 점검 7회에서 후킹 점수가 가장 높은 표지가
 // "홍어회는 썩은 게 아니라 삭히는 거라고?"처럼 흔한 오해를 뒤집는 표지였다.
-export type PrincipleNote={id:string;myth?:string;menus:readonly string[];when?:RegExp;hint:string;fact:string;sure:boolean};
+// mythWhen: 이 오해를 표지 재료로 꺼낼 주제·본문 낱말. 메뉴만 맞는다고 꺼내면 엉뚱한 표지가 된다(사장님 제보 2026-10-20: "과메기는 왜 김과 미역에 싸서 먹을까?"
+// 주제에 "과메기는 냉동실에서 만들 수 있다고?" 표지가 붙어 그림도 냉동실 이야기가 됐다).
+export type PrincipleNote={id:string;myth?:string;mythWhen?:RegExp;menus:readonly string[];when?:RegExp;hint:string;fact:string;sure:boolean};
 
 export const PRINCIPLE_NOTES:readonly PrincipleNote[]=[
   // 홍어(회·삼합과 홍어 요리 공통)
-  {id:"skate-urea",myth:"홍어의 톡 쏘는 향은 상해서 나는 냄새다",menus:["hongeo-hoe","hongeo-muchim","hongeo-aetang","hongeo-jjim","hongeo-jeon","hongeo-ramyeon"],hint:"홍어 살의 요소가 삭으며 암모니아로",sure:true,
+  {id:"skate-urea",mythWhen:/향|냄새|쏘|찡|코|삭|상하|썩/,myth:"홍어의 톡 쏘는 향은 상해서 나는 냄새다",menus:["hongeo-hoe","hongeo-muchim","hongeo-aetang","hongeo-jjim","hongeo-jeon","hongeo-ramyeon"],hint:"홍어 살의 요소가 삭으며 암모니아로",sure:true,
     fact:"홍어 같은 연골어류는 바닷물 속에서 몸의 수분을 지키려고 살과 피에 요소를 많이 지니고 있어요. 삭히는 동안 미생물의 효소가 이 요소를 암모니아로 분해해 톡 쏘는 향이 생겨요."},
-  {id:"skate-no-spoil",myth:"홍어는 썩혀 먹는 생선이다",menus:["hongeo-hoe"],hint:"암모니아가 다른 균을 막아 상하지 않고 삭음",sure:false,
+  {id:"skate-no-spoil",mythWhen:/삭|상하|썩|보관|오래|발효/,myth:"홍어는 썩혀 먹는 생선이다",menus:["hongeo-hoe"],hint:"암모니아가 다른 균을 막아 상하지 않고 삭음",sure:false,
     fact:"암모니아가 생기면 살이 알칼리성으로 바뀌어 다른 부패균이 자라기 어려워진다고 알려져 있어요. 그래서 홍어는 상하지 않고 삭는 음식이 됐다고 해요."},
-  {id:"skate-nose",myth:"홍어 맛은 혀로 느낀다",menus:["hongeo-hoe","hongeo-muchim","hongeo-jjim"],hint:"암모니아는 코로 먼저, 씹을 때 다시",sure:true,
+  {id:"skate-nose",mythWhen:/코|향|찡|쏘|맛|혀/,myth:"홍어 맛은 혀로 느낀다",menus:["hongeo-hoe","hongeo-muchim","hongeo-jjim"],hint:"암모니아는 코로 먼저, 씹을 때 다시",sure:true,
     fact:"암모니아는 쉽게 날아오르는 기체라 입에 넣기 전에 코로 먼저 올라오고, 씹을 때 입안에서 코 뒤쪽으로 다시 넘어가 한 번 더 느껴져요. 그래서 맛보다 향이 먼저 와요."},
-  {id:"skate-cartilage",myth:"생선 뼈는 발라내고 먹는다",menus:["hongeo-hoe","hongeo-jjim"],hint:"뼈가 연골이라 같이 씹힘",sure:true,
+  {id:"skate-cartilage",mythWhen:/뼈|연골|씹|오독|줄/,myth:"생선 뼈는 발라내고 먹는다",menus:["hongeo-hoe","hongeo-jjim"],hint:"뼈가 연골이라 같이 씹힘",sure:true,
     fact:"홍어는 뼈가 단단한 뼈가 아니라 연골이에요. 그래서 회로 썰면 살 사이의 흰 연골까지 함께 씹혀 쫀득한 살과 오독한 연골이 한입에 대비돼요."},
   {id:"skate-season",menus:["hongeo-hoe","hongeo-aetang"],hint:"홍어는 겨울~이른 봄 제철",sure:false,
     fact:"홍어는 찬 바다에서 살이 오르는 겨울부터 이른 봄까지가 제철로 알려져 있어요."},
   {id:"samhap",myth:"삼합의 수육과 묵은지는 그냥 곁들이는 반찬이다",menus:["hongeo-hoe"],when:/삼합|수육|묵은지/,hint:"수육 지방·묵은지 산미·홍어 향의 역할 나눔",sure:true,
     fact:"삼합에서 수육의 지방은 혀를 감싸 암모니아의 톡 쏘는 자극을 덜 날카롭게 느끼게 하고, 묵은지의 젖산 신맛은 기름진 느낌을 끊어 줘요. 삭힌 홍어·익은 묵은지(둘 다 발효)와 삶은 돼지고기가 서로 다른 맛을 맡아요."},
   // 홍어무침
-  {id:"muchim-vinegar",myth:"새콤한 양념은 맛만 바꾼다",menus:["hongeo-muchim"],hint:"식초의 산이 암모니아를 붙잡음",sure:false,
+  {id:"muchim-vinegar",mythWhen:/식초|새콤|양념|쏘|향|덜/,myth:"새콤한 양념은 맛만 바꾼다",menus:["hongeo-muchim"],hint:"식초의 산이 암모니아를 붙잡음",sure:false,
     fact:"암모니아는 알칼리성이라 식초 같은 산을 만나면 날아오르지 않는 염으로 바뀌어요. 그래서 새콤하게 무치면 톡 쏘는 향이 회보다 덜하게 느껴진다고 해요."},
-  {id:"muchim-chili",myth:"매운맛도 짠맛·단맛 같은 맛의 하나다",menus:["hongeo-muchim","hongeo-ramyeon","haemul-ramyeon"],hint:"매운맛은 맛이 아니라 통증 감각",sure:true,
+  {id:"muchim-chili",mythWhen:/매운|매워|맵|통증|얼얼|고추/,myth:"매운맛도 짠맛·단맛 같은 맛의 하나다",menus:["hongeo-muchim","hongeo-ramyeon","haemul-ramyeon"],hint:"매운맛은 맛이 아니라 통증 감각",sure:true,
     fact:"고추의 매운맛(캡사이신)은 혀의 맛 감각이 아니라 열과 통증을 느끼는 감각을 건드려요. 강한 자극이 함께 오면 다른 향이 상대적으로 덜 두드러져요."},
   // 홍어애탕
-  {id:"ae-fat",myth:"진한 국물은 오래 고아서 나온다",menus:["hongeo-aetang"],hint:"애(간)의 지방이 국물에 풀림",sure:true,
+  {id:"ae-fat",mythWhen:/국물|진하|묵직|걸쭉|고소|구수/,myth:"진한 국물은 오래 고아서 나온다",menus:["hongeo-aetang"],hint:"애(간)의 지방이 국물에 풀림",sure:true,
     fact:"애는 홍어의 간이에요. 생선 간은 지방이 많아서 끓이면 지방이 국물에 풀려 국물이 고소하고 묵직해져요."},
   {id:"ae-season",menus:["hongeo-aetang"],hint:"겨울 홍어 애가 가장 기름지다는 이야기",sure:false,
     fact:"홍어 애는 제철인 겨울에 가장 크고 기름지다고 알려져 있어요. 그래서 애탕은 찬바람 부는 계절 음식으로 꼽혀요."},
-  {id:"ae-barley",myth:"홍어애탕은 요즘 만든 요리다",menus:["hongeo-aetang"],hint:"보리 새순과 끓이는 전라도식",sure:true,
+  {id:"ae-barley",mythWhen:/보리|새순|유래|예전|옛|전라|끓여 먹었/,myth:"홍어애탕은 요즘 만든 요리다",menus:["hongeo-aetang"],hint:"보리 새순과 끓이는 전라도식",sure:true,
     fact:"전라도에서는 홍어 애를 보리 새순과 함께 끓인 홍어앳국(보릿국)을 겨울~봄에 즐겨 왔어요. 풋풋한 보리싹 향이 기름진 애 맛을 받쳐 줘요."},
   // 홍어찜·전·라면
-  {id:"jjim-steam",myth:"익히면 홍어 향이 약해진다",menus:["hongeo-jjim"],hint:"열에 암모니아가 더 피어오름",sure:false,
+  {id:"jjim-steam",mythWhen:/향|냄새|세|쏘|찡|코/,myth:"익히면 홍어 향이 약해진다",menus:["hongeo-jjim"],hint:"열에 암모니아가 더 피어오름",sure:false,
     fact:"향 성분은 뜨거울수록 더 많이 날아올라요. 찜은 김과 함께 암모니아가 한꺼번에 피어올라, 홍어찜은 홍어 요리 가운데 향이 가장 세게 느껴지는 편으로 알려져 있어요."},
-  {id:"jjim-collagen",myth:"생선은 찌면 퍽퍽해진다",menus:["hongeo-jjim"],hint:"열에 콜라겐이 젤라틴으로",sure:true,
+  {id:"jjim-collagen",mythWhen:/쫀득|퍽퍽|살|식감|탱글|부드/,myth:"생선은 찌면 퍽퍽해진다",menus:["hongeo-jjim"],hint:"열에 콜라겐이 젤라틴으로",sure:true,
     fact:"홍어 껍질과 연골 둘레에는 콜라겐이 많아요. 찌는 열에 콜라겐이 젤라틴으로 풀리면 살이 촉촉하고 쫀득해지고, 식으면 젤라틴이 다시 굳어 탄력이 달라져요."},
   {id:"jeon-batter",menus:["hongeo-jeon","minari-jeon","kimchi-jeon"],hint:"달걀옷·밀가루가 기름에 구워지며 고소",sure:true,
     fact:"전은 밀가루와 달걀옷이 뜨거운 기름에 닿아 겉면이 노릇하게 구워지면서(당과 단백질이 열에 반응하는 갈변) 고소한 향이 생겨요. 겉은 바삭하고 속은 수분이 남아 촉촉해요."},
-  {id:"jeon-mild",myth:"홍어는 어떻게 먹어도 향이 똑같이 세다",menus:["hongeo-jeon"],hint:"부치는 동안 향이 일부 날아감",sure:false,
+  {id:"jeon-mild",mythWhen:/순하|약하|향|덜|세|부치/,myth:"홍어는 어떻게 먹어도 향이 똑같이 세다",menus:["hongeo-jeon"],hint:"부치는 동안 향이 일부 날아감",sure:false,
     fact:"홍어를 기름에 부치는 동안 향 성분의 일부가 날아가고 고소한 전의 향이 더해져, 회보다 순하게 느끼는 사람이 많다고 해요."},
   // 과메기
-  {id:"gwamegi-freeze",myth:"과메기는 냉동실에서도 만들 수 있다",menus:["gwamegi"],hint:"찬바람에 얼었다 녹기를 되풀이하며 마름",sure:true,
+  {id:"gwamegi-freeze",mythWhen:/찬바람|말리|말려|냉동|건조|겨울|바람|얼/,myth:"과메기는 냉동실에서도 만들 수 있다",menus:["gwamegi"],hint:"찬바람에 얼었다 녹기를 되풀이하며 마름",sure:true,
     fact:"과메기는 꽁치(원래는 청어)를 겨울 바닷바람에 얼었다 녹기를 되풀이하며 말려 만들어요. 그 사이 수분이 빠지고 살이 꾸덕하고 쫀득해지며 기름이 살에 고루 배요. 그래서 찬바람이 부는 겨울에만 제대로 만들 수 있어요."},
   {id:"gwamegi-wrap",menus:["gwamegi"],hint:"김·미역·쪽파·마늘로 기름진 맛을 끊음",sure:true,
     fact:"과메기는 김·미역·쪽파·마늘·고추에 싸 먹어요. 해조류의 바다 향과 매운 채소의 자극이 등푸른 생선의 기름진 맛을 끊어 줘요."},
-  {id:"gwamegi-origin",myth:"과메기는 원래부터 꽁치로 만들었다",menus:["gwamegi"],hint:"경북 포항 구룡포의 겨울 음식",sure:true,
+  {id:"gwamegi-origin",mythWhen:/꽁치|청어|원래|유래|구룡포|포항|옛|예전/,myth:"과메기는 원래부터 꽁치로 만들었다",menus:["gwamegi"],hint:"경북 포항 구룡포의 겨울 음식",sure:true,
     fact:"과메기는 경북 포항 구룡포 일대의 겨울 음식으로 알려져 있어요."},
   // 미나리전·묵은지김치전
   {id:"minari-aroma",menus:["minari-jeon"],hint:"미나리 향 성분과 아삭한 줄기 섬유",sure:false,
@@ -62,10 +64,10 @@ export const PRINCIPLE_NOTES:readonly PrincipleNote[]=[
   {id:"mukeunji-acid",myth:"신 김치는 상한 김치다",menus:["kimchi-jeon","hongeo-hoe"],when:/묵은지|김치/,hint:"오래 익으며 유산균이 젖산을 만듦",sure:true,
     fact:"김치가 오래 익으면 유산균이 배추의 당을 젖산으로 바꿔 신맛이 강해지고 배추 조직이 부드러워져요. 이 신맛이 기름진 음식의 느끼함을 끊어 줘요."},
   // 라면
-  {id:"seafood-umami",myth:"해물 국물이 시원한 건 온도 때문이다",menus:["haemul-ramyeon"],hint:"조개·새우의 감칠맛 성분이 우러남",sure:true,
+  {id:"seafood-umami",mythWhen:/시원|국물|감칠|개운/,myth:"해물 국물이 시원한 건 온도 때문이다",menus:["haemul-ramyeon"],hint:"조개·새우의 감칠맛 성분이 우러남",sure:true,
     fact:"조개·새우·오징어 같은 해물에는 감칠맛을 내는 아미노산과 호박산 같은 성분이 많아, 끓이면 국물에 우러나 '시원하다'고 느끼는 맛을 내요."},
   // 막걸리
-  {id:"makgeolli-yeast",myth:"막걸리 탄산은 따로 넣은 것이다",menus:["baedari-makgeolli"],hint:"효모가 당을 알코올과 탄산으로",sure:true,
+  {id:"makgeolli-yeast",mythWhen:/탄산|톡|거품|효모|발효|쏘|개운/,myth:"막걸리 탄산은 따로 넣은 것이다",menus:["baedari-makgeolli"],hint:"효모가 당을 알코올과 탄산으로",sure:true,
     fact:"막걸리는 쌀이나 밀을 누룩으로 빚어요. 누룩 속 효소가 곡물의 전분을 당으로 바꾸고, 효모가 그 당을 알코올과 탄산으로 바꿔요. 살균하지 않은 생막걸리는 병 속에서도 효모가 살아 있어 탄산이 계속 생겨요."},
   {id:"makgeolli-taste",menus:["baedari-makgeolli"],hint:"남은 당분 단맛·유기산 신맛·탄산",sure:true,
     fact:"막걸리의 단맛은 발효되고 남은 당분, 새콤한 맛은 발효 중 생긴 유기산, 톡 쏘는 느낌은 탄산에서 와요. 상표마다 원료·배합이 달라 이 셋의 균형이 달라지는데, 원료는 병 뒤 원재료 표시에서 확인할 수 있어요."},
@@ -108,23 +110,41 @@ ${lines}`;
 }
 
 // 주제 추천용: 메뉴마다 답이 있는 원리 실마리를 짧게 준다(이 실마리로 답할 수 있는 "왜" 질문을 고르게).
-export function principleTopicHints():string {
+// usedTitles: 이미 보여 줬거나 만든 주제 제목. 그 제목이 다루는 실마리는 빼고 준다(2026-10-20 점검: 실마리를 그대로 주면 AI가 금지 목록에 있는
+// 준비 주제를 글자까지 같게 다시 냈다). 메뉴가 맞고 mythWhen(없으면 when)이 제목에 맞는 노트를 "이미 쓴 실마리"로 본다.
+export function usedPrincipleNotes(usedTitles:readonly string[]):Set<string> {
+  const used=new Set<string>();
+  for(const title of usedTitles){
+    const menus=new Set(menuOf(title).map(item=>item.id));
+    for(const note of PRINCIPLE_NOTES){
+      const match=note.mythWhen??note.when;
+      if(!match||!note.menus.some(id=>menus.has(id)))continue;
+      if(match.test(title))used.add(note.id);
+    }
+  }
+  return used;
+}
+export function principleTopicHints(usedTitles:readonly string[]=[]):string {
   const byMenu=new Map<string,string[]>();
+  const used=usedPrincipleNotes(usedTitles);
   for(const note of PRINCIPLE_NOTES){
+    if(used.has(note.id))continue;
     const key=note.menus.length?STORE_MENU.find(item=>item.id===note.menus[0])?.short??note.menus[0]:"공통";
     byMenu.set(key,[...(byMenu.get(key)??[]),note.hint]);
   }
   const lines=[...byMenu.entries()].map(([menu,hints])=>`- ${menu}: ${hints.join(" / ")}`).join("\n");
-  return `[원리 노트 실마리] 아래는 확인해 둔 원리의 실마리입니다(참고 데이터). 주제 질문은 이런 원리로 분명하게 답할 수 있는 "왜" 질문으로 고르세요. 그럴듯하지만 실제 원리로 답할 수 없는 질문(예: "찬바람 불 때 애탕은 왜 진할까?"처럼 원인이 없는 질문)은 고르지 마세요.
+  return `[원리 노트 실마리] 아래는 확인해 둔 원리의 실마리입니다(참고 데이터). 주제 질문은 이런 원리로 분명하게 답할 수 있는 "왜" 질문으로 고르세요. 그럴듯하지만 실제 원리로 답할 수 없는 질문(예: "찬바람 불 때 애탕은 왜 진할까?"처럼 원인이 없는 질문)은 고르지 마세요. 같은 실마리로 만든 질문이 참고 데이터의 recentTitles에 이미 있으면 그 질문을 그대로나 말만 바꿔 내지 말고, 같은 원리의 다른 장면·다른 궁금증이나 다른 실마리를 고르세요.
 ${lines}`;
 }
 
 // 표지 "오해 깨기" 재료: 주제에 맞는 노트의 흔한 오해와, 그것을 뒤집는 실제 원리. 맞는 것이 없으면 빈 문자열.
 export function coverMythRule(...texts:Array<string|undefined>):string {
-  const notes=principlesFor(...texts).filter(note=>note.myth);
+  // 메뉴가 맞아도 주제·본문이 그 오해를 다루지 않으면 꺼내지 않는다(mythWhen, 없으면 when).
+  const text=texts.filter(Boolean).join(" ");
+  const notes=principlesFor(...texts).filter(note=>note.myth&&((note.mythWhen??note.when)?.test(text)??true));
   if(!notes.length)return "";
   const lines=notes.map(note=>`- 흔한 오해: "${note.myth}" → 실제: ${note.fact}`).join("\n");
-  return `[오해 깨기 재료] 독자가 흔히 믿는 오해와 실제 원리입니다(참고 데이터). 후보 하나는 반드시 이 가운데 본문과 맞는 오해 하나를 뒤집는 표지로 쓰세요. 형태는 "~가 아니라 ~라고?"처럼 오해를 뒤집은 사실을 보여 주거나(예: "홍어회는 썩은 게 아니라 삭히는 거라고?", "과메기, 냉동실에선 못 만든다고?"), 오해와 다른 구체적 현상을 대조하세요(예: "홍어전은 왜 삭힌 홍어보다 덜 쏠까?"). 오해를 그대로 예/아니오로 묻는 질문("홍어애탕은 오래 고아서 진할까?", "홍어 향은 상해서 나는 냄새일까요?")은 답이 "아니요" 하나라 약하니 쓰지 마세요. 표지에는 오해를 뒤집는다는 것만 보여 주고, 실제 원인의 이름(요소·콜라겐 같은 성분)은 본문에서 밝히세요.
+  return `[오해 깨기 재료] 독자가 흔히 믿는 오해와 실제 원리입니다(참고 데이터). 후보 하나는 반드시 이 가운데 본문과 맞는 오해 하나를 뒤집는 표지로 쓰세요. 형태는 "~가 아니라 ~라고?"처럼 오해를 뒤집은 사실을 보여 주거나(예: "홍어회는 썩은 게 아니라 삭히는 거라고?"; 아래 목록에 없는 오해를 표지에 쓰지 마세요), 오해와 다른 구체적 현상을 대조하세요(예: "홍어전은 왜 삭힌 홍어보다 덜 쏠까?"). 오해를 그대로 예/아니오로 묻는 질문("홍어애탕은 오래 고아서 진할까?", "홍어 향은 상해서 나는 냄새일까요?")은 답이 "아니요" 하나라 약하니 쓰지 마세요. 표지에는 오해를 뒤집는다는 것만 보여 주고, 실제 원인의 이름(요소·콜라겐 같은 성분)은 본문에서 밝히세요.
 ${lines}`;
 }
 
