@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { CarouselPlan, CarouselRole, CarouselSlidePlan } from "./carousel";
 import { DEFAULT_DESIGN, type CardLayout, type DesignSpec, type PaletteId } from "./design";
 import type { StyleId } from "./styleCatalog";
-import { CLOSING_INVITE_TAIL, EXPLAIN_REASONS_RULE, HOOK_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, QUESTION_FOCUS_RULE, STORY_ARC_RULE, closingInvite } from "@/features/copy/explain";
-import { menuOf } from "@/features/store/menu";
+import { EXPLAIN_REASONS_RULE, HOOK_RULE, NOTES_FIRST_RULE, NO_PROMO_IN_CARDS, PROMO_IN_CARD, QUESTION_FOCUS_RULE, STORY_ARC_RULE } from "@/features/copy/explain";
+import { COPY_EXEMPLARS, EDITOR_ROLE, SCENE_THEN_CAUSE_RULE, SENSE_RULE } from "@/features/copy/senses";
 
 // 갈래(계획서 SIMPLIFY_PLAN): 사장님은 "사진 중심 / 글 중심" 둘 중 하나만 고르고, 나머지는 갈래가 정한다.
 //   - 장 수: 구성안 AI가 내용에 맞춰 4~9장 중에서 정한다(표지 + 이유 장 + 결론). 맨 뒤 가게 홍보 카드는 생성 흐름이 따로 붙여
@@ -247,7 +247,8 @@ export function applyTrack(plan:CarouselPlan,track:CarouselTrack,options:{copy?:
   const copy=options.copy??true;
   const last=plan.slides.length-1;
   const slides:CarouselPlan["slides"]=plan.slides.map((slide,i)=>({
-    ...slide,...(copy?fitTrackCopy(slide,track,{conclusion:i===last&&i>0}):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
+    // 결론 장의 가게 줄(예전 맺음말, AI가 쓴 방문 권유)은 길이를 맞추기 전에 걷어 낸다(맞춘 뒤 걷어 내면 이유 줄이 밀려난다).
+    ...slide,...(copy?fitTrackCopy(i===last&&i>0?{...slide,points:slide.points.filter(point=>!PROMO_IN_CARD.test(point))}:slide,track,{conclusion:i===last&&i>0}):{}),layout:trackLayout(track,slide.role),titleFont:"auto",bodyFont:"auto",variant:0,
   }));
   const cover=plan.slides[0];
   // 이미 고른 모양(design.look)은 그대로 둔다(갈래 맞추기를 여러 번 불러도 모양이 0으로 돌아가지 않게).
@@ -268,19 +269,17 @@ function withReasonCount<T extends CarouselSlidePlan>(slides:T[]):T[] {
   return slides.map((slide,i)=>i===0?{...slide,subline}:slide);
 }
 
-// 마지막(결론) 장의 짧은 글 맨 끝을 "미나리전과 막걸리를 묵동홍어마을에서 즐겨 보세요"로 맺는다(사장님 요청 2026-10-09).
-// 본문 장은 홍보 없이 이유만, 결론 장 한 줄만 가볍게 권한다. 메뉴 이름은 표지 질문에서 찾고, 자리가 모자라면 이유 줄을 빼서라도 메뉴 이름을 살린다.
-// 이미 붙어 있으면 바꿔 붙이므로 여러 번 불러도 결과가 같다.
+// 마지막(결론) 장은 표지 질문의 답만 둔다. 예전에는 맨 끝에 "~을 묵동홍어마을에서 즐겨 보세요"를 붙였는데(2026-10-09 요청),
+// 결과물 점검마다 "결론이 광고로 끝나 흐름이 깨진다"고 깎여서 빼기로 했다(사장님 결정 2026-10-20). 가게 홍보는 맨 뒤 가게 카드가 맡는다.
+// AI가 넣은 가게 이름·방문 권유 줄도 여기서 걷어 낸다.
 function withClosingInvite<T extends CarouselSlidePlan>(slides:T[],track:CarouselTrack):T[] {
   const last=slides.length-1;
   if(last<1)return slides;
   const end=slides[last];
-  const dishes=menuOf(slides[0].headline).map(item=>item.short);
-  const reasons=(end.points??[]).filter(point=>!point.includes(CLOSING_INVITE_TAIL)&&!PROMO_IN_CARD.test(point));
+  const reasons=(end.points??[]).filter(point=>!PROMO_IN_CARD.test(point));
   const count=trackPointCount(track,end.headline);
-  const make=(keep:string[])=>{const room=trackPointRoom(track,end.headline,keep.length+1);return [...keep,closingInvite(dishes,room)];};
-  let points=make(reasons.slice(0,Math.max(0,count-1)));
-  if(points.length>1&&dishes.length&&points.at(-1)===CLOSING_INVITE_TAIL)points=make([]);
+  const room=trackPointRoom(track,end.headline,count);
+  const points=reasons.slice(0,count).map(point=>cleanCut(point,room)).filter((point):point is string=>!!point);
   return slides.map((slide,i)=>i===last?{...slide,points}:slide);
 }
 
@@ -297,7 +296,11 @@ ${STORY_ARC_RULE}
 ${QUESTION_FOCUS_RULE}
 ${EXPLAIN_REASONS_RULE}
 ${NOTES_FIRST_RULE}`,
-    style:`[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. ${HOOK_RULE} 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내)으로, 질문형이나 의외의 사실을 단정하는 문장으로 쓰고, subline(${cover.subline}자 이내 해요체 한 줄)에는 결론(답)을 미리 말하지 말고 궁금증을 키우는 한 줄을 쓰세요(예: "알고 보면 소리 이야기예요". "답은 탄산에 있어요"처럼 답을 밝히면 넘겨 볼 이유가 사라져요). 단정형 표지면 부제에 본문이 답할 질문을 쓰세요. "유혹", "매력", "풍미", "향연", "특별한" 같은 광고 말은 쓰지 마세요(이유 개수는 앱이 덧붙여요). 짧은 글은 그 장 제목을 뒷받침하는 이유·근거만 쓰세요. 먹는 법·고르는 법 같은 써먹을 정보는 notes에 쓰면 올릴 글(캡션)에 들어가요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.`,
+    style:`${EDITOR_ROLE}
+[문체] headline과 points는 모두 가까운 사람에게 말하듯 자연스러운 해요체의 완결된 문장이나 질문으로 쓰세요. "~느껴보기", "~의 세계" 같은 명사형 슬로건, "미식의 향연", "풍미 가득", "놓치지 마세요" 같은 광고 상투어, 느낌표 남발은 금지합니다. 표지가 아닌 각 장은 headline 한 줄(${rule.headline}자 이내, 띄어쓰기 포함)과 ${points}만 씁니다. 글자 수를 꼭 지키세요: 넘치면 카드에서 잘립니다. 짧은 글은 headline을 반복하지 말고 눈이나 입으로 확인할 수 있는 구체적인 정보 하나만 쓰세요. ${HOOK_RULE} 표지 headline은 넘기고 싶게 만드는 훅(${cover.headline}자 이내)으로, 질문형이나 의외의 사실을 단정하는 문장으로 쓰고, subline(${cover.subline}자 이내 해요체 한 줄)에는 결론(답)을 미리 말하지 말고 궁금증을 키우는 한 줄을 쓰세요(예: "알고 보면 소리 이야기예요". "답은 탄산에 있어요"처럼 답을 밝히면 넘겨 볼 이유가 사라져요). 단정형 표지면 부제에 본문이 답할 질문을 쓰세요. "유혹", "매력", "풍미", "향연", "특별한" 같은 광고 말은 쓰지 마세요(이유 개수는 앱이 덧붙여요). 짧은 글은 그 장 제목을 뒷받침하는 이유·근거만 쓰세요. 먹는 법·고르는 법 같은 써먹을 정보는 notes에 쓰면 올릴 글(캡션)에 들어가요. 표지의 points는 빈 배열, 표지가 아닌 장의 subline은 빈 문자열입니다.
+${SCENE_THEN_CAUSE_RULE}
+${SENSE_RULE}
+${COPY_EXEMPLARS}`,
     design:`[디자인] 디자인과 장마다 layout은 앱이 정합니다. design은 {"palette":"warm","style":"${TRACK_STYLES[track]}","theme":"classic","titleFont":"pretendard","bodyFont":"pretendard","tone":"loud","season":"none","look":0} 그대로 두고, 표지 layout은 fullscreen, 나머지 장은 ${track==="photo"?"frame":"browser"}로 쓰세요. 각 slide의 keywords에는 그 장을 대표하는 2~3자 내외의 짧은 키워드 2~3개를 넣고, figure는 빈 문자열로 두세요.`,
     track:track==="photo"
       ?`[갈래: ${TRACK_LABELS.photo}] 모든 장이 사진 한 장으로 꽉 차는 게시물입니다. 사진이 주인공이므로 글은 사진을 보며 바로 읽히는 한 줄이면 충분합니다. 각 장의 visualPrompt는 그 장의 글이 말하는 장면을 먹음직스럽게, 장마다 서로 다른 구도로 쓰세요.`

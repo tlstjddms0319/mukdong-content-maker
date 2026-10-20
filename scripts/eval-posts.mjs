@@ -32,7 +32,7 @@ const { resetTopicPace } = await import("@/features/topics/refreshPace");
 const { slideCopyIssues } = await import("@/features/images/planReview");
 const { scoreImages, expectedFoodFrom } = await import("@/features/images/coverCheck");
 const { createTextClient } = await import("@/lib/ai/textClient");
-const { HOOK_RULE, COMPARISON_RULE, CLOSING_INVITE_TAIL, comparedPair } = await import("@/features/copy/explain");
+const { HOOK_RULE, COMPARISON_RULE, comparedPair } = await import("@/features/copy/explain");
 const { z } = await import("zod");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -101,8 +101,7 @@ for (const [index, topic] of topics.slice(0, POSTS).entries()) {
     post.planProvider = planned.provider;
     post.review = planned.review;
     post.polish = planned.polish ?? null;
-    // 앱은 검수 뒤에 결론 장 맺음말("~을 묵동홍어마을에서 즐겨 보세요")을 붙인다(applyTrack). 그 줄의 길이 지적은 빼고 본다.
-    post.copyIssues = slideCopyIssues(planned.plan, track).filter((issue) => !issue.message.includes(CLOSING_INVITE_TAIL)).map((issue) => `${issue.slide}장: ${issue.message}`);
+    post.copyIssues = slideCopyIssues(planned.plan, track).map((issue) => `${issue.slide}장: ${issue.message}`);
     post.comparison = Boolean(comparedPair(planned.plan.slides[0]?.headline ?? "") ?? comparedPair(topic.title));
   } catch (error) { post.errors.push(`구성안: ${short(error)}`); }
 
