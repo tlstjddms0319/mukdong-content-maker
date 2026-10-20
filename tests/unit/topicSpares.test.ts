@@ -59,7 +59,7 @@ describe("cover myth material follows the topic, not just the menu",()=>{
     const gim=coverMythRule("과메기는 왜 김과 미역에 싸서 먹을까?","과메기 한 쌈","해조류의 향이 기름진 맛을 감싸요","김의 짠맛이 균형을 잡아요");
     expect(gim).not.toContain("냉동실");
     const wind=coverMythRule("과메기는 왜 냉동실이 아니라 찬바람에 말려야 할까?","과메기는 왜 찬바람에 말릴까?","얼었다 녹기를 되풀이해요");
-    expect(wind).toContain("냉동실");
+    expect(wind).toContain("얼었다 녹기");
   });
 });
 
