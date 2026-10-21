@@ -22,6 +22,13 @@ try { process.loadEnvFile(".env.local"); } catch { console.warn(".env.local을 �
 // 운영 저장소를 건드리지 않는다: 주제 추천 라우트는 오래된 초안을 지우고, 모든 AI 호출은 사용 기록을 남긴다.
 delete process.env.SUPABASE_URL; delete process.env.SUPABASE_SECRET_KEY;
 process.env.DATA_DIR = await mkdtemp(path.join(tmpdir(), "post-eval-"));
+// --writer=gemini|anthropic|groq|cloudflare : 글을 쓰는 AI를 고정한다(설정 파일을 임시 데이터 폴더에 써 둔다). 없으면 설정 기본값(automatic: 키 있는 것 중 Claude부터).
+// --judge=... : 평가자 AI. Claude를 붙인 뒤(2026-10-21) Gemini 글 vs Claude 글을 같은 평가자로 견주려고 둔다.
+if (args.writer) {
+  const { DEFAULT_SETTINGS } = await import("@/features/settings/defaults");
+  // readSettings는 textAiRoutingVersion이 1일 때만 저장된 글 AI를 믿는다(repository.ts).
+  await writeFile(path.join(process.env.DATA_DIR, "settings.json"), JSON.stringify({ ...DEFAULT_SETTINGS, textAiProvider: args.writer, textAiRoutingVersion: 1, imageAiRoutingVersion: 1, copyWritingVersion: 1 }));
+}
 if (!process.env.GEMINI_API_KEY) { console.error("GEMINI_API_KEY가 필요해요(글·평가·표지 점검)."); process.exit(1); }
 
 const { POST: topicsRoute } = await import("@/app/api/topics/route");
@@ -88,7 +95,7 @@ for (let round = 0; topics.length < POSTS && round < 6; round++) {
 }
 if (!topics.length) { console.error("주제를 하나도 받지 못했어요."); process.exit(1); }
 
-const judge = createTextClient("automatic");
+const judge = createTextClient(args.judge ?? "automatic");
 const posts = [];
 for (const [index, topic] of topics.slice(0, POSTS).entries()) {
   const n = String(index + 1).padStart(2, "0");
@@ -157,7 +164,7 @@ const avg = (key) => judged.length ? (judged.reduce((sum, post) => sum + post.ju
 const covers = posts.filter((post) => post.coverCheck);
 const report = [
   `# 게시물 결과물 점검 (${new Date().toLocaleString("ko-KR")})`, "",
-  `게시물 ${posts.length}개 · 평가 ${judged.length}개 · 표지 점검 ${covers.length}개`, "",
+  `게시물 ${posts.length}개 · 평가 ${judged.length}개 · 표지 점검 ${covers.length}개 · 글 AI 지정: ${args.writer ?? "자동"} · 평가자: ${judge.provider ?? args.judge ?? "자동"}`, "",
   `구성안을 쓴 AI: ${[...new Set(posts.map((post) => post.planProvider ?? "-"))].join(", ")} · 표지 이미지: ${[...new Set(posts.map((post) => post.imageProvider ?? "-"))].join(", ")}. 운영 앱과 다른 AI(키가 없거나 무효라 다음 순서로 넘어감)로 만들었다면 점수를 운영 품질로 보지 마세요.`, "",
   "## 평균 점수 (1~5)",
   `| 후킹 | 이유 깊이 | 흐름 | 사실 안전 | 올릴 글 | 뻔한 질문 | 흐린 비교 | 표지 사진(10점) | 홍어처럼 보임 |`,

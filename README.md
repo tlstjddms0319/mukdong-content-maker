@@ -142,6 +142,7 @@ PowerShell에서 `./scripts/setup-owner-password.ps1`을 한 번 실행하면 `O
 
 | 변수 | 용도 |
 | --- | --- |
+| `ANTHROPIC_API_KEY` (`ANTHROPIC_TEXT_MODEL`, 기본 `claude-opus-5-5`) | 글 AI 1순위(유료). 키가 있으면 자동 모드에서 Claude부터 쓴다 |
 | `GEMINI_API_KEY` (`GEMINI_TEXT_MODEL`, `GEMINI_FALLBACK_TEXT_MODEL`) | 주제·구성안·올릴 글, 표지 후보 점검 |
 | `GROQ_API_KEY` (`GROQ_TEXT_MODEL`) | 글 AI 예비(무료) |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (`CLOUDFLARE_TEXT_MODEL`) | 이미지 생성 예비(무료 할당량), 선택 시 글 |
