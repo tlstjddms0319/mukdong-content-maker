@@ -26,9 +26,9 @@ describe("structured prompt",()=>{
   });
   it("keeps the skate accuracy rules inside the dish and texture slots",()=>{
     const prompt=buildStructuredImagePrompt(brief({topic:"홍어회는 왜 처음 먹을 때 코가 찡할까?",slide:slide({headline:"홍어회는 왜 코가 찡할까?",visualPrompt:"검은 접시에 줄지어 담긴 홍어회와 초장 종지",keywords:["홍어회"]})}));
-    expect(prompt).toContain("dusty mauve-pink");
+    expect(prompt).toContain("dusty-purple-pink");
     expect(prompt).toContain("never bacon, ham or pork belly");
-    expect(prompt.indexOf("dusty mauve-pink")).toBeLessThan(prompt.indexOf("[Do not]"));
+    expect(prompt.indexOf("dusty-purple-pink")).toBeLessThan(prompt.indexOf("[Do not]"));
     const cooked=buildStructuredImagePrompt(brief({topic:"홍어찜은 왜 쪄도 살이 쫀득할까?",slide:slide({headline:"홍어찜은 왜 쫀득할까?",visualPrompt:"접시에 담긴 김 오르는 홍어찜",keywords:["홍어찜"]})}));
     expect(cooked).toContain("opaque ivory cooked flesh");
     expect(cooked).toContain("never exaggerate the fibers");

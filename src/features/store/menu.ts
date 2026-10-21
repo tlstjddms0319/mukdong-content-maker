@@ -38,10 +38,10 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     // "홍어" 하나만 써도 홍어회로 본다(이 가게 메뉴판의 "홍어사시미"도 홍어회). 홍어무침·홍어애탕·홍어전·홍어찜·홍어라면과
     // 가게 이름(묵동홍어마을)은 빼고 본다. "홍어 애호가"처럼 애탕·애국이 아닌 "애"는 홍어회로 본다.
     match:/홍어\s*(?:회|사시미)|삼합|홍어(?!\s*(?:무침|애\s*(?:탕|국)|탕|전(?!문|통|체|날)|찜|라면|마을))/,
-    look:"Korean hongeo-hoe: hand-cut squarish slices of fermented skate wing about two finger-widths across and 5-8 mm thick, muted dusty mauve-pink flesh with pale grey-white areas, crossed by diagonal rows of fine translucent white cartilage lines, set in loose rows on a black slate board.",
-    lookKo:"손가락 두 마디 크기로 도톰히(5~8mm) 썬 삭힌 홍어 조각(탁한 연보라빛 분홍 살에 회백색, 비스듬한 흰 연골 결, 검은 접시에 줄지어 담김)",
+    look:"Korean hongeo-hoe: flat hand-cut slices of fermented skate wing about 4 x 7 cm and 5-8 mm thick, laid in neat straight rows on a black rectangular board. Each slice has two clearly separate parts with a sharp boundary: a smooth, glossy, translucent dusty-purple-pink flesh with no wrinkles, fibers or fine lines at all, and along one long edge a distinct band of pale ivory cartilage made of thick, evenly spaced parallel ridges like the teeth of a comb, clearly visible as a separate white strip.",
+    lookKo:"검은 직사각 판에 줄 맞춰 놓은 납작한 홍어회 조각(살은 매끈한 보랏빛 분홍, 한쪽 긴 변에만 흰 연골 띠가 빗살처럼 따로 붙고 둘의 경계가 또렷함)",
     plating:"set in loose rows on a black slate board or dark onggi plate; a small dish of chogochujang (red vinegar-chili dip) and coarse salt beside it; when the scene says samhap, a slice of boiled pork belly (suyuk) and a leaf of deep-red aged kimchi (mugeunji) sit next to the skate, never on top of it",
-    texture:"muted dusty mauve-pink flesh with pale grey-white areas, fine translucent white cartilage lines in parallel diagonal rows, cut sides visible, a faint moist sheen; never glossy orange like salmon, never chalk-white",
+    texture:"smooth, glossy, translucent dusty-purple-pink flesh with no wrinkles, fibers or fine lines; the cartilage is a separate band of pale ivory comb-tooth ridges along one long edge with a sharp boundary to the flesh; a faint moist sheen; never glossy orange like salmon, never chalk-white, never wrinkly or fibrous all over",
     seasons:[],moments:"모임·잔칫상·김장철 수육과 함께",
   },
   {
@@ -163,11 +163,19 @@ export function mainMenuOf(...texts:Array<string|undefined>):StoreMenuItem|undef
 // 한 장면의 주인공 메뉴. 장 글(제목·요점·장면)과 주제 글을 함께 본다.
 // 1) 장 글이 주제의 메뉴를 말하면 주제 메뉴, 2) 장 글에 나온 첫 음식(술 제외), 3) 주제 메뉴, 4) 장 글의 술 순서.
 // 예: 과메기 주제의 "막걸리 한 잔 곁들여요" 장 → 과메기, 막걸리 주제의 "미나리전 한 장" 장 → 미나리전. 못 찾으면 undefined.
+// 메뉴 이름 없이 곁들임만 말하는 장은 그 곁들임이 딸린 메뉴가 주인공이다(사장님 지적 2026-10-21: 홍어 주제의 "쪽파의 매운맛이 뒷맛을 끊어요" 장이
+// 홍어 위에 쪽파를 얹은 분홍 덩어리로 그려졌다. 쪽파·김·미역은 과메기 쌈 곁들임이다). "김"은 "김이 오른다"의 김과 겹쳐 조사까지 본다.
+const SIDE_HERO:ReadonlyArray<{menu:string;match:RegExp}>=[{menu:"gwamegi",match:/쪽파|물?미역|김(?:에|을|과|이랑|\s*한\s*장|\s*싸)/}];
+function sideHero(text:string|undefined):StoreMenuItem|undefined {
+  if(!text)return undefined;
+  const hit=SIDE_HERO.find(side=>side.match.test(text));
+  return hit?STORE_MENU.find(item=>item.id===hit.menu):undefined;
+}
 export function heroMenu(slideText:string|undefined,topicText:string|undefined):StoreMenuItem|undefined {
   const inSlide=menuOf(slideText);
   const topic=menuOf(topicText)[0];
   if(topic&&inSlide.some(item=>item.id===topic.id))return topic;
-  return inSlide.find(item=>item.category!=="술")??topic??inSlide[0];
+  return inSlide.find(item=>item.category!=="술")??sideHero(slideText)??topic??inSlide[0];
 }
 
 // 받침에 맞춰 조사를 붙인다. 예: josa("과메기","이","가") → "과메기가", josa("미나리전","이","가") → "미나리전이".

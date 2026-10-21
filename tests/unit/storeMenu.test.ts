@@ -39,6 +39,11 @@ describe("store menu", () => {
     expect(heroMenu("미나리전 한 장을 곁들여요","막걸리 한 잔엔 어떤 안주가 어울릴까?")?.id).toBe("minari-jeon");
     expect(heroMenu("사발에 따라요","막걸리는 왜 사발에 따라 마실까?")?.id).toBe("baedari-makgeolli");
     expect(heroMenu("오늘 이야기","비 오는 날")).toBeUndefined();
+    // 곁들임만 말하는 장(2026-10-21): 쪽파·김·미역은 과메기 쌈이라 주제가 홍어라도 과메기가 주인공.
+    expect(heroMenu("쪽파의 매운맛이 뒷맛을 끊어요 알싸한 자극이 기름진 뒷맛을 씻어 줘요","홍어와 과메기, 겨울에 같이 먹으면 왜 더 맛있을까?")?.id).toBe("gwamegi");
+    expect(heroMenu("김에 싸서 한 입","홍어회는 왜 코가 찡할까?")?.id).toBe("gwamegi");
+    expect(heroMenu("뚝배기에서 김이 올라요","홍어애탕은 왜 국물이 묵직할까?")?.id).toBe("hongeo-aetang");
+    expect(heroMenu("홍어 한 점에 쪽파를 얹어요","홍어회는 왜 코가 찡할까?")?.id).toBe("hongeo-hoe");
   });
 
   it("keeps seasonal menus to their season and all-year menus always", () => {
