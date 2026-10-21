@@ -34,10 +34,11 @@ describe("topic history",()=>{
     expect(new Set(used).size).toBe(used.length);
   });
 
-  it("does not recommend an AI topic that rewords a used topic",()=>{
+  // 사장님 결정(2026-10-21): 했던 주제와 같아도 AI 추천을 거르지 않는다(피할 목록은 프롬프트에 "되도록"으로만).
+  it("keeps an AI topic that rewords a used topic (the avoid list is advice, not a filter)",()=>{
     const make=(title:string,id:string):TopicSuggestion=>({id,title,summary:"요소가 암모니아로 분해되며 다른 세균이 자라기 어려워진다는 원리를 설명합니다.",reason:"궁금해요",audience:"A",imageBrief:"홍어회",season:"",trend:""});
     const {topics}=assembleTopics([make("홍어는 왜 상하지 않고 삭을까요?","a"),make("과메기는 왜 냉동실이 아니라 찬바람에 말릴까?","b"),make("같은 홍어인데 왜 찜이 회보다 향이 셀까?","c")],
       {storeName:"묵동홍어마을",round:0,excludeTitles:[],avoidTitles:["홍어는 왜 상하지 않고 삭을까?"]});
-    expect(topics.map(topic=>topic.title)).not.toContain("홍어는 왜 상하지 않고 삭을까요?");
+    expect(topics.map(topic=>topic.title)).toContain("홍어는 왜 상하지 않고 삭을까요?");
   });
 });

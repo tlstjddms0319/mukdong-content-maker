@@ -238,7 +238,7 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
 export type TopicRejectReason="question"|"hype"|"obvious"|"pair"|"store"|"summary"|"menu"|"long"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
 export const TOPIC_REJECT_LABELS:Record<TopicRejectReason,string>={
   question:"물음표 질문이 아니어서",long:"제목이 너무 길어서(30자 초과)",hype:"과장하거나 독자를 시험하는 말투라서",obvious:"답이 뻔한 질문이라서",pair:"차이를 확인할 수 없는 상표 비교라서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
-  current:"지금 화면 주제와 같아서",recent:"최근에 보여 준 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",photo:"넣은 사진 속 메뉴가 아니어서",
+  current:"지금 화면 주제와 같아서",recent:"최근에 보여 준 주제와 같아서(지금은 거르지 않음)",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",photo:"넣은 사진 속 메뉴가 아니어서",
 };
 function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason|undefined {
   if(!/[?？]["'”’」』)\]\s]*$/.test(topic.title.trim()))return "question";
@@ -304,9 +304,9 @@ export function assembleTopics(suggestions:TopicSuggestion[],options:{storeName:
   const rejected:Partial<Record<TopicRejectReason,number>>={};
   for(const topic of suggestions){
     if(picked.length>=3)break;
-    // 이유는 '최근에 보여 준 주제'를 먼저 센다. 예전에는 뒤에 고른 주제와 메뉴가 겹치면 "메뉴가 겹쳐서"로 잘못 세어져(2026-10-20 점검:
-    // 글자까지 같은 제목이 same-menu로 기록됨) 화면 안내가 틀리고 "한 번 더 묻기"도 건너뛰었다.
-    const reason=recentlyShown(topic)?"recent":problem(topic);
+    // '했던 주제'(이미 만든 게시물·보관함·지운 기록·이 브라우저에서 본 주제)와 같아도 거절하지 않는다(사장님 결정 2026-10-21: 조건에서 빼기).
+    // 피할 목록은 프롬프트에 "되도록 피하기"로만 전하고, 준비된 주제를 고를 때 안 보인 것을 먼저 고르는 데만 쓴다.
+    const reason=problem(topic);
     if(reason)rejected[reason]=(rejected[reason]??0)+1;
     else picked.push(take(topic));
   }
@@ -405,9 +405,9 @@ export async function suggestTopics(input:TopicInput,ai?:TopicAiClient,onFallbac
     let result=await ask(parsed);
     // 셋 다 "이미 보여 준·했던 주제"로 거절되면(사장님 지적 2026-10-13: 앱을 열자마자 준비된 주제만 돌아 반복처럼 보임), 준비된 주제로 넘어가기 전에
     // 거절된 제목을 피할 목록 맨 앞에 두고 한 번만 다시 묻는다. AI는 피할 목록 앞쪽 30개만 보므로, 방금 낸 제목을 또 내는 일이 잦았다.
-    if(result.filled>=3&&((result.rejected.recent??0)+(result.rejected.current??0))>0){
+    if(result.filled>=3&&(result.rejected.current??0)>0){
       const rejectedTitles=result.suggestions.map(topic=>topic.title);
-      console.warn(`[topics] AI 추천 3개가 모두 했던 주제라 거절된 제목을 피해 한 번 더 물어요: ${rejectedTitles.join(" / ").slice(0,200)}`);
+      console.warn(`[topics] AI 추천 3개가 모두 지금 화면 주제라 거절된 제목을 피해 한 번 더 물어요: ${rejectedTitles.join(" / ").slice(0,200)}`);
       result=await ask({...parsed,avoidTitles:[...new Set([...rejectedTitles,...parsed.avoidTitles])].slice(0,300)});
     }
     const {topics,filled,rejected,suggestions}=result;

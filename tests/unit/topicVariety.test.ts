@@ -72,17 +72,14 @@ describe("topic variety", () => {
     expect(topics[2].id).toMatch(/^fallback-/);
   });
 
-  // 최근에 보여 준 주제는 다시 쓰지 않는다(사장님 지적 2026-10-10: 다른 주제 보기를 눌러도 같은 주제가 돌아왔다).
-  it("does not bring back recently shown topics, even reworded", () => {
+  // 사장님 결정(2026-10-21): '했던 주제'와 같아도 거르지 않는다(피할 목록은 프롬프트에 "되도록"으로만). 지금 화면 주제만 거른다.
+  it("keeps AI topics even when they match recently shown ones, but still drops the ones on screen", () => {
     const recent=["과메기는 왜 찬바람이 불면 찾을까?","미나리전엔 왜 막걸리가 생각날까?","홍어애탕은 어떤 국물일까?"];
     const aetang={...make(recent[2]),summary:"찬바람 부는 날 홍어애탕 한 그릇을 소개하고 재료와 맛은 사장님께 확인한 뒤 씁니다."};
     const all=assembleTopics([makeMenu(recent[0]),makeJeon(recent[1]),aetang],{...base,avoidTitles:recent});
-    expect(all.filled).toBe(3);
-    expect(all.rejected).toEqual({recent:3});
-    for(const title of recent)expect(all.topics.map(topic=>topic.title)).not.toContain(title);
-    // 새 제목은 그대로 쓴다.
-    const mixed=assembleTopics([makeMenu(recent[0]),makeJeon("미나리전은 왜 비 오는 날 생각날까?"),aetang],{...base,avoidTitles:recent});
-    expect(mixed.topics[0].title).toBe("미나리전은 왜 비 오는 날 생각날까?");
+    expect(all.filled).toBe(0);
+    expect(all.rejected).toEqual({});
+    expect(all.topics.map(topic=>topic.title)).toEqual(recent);
     // 지금 화면의 제목(excludeTitles)은 여전히 쓰지 않고, 그 이유를 센다.
     const now=assembleTopics([makeMenu(recent[0]),makeJeon("미나리전은 왜 비 오는 날 생각날까?"),{...aetang,title:"홍어애탕은 어떤 국물일까"}],{...base,excludeTitles:[recent[0]]});
     expect(now.topics.map(topic=>topic.title)).not.toContain(recent[0]);
@@ -94,10 +91,10 @@ describe("topic variety", () => {
     expect(filled).toBe(0);
   });
 
-  it("replaces a topic shown recently or already drafted", () => {
+  it("keeps a topic shown recently or already drafted (2026-10-21: not a filter any more)", () => {
     const {topics,filled}=assembleTopics([make("홍어에는 왜 김치를 곁들일까?"),make("홍어는 왜 찬 바다에서 맛이 들까?"),makeMenu("과메기는 왜 겨울에 찾을까?")],{...base,avoidTitles:["홍어에는 왜 김치를 곁들일까?"]});
-    expect(filled).toBe(1);
-    expect(topics.map(topic=>topic.title)).not.toContain("홍어에는 왜 김치를 곁들일까?");
+    expect(filled).toBe(0);
+    expect(topics.map(topic=>topic.title)).toContain("홍어에는 왜 김치를 곁들일까?");
   });
 
   it("rotates the prepared topics away from the ones shown recently", () => {
