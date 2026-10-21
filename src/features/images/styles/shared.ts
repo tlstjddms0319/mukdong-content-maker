@@ -32,7 +32,8 @@ export const STYLE_FONTS={
   chalk:face("Gaegu-Bold.ttf","Gaegu Bold"),                  // 칠판(분필 손글씨)
   marker:face("EastSeaDokdo-Regular.ttf","East Sea Dokdo"),   // 사진 위 낙서(마커 손글씨)
   soft:face("GamjaFlower-Regular.ttf","Gamja Flower"),        // 수채화(둥근 손글씨)
-  dodum:face("GowunDodum-Regular.ttf","Gowun Dodum"),         // 수채화 요점(부드러운 고딕)
+  dodum:face("GowunDodum-Regular.ttf","Gowun Dodum"),
+  batang:face("GowunBatang-Bold.ttf","Gowun Batang Bold"),   // 홈페이지 제목 명조(styles/homepage.ts)         // 수채화 요점(부드러운 고딕)
   mono:face("NanumGothicCoding-Bold.ttf","NanumGothicCoding Bold"), // 모던 그리드·티켓(번호·꼬리표)
   display:face("AbrilFatface-Regular.ttf","Abril Fatface"),   // 푸드 매거진 표지(제호, 영문 전용)
   condensed:face("BebasNeue-Regular.ttf","Bebas Neue"),       // 티켓·라벨(좁은 영문 대문자, 영문 전용)

@@ -4,8 +4,8 @@ import { createFallbackCarouselPlan } from "@/features/images/carousel";
 
 describe("갈래 모양 고르기",()=>{
   it("갈래마다 모양 이름이 있고 기존 모양(0번)도 들어 있다",()=>{
-    expect(TRACK_LOOKS.photo.map(look=>look.name)).toEqual(["기본","매거진","반반","숙성 도장","순서 카드","레트로 간판","원형 그릇","먹색 액자","경매표","박물관 라벨","풀블리드","화이트 매거진"]);
-    expect(TRACK_LOOKS.text.map(look=>look.name)).toEqual(["기본","메모지","노포 메뉴판","한지 붓글씨","호외 신문","공지 안내판","큰 한 글자","승차권","풀블리드","화이트 매거진"]);
+    expect(TRACK_LOOKS.photo.map(look=>look.name)).toEqual(["기본","매거진","반반","숙성 도장","순서 카드","레트로 간판","원형 그릇","먹색 액자","경매표","박물관 라벨","풀블리드","홈페이지"]);
+    expect(TRACK_LOOKS.text.map(look=>look.name)).toEqual(["기본","메모지","노포 메뉴판","한지 붓글씨","호외 신문","공지 안내판","큰 한 글자","승차권","풀블리드","홈페이지"]);
   });
   // 사장님 결정(2026-10-21): 새 게시물은 늘 풀블리드. 나머지 모양은 '모양 바꾸기'에서만.
   it("새 게시물의 모양은 늘 풀블리드다",()=>{
@@ -37,6 +37,6 @@ describe("확인 화면의 모양 표시",()=>{
     expect(trackLookOf({input:{track:"text"} as never,plan:{...plan,design:{...plan.design,look:2}}})).toEqual({name:"노포 메뉴판",number:3,count:10,track:"text",look:2});
     expect(trackLookOf({input:{} as never,plan})).toBeNull();
     // 저장된 모양 번호가 목록보다 크면(모양을 줄였을 때) 마지막 모양으로 본다
-    expect(trackLookOf({input:{track:"text"} as never,plan:{...plan,design:{...plan.design,look:15}}})?.name).toBe("화이트 매거진");
+    expect(trackLookOf({input:{track:"text"} as never,plan:{...plan,design:{...plan.design,look:15}}})?.name).toBe("홈페이지");
   });
 });
