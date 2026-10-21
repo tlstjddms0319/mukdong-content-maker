@@ -8,7 +8,7 @@ import { StudioSnapshotSchema, type StudioSnapshotInput } from "@/features/draft
 import { normalizeCardLayout, photosNeeded, type CardLayout } from "./design";
 import { AnalyzeResponseSchema, TOPIC_TAG, photoNote, type FoodBox } from "./photoAnalysis";
 import type { StyleId } from "./styleCatalog";
-import { TRACK_LOOKS, TRACK_STYLES, nextTrackLook, pickTrackLook, type CarouselTrack } from "./track";
+import { TRACK_LOOKS, TRACK_STYLES, nextTrackLook, pickTrackLook, type CarouselTrack, DEFAULT_TRACK_LOOK } from "./track";
 import { readJsonResponse } from "@/lib/http/readJson";
 import { teaserText } from "./teaser";
 import { fillWithPhotoViews, fitPlanToPhotos, matchPhotosToSlides, sceneFallbackSlide, swapPhoto, type PhotoView } from "./photoCarousel";
@@ -453,7 +453,9 @@ const boxesField=(slots:readonly number[])=>{const boxes=slots.map(i=>state.phot
 async function composePhotoSlide(plan:CarouselPlan,index:number,slots:number[],views?:readonly PhotoView[]):Promise<ApprovedImage>{
   const drawnAt=positionKey(state,index);
   const slide=plan.slides[index];
-  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide,styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:index+1,count:1,...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views),...boxesField(slots)}:{})})});
+  // 글 중심 풀블리드 본문(사진 없는 장)은 표지 그림(글자 없는 원본)을 흐린 배경으로 쓴다(styles/fullBleed.ts).
+  const backdrop=!slots.length&&index>0&&state.input.track==="text"&&plan.design?.look===DEFAULT_TRACK_LOOK.text?(state.cover?.referencePreview??state.cover?.preview):undefined;
+  const response=await fetch("/api/images/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase(),slideLayout:"card",slide,styleAnchor:plan.styleAnchor,design:plan.design,slideIndex:index+1,count:1,...(backdrop?{backdrop}:{}),...(slots.length?{photos:slots.map(i=>state.photos[i].preview),...viewsField(views),...boxesField(slots)}:{})})});
   const data=await readJsonResponse(response);
   if(!response.ok)throw new Error(data.message||"카드를 만들지 못했어요.");
   if(!Array.isArray(data.images)||data.images.length!==1)throw new Error("카드는 정확히 1장이 필요합니다.");

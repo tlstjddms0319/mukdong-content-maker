@@ -28,6 +28,8 @@ export const ImageBriefSchema = z.object({
   referenceImage: z.string().regex(/^data:image\/(?:png|jpeg|webp);base64,/).max(18_000_000).optional(),
   // dish: 사장님 사진 속 음식(종류·양념·썬 모양·그릇)은 그대로, 장면·구도·곁들임은 이 장 글에 맞게 새로(사진 중심의 모자란 장).
   referenceMode:z.enum(["source","style","continuity","dish"]).optional(),
+  // 사진 없는 장(글 중심 본문)의 배경으로 흐려 깔 표지 그림(글자 없는 원본). 풀블리드 모양일 때 화면이 보낸다(styles/fullBleed.ts).
+  backdrop:z.string().regex(/^data:image\/(?:png|jpeg|webp);base64,/).max(8_000_000).optional(),
   // 실제 사진으로 만드는 캐러셀: 이 장에 넣을 사진들(사장님이 올린 사진). 있으면 이미지 AI를 부르지 않고 바로 카드를 그린다.
   photos:z.array(z.string().regex(/^data:image\/(?:png|jpeg|webp);base64,/).max(8_000_000)).min(1).max(3).optional(),
   // 표지+2장 파노라마: 같은 사진을 표지(left)와 2번째 장(right)에 반씩 쓴다(render/panorama.ts).

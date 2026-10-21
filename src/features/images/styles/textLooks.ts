@@ -5,6 +5,8 @@ import { STYLE_FONTS, brandSeal, emphasisOf, snap, type StyleContent } from "./s
 import { countLines, fitLines, footerRow, logoMark, reasonMark, storeCardBlock, type TrackSurface } from "./trackKit";
 import type { TrackLook } from "./trackLooks";
 import { renderTextLookPrint } from "./textLooksPrint";
+import { renderFullBleedText } from "./fullBleed";
+import { renderWhiteMagazineText } from "./whiteMagazine";
 
 // 글 중심의 추가 모양(사장님 지적 2026-10-12: 게시물마다 같은 템플릿). slide.variant로 고른다(0은 textFocus.ts의 기본 모양).
 //   1 메모지 : 줄 노트 종이에 손글씨(개구). 왼쪽 강조색 여백 선, 표지 사진은 테이프로 붙인 인화지처럼.
@@ -227,6 +229,9 @@ async function hanjiCard(photo:Buffer|undefined,content:StyleContent,index:numbe
 }
 
 export function renderTextLook(look:number,photo:Buffer|undefined,content:StyleContent,index:number,colors:TrackLook):Promise<Buffer>|null {
+  // 8 풀블리드(기본)·9 화이트 매거진(2026-10-21). 풀블리드 본문은 표지 그림을 흐린 배경으로 받는다(textFocus.ts가 넘겨 준다).
+  if(look===8)return renderFullBleedText(photo,content,index);
+  if(look===9)return renderWhiteMagazineText(photo,content,index);
   if(look>=4)return renderTextLookPrint(look,photo,content,index,colors);
   if(look===1)return content.cover?memoCover(photo,content,colors):memoBody(content,index,colors);
   if(look===2)return menuBoard(photo,content,index,colors);

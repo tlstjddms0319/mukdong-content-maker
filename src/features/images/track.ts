@@ -46,13 +46,16 @@ export const trackDesign=(track:CarouselTrack,palette:PaletteId=DEFAULT_DESIGN.p
 // manual: 자동 선택에서 빼고 확인 화면 '모양 바꾸기'에서 직접 고를 때만 쓴다. 원형 그릇·먹색 액자는 모양 특성상 사진이
 // 화면의 20~37%뿐이라(사진이 주인공이어야 한다는 사장님 의견, 2026-10-12) 자동으로는 고르지 않는다.
 export const TRACK_LOOKS:Record<CarouselTrack,ReadonlyArray<{name:string;manual?:boolean}>>={
-  photo:[{name:"기본"},{name:"매거진"},{name:"반반"},{name:"숙성 도장"},{name:"순서 카드"},{name:"레트로 간판"},{name:"원형 그릇",manual:true},{name:"먹색 액자",manual:true},{name:"경매표"},{name:"박물관 라벨"}],
-  text:[{name:"기본"},{name:"메모지"},{name:"노포 메뉴판"},{name:"한지 붓글씨"},{name:"호외 신문"},{name:"공지 안내판"},{name:"큰 한 글자"},{name:"승차권"}],
+  photo:[{name:"기본"},{name:"매거진"},{name:"반반"},{name:"숙성 도장"},{name:"순서 카드"},{name:"레트로 간판"},{name:"원형 그릇",manual:true},{name:"먹색 액자",manual:true},{name:"경매표"},{name:"박물관 라벨"},{name:"풀블리드"},{name:"화이트 매거진"}],
+  text:[{name:"기본"},{name:"메모지"},{name:"노포 메뉴판"},{name:"한지 붓글씨"},{name:"호외 신문"},{name:"공지 안내판"},{name:"큰 한 글자"},{name:"승차권"},{name:"풀블리드"},{name:"화이트 매거진"}],
 };
 // 새 게시물의 모양: 직접 고를 때만 쓰는 모양(manual)과 바로 전 게시물 모양(previous)을 빼고 고르게 하나. previous가 범위 밖이면 무시한다.
-export function pickTrackLook(track:CarouselTrack,previous?:number,random:()=>number=Math.random):number {
-  const choices=TRACK_LOOKS[track].map((look,i)=>look.manual?-1:i).filter(i=>i>=0&&i!==previous);
-  return choices[Math.min(choices.length-1,Math.floor(random()*choices.length))];
+// 새 게시물의 기본 모양(사장님 결정 2026-10-21): 풀블리드로 고정. 나머지 모양은 확인 화면 '모양 바꾸기'에서 직접 고를 때만 쓴다
+// (예전에는 바로 전 모양만 빼고 무작위로 골라 게시물마다 테마가 바뀌어 피드에 통일감이 없었다).
+export const DEFAULT_TRACK_LOOK:Record<CarouselTrack,number>={photo:TRACK_LOOKS.photo.findIndex(look=>look.name==="풀블리드"),text:TRACK_LOOKS.text.findIndex(look=>look.name==="풀블리드")};
+// previous·random은 예전 호출 모양을 지키려고 남겨 둔 인자(지금은 쓰지 않는다).
+export function pickTrackLook(track:CarouselTrack,_previous?:number,_random?:()=>number):number {
+  return DEFAULT_TRACK_LOOK[track];
 }
 // 다음 모양(끝이면 처음). 확인 화면은 이제 목록에서 직접 고르지만, 번호 없이 부르면 이것을 쓴다.
 export const nextTrackLook=(track:CarouselTrack,current:number)=>(current+1)%TRACK_LOOKS[track].length;
@@ -167,11 +170,15 @@ export const TRACK_FIT={
   text:{headline:28,oneLineHeadline:14},
 } as const;
 // 짧은 글 자리: 몇 개까지(count), 하나에 몇 자까지(room). 글 중심은 제목 줄 수와 짧은 글 개수에 따라 자리가 다르다.
-export function trackPointRoom(track:CarouselTrack,headline:string,count:number):number {
+export function trackPointRoom(track:CarouselTrack,headline:string,count:number,roomy=false):number {
   if(track==="photo")return 46;
+  // 풀블리드·화이트 매거진(2026-10-21)은 글 덩어리를 한가운데 크게 두어 두 줄 제목 아래에도 원인 한 줄(34자)이 들어간다.
+  if(roomy)return 34;
   if(headline.length>TRACK_FIT.text.oneLineHeadline)return 18;
   return count>=2?18:34;
 }
+// 글 덩어리 자리가 넉넉한 모양(풀블리드·화이트 매거진): 글 중심에서 두 줄 제목이어도 짧은 글 하나를 34자까지 둔다.
+export const roomyTextLook=(track:CarouselTrack,variant:number|undefined)=>track==="text"&&variant!==undefined&&/풀블리드|화이트 매거진/.test(TRACK_LOOKS.text[variant]?.name??"");
 export const trackPointCount=(track:CarouselTrack,headline:string):number=>
   track==="text"&&headline.length>TRACK_FIT.text.oneLineHeadline?1:TRACK_COPY[track].points;
 
@@ -236,7 +243,8 @@ export function fitTrackCopy(slide:CarouselSlidePlan,track:CarouselTrack,options
     .filter((point,i,list)=>list.findIndex(other=>same(other,point))===i);
   // 두 개를 넣을 자리로 먼저 맞춰 보고, 하나만 남으면 하나일 때의 자리로 다시 맞춘다(글 중심 한 줄 제목은 하나면 더 길게 들어간다).
   const most=trackPointCount(track,headline);
-  const fitAll=(count:number)=>candidates.map(point=>cleanCut(point,trackPointRoom(track,headline,count))).filter((point):point is string=>!!point).slice(0,count);
+  const roomy=roomyTextLook(track,slide.variant);
+  const fitAll=(count:number)=>candidates.map(point=>cleanCut(point,trackPointRoom(track,headline,count,roomy))).filter((point):point is string=>!!point).slice(0,count);
   let points=fitAll(most);
   if(points.length<2)points=fitAll(1);
   return {headline,subline:"",points};
