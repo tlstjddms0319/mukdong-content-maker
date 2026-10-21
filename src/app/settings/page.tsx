@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage(){
   await requireOwnerPage();
   const settings=await readSettings().catch(()=>AppSettingsSchema.parse(DEFAULT_SETTINGS));
-  const keys={gemini:Boolean(process.env.GEMINI_API_KEY),groq:Boolean(process.env.GROQ_API_KEY),cloudflare:Boolean(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN),openai:Boolean(process.env.OPENAI_API_KEY),higgsfield:Boolean(process.env.HF_API_KEY_ID?.trim()&&process.env.HF_API_KEY_SECRET?.trim())};
+  const keys={anthropic:Boolean(process.env.ANTHROPIC_API_KEY?.trim()),gemini:Boolean(process.env.GEMINI_API_KEY),groq:Boolean(process.env.GROQ_API_KEY),cloudflare:Boolean(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN),openai:Boolean(process.env.OPENAI_API_KEY),higgsfield:Boolean(process.env.HF_API_KEY_ID?.trim()&&process.env.HF_API_KEY_SECRET?.trim())};
   return <WizardShell step="topic" section="settings">
     <h1>설정</h1>
     <p className="lead">인스타그램 연결과 휴대폰 알림, 가게 계정만 확인하면 돼요.</p>

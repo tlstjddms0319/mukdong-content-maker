@@ -6,8 +6,9 @@ import { readJsonResponse } from "@/lib/http/readJson";
 
 // 설정 화면 "AI 사용량". 각 AI가 남은 무료 한도를 API로 알려 주지 않아서(Groq만 예외),
 // 앱이 직접 센 오늘·이번 달 사용 횟수와 마지막 한도 초과 시각을 보여 주고, 정확한 남은 양은 대시보드 링크로 안내한다.
-type Connections={gemini:boolean;groq:boolean;cloudflare:boolean;openai:boolean;higgsfield:boolean};
+type Connections={anthropic:boolean;gemini:boolean;groq:boolean;cloudflare:boolean;openai:boolean;higgsfield:boolean};
 const ROWS:Array<{id:UsageProvider;label:string;unit:string;key:keyof Connections;dashboard:string;dashboardLabel:string}>=[
+  {id:"anthropic",label:"Claude 문안",unit:"회",key:"anthropic",dashboard:"https://console.anthropic.com/settings/usage",dashboardLabel:"Anthropic 사용량"},
   {id:"gemini",label:"Gemini 문안",unit:"회",key:"gemini",dashboard:"https://aistudio.google.com/usage",dashboardLabel:"AI Studio 사용량"},
   {id:"gemini-vision",label:"Gemini 사진 점검",unit:"장",key:"gemini",dashboard:"https://aistudio.google.com/usage",dashboardLabel:"AI Studio 사용량"},
   {id:"groq",label:"Groq 문안(예비)",unit:"회",key:"groq",dashboard:"https://console.groq.com/settings/limits",dashboardLabel:"Groq 한도"},

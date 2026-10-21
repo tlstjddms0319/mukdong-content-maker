@@ -6,7 +6,7 @@ export const AppSettingsSchema = z.object({
   imageCandidateCount: z.union([z.literal(1), z.literal(3), z.literal(5)]),
   imageAspectRatio: z.enum(["4:5", "1:1", "9:16"]),
   copyLength: z.enum(["short", "medium", "detailed"]),
-  textAiProvider: z.enum(["automatic", "gemini", "groq", "cloudflare"]),
+  textAiProvider: z.enum(["automatic", "anthropic", "gemini", "groq", "cloudflare"]),
   imageAiProvider: z.enum(["automatic", "higgsfield", "cloudflare", "openai"]),
   imageQuality: z.enum(["medium","high"]).default("medium"),
   // 브랜드 키트: 카드 바닥글에 가게 이름과 함께 찍을 Instagram 계정. 비우면 가게 이름만 찍는다. "@"는 있어도 없어도 된다.

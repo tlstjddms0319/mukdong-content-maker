@@ -14,7 +14,7 @@ describe("AI usage card", () => {
       stat("gemini",3,40,{month:counter(40,{failures:2,quota:1}),lastQuota:now}),stat("gemini-vision",0,6),stat("groq",1,5),stat("cloudflare",0,0),
       stat("higgsfield",2,12),stat("cloudflare-image",0,0),stat("openai-image",0,0),
     ]},cutout:{used:4,budget:20}})})));
-    render(<AiUsageCard connections={{gemini:true,groq:true,cloudflare:false,openai:false,higgsfield:true}}/>);
+    render(<AiUsageCard connections={{anthropic:false,gemini:true,groq:true,cloudflare:false,openai:false,higgsfield:true}}/>);
     expect(await screen.findByText("Gemini 문안")).toBeInTheDocument();
     expect(screen.getByText(/오늘 3회 · 이번 달 40회 · 실패 2번 · 마지막 한도 초과 오늘/)).toBeInTheDocument();
     expect(screen.getByText(/남은 요청 987 \/ 1,000/)).toBeInTheDocument();
@@ -30,7 +30,7 @@ describe("AI usage card", () => {
     vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({usage:{month:"2026-10",today:"2026-10-10",groq:null,providers:[
       stat("higgsfield",0,14,{month:counter(14,{failures:88}),lastError:{at:now,status:503,reason:"failed",detail:"Grok Image 2.0 503 POST /xai/grok-imagine-image-2.0: overloaded"},reasons:{rejected:20,timeout:60,failed:8}}),
     ]},cutout:null})})));
-    render(<AiUsageCard connections={{gemini:false,groq:false,cloudflare:false,openai:false,higgsfield:true}}/>);
+    render(<AiUsageCard connections={{anthropic:false,gemini:false,groq:false,cloudflare:false,openai:false,higgsfield:true}}/>);
     expect(await screen.findByText(/실패 이유: 시간 초과 60, 모델이 요청 거절 20, 작업 실패 8\. 마지막 실패 오늘/)).toBeInTheDocument();
     expect(screen.getByText(/코드 503\) — Grok Image 2.0 503 POST/)).toBeInTheDocument();
   });

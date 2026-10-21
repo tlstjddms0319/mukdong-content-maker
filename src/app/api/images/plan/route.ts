@@ -16,7 +16,7 @@ export async function POST(request:Request) { const denied=await ownerApiError()
   // 갈래(사진 중심·글 중심)가 오면 장 수는 AI가 4~9장 중에서 정한다(track.ts). 기본 문안(AI 없음)만 5장이다.
   const input={data:withTrackCount(parsed.data)};
 
-  let provider:"gemini"|"groq"|"cloudflare"|"fallback"="fallback";
+  let provider:"anthropic"|"gemini"|"groq"|"cloudflare"|"fallback"="fallback";
   // AI 답은 검사 전에 고칠 수 있는 것(긴 요점·장 순서 이름·같은 장면 등)을 고쳐 쓴다(planRepair.ts). 고친 내용은 로그로 남긴다.
   const fixes:string[]=[];
   const requestedPlanSchema=lenientPlanSchema(input.data.track?TRACK_SLIDE_RANGE:input.data.slideCount,fixes);
