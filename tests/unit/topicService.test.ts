@@ -17,25 +17,16 @@ describe("topic service", () => {
     await expect(suggestTopics(input, { suggest:async () => topics })).resolves.toEqual(topics.map(topic=>({...topic,season:"",trend:""})));
   });
 
-  // 사장님 지적(2026-10-13): 앱을 열자마자 준비된 주제만 돌아 반복처럼 보임 — AI 추천 3개가 모두 "이미 보여 준 주제"로 거절돼서였다.
-  it("asks the AI once more with the rejected titles before falling back to prepared topics", async () => {
-    const titled=(titles:string[],prefix:string)=>titles.map((title,index)=>({ id:`${prefix}-${index}`, title, summary:"홍어무침은 식초의 산이 암모니아를 붙잡아 향이 덜 느껴지고, 과메기는 찬바람에 얼었다 녹으며 마르는 원리를 설명합니다.", reason:"궁금해요", audience:"A" as const, imageBrief:"접시", season:"", trend:"" }));
-    const stale=["과메기는 왜 냉동실이 아니라 찬바람에 말려야 할까?","홍어무침은 채소에서 왜 물이 많이 생기지 않을까?","송년회 술자리에서 홍어무침은 왜 빠지지 않고 찾게 될까?"];
-    const fresh=["생선회와 달리 홍어회는 왜 삭혀도 상하지 않을까?","같은 홍어인데 왜 찜이 회보다 향이 셀까?","청어 과메기와 꽁치 과메기는 왜 기름진 맛이 다를까?"];
-    const seen:string[][]=[];
-    const suggest=vi.fn(async (value:{avoidTitles?:string[]}) => { seen.push(value.avoidTitles??[]); return seen.length===1?titled(stale,"a"):titled(fresh,"b"); });
+  // 사장님 결정(2026-10-21): '했던 주제'는 거르지 않는다. 피할 목록에 있는 제목이 와도 그대로 쓰고, 다시 묻지 않는다.
+  it("accepts AI topics that match the avoid list and does not ask again", async () => {
+    const titled=(titles:string[],prefix:string)=>titles.map((title,index)=>({ id:`${prefix}-${index}`, title, summary:"홍어무침은 식초의 산이 암모니아를 붙잡아 향이 덜 느껴지고, 과메기는 찬바람에 얼었다 녹기를 되풀이하며 마릅니다. 확인된 원리로 설명합니다.", reason:"이유", audience:"A" as const, imageBrief:"사진", season:"", trend:"" }));
+    const stale=["과메기는 왜 냉동실이 아니라 찬바람에 말려야 할까?","홍어무침은 채소에서 왜 물이 많이 생기지 않을까?","생선회와 달리 홍어회는 왜 삭혀도 상하지 않을까?"];
+    const suggest=vi.fn(async () => titled(stale,"a"));
     const fallback=vi.fn();
     const result=await suggestTopics({...input,avoidTitles:stale},{suggest},fallback);
-    expect(suggest).toHaveBeenCalledTimes(2);
-    expect(seen[1].slice(0,3)).toEqual(stale);
-    expect(result.map(topic=>topic.title)).toEqual(fresh);
+    expect(suggest).toHaveBeenCalledTimes(1);
+    expect(result.map(topic=>topic.title)).toEqual(stale);
     expect(fallback).not.toHaveBeenCalled();
-    // 두 번째도 모두 거절되면 그때 준비된 주제로 간다.
-    const stubborn=vi.fn(async () => titled(stale,"c"));
-    const fell=vi.fn();
-    await suggestTopics({...input,avoidTitles:stale},{suggest:stubborn},fell);
-    expect(stubborn).toHaveBeenCalledTimes(2);
-    expect(fell).toHaveBeenCalledWith(expect.stringContaining("recent"),undefined,expect.objectContaining({recent:3}));
   });
 
   it("offers three question topics with distinct menus, at least one beyond hongeo and samhap, in every offline round", async () => {

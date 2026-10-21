@@ -15,24 +15,22 @@ const jeon=(title:string)=>({...make(title),summary:"비 오는 날 미나리전
 const base={storeName:"묵동홍어마을",round:0,excludeTitles:[],avoidTitles:[]};
 
 describe("spare topics fill rejected slots",()=>{
-  it("uses the 4th~6th suggestions when the first ones were recently shown, without counting unused spares as rejected",()=>{
+  // 사장님 결정(2026-10-21): '했던 주제'는 거르지 않으므로 앞의 셋이 그대로 쓰이고, 예비는 규칙에 걸린 자리에만 들어간다.
+  it("keeps the first three even when they match the avoid list, and uses a spare only for a rule-breaking slot",()=>{
     const recent=["홍어회는 왜 처음 먹을 때 코가 먼저 찡할까?","과메기는 왜 냉동실이 아니라 찬바람에 말려야 할까?"];
     const {topics,filled,rejected}=assembleTopics([
       make(recent[0]),gwamegi(recent[1]),jeon("미나리전은 왜 비 오는 날 생각날까?"),
       make("홍어회 흰 줄은 왜 씹어 먹을까?"),gwamegi("과메기는 왜 김에 싸 먹을까?"),jeon("미나리전엔 왜 초간장이 어울릴까?"),
     ],{...base,avoidTitles:recent});
-    expect(topics.map(topic=>topic.title)).toEqual(["미나리전은 왜 비 오는 날 생각날까?","홍어회 흰 줄은 왜 씹어 먹을까?","과메기는 왜 김에 싸 먹을까?"]);
+    expect(topics.map(topic=>topic.title)).toEqual([recent[0],recent[1],"미나리전은 왜 비 오는 날 생각날까?"]);
     expect(filled).toBe(0);
-    expect(rejected).toEqual({recent:2});
-  });
-  it("counts a recently shown title as 'recent', not as a menu clash with a later pick",()=>{
-    const recent=["막걸리는 왜 기름진 전과 함께 먹으면 더 개운할까?"];
-    const {rejected}=assembleTopics([
-      {...make(recent[0]),summary:"막걸리와 기름진 전을 함께 먹는 장면에서 시작해 탄산과 산미가 입안을 씻어 주는 원리를 설명합니다."},
-      {...make("생막걸리와 살균 막걸리는 무엇이 다를까?"),summary:"막걸리 두 종류를 견주어 효모가 살아 있는지에 따라 맛과 보관이 어떻게 달라지는지 설명합니다."},
-      gwamegi("과메기는 왜 김에 싸 먹을까?"),
-    ],{...base,avoidTitles:recent});
-    expect(rejected).toEqual({recent:1});
+    expect(rejected).toEqual({});
+    const broken=assembleTopics([
+      make("홍어회 즐기기"),gwamegi(recent[1]),jeon("미나리전은 왜 비 오는 날 생각날까?"),
+      make("홍어회 흰 줄은 왜 씹어 먹을까?"),
+    ],base);
+    expect(broken.topics.map(topic=>topic.title)).toEqual([recent[1],"미나리전은 왜 비 오는 날 생각날까?","홍어회 흰 줄은 왜 씹어 먹을까?"]);
+    expect(broken.rejected).toEqual({question:1});
   });
 });
 
