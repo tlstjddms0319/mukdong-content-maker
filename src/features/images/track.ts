@@ -54,6 +54,7 @@ export const TRACK_LOOKS:Record<CarouselTrack,ReadonlyArray<{name:string;manual?
 // (예전에는 바로 전 모양만 빼고 무작위로 골라 게시물마다 테마가 바뀌어 피드에 통일감이 없었다).
 export const DEFAULT_TRACK_LOOK:Record<CarouselTrack,number>={photo:TRACK_LOOKS.photo.findIndex(look=>look.name==="풀블리드"),text:TRACK_LOOKS.text.findIndex(look=>look.name==="풀블리드")};
 // previous·random은 예전 호출 모양을 지키려고 남겨 둔 인자(지금은 쓰지 않는다).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function pickTrackLook(track:CarouselTrack,_previous?:number,_random?:()=>number):number {
   return DEFAULT_TRACK_LOOK[track];
 }
