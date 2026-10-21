@@ -235,9 +235,9 @@ export function fallbackTopics(round=0,excludeTitles:readonly string[]=[],season
 // 주제 한 개가 기본 조건을 못 지키는 이유(지키면 undefined).
 // - 제목 끝 물음표 뒤의 따옴표·괄호·공백은 봐준다(AI가 "…일까?" 처럼 따옴표로 감싸 보내곤 한다).
 // - 가게 메뉴는 제목과 설명을 함께 본다(제목에만 메뉴 이름을 쓴 주제를 버리지 않게).
-export type TopicRejectReason="question"|"hype"|"obvious"|"pair"|"store"|"summary"|"menu"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
+export type TopicRejectReason="question"|"hype"|"obvious"|"pair"|"store"|"summary"|"menu"|"long"|"current"|"recent"|"duplicate"|"same-menu"|"photo";
 export const TOPIC_REJECT_LABELS:Record<TopicRejectReason,string>={
-  question:"물음표 질문이 아니어서",hype:"과장하거나 독자를 시험하는 말투라서",obvious:"답이 뻔한 질문이라서",pair:"차이를 확인할 수 없는 상표 비교라서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
+  question:"물음표 질문이 아니어서",long:"제목이 너무 길어서(30자 초과)",hype:"과장하거나 독자를 시험하는 말투라서",obvious:"답이 뻔한 질문이라서",pair:"차이를 확인할 수 없는 상표 비교라서",store:"제목에 가게 이름이 있어서",summary:"설명이 너무 짧아서",menu:"가게 메뉴와 이어지지 않아서",
   current:"지금 화면 주제와 같아서",recent:"최근에 보여 준 주제와 같아서",duplicate:"같은 제목이 겹쳐서","same-menu":"다른 주제와 메뉴가 겹쳐서",photo:"넣은 사진 속 메뉴가 아니어서",
 };
 function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason|undefined {
@@ -246,6 +246,8 @@ function basicsProblem(topic:TopicSuggestion,storeName:string):TopicRejectReason
   if(HOOK_HYPE.test(topic.title)||HOOK_DARE.test(topic.title))return "hype";
   // 음식의 이름난 특징을 그대로 묻는 질문("홍어애탕 국물은 왜 고소하면서 진할까?")은 답이 뻔하다(explain.ts obviousQuestion).
   if(obviousQuestion(topic.title))return "obvious";
+  // 5차 점검(2026-10-21): 실마리 문장을 제목 앞에 붙여 35자가 넘는 제목이 나왔다. 카드 표지 두 줄(30자)을 넘으면 거절.
+  if(topic.title.trim().length>30)return "long";
   if(topic.title.includes(storeName))return "store";
   if(topic.summary.trim().length<30)return "summary";
   if(!menuOf(`${topic.title} ${topic.summary}`).length)return "menu";

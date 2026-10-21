@@ -141,8 +141,9 @@ export function principleTopicHints(usedTitles:readonly string[]=[]):string {
   }
   const lines=[...byMenu.entries()].map(([menu,hints])=>`- ${menu}: ${hints.join(" / ")}`).join("\n");
   // 의외성 큰(3) 오해는 따로 앞세운다: 독자가 멈추는 건 "몰랐던 반전"이지 "원래 그런 음식" 설명이 아니다.
-  const big=PRINCIPLE_NOTES.filter(note=>!used.has(note.id)&&note.surprise===3&&note.hook).map(note=>`"${note.hook}"(${note.hint})`);
-  const bigBlock=big.length?`[의외성 큰 실마리 — 3개 중 2개 이상은 되도록 여기서, 질문은 새로 쓰되 이 반전을 담아] ${big.join(", ")}\n`:"";
+  // 표지 예(hook)는 주지 않는다: 5차 점검(2026-10-21)에서 AI가 그 문장을 제목 앞에 그대로 붙여 "매운맛은 맛이 아니라 통증인데 왜 …"처럼 35자가 넘었다.
+  const big=PRINCIPLE_NOTES.filter(note=>!used.has(note.id)&&note.surprise===3&&note.hook).map(note=>`오해 "${note.myth}" → 실은 ${note.hint}`);
+  const bigBlock=big.length?`[의외성 큰 실마리 — 3개 중 2개 이상은 되도록 여기서. 제목은 25자 안의 짧은 질문 하나로 새로 쓰고, 반전 내용은 summary에 담으세요. 실마리 문장을 제목 앞에 붙이지 마세요] ${big.join(", ")}\n`:"";
   return `${bigBlock}[원리 노트 실마리] 아래는 확인해 둔 원리의 실마리입니다(참고 데이터). 주제 질문은 이런 원리로 분명하게 답할 수 있는 "왜" 질문으로 고르세요. 그럴듯하지만 실제 원리로 답할 수 없는 질문(예: "찬바람 불 때 애탕은 왜 진할까?"처럼 원인이 없는 질문)은 고르지 마세요. 같은 실마리로 만든 질문이 참고 데이터의 recentTitles에 이미 있으면 그 질문을 그대로나 말만 바꿔 내지 말고, 같은 원리의 다른 장면·다른 궁금증이나 다른 실마리를 고르세요.
 ${lines}`;
 }
