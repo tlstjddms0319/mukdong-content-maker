@@ -9,7 +9,8 @@ vi.mock("server-only", () => ({}));
 
 const schema = z.object({ ok:z.boolean() });
 const fake = (provider:TextAiClient["provider"], generateJson:TextAiClient["generateJson"]):TextAiClient => ({ provider, generateJson });
-const factories = (overrides:Partial<Record<TextAiClient["provider"], () => TextAiClient>>) => ({
+const factories = (overrides:Partial<Record<TextAiClient["provider"], () => TextAiClient>>):Record<TextAiClient["provider"], () => TextAiClient> => ({
+  anthropic:() => { throw new Error("no key"); },
   gemini:() => { throw new Error("no key"); },
   groq:() => { throw new Error("no key"); },
   cloudflare:() => { throw new Error("no key"); },

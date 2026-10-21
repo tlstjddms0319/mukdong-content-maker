@@ -20,6 +20,7 @@ describe("text AI failures", () => {
   it("reports the most useful failure instead of the last one", async () => {
     // Gemini 한도 초과 → Groq 형식 오류: 사장님에게는 "한도 초과"가 맞는 이유다.
     const client = createTextClient("automatic", { create: {
+      anthropic: () => { throw new Error("no key"); },
       gemini: () => fake("gemini", async () => { throw new TextAiHttpError("Gemini", 429); }),
       groq: () => fake("groq", async () => { throw new SyntaxError("bad json"); }),
       cloudflare: () => { throw new Error("no key"); },
@@ -31,6 +32,7 @@ describe("text AI failures", () => {
     await expect(guardedFetch("Gemini", async () => { throw stalled; })).rejects.toMatchObject({ provider: "Gemini", status: 0 });
     const calls: string[] = [];
     const client = createTextClient("automatic", { create: {
+      anthropic: () => { throw new Error("no key"); },
       gemini: () => fake("gemini", async () => { calls.push("gemini"); throw new TextAiHttpError("Gemini", 0); }),
       groq: () => fake("groq", async <T,>() => { calls.push("groq"); return { ok: true } as T; }),
       cloudflare: () => { throw new Error("no key"); },

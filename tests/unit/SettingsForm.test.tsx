@@ -9,7 +9,7 @@ describe("SettingsForm", () => {
     const save = vi.fn(); render(<SettingsForm onSave={save}/>);
     expect(screen.queryByLabelText("이미지 비율")).not.toBeInTheDocument();
     expect(screen.getByLabelText("문안 AI")).toHaveValue("automatic");
-    expect(screen.getByRole("option", { name:"자동 (Gemini → Groq → Cloudflare)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name:"자동 (Claude → Gemini → Groq → Cloudflare)" })).toBeInTheDocument();
     expect(screen.getByLabelText("이미지 AI")).toHaveValue("automatic");
     expect(screen.getByRole("option", { name:"자동 (Higgsfield → Cloudflare, 유료 OpenAI는 안 씀)" })).toBeInTheDocument();
     expect(screen.getByText(/제공자 요금제에 따라 비용이 들 수 있어요/)).toBeInTheDocument();

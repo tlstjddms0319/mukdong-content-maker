@@ -9,7 +9,7 @@ import { remoteStore } from "@/lib/files/remoteStore";
 // 장부는 달마다 한 파일(usage/YYYY-MM.json, Supabase가 있으면 거기, 없으면 DATA_DIR). 호출마다 쓰지 않고 잠깐 모았다가 쓴다.
 // 기록 실패는 조용히 넘어간다(사용량 표시는 보조 기능이라 실제 생성을 막으면 안 된다).
 
-export const USAGE_PROVIDERS=["gemini","groq","cloudflare","gemini-vision","higgsfield","cloudflare-image","openai-image"] as const;
+export const USAGE_PROVIDERS=["anthropic","gemini","groq","cloudflare","gemini-vision","higgsfield","cloudflare-image","openai-image"] as const;
 export type UsageProvider=typeof USAGE_PROVIDERS[number];
 export type UsageCounter={calls:number;failures:number;quota:number;units:number};
 import type { FailureReason } from "./failureReasons";

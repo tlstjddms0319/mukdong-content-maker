@@ -6,8 +6,9 @@ import { createCloudflareTextClient } from "./cloudflareTextClient";
 import { TextAiHttpError } from "./errors";
 import { createGeminiClient } from "./geminiClient";
 import { createGroqClient } from "./groqClient";
+import { createAnthropicClient } from "./anthropicClient";
 
-export type TextProvider = "gemini" | "groq" | "cloudflare";
+export type TextProvider = "anthropic" | "gemini" | "groq" | "cloudflare";
 
 export interface TextAiClient {
   provider: TextProvider;
@@ -21,11 +22,13 @@ export class TextAiUnavailableError extends Error {
   }
 }
 
-export const TEXT_PROVIDER_ORDER: readonly TextProvider[] = ["gemini", "groq", "cloudflare"];
+// Claude(2026-10-21)가 키만 있으면 맨 앞. 없으면 예전처럼 Gemini부터.
+export const TEXT_PROVIDER_ORDER: readonly TextProvider[] = ["anthropic", "gemini", "groq", "cloudflare"];
 
 // Stamp the provider name ourselves so the resolver never depends on the client carrying it.
 // Spreading is safe: none of the clients' generateJson methods use `this`.
 const defaultFactories: Record<TextProvider, () => TextAiClient> = {
+  anthropic: () => ({ ...createAnthropicClient(), provider: "anthropic" }),
   gemini: () => ({ ...createGeminiClient(), provider: "gemini" }),
   groq: () => ({ ...createGroqClient(), provider: "groq" }),
   cloudflare: () => ({ ...createCloudflareTextClient(), provider: "cloudflare" }),

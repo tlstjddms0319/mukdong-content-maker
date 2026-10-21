@@ -31,8 +31,8 @@ export type AiCheckDeps={
   remoteCutout?:()=>Promise<{enabled:boolean;monthlyCredits:number;used:number;month:string}>;
 };
 
-const TEXT_LABELS:Record<TextProvider,string>={gemini:"문안 AI · Gemini",groq:"문안 AI · Groq",cloudflare:"문안 AI · Cloudflare"};
-const SECRET_NAMES=["GEMINI_API_KEY","GROQ_API_KEY","CLOUDFLARE_API_TOKEN","OPENAI_API_KEY","HF_API_KEY_ID","HF_API_KEY_SECRET","NAVER_CLIENT_ID","NAVER_CLIENT_SECRET"];
+const TEXT_LABELS:Record<TextProvider,string>={anthropic:"문안 AI · Claude",gemini:"문안 AI · Gemini",groq:"문안 AI · Groq",cloudflare:"문안 AI · Cloudflare"};
+const SECRET_NAMES=["ANTHROPIC_API_KEY","GEMINI_API_KEY","GROQ_API_KEY","CLOUDFLARE_API_TOKEN","OPENAI_API_KEY","HF_API_KEY_ID","HF_API_KEY_SECRET","NAVER_CLIENT_ID","NAVER_CLIENT_SECRET"];
 const SAMPLE=path.join(process.cwd(),"assets/design/samples/studio-hongeo.jpg");
 
 // 오류 메시지를 사람이 읽을 길이로 줄이고, 혹시 섞여 온 키 값을 가린다.
