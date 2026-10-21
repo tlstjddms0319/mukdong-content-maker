@@ -6,6 +6,7 @@ import type { CarouselSlidePlan } from "../carousel";
 import { teaserText } from "../teaser";
 import { noteAudit } from "../render/audit";
 import { seeded } from "./handDrawn";
+import { menuOf } from "@/features/store/menu";
 import { brandHandle, cleanPoints, currentRemoteCutout, currentStoreCard, finishPhoto, textLayer, type TextEmphasis, type Font, type Layer } from "../render/primitives";
 
 // 스타일 계열(styles/*.ts)이 함께 쓰는 도구. 계열마다 고유한 글꼴·색을 쓰므로 여기의 글꼴은 사용자가 고른 제목·본문 글꼴로
@@ -32,7 +33,8 @@ export const STYLE_FONTS={
   chalk:face("Gaegu-Bold.ttf","Gaegu Bold"),                  // 칠판(분필 손글씨)
   marker:face("EastSeaDokdo-Regular.ttf","East Sea Dokdo"),   // 사진 위 낙서(마커 손글씨)
   soft:face("GamjaFlower-Regular.ttf","Gamja Flower"),        // 수채화(둥근 손글씨)
-  dodum:face("GowunDodum-Regular.ttf","Gowun Dodum"),         // 수채화 요점(부드러운 고딕)
+  dodum:face("GowunDodum-Regular.ttf","Gowun Dodum"),
+  batang:face("GowunBatang-Bold.ttf","Gowun Batang Bold"),   // 홈페이지 제목 명조(styles/homepage.ts)         // 수채화 요점(부드러운 고딕)
   mono:face("NanumGothicCoding-Bold.ttf","NanumGothicCoding Bold"), // 모던 그리드·티켓(번호·꼬리표)
   display:face("AbrilFatface-Regular.ttf","Abril Fatface"),   // 푸드 매거진 표지(제호, 영문 전용)
   condensed:face("BebasNeue-Regular.ttf","Bebas Neue"),       // 티켓·라벨(좁은 영문 대문자, 영문 전용)
@@ -114,10 +116,16 @@ export async function brandSeal(size:number,seed:number,options:{on?:"light"|"da
   return {text,svg:(x,y)=>`<filter id="${id}"><feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="${seed}" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="5"/></filter><rect x="${x}" y="${y}" width="${size}" height="${size}" rx="${Math.round(size*.08)}" fill="${paper}" filter="url(#${id})" transform="rotate(${angle} ${x+size/2} ${y+size/2})"/>`};
 }
 
-// 제목 핵심어 강조(계획서 B13): 키워드 중 제목에 들어 있는 낱말 최대 2개를 색만 바꿔 강조한다. 없으면 undefined.
+// 제목 핵심어 강조: 제목에 들어 있는 가게 메뉴 이름(홍어·홍어회·과메기·막걸리·애탕…)을 최대 2개 색만 바꿔 강조한다. 없으면 undefined.
+// 예전에는 구성안 AI가 적은 keywords가 제목에 있을 때만 색이 들어가서 장마다 들쭉날쭉했다(사장님 지적 2026-10-21: "어쩔 땐 들어가고 어쩔 땐 안 들어간다").
+// 이제 keywords는 보지 않고 메뉴 이름만 쓰므로 결과를 미리 알 수 있다: 메뉴 이름이 있으면 색, 없으면 없음.
 export function emphasisOf(content:Pick<StyleContent,"headline"|"keywords">,color:string):TextEmphasis|undefined {
-  const words=content.keywords.map(word=>word.trim()).filter(word=>word.length>=2&&content.headline.includes(word)).slice(0,2);
-  return words.length?{words,color}:undefined;
+  const words:string[]=[];
+  for(const item of menuOf(content.headline)){
+    const found=content.headline.match(new RegExp(item.match.source,item.match.flags.replace("g","")))?.[0]?.trim();
+    if(found&&found.length>=2&&!words.includes(found))words.push(found);
+  }
+  return words.length?{words:words.slice(0,2),color}:undefined;
 }
 export const hashtags=(content:StyleContent)=>content.keywords.length?content.keywords.map(word=>`#${word}`).join(" "):STORE_NAME;
 

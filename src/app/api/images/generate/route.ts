@@ -99,7 +99,9 @@ export async function POST(request: Request) { const denied=await ownerApiError(
     const dropped=()=>droppedPoints?{droppedPoints}:{};
     // 브라우저형·Q&A·대형 숫자처럼 사진이 없는 레이아웃은 이미지 AI를 부르지 않는다.
     if(parsed.data.slide&&parsed.data.slideLayout!=="overlay"&&photosNeeded(normalizeCardLayout(parsed.data.slide))===0){
-      const composed=await composeSlideImage([],parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design,cardOptions);
+      // 풀블리드 글 중심 본문: 화면이 보낸 표지 그림을 흐린 배경으로 쓴다(그리는 쪽이 흐린다).
+      const backdrop=parsed.data.backdrop?[Buffer.from(parsed.data.backdrop.replace(/^data:image\/\w+;base64,/,""),"base64")]:[];
+      const composed=await composeSlideImage(backdrop,parsed.data.slide,parsed.data.slideIndex??1,parsed.data.slideTotal??parsed.data.count,"card",parsed.data.design,cardOptions);
       return NextResponse.json({images:[`data:image/jpeg;base64,${composed.toString("base64")}`],source:"design",provider:"none",fallback:false,...dropped()});
     }
     // 사장님이 올린 실제 사진으로 만드는 장: 이미지 AI 없이 그 사진들로 바로 카드를 그린다.

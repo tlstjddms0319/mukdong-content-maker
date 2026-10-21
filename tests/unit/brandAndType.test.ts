@@ -24,7 +24,10 @@ describe("font fallback chain", () => {
 
 describe("keyword emphasis", () => {
   it("picks up to two keywords that appear in the headline", () => {
-    expect(emphasisOf({headline:"묵은지에 싼 홍어 한 점",keywords:["홍어","묵은지","막걸리"]},"#d33")).toEqual({words:["홍어","묵은지"],color:"#d33"});
+    // 사장님 지적(2026-10-21): 색이 들쭉날쭉. 이제 keywords가 아니라 제목 속 가게 메뉴 이름만 색칠한다.
+    expect(emphasisOf({headline:"묵은지에 싼 홍어 한 점",keywords:["막걸리"]},"#d33")?.words).toContain("홍어");
+    expect(emphasisOf({headline:"과메기 한 점은 기름이 좌르르 돌아요",keywords:[]},"#d33")).toEqual({words:["과메기"],color:"#d33"});
+    expect(emphasisOf({headline:"첫 점은 코끝이 먼저 찡해요",keywords:["홍어"]},"#d33")).toBeUndefined();
     expect(emphasisOf({headline:"가기 전에 확인해요",keywords:["홍어"]},"#d33")).toBeUndefined();
   });
 

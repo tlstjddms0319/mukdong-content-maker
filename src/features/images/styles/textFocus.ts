@@ -136,7 +136,8 @@ export const renderTextFocus:CardRenderer=async(inputs,slide,index,total,palette
   const content=contentOf(slide,inputs,index,total);
   const look=trackLookOf(palette);
   // 모양(slide.variant): 0은 아래 기본 모양, 1~3은 textLooks.ts. 한 게시물의 장은 모두 같은 모양을 쓴다.
-  const looked=renderTextLook(slide.variant??0,content.cover?inputs[0]:undefined,content,index,look);
+  // 풀블리드(8)는 본문 장에도 사진을 넘긴다: 화면이 보낸 표지 그림(글자 없는 원본)을 흐린 배경으로 쓴다(fullBleed.ts).
+  const looked=renderTextLook(slide.variant??0,content.cover||slide.variant===8?inputs[0]:undefined,content,index,look);
   if(looked)return looked;
   // 표지만 사진을 쓴다. 본문 장은 사진이 들어와도(예전 초안·사진 장 레이아웃) 쓰지 않는다 — 글 중심은 글이 주인공.
   if(content.cover)return cover(inputs[0],content,look);
