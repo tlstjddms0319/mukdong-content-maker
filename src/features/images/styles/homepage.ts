@@ -13,7 +13,7 @@ const CONTENT_W=W-MARGIN*2;
 const CANVAS="#1C1714",INK="#F7EDDD",SOFT="#C9B491",ACCENT="#E79463",LINE="rgba(247,237,221,0.18)";
 const BATANG=STYLE_FONTS.batang;
 
-const titleOf=(content:StyleContent,sizes:number[],maxLines:number)=>fitLines(content.headline,{sizes,width:CONTENT_W,font:BATANG,color:INK,maxLines,prefer:sizes[0]>=96?"size":"lines",spacing:size=>Math.round(size*.12),letterSpacing:size=>-size*.01,emphasis:emphasisOf(content,ACCENT)});
+const titleOf=(content:StyleContent,sizes:number[],maxLines:number)=>fitLines(content.headline,{sizes,width:CONTENT_W,font:BATANG,color:INK,maxLines,prefer:sizes[0]>=96?"size":"lines",spacing:()=>0,letterSpacing:size=>-size*.01,emphasis:emphasisOf(content,ACCENT)});
 const lineOf=(text:string,size:number)=>textLayer(text,{size,color:SOFT,width:CONTENT_W,height:4000,font:SANS,spacing:12});
 // 라벨: 자간 넓은 작은 글(홈페이지의 "인기 메뉴 01", "A TASTE OF THE SEASON").
 const eyebrowOf=(text:string)=>textLayer(text,{size:26,color:SOFT,width:CONTENT_W,height:60,font:SANS_SEMI,letterSpacing:4});
@@ -28,8 +28,6 @@ function outlinedPill(x:number,y:number,width:number,height:number):string {
 }
 
 async function card(photo:Buffer|undefined,content:StyleContent,index:number):Promise<Buffer> {
-  const photoH=photo?Math.round(H*(content.cover?.62:.56)):0;
-  const shot=photo?await finishPhoto(photo,W,photoH,{zoom:1.03}):null;
   const plain=!photo;
   const title=await titleOf(content,content.cover?[96,88,82,76,70]:plain?[100,92,84,78,72]:[86,80,74,68,62],plain?3:2);
   const line=content.cover?content.subline:shortLines(content,1)[0];
@@ -48,8 +46,12 @@ async function card(photo:Buffer|undefined,content:StyleContent,index:number):Pr
   // 글 덩어리: 라벨 → (진행 막대) → 제목 → 원인 → 가는 선.
   const barsH=reason?5+26:0;
   const blockH=eyebrow.info.height+22+barsH+title.layer.info.height+(sub?18+sub.info.height:0)+(chip?26+chipH:0);
+  // 사진 높이는 글 양에 맞춘다: 기본 56%(표지 62%)이되, 글 덩어리가 가는 선과 겹치면 그만큼 줄인다(사장님 지적 2026-10-21: 표지 부제가 선과 겹침).
+  const wanted=photo?Math.round(H*(content.cover?.62:.56)):0;
+  const photoH=photo?Math.min(wanted,footTop-RULE_GAP-24-blockH-44):0;
+  const shot=photo?await finishPhoto(photo,W,photoH,{zoom:1.03}):null;
   const area=plain?{top:MARGIN+80,bottom:footTop-RULE_GAP-40}:{top:photoH+44,bottom:footTop-RULE_GAP-24};
-  const blockTop=plain?Math.round(area.top+(area.bottom-area.top-blockH)/2):Math.max(area.top,Math.round(area.top+(area.bottom-area.top-blockH)/2));
+  const blockTop=Math.round(area.top+Math.max(0,area.bottom-area.top-blockH)/2);
   const eyebrowTop=blockTop,barsTop=eyebrowTop+eyebrow.info.height+22,titleTop=barsTop+barsH,subTop=titleTop+title.layer.info.height+18;
   const chipTop=(sub?subTop+sub.info.height:titleTop+title.layer.info.height)+26;
   let svg="";
