@@ -1,5 +1,6 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { brandHandle, finishPhoto, svgLayer, textLayer } from "../render/primitives";
+import { textureLayer } from "../decor";
 import { nextCue, snap, type StyleContent } from "./shared";
 import { MARGIN, SANS, SANS_SEMI, SAVE_CHIP, SHADE, TITLE_SERIF, fitLines, logoMark, shortLines } from "./trackKit";
 
@@ -10,7 +11,8 @@ import { MARGIN, SANS, SANS_SEMI, SAVE_CHIP, SHADE, TITLE_SERIF, fitLines, logoM
 // 색: 종이 #FBF8F3, 먹색 #241E1B, 보조 #6E625B. 강조색 없음.
 const W=1080,H=1350;
 const CONTENT_W=W-MARGIN*2;
-const PAPER="#FBF8F3",INK="#241E1B",DIM="#6E625B",RULE="#D9D2C8";
+// 순백은 어두운 음식 사진과 부딪혀 이질적(사장님 2026-10-21). 따뜻한 크림 종이에 리넨 결을 옅게.
+const PAPER="#EFE6D9",INK="#241E1B",DIM="#6A5D55",RULE="#CFC4B5";
 
 const titleOf=(content:StyleContent,sizes:number[],maxLines:number)=>fitLines(content.headline,{sizes,width:CONTENT_W,font:TITLE_SERIF,color:INK,maxLines,prefer:sizes[0]>=96?"size":"lines",spacing:size=>Math.round(size*.06),letterSpacing:size=>-size*.015});
 const lineOf=(text:string,size:number)=>textLayer(text,{size,color:DIM,width:CONTENT_W,height:4000,font:SANS,spacing:10});
@@ -44,6 +46,8 @@ async function card(photo:Buffer|undefined,content:StyleContent,index:number):Pr
   const markTop=blockTop,titleTop=blockTop+(markH?markH+markGap:0),subTop=titleTop+title.layer.info.height+18;
   let svg="";
   const layers:OverlayOptions[]=[];
+  const linen=await textureLayer("linen",{opacity:.2});
+  if(linen)layers.push(linen);
   if(shot)layers.push({input:shot,left:0,top:0});
   const marks:OverlayOptions[]=[];
   // 장 번호·로고는 사진 위면 흰색(그늘 없이 읽히게 위쪽에 얇은 그늘), 종이 위면 먹색.
