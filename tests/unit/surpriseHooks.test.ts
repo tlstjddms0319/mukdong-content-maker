@@ -33,8 +33,10 @@ describe("myth notes carry a surprise grade and a hook line",()=>{
   it("topic hints put the big-surprise hooks first and skip ones already used",()=>{
     const hints=principleTopicHints();
     expect(hints.indexOf("[의외성 큰 실마리")).toBe(0);
-    expect(hints).toContain("홍어, 숨을 참고 씹으면 덜 쏜다고?");
-    expect(principleTopicHints(["홍어회는 왜 숨을 참고 씹으면 덜 쏠까?"])).not.toContain("숨을 참고 씹으면 덜 쏜다고?");
+    // 표지 예 문장은 주지 않는다(5차 점검: 제목 앞에 그대로 붙었다). 오해 → 실마리만.
+    expect(hints).toContain('오해 "홍어 향은 코로만 느낀다" → 실은 암모니아는 코로 먼저');
+    expect(hints).not.toContain("숨을 참고 씹으면 덜 쏜다고?");
+    expect(principleTopicHints(["홍어회는 왜 숨을 참고 씹으면 덜 쏠까?"])).not.toContain("홍어 향은 코로만 느낀다");
   });
 });
 
@@ -57,5 +59,23 @@ describe("prepared topics lead with the twist",()=>{
     expect(titles).toContain("홍어애탕은 오래 끓이지 않아도 왜 국물이 묵직할까?");
     expect(titles).not.toContain("홍어애탕은 왜 맑은 생선탕과 달리 국물이 묵직할까?");
     expect(titles).not.toContain("비 오는 날엔 왜 전과 막걸리가 생각날까?");
+  });
+});
+
+// 5차 점검(2026-10-21): 실마리 문장이 제목 앞에 붙어 35자 제목이 나왔고, 띄어쓰기 뗀 키("맑은생선탕")가 제목에 그대로 들어갔다.
+describe("fifth-eval regressions",()=>{
+  it("rejects a topic title over 30 characters and names the reason",async()=>{
+    const { topicBasicsProblem, TOPIC_REJECT_LABELS }=await import("@/features/topics/service");
+    const long={id:"x",title:"매운맛은 맛이 아니라 통증인데 왜 새콤한 홍어무침은 입맛을 살려줄까?",summary:"홍어무침의 매운 양념과 식초가 향을 어떻게 바꾸는지 감각 원리로 설명합니다.",reason:"r",audience:"A" as const,imageBrief:"i",season:"",trend:""};
+    expect(topicBasicsProblem(long,"묵동홍어마을")).toBe("long");
+    expect(TOPIC_REJECT_LABELS.long).toContain("30자");
+    expect(topicBasicsProblem({...long,title:"홍어무침은 왜 매콤할수록 덜 쏠까?"},"묵동홍어마을")).toBeUndefined();
+  });
+  it("comparison review messages show the full name with its spaces",()=>{
+    const base=createFallbackCarouselPlan({topic:"맑은 생선탕과 달리 홍어애탕은 왜 국물이 묵직할까?",slideCount:5,track:"text"});
+    const plan:CarouselPlan={...base,slides:base.slides.map((slide,i)=>i===0?{...slide,headline:"맑은 생선탕과 달리 홍어애탕은 왜 국물이 묵직할까?",subline:"애가 국물을 바꿔요"}:i===1?{...slide,headline:"국물이 한 숟갈에 걸쭉하게 감겨요",points:["애의 지방이 풀려서예요"]}:slide)};
+    const found=slideCopyIssues(plan,"text").map(issue=>issue.message).join("\n");
+    expect(found).toContain("'맑은 생선탕'와(과) '홍어애탕'");
+    expect(found).not.toContain("맑은생선탕");
   });
 });
