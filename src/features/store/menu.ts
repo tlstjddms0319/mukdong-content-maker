@@ -38,10 +38,10 @@ export const STORE_MENU:readonly StoreMenuItem[]=[
     // "홍어" 하나만 써도 홍어회로 본다(이 가게 메뉴판의 "홍어사시미"도 홍어회). 홍어무침·홍어애탕·홍어전·홍어찜·홍어라면과
     // 가게 이름(묵동홍어마을)은 빼고 본다. "홍어 애호가"처럼 애탕·애국이 아닌 "애"는 홍어회로 본다.
     match:/홍어\s*(?:회|사시미)|삼합|홍어(?!\s*(?:무침|애\s*(?:탕|국)|탕|전(?!문|통|체|날)|찜|라면|마을))/,
-    look:"Korean hongeo-hoe: flat hand-cut slices of fermented skate wing about 4 x 7 cm and 5-8 mm thick, laid in neat straight rows on a black rectangular board. Each slice has two clearly separate parts with a sharp boundary: a smooth, glossy, translucent dusty-purple-pink flesh with no wrinkles, fibers or fine lines at all, and along one long edge a distinct band of pale ivory cartilage made of thick, evenly spaced parallel ridges like the teeth of a comb, clearly visible as a separate white strip.",
-    lookKo:"검은 직사각 판에 줄 맞춰 놓은 납작한 홍어회 조각(살은 매끈한 보랏빛 분홍, 한쪽 긴 변에만 흰 연골 띠가 빗살처럼 따로 붙고 둘의 경계가 또렷함)",
+    look:"Korean hongeo-hoe: thin hand-cut slices of fermented skate wing about 4 x 7 cm and 5-8 mm thick, slightly uneven shapes (not identical rectangles), overlapping in loose rows on a black rectangular board. Each slice has two clearly separate parts with a sharp boundary: a smooth, glossy, translucent dusty-purple-pink flesh with no wrinkles, fibers or fine lines at all, and along one long edge a distinct band of pale ivory cartilage: a narrow, flat, slightly translucent whitish strip with fine, closely spaced hairline ridges that lie flush with the surface and never protrude (not thick teeth, not a gear).",
+    lookKo:"검은 직사각 판에 줄 맞춰 놓은 납작한 홍어회 조각(살은 매끈한 보랏빛 분홍, 한쪽 긴 변에만 가늘고 납작한 흰 연골 띠가 따로 붙고 둘의 경계가 또렷함. 연골은 튀어나온 톱니가 아님)",
     plating:"set in loose rows on a black slate board or dark onggi plate; a small dish of chogochujang (red vinegar-chili dip) and coarse salt beside it; when the scene says samhap, a slice of boiled pork belly (suyuk) and a leaf of deep-red aged kimchi (mugeunji) sit next to the skate, never on top of it",
-    texture:"smooth, glossy, translucent dusty-purple-pink flesh with no wrinkles, fibers or fine lines; the cartilage is a separate band of pale ivory comb-tooth ridges along one long edge with a sharp boundary to the flesh; a faint moist sheen; never glossy orange like salmon, never chalk-white, never wrinkly or fibrous all over",
+    texture:"smooth, glossy, translucent dusty-purple-pink flesh with no wrinkles, fibers or fine lines; the cartilage is a separate narrow flat band of pale ivory along one long edge with fine flush hairline ridges and a sharp boundary to the flesh, never thick protruding teeth; a faint moist sheen; never glossy orange like salmon, never chalk-white, never wrinkly or fibrous all over",
     seasons:[],moments:"모임·잔칫상·김장철 수육과 함께",
   },
   {
