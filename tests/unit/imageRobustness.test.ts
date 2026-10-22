@@ -13,9 +13,9 @@ describe("cooked skate dishes are not drawn with raw-skate fiber detail",()=>{
   it("tones down fibers for 홍어찜 and keeps the raw description for 홍어회",()=>{
     const jjim=buildImagePrompt({topic:"홍어찜은 왜 쪄도 살이 쫀득할까?",count:1,aspectRatio:"4:5",slide:slide("찌는 열에 콜라겐이 풀려요","홍어찜은 왜 쪄도 살이 쫀득할까?"),slideIndex:2,slideTotal:5} as never);
     expect(jjim).toContain("never exaggerate the fibers into combs");
-    expect(jjim).not.toContain("separate band of pale ivory cartilage");
+    expect(jjim).not.toContain("thin translucent cartilage lines");
     const hoe=buildImagePrompt({topic:"홍어회는 왜 쫀득할까?",count:1,aspectRatio:"4:5",slide:slide("콜라겐이 촘촘히 얽혀 있어요","홍어회는 왜 쫀득할까?"),slideIndex:2,slideTotal:5} as never);
-    expect(hoe).toContain("separate band of pale ivory cartilage");
+    expect(hoe).toContain("thin translucent cartilage lines");
   });
 });
 

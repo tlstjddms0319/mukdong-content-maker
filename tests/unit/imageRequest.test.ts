@@ -64,15 +64,14 @@ describe("OpenAI image request", () => {
       if(role==="detail")expect(prompt).not.toContain("entire main dish");
     }
   });
-  it("requests explicit high quality and describes the store's flat purple-pink slices with a separate cartilage band",()=>{
+  it("requests explicit high quality and describes the store's square mauve slices crossed by diagonal cartilage lines",()=>{
     const request=buildImageRequest({topic:"홍어삼합",count:1,aspectRatio:"4:5"},"high");
     expect(request.quality).toBe("high");
-    expect(request.prompt).toContain("5-8 mm thick in neat rows");
-    expect(request.prompt).toContain("separate band of pale ivory cartilage");
-    expect(request.prompt).not.toContain("herringbone");
-    expect(request.prompt).toContain("dusty-purple-pink");
+    expect(request.prompt).toContain("5-8 mm thick with visible cut sides");
+    expect(request.prompt).toContain("herringbone or chevron");
+    expect(request.prompt).toContain("dusty mauve");
     // 똑같은 얇은 정사각형 타일(초콜릿처럼 보임)이 아니라, 두께가 보이는 손썰기 조각.
-    expect(request.prompt).toContain("never thick blocks or one big slab");
+    expect(request.prompt).toContain("never identical thin square tiles");
     expect(request.prompt).toContain("정육면체");
   });
   it("returns an uncaptioned cover reference alongside the captioned image",async()=>{
@@ -521,11 +520,11 @@ describe("appetizing photo direction (A9)", () => {
     const prompt=buildImagePrompt(brief);
     expect(prompt).toContain("glossy moist highlights");
     expect(prompt).toContain("3200-4000K side light");
-    expect(prompt).toContain("distinct band of pale ivory cartilage");
+    expect(prompt).toContain("diagonal rows of fine translucent white cartilage lines");
     expect(prompt).toContain("translucent edges backlit");
     // 하얗게만 나오던 홍어(2026-10-10)를 산호빛으로 고쳤더니 참치·연어회처럼 나왔다(2026-10-11).
     // 사장님 사진처럼 반투명한 연분홍·흰 살에 가장자리만 붉은 기, 바랜 흰색은 아니게.
-    expect(prompt).toContain("not chalk-white");
+    expect(prompt).toContain("not bleached chalk-white");
     expect(prompt).not.toMatch(/coral|선홍/);
     expect(prompt).toContain("plate fills about 60%");
     expect(prompt).toContain("brass yugi bowls");
