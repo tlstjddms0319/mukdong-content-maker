@@ -163,11 +163,19 @@ export function mainMenuOf(...texts:Array<string|undefined>):StoreMenuItem|undef
 // 한 장면의 주인공 메뉴. 장 글(제목·요점·장면)과 주제 글을 함께 본다.
 // 1) 장 글이 주제의 메뉴를 말하면 주제 메뉴, 2) 장 글에 나온 첫 음식(술 제외), 3) 주제 메뉴, 4) 장 글의 술 순서.
 // 예: 과메기 주제의 "막걸리 한 잔 곁들여요" 장 → 과메기, 막걸리 주제의 "미나리전 한 장" 장 → 미나리전. 못 찾으면 undefined.
+// 메뉴 이름 없이 곁들임만 말하는 장은 그 곁들임이 딸린 메뉴가 주인공이다(사장님 지적 2026-10-21: 홍어 주제의 "쪽파의 매운맛이 뒷맛을 끊어요" 장이
+// 홍어 위에 쪽파를 얹은 분홍 덩어리로 그려졌다. 쪽파·김·미역은 과메기 쌈 곁들임이다). "김"은 "김이 오른다"의 김과 겹쳐 조사까지 본다.
+const SIDE_HERO:ReadonlyArray<{menu:string;match:RegExp}>=[{menu:"gwamegi",match:/쪽파|물?미역|김(?:에|을|과|이랑|\s*한\s*장|\s*싸)/}];
+function sideHero(text:string|undefined):StoreMenuItem|undefined {
+  if(!text)return undefined;
+  const hit=SIDE_HERO.find(side=>side.match.test(text));
+  return hit?STORE_MENU.find(item=>item.id===hit.menu):undefined;
+}
 export function heroMenu(slideText:string|undefined,topicText:string|undefined):StoreMenuItem|undefined {
   const inSlide=menuOf(slideText);
   const topic=menuOf(topicText)[0];
   if(topic&&inSlide.some(item=>item.id===topic.id))return topic;
-  return inSlide.find(item=>item.category!=="술")??topic??inSlide[0];
+  return inSlide.find(item=>item.category!=="술")??sideHero(slideText)??topic??inSlide[0];
 }
 
 // 받침에 맞춰 조사를 붙인다. 예: josa("과메기","이","가") → "과메기가", josa("미나리전","이","가") → "미나리전이".
